@@ -1,0 +1,11 @@
+spring:
+  ai:
+    openai:
+      api-key: ${OPENAI_API_KEY:demo-key}
+      chat:
+        options:
+          model: gpt-4o-mini
+
+logging:
+  level:
+    com.kubeoncall: INFO

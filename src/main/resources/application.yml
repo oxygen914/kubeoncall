@@ -1,0 +1,49 @@
+spring:
+  application:
+    name: kubeoncall
+  profiles:
+    active: local
+  data:
+    redis:
+      host: localhost
+      port: 6379
+      repositories:
+        enabled: false
+    elasticsearch:
+      repositories:
+        enabled: false
+  elasticsearch:
+    uris: http://localhost:9200
+  jackson:
+    serialization:
+      write-dates-as-timestamps: false
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+
+server:
+  port: 8080
+
+kubeoncall:
+  agent:
+    max-loops: 3
+  approval:
+    enabled: true
+    callback-timeout-seconds: 1800
+  rag:
+    default-top-k: 5
+    knowledge-index: kubeoncall-knowledge
+  storage:
+    minio:
+      endpoint: http://localhost:9000
+      access-key: minioadmin
+      secret-key: minioadmin
+      bucket: kubeoncall-docs
+  mcp:
+    enabled: true
+    server-name: local-mcp
+  workflow:
+    alarm-dedup-ttl-seconds: 600
