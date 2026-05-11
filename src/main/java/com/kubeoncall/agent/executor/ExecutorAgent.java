@@ -32,6 +32,14 @@ public class ExecutorAgent extends ReActAgent {
         return List.of(executorThinkNode, executorExecuteNode);
     }
 
+    public com.kubeoncall.domain.graph.GraphState plan(com.kubeoncall.domain.graph.GraphState state) {
+        return runLoop(state, List.of(executorThinkNode), getAgentName() + "Plan");
+    }
+
+    public com.kubeoncall.domain.graph.GraphState executePrepared(com.kubeoncall.domain.graph.GraphState state) {
+        return runLoop(state, List.of(executorExecuteNode), getAgentName() + "Execute");
+    }
+
     @Override
     protected int maxLoops() {
         return properties.getAgent().getMaxLoops();

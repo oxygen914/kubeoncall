@@ -27,6 +27,11 @@ public class PlannerThinkNode extends ThinkNode {
 
     private static final Pattern SERVICE_PATTERN = Pattern.compile("(\\w+[-_]?\\w*)-?(service|gateway|api|worker|job)");
     private static final Pattern NUMBER_PATTERN = Pattern.compile("\\d+");
+    private final PlannerLlmService plannerLlmService;
+
+    public PlannerThinkNode(PlannerLlmService plannerLlmService) {
+        this.plannerLlmService = plannerLlmService;
+    }
 
     @Override
     public String getName() {
@@ -52,8 +57,40 @@ public class PlannerThinkNode extends ThinkNode {
         List<String> missingSignals = identifyMissingSignals(normalized, taskType, parameters, plannerKnowledge);
         List<String> consultedTools = consultedTools(state);
         Map<String, String> evidenceSources = buildEvidenceSources(plannerKnowledge);
-        String planSummary = buildPlanSummary(intent, taskType, target, riskLevel, consultedTools);
+        String plannerSource = "rules";
 
+        PlannerLlmDecision llmDecision = plannerLlmService.plan(normalized, plannerKnowledge).orElse(null);
+        if (llmDecision != null) {
+            intent = defaultString(llmDecision.intent(), intent);
+            confidence = defaultString(llmDecision.confidence(), confidence);
+            target = defaultString(llmDecision.target(), target);
+            targetSource = defaultString(llmDecision.targetSource(), "llm");
+            taskType = llmDecision.taskType() == null ? mapIntentToTaskType(intent) : llmDecision.taskType();
+            parameters = mergeParameters(inferParameters(normalized, taskType, target, plannerKnowledge), llmDecision.parameters());
+            parameterSources = markLlmParameterSources(buildParameterSources(parameters, normalized, plannerKnowledge), llmDecision.parameters());
+            riskLevel = llmDecision.riskLevel() == null
+                    ? inferRiskLevel(intent, taskType, target, parameters, plannerKnowledge)
+                    : llmDecision.riskLevel();
+            missingSignals = mergeMissingSignals(missingSignals, llmDecision.missingSignals());
+            plannerSource = "llm";
+        }
+        String planSummary = buildPlanSummary(intent, taskType, target, riskLevel, consultedTools);
+        if (llmDecision != null && llmDecision.summary() != null && !llmDecision.summary().isBlank()) {
+            planSummary = llmDecision.summary();
+        }
+
+        if (shouldRetryForMissingSignals(taskType, missingSignals, state.getCurrentLoop())) {
+            state.getContext().put("plannerMissingSignals", missingSignals);
+            return NodeResult.retry(
+                    getName(),
+                    "Planner requires additional signals: " + String.join(", ", missingSignals),
+                    "MISSING_SIGNALS",
+                    "QUERY_ADDITIONAL_CONTEXT",
+                    Map.of("missingSignals", missingSignals, "taskType", taskType.name(), "target", target)
+            );
+        }
+
+        state.getContext().remove("plannerMissingSignals");
         PlannerSummary summary = new PlannerSummary(
                 normalized,
                 intent,
@@ -70,29 +107,34 @@ public class PlannerThinkNode extends ThinkNode {
         state.getContext().put("plannerSummary", summary);
         state.getContext().put("plannerIntent", intent);
         state.getContext().put("plannerConfidence", confidence);
+        state.getContext().put("plannerSource", plannerSource);
 
-        Task task = new Task(
-                UUID.randomUUID().toString(),
-                buildTaskDescription(intent, taskType, target, parameters),
-                taskType,
-                riskLevel,
-                target,
-                parameters,
-                new SopReference("SOP-" + taskType.name(), taskType.name() + " Standard Procedure", "v1", "rag:sop")
-        );
+        List<Task> tasks = new ArrayList<>();
+        tasks.add(buildTask(intent, taskType, target, parameters, riskLevel));
+        List<String> taskRequests = splitTaskRequests(normalized);
+        for (int i = 1; i < taskRequests.size(); i++) {
+            String taskRequest = taskRequests.get(i);
+            String taskIntent = inferIntent(taskRequest);
+            TaskType inferredTaskType = mapIntentToTaskType(taskIntent);
+            String inferredTarget = inferTarget(taskRequest);
+            Map<String, Object> inferredParameters = inferParameters(taskRequest, inferredTaskType, inferredTarget, plannerKnowledge);
+            RiskLevel inferredRiskLevel = inferRiskLevel(taskIntent, inferredTaskType, inferredTarget, inferredParameters, plannerKnowledge);
+            tasks.add(buildTask(taskIntent, inferredTaskType, inferredTarget, inferredParameters, inferredRiskLevel));
+        }
+        Task task = tasks.get(0);
 
         TaskPlan taskPlan = new TaskPlan(
                 executionId,
                 userRequest,
-                List.of(task),
+                tasks,
                 Instant.now(),
-                riskLevel.ordinal() >= RiskLevel.HIGH.ordinal()
+                tasks.stream().anyMatch(item -> item.riskLevel().ordinal() >= RiskLevel.HIGH.ordinal())
         );
 
         state.setTaskPlan(taskPlan);
         state.setCurrentTask(task);
         state.addObservation("Planner: intent=" + intent + ", confidence=" + confidence + ", target=" + target
-                + ", risk=" + riskLevel + ", consultedTools=" + consultedTools);
+                + ", risk=" + riskLevel + ", source=" + plannerSource + ", consultedTools=" + consultedTools);
 
         return new NodeResult(
                 getName(),
@@ -102,6 +144,7 @@ public class PlannerThinkNode extends ThinkNode {
                         "taskCount", taskPlan.tasks().size(),
                         "intent", intent,
                         "confidence", confidence,
+                        "plannerSource", plannerSource,
                         "consultedTools", consultedTools,
                         "evidenceSources", evidenceSources
                 )
@@ -111,6 +154,75 @@ public class PlannerThinkNode extends ThinkNode {
     private String normalizeRequest(String request) {
         if (request == null) return "";
         return request.trim().replaceAll("\\s+", " ");
+    }
+
+    private List<String> splitTaskRequests(String normalized) {
+        if (normalized == null || normalized.isBlank()) {
+            return List.of("");
+        }
+        String[] parts = normalized.split("\\s*(?:然后|并且|同时|;|；|, then | and then )\\s*");
+        List<String> requests = new ArrayList<>();
+        for (String part : parts) {
+            if (part != null && !part.isBlank()) {
+                requests.add(part.trim());
+            }
+        }
+        return requests.isEmpty() ? List.of(normalized) : requests;
+    }
+
+    private Task buildTask(String intent,
+                           TaskType taskType,
+                           String target,
+                           Map<String, Object> parameters,
+                           RiskLevel riskLevel) {
+        return new Task(
+                UUID.randomUUID().toString(),
+                buildTaskDescription(intent, taskType, target, parameters),
+                taskType,
+                riskLevel,
+                target,
+                parameters,
+                new SopReference("SOP-" + taskType.name(), taskType.name() + " Standard Procedure", "v1", "rag:sop")
+        );
+    }
+
+    private String defaultString(String value, String fallback) {
+        return value == null || value.isBlank() ? fallback : value;
+    }
+
+    private Map<String, Object> mergeParameters(Map<String, Object> base, Map<String, Object> overrides) {
+        Map<String, Object> merged = new LinkedHashMap<>(base);
+        if (overrides != null) {
+            overrides.forEach((key, value) -> {
+                if (key != null && value != null && !String.valueOf(value).isBlank()) {
+                    merged.put(key, value);
+                }
+            });
+        }
+        return merged;
+    }
+
+    private Map<String, String> markLlmParameterSources(Map<String, String> baseSources, Map<String, Object> llmParameters) {
+        Map<String, String> sources = new LinkedHashMap<>(baseSources);
+        if (llmParameters != null) {
+            llmParameters.keySet().forEach(key -> sources.put(String.valueOf(key), "llm_planner"));
+        }
+        return sources;
+    }
+
+    private List<String> mergeMissingSignals(List<String> ruleSignals, List<String> llmSignals) {
+        List<String> merged = new ArrayList<>();
+        if (ruleSignals != null) {
+            merged.addAll(ruleSignals);
+        }
+        if (llmSignals != null) {
+            for (String signal : llmSignals) {
+                if (signal != null && !signal.isBlank() && !merged.contains(signal)) {
+                    merged.add(signal);
+                }
+            }
+        }
+        return merged;
     }
 
     private String inferIntent(String normalized) {
@@ -187,6 +299,7 @@ public class PlannerThinkNode extends ThinkNode {
 
     private Map<String, Object> inferParameters(String normalized, TaskType taskType, String target, Map<String, Object> plannerKnowledge) {
         Map<String, Object> params = new LinkedHashMap<>();
+        Map<String, Object> supplementalSignals = readSupplementalSignals(plannerKnowledge);
         params.put("namespace", readServiceMetadata(plannerKnowledge).getOrDefault("namespace", "default"));
 
         switch (taskType) {
@@ -199,7 +312,7 @@ public class PlannerThinkNode extends ThinkNode {
                 params.put("windowMinutes", readMetricWindow(plannerKnowledge));
             }
             case PATCH_CONFIG -> {
-                params.put("configKey", extractConfigKey(normalized));
+                params.put("configKey", extractConfigKey(normalized, supplementalSignals));
                 params.put("desiredValue", extractConfigValue(normalized));
                 params.put("changeReason", "operator_request");
             }
@@ -208,7 +321,7 @@ public class PlannerThinkNode extends ThinkNode {
                 params.put("reason", "operator_initiated_restart");
             }
             case SCALE_WORKLOAD -> {
-                params.put("replicas", extractReplicas(normalized));
+                params.put("replicas", extractReplicas(normalized, supplementalSignals));
                 params.put("reason", "manual_scaling");
             }
             case EXECUTE_SCRIPT -> {
@@ -229,8 +342,12 @@ public class PlannerThinkNode extends ThinkNode {
         return "error";
     }
 
-    private String extractConfigKey(String normalized) {
+    private String extractConfigKey(String normalized, Map<String, Object> supplementalSignals) {
         if (normalized.contains("超时") || normalized.contains("timeout")) return "timeout";
+        Object recommended = supplementalSignals.get("recommendedConfigKey");
+        if (recommended != null && !String.valueOf(recommended).isBlank()) {
+            return String.valueOf(recommended);
+        }
         return "config_key";
     }
 
@@ -242,10 +359,14 @@ public class PlannerThinkNode extends ThinkNode {
         return "60s";
     }
 
-    private int extractReplicas(String normalized) {
+    private int extractReplicas(String normalized, Map<String, Object> supplementalSignals) {
         Matcher matcher = NUMBER_PATTERN.matcher(normalized);
         if (matcher.find()) {
             return Integer.parseInt(matcher.group());
+        }
+        Object recommended = supplementalSignals.get("recommendedReplicas");
+        if (recommended instanceof Number number) {
+            return number.intValue();
         }
         return 3;
     }
@@ -253,11 +374,16 @@ public class PlannerThinkNode extends ThinkNode {
     private Map<String, String> buildParameterSources(Map<String, Object> parameters, String normalized, Map<String, Object> plannerKnowledge) {
         Map<String, String> sources = new LinkedHashMap<>();
         boolean hasMetricContext = plannerKnowledge.containsKey("metricsContext");
+        Map<String, Object> supplemental = readSupplementalSignals(plannerKnowledge);
         for (String key : parameters.keySet()) {
             if (key.equals("namespace") && readServiceMetadata(plannerKnowledge).containsKey("namespace")) {
                 sources.put(key, "tool:cmdb.getServiceMetadata");
             } else if (key.equals("windowMinutes") && hasMetricContext) {
                 sources.put(key, "tool:prometheus.queryRange");
+            } else if (key.equals("replicas") && supplemental.containsKey("recommendedReplicas") && !NUMBER_PATTERN.matcher(normalized).find()) {
+                sources.put(key, "tool:topology.getServiceTopology");
+            } else if (key.equals("configKey") && supplemental.containsKey("recommendedConfigKey") && !normalized.toLowerCase(Locale.ROOT).contains("timeout")) {
+                sources.put(key, "tool:knowledge.searchSop");
             } else if (NUMBER_PATTERN.matcher(normalized).find() && (key.equals("replicas") || key.contains("Value"))) {
                 sources.put(key, "extracted_from_request");
             } else {
@@ -293,10 +419,10 @@ public class PlannerThinkNode extends ThinkNode {
 
     private List<String> identifyMissingSignals(String normalized, TaskType taskType, Map<String, Object> parameters, Map<String, Object> plannerKnowledge) {
         List<String> missing = new ArrayList<>();
-        if (taskType == TaskType.PATCH_CONFIG && parameters.get("configKey").equals("config_key")) {
+        if (taskType == TaskType.PATCH_CONFIG && "config_key".equals(parameters.get("configKey"))) {
             missing.add("specific_config_key_not_identified");
         }
-        if (taskType == TaskType.SCALE_WORKLOAD && !NUMBER_PATTERN.matcher(normalized).find()) {
+        if (taskType == TaskType.SCALE_WORKLOAD && !NUMBER_PATTERN.matcher(normalized).find() && !readSupplementalSignals(plannerKnowledge).containsKey("recommendedReplicas")) {
             missing.add("target_replica_count_not_specified");
         }
         if (!plannerKnowledge.containsKey("sop")) {
@@ -306,6 +432,14 @@ public class PlannerThinkNode extends ThinkNode {
             missing.add("service_metadata_unavailable");
         }
         return missing;
+    }
+
+    private boolean shouldRetryForMissingSignals(TaskType taskType, List<String> missingSignals, int currentLoop) {
+        if (currentLoop > 0 || missingSignals.isEmpty()) {
+            return false;
+        }
+        return (taskType == TaskType.SCALE_WORKLOAD && missingSignals.contains("target_replica_count_not_specified"))
+                || (taskType == TaskType.PATCH_CONFIG && missingSignals.contains("specific_config_key_not_identified"));
     }
 
     private String buildPlanSummary(String intent, TaskType taskType, String target, RiskLevel riskLevel, List<String> consultedTools) {
@@ -359,6 +493,16 @@ public class PlannerThinkNode extends ThinkNode {
     @SuppressWarnings("unchecked")
     private Map<String, Object> readServiceMetadata(Map<String, Object> plannerKnowledge) {
         Object value = plannerKnowledge.get("serviceMetadata");
+        if (value instanceof Map<?, ?> raw) {
+            Map<String, Object> result = new LinkedHashMap<>();
+            raw.forEach((key, entryValue) -> result.put(String.valueOf(key), entryValue));
+            return result;
+        }
+        return Map.of();
+    }
+
+    private Map<String, Object> readSupplementalSignals(Map<String, Object> plannerKnowledge) {
+        Object value = plannerKnowledge.get("supplementalSignals");
         if (value instanceof Map<?, ?> raw) {
             Map<String, Object> result = new LinkedHashMap<>();
             raw.forEach((key, entryValue) -> result.put(String.valueOf(key), entryValue));

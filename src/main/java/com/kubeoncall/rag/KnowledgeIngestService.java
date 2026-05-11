@@ -12,6 +12,7 @@ import org.springframework.stereotype.Service;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -81,19 +82,66 @@ public class KnowledgeIngestService {
         HybridRetrievalService.RetrievalTrace retrievalTrace = hybridRetrievalService.retrieveWithTrace(request);
         RerankService.RerankTrace rerankTrace = rerankService.rerank(rewritten, retrievalTrace.documents());
 
-        List<KnowledgeDocument> documents = rerankTrace.documents();
+        ParentAggregation parentAggregation = aggregateParents(rerankTrace.documents());
+        List<KnowledgeDocument> documents = parentAggregation.documents();
+
         List<String> reasons = new ArrayList<>(retrievalTrace.reasons());
         reasons.add(documents.isEmpty() ? "No document passed rerank stage" : "Reranked documents by token overlap and metadata match");
+        if (parentAggregation.parentLookupCount() > 0) {
+            reasons.add("Aggregated parent documents from child chunks");
+        }
 
         Map<String, Object> diagnostics = new LinkedHashMap<>(retrievalTrace.diagnostics());
         diagnostics.putAll(rerankTrace.diagnostics());
         diagnostics.put("filters", filters == null ? Map.of() : filters);
         diagnostics.put("route", route);
         diagnostics.put("resultCount", documents.size());
+        diagnostics.put("parentAggregationApplied", parentAggregation.parentLookupCount() > 0);
+        diagnostics.put("parentLookupCount", parentAggregation.parentLookupCount());
+        diagnostics.put("childChunkCount", parentAggregation.childChunkCount());
 
         String summary = documents.isEmpty()
                 ? "No matching knowledge found"
                 : "Retrieved " + documents.size() + " documents via " + route;
         return new RetrievalResult(rewritten, documents, route, summary, reasons, diagnostics);
+    }
+
+    private ParentAggregation aggregateParents(List<KnowledgeDocument> reranked) {
+        List<String> parentIds = reranked.stream()
+                .map(KnowledgeDocument::metadata)
+                .filter(metadata -> metadata != null && metadata.containsKey("parentDocumentId"))
+                .map(metadata -> metadata.get("parentDocumentId"))
+                .filter(id -> id != null && !id.isBlank())
+                .distinct()
+                .toList();
+
+        if (parentIds.isEmpty()) {
+            return new ParentAggregation(reranked, 0, 0);
+        }
+
+        Map<String, KnowledgeDocument> parents = knowledgeRepository.loadParents(parentIds);
+        LinkedHashMap<String, KnowledgeDocument> merged = new LinkedHashMap<>();
+        int childChunks = 0;
+        for (KnowledgeDocument doc : reranked) {
+            String parentId = doc.metadata() == null ? null : doc.metadata().get("parentDocumentId");
+            if (parentId != null && !parentId.isBlank()) {
+                childChunks++;
+                KnowledgeDocument parent = parents.get(parentId);
+                if (parent != null) {
+                    merged.putIfAbsent(parent.id(), parent);
+                    continue;
+                }
+            }
+            merged.putIfAbsent(doc.id(), doc);
+        }
+
+        return new ParentAggregation(new ArrayList<>(new LinkedHashSet<>(merged.values())), parentIds.size(), childChunks);
+    }
+
+    private record ParentAggregation(
+            List<KnowledgeDocument> documents,
+            int parentLookupCount,
+            int childChunkCount
+    ) {
     }
 }

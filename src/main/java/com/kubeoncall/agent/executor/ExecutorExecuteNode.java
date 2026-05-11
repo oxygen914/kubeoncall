@@ -17,6 +17,13 @@ import java.util.stream.Collectors;
 @Component
 public class ExecutorExecuteNode extends ExecuteNode {
 
+    private static final String RETRY_REASON_MISSING_PARAMETERS = "MISSING_PARAMETERS";
+    private static final String RETRY_REASON_INCOMPLETE_PAYLOAD = "INCOMPLETE_EXECUTION_PAYLOAD";
+    private static final String RETRY_REASON_TRANSIENT_TOOL_FAILURE = "TRANSIENT_TOOL_FAILURE";
+    private static final String RETRY_STRATEGY_QUERY_ADDITIONAL_CONTEXT = "QUERY_ADDITIONAL_CONTEXT";
+    private static final String RETRY_STRATEGY_REPLAN_EXECUTION = "REPLAN_EXECUTION";
+    private static final String RETRY_STRATEGY_RETRY_TOOL_CALL = "RETRY_TOOL_CALL";
+
     private final Map<String, ToolExecutor> executorsByKind;
 
     public ExecutorExecuteNode(List<ToolExecutor> toolExecutors) {
@@ -43,25 +50,28 @@ public class ExecutorExecuteNode extends ExecuteNode {
         }
 
         if (!executionPlan.missingParameters().isEmpty()) {
-            return new NodeResult(
+            return NodeResult.retry(
                     getName(),
-                    NodeStatus.RETRY,
                     defaultMessage(executionPlan.retryHint(), "Execution plan still has missing parameters"),
+                    RETRY_REASON_MISSING_PARAMETERS,
+                    RETRY_STRATEGY_QUERY_ADDITIONAL_CONTEXT,
                     Map.of(
                             "errorCode", 400,
                             "missingParameters", executionPlan.missingParameters(),
-                            "action", executionPlan.action()
+                            "action", executionPlan.action(),
+                            "executorKind", executionPlan.executorKind()
                     )
             );
         }
 
         Object complete = payload.get("complete");
         if (!(complete instanceof Boolean done) || !done) {
-            return new NodeResult(
+            return NodeResult.retry(
                     getName(),
-                    NodeStatus.RETRY,
                     defaultMessage(executionPlan.retryHint(), "Execution payload is incomplete"),
-                    Map.of("errorCode", 409, "action", executionPlan.action())
+                    RETRY_REASON_INCOMPLETE_PAYLOAD,
+                    RETRY_STRATEGY_REPLAN_EXECUTION,
+                    Map.of("errorCode", 409, "action", executionPlan.action(), "executorKind", executionPlan.executorKind())
             );
         }
 
@@ -84,12 +94,45 @@ public class ExecutorExecuteNode extends ExecuteNode {
         state.getContext().put("executorResult", toolResult);
         state.addObservation("Executor execute: dispatched " + executorKind + "." + action + " with parameters=" + parameters.keySet());
 
+        int httpStatus = readHttpStatus(toolResult);
+        String resultStatus = String.valueOf(toolResult.getOrDefault("status", "unknown"));
+        if (shouldRetryToolFailure(httpStatus, resultStatus, state.getCurrentLoop())) {
+            return NodeResult.retry(
+                    getName(),
+                    "Executor call returned transient failure for " + executorKind + "." + action,
+                    RETRY_REASON_TRANSIENT_TOOL_FAILURE,
+                    RETRY_STRATEGY_RETRY_TOOL_CALL,
+                    Map.of(
+                            "httpStatus", httpStatus,
+                            "executorKind", executorKind,
+                            "action", action,
+                            "toolName", payload.get("toolName"),
+                            "result", toolResult
+                    )
+            );
+        }
+
+        if (httpStatus >= 400 || "failed".equalsIgnoreCase(resultStatus)) {
+            return new NodeResult(
+                    getName(),
+                    NodeStatus.FAILURE,
+                    "Executor call failed for " + executorKind + "." + action,
+                    Map.of(
+                            "httpStatus", httpStatus,
+                            "executorKind", executorKind,
+                            "action", action,
+                            "toolName", payload.get("toolName"),
+                            "result", toolResult
+                    )
+            );
+        }
+
         return new NodeResult(
                 getName(),
                 NodeStatus.SUCCESS,
                 defaultMessage(executionSummary, "Execution prepared successfully"),
                 Map.of(
-                        "httpStatus", toolResult.getOrDefault("httpStatus", 200),
+                        "httpStatus", httpStatus,
                         "executorKind", executorKind,
                         "action", action,
                         "parameterCount", parameters.size(),
@@ -99,6 +142,24 @@ public class ExecutorExecuteNode extends ExecuteNode {
                         "result", toolResult
                 )
         );
+    }
+
+    private boolean shouldRetryToolFailure(int httpStatus, String resultStatus, int currentLoop) {
+        if (currentLoop > 0) {
+            return false;
+        }
+        return httpStatus == 408 || httpStatus == 429 || httpStatus >= 500
+                || "timeout".equalsIgnoreCase(resultStatus)
+                || "retryable".equalsIgnoreCase(resultStatus)
+                || "transient_failed".equalsIgnoreCase(resultStatus);
+    }
+
+    private int readHttpStatus(Map<String, Object> toolResult) {
+        Object raw = toolResult.get("httpStatus");
+        if (raw instanceof Number number) {
+            return number.intValue();
+        }
+        return 200;
     }
 
     private String defaultMessage(String value, String fallback) {

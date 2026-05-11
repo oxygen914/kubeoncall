@@ -1,6 +1,8 @@
 package com.kubeoncall.rag;
 
+import com.kubeoncall.common.config.KubeOnCallProperties;
 import com.kubeoncall.domain.rag.KnowledgeDocument;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.time.Duration;
@@ -16,22 +18,76 @@ import java.util.stream.Collectors;
 @Service
 public class RerankService {
 
+    private final KubeOnCallProperties properties;
+    private final List<CrossEncoderReranker> crossEncoderRerankers;
+
+    @Autowired
+    public RerankService(KubeOnCallProperties properties, List<CrossEncoderReranker> crossEncoderRerankers) {
+        this.properties = properties;
+        this.crossEncoderRerankers = crossEncoderRerankers == null ? List.of() : crossEncoderRerankers;
+    }
+
+    public RerankService(KubeOnCallProperties properties) {
+        this(properties, List.of());
+    }
+
     public RerankTrace rerank(String query, List<KnowledgeDocument> documents) {
         Instant startedAt = Instant.now();
         Set<String> tokens = tokenize(query);
-        List<KnowledgeDocument> reranked = documents.stream()
+        boolean crossEncoderEnabled = properties.getRag().isCrossEncoderEnabled();
+        Map<String, Double> crossEncoderScores = crossEncoderEnabled
+                ? crossEncoderScores(query, documents)
+                : Map.of();
+        boolean crossEncoderApplied = !crossEncoderScores.isEmpty();
+
+        Map<String, Integer> scoreMap = new LinkedHashMap<>();
+        List<KnowledgeDocument> ranked = documents.stream()
                 .sorted(Comparator
-                        .comparingInt((KnowledgeDocument doc) -> score(tokens, doc)).reversed()
-                        .thenComparing(KnowledgeDocument::createdAt).reversed())
+                        .comparingDouble((KnowledgeDocument doc) -> crossEncoderScores.getOrDefault(doc.id(), 0.0)).reversed()
+                        .thenComparing(Comparator.comparingInt((KnowledgeDocument doc) -> score(tokens, doc)).reversed())
+                        .thenComparing(KnowledgeDocument::createdAt, Comparator.nullsLast(Comparator.reverseOrder())))
+                .limit(Math.max(1, properties.getRag().getRerankTopN()))
                 .toList();
+        for (KnowledgeDocument document : ranked) {
+            scoreMap.put(document.id(), score(tokens, document));
+        }
+
         Map<String, Object> diagnostics = new LinkedHashMap<>();
         diagnostics.put("rerankLatencyMs", Duration.between(startedAt, Instant.now()).toMillis());
         diagnostics.put("queryTokens", tokens);
-        return new RerankTrace(reranked, diagnostics);
+        diagnostics.put("scoreByDocument", scoreMap);
+        diagnostics.put("crossEncoderScoreByDocument", crossEncoderScores);
+        diagnostics.put("crossEncoderEnabled", crossEncoderEnabled);
+        diagnostics.put("crossEncoderApplied", crossEncoderApplied);
+        diagnostics.put("crossEncoderFallback", crossEncoderEnabled && !crossEncoderApplied);
+        diagnostics.put("crossEncoderFallbackReason", crossEncoderEnabled
+                ? (crossEncoderApplied ? null : "Cross-encoder adapter unavailable or returned no scores; fallback to rule rerank")
+                : "Cross-encoder disabled by configuration");
+        diagnostics.put("rerankTopN", properties.getRag().getRerankTopN());
+        return new RerankTrace(ranked, diagnostics);
+    }
+
+    private Map<String, Double> crossEncoderScores(String query, List<KnowledgeDocument> documents) {
+        for (CrossEncoderReranker reranker : crossEncoderRerankers) {
+            if (!reranker.available()) {
+                continue;
+            }
+            try {
+                Map<String, Double> scores = reranker.score(query, documents);
+                if (scores != null && !scores.isEmpty()) {
+                    return scores;
+                }
+            } catch (RuntimeException ignored) {
+                return Map.of();
+            }
+        }
+        return Map.of();
     }
 
     private int score(Set<String> tokens, KnowledgeDocument document) {
-        String haystack = (document.title() + " " + document.content()).toLowerCase(Locale.ROOT);
+        String title = document.title() == null ? "" : document.title();
+        String content = document.content() == null ? "" : document.content();
+        String haystack = (title + " " + content).toLowerCase(Locale.ROOT);
         int score = 0;
         for (String token : tokens) {
             if (haystack.contains(token)) {
@@ -48,7 +104,8 @@ public class RerankService {
         if (query == null || query.isBlank()) {
             return Set.of();
         }
-        return List.of(query.toLowerCase(Locale.ROOT).split("\\s+"))
+        String normalized = query.toLowerCase(Locale.ROOT).replaceAll("[^\\p{L}\\p{N}_-]+", " ");
+        return List.of(normalized.split("\\s+"))
                 .stream()
                 .filter(token -> !token.isBlank())
                 .collect(Collectors.toSet());

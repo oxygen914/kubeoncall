@@ -1,15 +1,26 @@
 package com.kubeoncall.tool.k8s;
 
+import com.kubeoncall.common.config.KubeOnCallProperties;
 import com.kubeoncall.domain.task.TaskType;
 import com.kubeoncall.tool.ToolDefinition;
 import com.kubeoncall.tool.ToolExecutor;
+import com.kubeoncall.tool.http.ToolHttpClient;
 import org.springframework.stereotype.Component;
 
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
 @Component
 public class KubernetesToolExecutor implements ToolExecutor {
+
+    private final ToolHttpClient toolHttpClient;
+    private final KubeOnCallProperties properties;
+
+    public KubernetesToolExecutor(ToolHttpClient toolHttpClient, KubeOnCallProperties properties) {
+        this.toolHttpClient = toolHttpClient;
+        this.properties = properties;
+    }
 
     @Override
     public String getExecutorKind() {
@@ -94,15 +105,21 @@ public class KubernetesToolExecutor implements ToolExecutor {
 
     @Override
     public Map<String, Object> execute(String action, Map<String, Object> parameters) {
-        return Map.of(
+        Map<String, Object> request = Map.of(
                 "executor", getExecutorKind(),
                 "action", action,
-                "parameters", parameters,
-                "targetSystem", "k8s-api",
-                "status", "simulated_success",
-                "httpStatus", 200,
-                "simulatedLatencyMs", 120,
-                "endpoint", "/api/v1/" + action
+                "parameters", parameters
+        );
+        Map<String, Object> metadata = new LinkedHashMap<>();
+        metadata.put("executor", getExecutorKind());
+        metadata.put("action", action);
+        metadata.put("parameters", parameters);
+        metadata.put("targetSystem", "k8s-api");
+        return toolHttpClient.post(
+                properties.getIntegrations().getKubernetes().getEndpoint(),
+                request,
+                properties.getIntegrations().getKubernetes().getTimeoutMillis(),
+                metadata
         );
     }
 }

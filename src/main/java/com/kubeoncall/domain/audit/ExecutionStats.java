@@ -13,6 +13,12 @@ public record ExecutionStats(
         long failedCount,
         long pausedCount,
         long rejectedCount,
+        long replanRequiredCount,
+        double autoEnrichmentTriggerRate,
+        double retryConvergenceRate,
+        double toolSuccessRate,
+        double degradedRate,
+        long averageApprovalLatencyMs,
         List<ExecutionAuditRecord> recentExecutions
 ) {
 }

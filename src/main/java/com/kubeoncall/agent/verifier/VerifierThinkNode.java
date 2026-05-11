@@ -63,8 +63,8 @@ public class VerifierThinkNode extends ThinkNode {
         if ("APPROVAL_REQUIRED".equals(evaluation.decision())) {
             return new NodeResult(
                     getName(),
-                    NodeStatus.WAITING,
-                    "High risk task requires approval",
+                    NodeStatus.SUCCESS,
+                    "Verifier requires approval before execution",
                     evaluation.details()
             );
         }

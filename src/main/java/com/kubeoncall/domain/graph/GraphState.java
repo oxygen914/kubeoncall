@@ -17,6 +17,7 @@ public class GraphState {
     private String userRequest;
     private TaskPlan taskPlan;
     private Task currentTask;
+    private int currentTaskIndex;
     private int currentLoop;
     private final List<String> observations = new ArrayList<>();
     private final List<NodeResult> nodeResults = new ArrayList<>();
@@ -25,6 +26,8 @@ public class GraphState {
     private int resumeAttempts;
     private ApprovalDecision finalApprovalDecision;
     private final List<String> approvalAuditTrail = new ArrayList<>();
+    private Instant approvalRequestedAt;
+    private Instant approvalDecidedAt;
     private Instant createdAt = Instant.now();
     private Instant updatedAt = Instant.now();
 
@@ -67,6 +70,15 @@ public class GraphState {
 
     public void setCurrentTask(Task currentTask) {
         this.currentTask = currentTask;
+    }
+
+    public int getCurrentTaskIndex() {
+        return currentTaskIndex;
+    }
+
+    public void setCurrentTaskIndex(int currentTaskIndex) {
+        this.currentTaskIndex = currentTaskIndex;
+        this.updatedAt = Instant.now();
     }
 
     public int getCurrentLoop() {
@@ -118,6 +130,24 @@ public class GraphState {
 
     public List<String> getApprovalAuditTrail() {
         return approvalAuditTrail;
+    }
+
+    public Instant getApprovalRequestedAt() {
+        return approvalRequestedAt;
+    }
+
+    public void setApprovalRequestedAt(Instant approvalRequestedAt) {
+        this.approvalRequestedAt = approvalRequestedAt;
+        this.updatedAt = Instant.now();
+    }
+
+    public Instant getApprovalDecidedAt() {
+        return approvalDecidedAt;
+    }
+
+    public void setApprovalDecidedAt(Instant approvalDecidedAt) {
+        this.approvalDecidedAt = approvalDecidedAt;
+        this.updatedAt = Instant.now();
     }
 
     public Instant getCreatedAt() {

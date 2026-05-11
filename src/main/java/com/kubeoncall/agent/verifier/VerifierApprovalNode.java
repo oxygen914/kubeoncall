@@ -11,6 +11,7 @@ import com.kubeoncall.domain.task.Task;
 import org.springframework.stereotype.Component;
 
 import java.time.Instant;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -30,8 +31,21 @@ public class VerifierApprovalNode extends ApprovalNode {
 
     @Override
     public NodeResult execute(GraphState state) {
+        String decision = String.valueOf(state.getContext().getOrDefault("verifierDecision", "UNKNOWN"));
+        if (!"APPROVAL_REQUIRED".equals(decision)) {
+            return new NodeResult(
+                    getName(),
+                    NodeStatus.SUCCESS,
+                    "Approval not required",
+                    Map.of("verifierDecision", decision)
+            );
+        }
+
         Task task = state.getCurrentTask();
         List<String> riskReasons = resolveRiskReasons(state);
+        Map<String, Object> snapshot = new LinkedHashMap<>();
+        snapshot.put("taskDescription", task == null ? null : task.description());
+        snapshot.put("parameters", task == null ? Map.of() : task.parameters());
         state.setPauseMetadata(new PauseMetadata(
                 "Awaiting human approval",
                 getName(),
@@ -42,22 +56,20 @@ public class VerifierApprovalNode extends ApprovalNode {
                 task == null || task.riskLevel() == null ? null : task.riskLevel().name(),
                 "ADMIN",
                 riskReasons,
-                Map.of(
-                        "taskDescription", task == null ? null : task.description(),
-                        "parameters", task == null ? Map.of() : task.parameters()
-                )
+                snapshot
         ));
         state.addObservation("Execution paused for approval, taskId=" + (task == null ? "unknown" : task.taskId()) + ", reasons=" + riskReasons);
         ApprovalRequest request = approvalService.createPending(state, "system", "High risk operation pending approval");
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("executionId", request.executionId());
+        payload.put("taskId", request.taskId());
+        payload.put("riskReasons", request.riskReasons());
+        payload.put("verifierDecision", decision);
         return new NodeResult(
                 getName(),
                 NodeStatus.WAITING,
                 "Approval created",
-                Map.of(
-                        "executionId", request.executionId(),
-                        "taskId", request.taskId(),
-                        "riskReasons", request.riskReasons()
-                )
+                payload
         );
     }
 

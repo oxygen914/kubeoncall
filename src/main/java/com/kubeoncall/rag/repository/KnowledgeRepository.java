@@ -4,10 +4,19 @@ import com.kubeoncall.domain.rag.KnowledgeDocument;
 import com.kubeoncall.domain.rag.RetrievalRequest;
 
 import java.util.List;
+import java.util.Map;
 
 public interface KnowledgeRepository {
 
     void save(KnowledgeDocument document);
 
-    List<KnowledgeDocument> search(RetrievalRequest request);
+    List<KnowledgeDocument> searchLexical(RetrievalRequest request, int candidateSize);
+
+    List<KnowledgeDocument> searchVector(RetrievalRequest request, int candidateSize);
+
+    Map<String, KnowledgeDocument> loadParents(List<String> parentDocumentIds);
+
+    default List<KnowledgeDocument> search(RetrievalRequest request) {
+        return searchLexical(request, Math.max(1, request.topK()));
+    }
 }

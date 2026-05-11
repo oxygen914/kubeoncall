@@ -1,0 +1,67 @@
+package com.kubeoncall.agent.verifier;
+
+import com.kubeoncall.domain.graph.ExecutionPlan;
+import com.kubeoncall.domain.graph.GraphState;
+import com.kubeoncall.domain.graph.NodeResult;
+import com.kubeoncall.domain.graph.NodeStatus;
+import com.kubeoncall.domain.task.RiskLevel;
+import com.kubeoncall.domain.task.SopReference;
+import com.kubeoncall.domain.task.Task;
+import com.kubeoncall.domain.task.TaskType;
+import com.kubeoncall.tool.AgentToolCatalog;
+import com.kubeoncall.tool.ToolDefinition;
+import org.junit.jupiter.api.Test;
+
+import java.util.List;
+import java.util.Map;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
+
+class VerifierThinkNodeTest {
+
+    @Test
+    void shouldReturnSuccessWhenApprovalRequiredDecision() {
+        AgentToolCatalog catalog = mock(AgentToolCatalog.class);
+        ToolDefinition tool = new ToolDefinition(
+                "kubernetes.rolloutRestart",
+                "kubernetes",
+                "restart deployment",
+                false,
+                true,
+                List.of(TaskType.RESTART_SERVICE),
+                List.of("namespace"),
+                List.of("k8s")
+        );
+        when(catalog.findExecutorTool("kubernetes", "rolloutRestart")).thenReturn(tool);
+
+        VerifierThinkNode node = new VerifierThinkNode(catalog);
+        GraphState state = new GraphState();
+        state.setCurrentTask(new Task(
+                "task-1",
+                "restart payment",
+                TaskType.RESTART_SERVICE,
+                RiskLevel.HIGH,
+                "payment-service",
+                Map.of("namespace", "default"),
+                new SopReference("SOP-RESTART_SERVICE", "restart", "v1", "rag:sop")
+        ));
+        state.getContext().put("executionPlan", new ExecutionPlan(
+                "kubernetes",
+                "rolloutRestart",
+                Map.of("namespace", "default"),
+                List.of("namespace"),
+                List.of(),
+                Map.of("namespace", "from_planner"),
+                "summary",
+                null
+        ));
+
+        NodeResult result = node.execute(state);
+
+        assertEquals(NodeStatus.SUCCESS, result.status());
+        assertEquals("APPROVAL_REQUIRED", state.getContext().get("verifierDecision"));
+        assertEquals("Verifier requires approval before execution", result.message());
+    }
+}

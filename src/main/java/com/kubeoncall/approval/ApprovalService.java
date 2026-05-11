@@ -50,6 +50,8 @@ public class ApprovalService {
                 riskReasons
         );
         state.addApprovalAudit("Approval requested by=" + requestedBy + ", taskId=" + request.taskId());
+        state.setApprovalRequestedAt(request.requestedAt());
+        state.setFinalApprovalDecision(ApprovalDecision.PENDING);
         graphStateStore.save(state, ttl());
         approvalRepository.save(request);
         return request;
@@ -88,6 +90,7 @@ public class ApprovalService {
         state.addObservation("Approval decision=" + decision + auditSuffix);
         state.addApprovalAudit("Approval decision=" + decision + auditSuffix);
         state.setFinalApprovalDecision(decision);
+        state.setApprovalDecidedAt(updated.decidedAt());
         if (decision == ApprovalDecision.APPROVED) {
             state.setResumeAttempts(state.getResumeAttempts() + 1);
             state.setStatus(GraphStatus.RUNNING);

@@ -10,9 +10,12 @@ import com.kubeoncall.domain.approval.ApprovalRequest;
 import com.kubeoncall.domain.audit.ExecutionRequestType;
 import com.kubeoncall.domain.graph.GraphState;
 import com.kubeoncall.domain.graph.GraphStatus;
+import com.kubeoncall.domain.task.Task;
 import org.springframework.stereotype.Service;
 
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
 
 @Service
 public class AskService {
@@ -49,13 +52,7 @@ public class AskService {
             return new AskExecutionResult(state.getExecutionId(), state.getStatus().name(), responseComposer.compose(state));
         }
 
-        verifierAgent.run(state);
-        if (state.getStatus() != GraphStatus.SUCCESS) {
-            executionAuditService.recordGraphExecution(ExecutionRequestType.ASK, state, startedAt);
-            return new AskExecutionResult(state.getExecutionId(), state.getStatus().name(), responseComposer.compose(state));
-        }
-
-        executorAgent.run(state);
+        runPlannedTasks(state, 0);
         executionAuditService.recordGraphExecution(ExecutionRequestType.ASK, state, startedAt);
         return new AskExecutionResult(state.getExecutionId(), state.getStatus().name(), responseComposer.compose(state));
     }
@@ -76,17 +73,20 @@ public class AskService {
         if (state.getFinalApprovalDecision() != ApprovalDecision.APPROVED) {
             throw new IllegalStateException("Execution has not been approved: " + executionId);
         }
-        if (state.getResumeAttempts() > 1) {
-            throw new IllegalStateException("Execution already resumed after approval: " + executionId);
-        }
 
         state.addObservation("Resuming execution after approval");
         state.addApprovalAudit("Execution resumed after approval");
         state.setPauseMetadata(null);
-        executorAgent.run(state);
+        state.setCurrentLoop(0);
+        executorAgent.executePrepared(state);
+        if (state.getStatus() == GraphStatus.SUCCESS) {
+            runPlannedTasks(state, state.getCurrentTaskIndex() + 1);
+        }
         AskExecutionResult result = new AskExecutionResult(state.getExecutionId(), state.getStatus().name(), responseComposer.compose(state));
         executionAuditService.recordGraphExecution(ExecutionRequestType.APPROVAL_RESUME, state, startedAt);
-        approvalService.clearState(executionId);
+        if (state.getStatus() != GraphStatus.PAUSED) {
+            approvalService.clearState(executionId);
+        }
         return result;
     }
 
@@ -109,5 +109,53 @@ public class AskService {
     }
 
     public record ApprovalDetailResult(ApprovalRequest approvalRequest, GraphState graphState) {
+    }
+
+    private void runPlannedTasks(GraphState state, int startIndex) {
+        if (state.getTaskPlan() == null || state.getTaskPlan().tasks() == null || state.getTaskPlan().tasks().isEmpty()) {
+            state.setStatus(GraphStatus.FAILED);
+            state.addObservation("No planned tasks available for execution");
+            return;
+        }
+
+        List<Task> tasks = state.getTaskPlan().tasks();
+        for (int index = Math.max(0, startIndex); index < tasks.size(); index++) {
+            Task task = tasks.get(index);
+            state.setCurrentTaskIndex(index);
+            state.setCurrentTask(task);
+            state.setCurrentLoop(0);
+            state.addObservation("Dispatching task " + (index + 1) + "/" + tasks.size() + ": " + task.taskId());
+
+            executorAgent.plan(state);
+            if (state.getStatus() != GraphStatus.SUCCESS) {
+                return;
+            }
+
+            verifierAgent.run(state);
+            if (state.getStatus() != GraphStatus.SUCCESS) {
+                return;
+            }
+
+            state.setCurrentLoop(0);
+            executorAgent.executePrepared(state);
+            if (state.getStatus() != GraphStatus.SUCCESS) {
+                return;
+            }
+            recordCompletedTask(state, task.taskId());
+        }
+        state.setStatus(GraphStatus.SUCCESS);
+    }
+
+    @SuppressWarnings("unchecked")
+    private void recordCompletedTask(GraphState state, String taskId) {
+        Object value = state.getContext().get("completedTaskIds");
+        List<String> completed;
+        if (value instanceof List<?> list) {
+            completed = (List<String>) list;
+        } else {
+            completed = new ArrayList<>();
+            state.getContext().put("completedTaskIds", completed);
+        }
+        completed.add(taskId);
     }
 }
