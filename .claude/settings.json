@@ -1,7 +1,12 @@
 {
   "permissions": {
     "allow": [
-      "Bash(mvn -DskipTests package)"
+      "Bash(mvn -DskipTests package)",
+      "Bash(mvn test *)",
+      "Bash(mvn -q -DskipTests compile)",
+      "Bash(jar tf *)",
+      "Read(//c/Users/hp/**)",
+      "Read(//c/Users/hp/src/main/resources/**)"
     ]
   }
 }

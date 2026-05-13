@@ -10,6 +10,8 @@ import org.springframework.stereotype.Service;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 
@@ -47,16 +49,16 @@ public class AlertWorkflowService {
                     "alarmDedup",
                     NodeStatus.FAILURE,
                     "Duplicate alarm ignored",
-                    Map.of("dedupKey", alarmEvent.dedupKey())
+                    Map.of("dedupKey", alarmEvent.dedupKey(), "dedupHit", true)
             );
             executionAuditService.recordAlarmExecution(
                     alarmEvent.alarmId(),
-                    "FAILED",
+                    "DEDUP_HIT",
+                    true,
                     false,
-                    false,
-                    result.message(),
-                    result.message(),
-                    List.of("alarm.dedup"),
+                    "Duplicate alarm ignored: dedupKey=" + alarmEvent.dedupKey(),
+                    null,
+                    List.of("alarm.dedup", "alarm.dedup.hit"),
                     startedAt
             );
             return List.of(result);
@@ -65,26 +67,73 @@ public class AlertWorkflowService {
         AlertWorkflowContext context = new AlertWorkflowContext(alarmEvent, startedAt);
         Duration nodeTimeout = Duration.ofMillis(properties.getWorkflow().getNodeTimeoutMillis());
         for (AlertWorkflowDefinition definition : alertWorkflowFactory.buildWorkflow()) {
-            workflowNodeExecutor.execute(definition, context, nodeTimeout);
             if (context.isTerminated()) {
                 break;
             }
+            List<String> missingDependencies = definition.dependencies().stream()
+                    .filter(dependency -> !context.getCompletedNodes().contains(dependency))
+                    .toList();
+            if (!missingDependencies.isEmpty()) {
+                context.setDegraded(true);
+                context.addSkippedNode(definition.name());
+                context.addNodeResult(new NodeResult(
+                        definition.name(),
+                        NodeStatus.FAILURE,
+                        "Skipped due to unmet dependencies: " + String.join(", ", missingDependencies),
+                        Map.of(
+                                "skipped", true,
+                                "dependencies", definition.dependencies(),
+                                "missingDependencies", missingDependencies,
+                                "failedNodes", context.getFailedNodes(),
+                                "completedNodes", context.getCompletedNodes()
+                        )
+                ));
+                continue;
+            }
+            workflowNodeExecutor.execute(definition, context, nodeTimeout);
         }
 
         List<NodeResult> results = context.getNodeResults();
         NodeResult latest = results.get(results.size() - 1);
-        String status = context.getFailedNodes().isEmpty() ? "SUCCESS" : "DEGRADED";
-        String failureReason = context.getFailedNodes().isEmpty()
+        boolean noIssues = context.getFailedNodes().isEmpty() && context.getSkippedNodes().isEmpty();
+        String status = noIssues ? "SUCCESS" : "DEGRADED";
+        String failureReason = noIssues
                 ? null
-                : "Failed nodes: " + String.join(", ", context.getFailedNodes());
+                : "Failed nodes: " + String.join(", ", context.getFailedNodes())
+                + "; Skipped nodes: " + String.join(", ", context.getSkippedNodes());
+        LinkedHashSet<String> toolNames = new LinkedHashSet<>();
+        for (NodeResult result : results) {
+            if (result.payload() == null) {
+                continue;
+            }
+            Object executorKind = result.payload().get("executorKind");
+            Object action = result.payload().get("action");
+            if (executorKind != null && action != null) {
+                toolNames.add(executorKind + "." + action);
+            }
+            Object resultPayload = result.payload().get("result");
+            if (resultPayload instanceof Map<?, ?> map) {
+                Object nestedExecutor = map.get("executor");
+                Object nestedAction = map.get("action");
+                if (nestedExecutor != null && nestedAction != null) {
+                    toolNames.add(nestedExecutor + "." + nestedAction);
+                }
+            }
+            if (Boolean.TRUE.equals(result.payload().get("dedupHit"))) {
+                toolNames.add("alarm.dedup.hit");
+            }
+        }
+        if (toolNames.isEmpty()) {
+            toolNames.addAll(results.stream().map(NodeResult::nodeName).toList());
+        }
         executionAuditService.recordAlarmExecution(
                 alarmEvent.alarmId(),
                 status,
-                context.getFailedNodes().isEmpty(),
+                noIssues,
                 false,
                 latest.message(),
                 failureReason,
-                results.stream().map(NodeResult::nodeName).toList(),
+                new ArrayList<>(toolNames),
                 startedAt
         );
         return results;

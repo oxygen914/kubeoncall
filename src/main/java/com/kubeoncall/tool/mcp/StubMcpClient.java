@@ -1,10 +1,12 @@
 package com.kubeoncall.tool.mcp;
 
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
 import java.util.Map;
 
 @Component
+@ConditionalOnProperty(prefix = "kubeoncall.mcp", name = "enabled", havingValue = "false")
 public class StubMcpClient implements McpClient {
 
     @Override

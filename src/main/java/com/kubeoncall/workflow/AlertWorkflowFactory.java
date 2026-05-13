@@ -32,11 +32,11 @@ public class AlertWorkflowFactory {
 
     public List<AlertWorkflowDefinition> buildWorkflow() {
         return List.of(
-                new AlertWorkflowDefinition("logCollectionNode", true, logCollectionNode),
-                new AlertWorkflowDefinition("deviceInfoNode", true, deviceInfoNode),
-                new AlertWorkflowDefinition("stateCompareNode", true, stateCompareNode),
-                new AlertWorkflowDefinition("knowledgeRetrieveNode", true, knowledgeRetrieveNode),
-                new AlertWorkflowDefinition("resultPushNode", false, resultPushNode)
+                new AlertWorkflowDefinition("logCollectionNode", true, List.of(), logCollectionNode),
+                new AlertWorkflowDefinition("deviceInfoNode", true, List.of("logCollectionNode"), deviceInfoNode),
+                new AlertWorkflowDefinition("stateCompareNode", true, List.of("deviceInfoNode"), stateCompareNode),
+                new AlertWorkflowDefinition("knowledgeRetrieveNode", true, List.of("logCollectionNode", "stateCompareNode"), knowledgeRetrieveNode),
+                new AlertWorkflowDefinition("resultPushNode", false, List.of("knowledgeRetrieveNode", "stateCompareNode"), resultPushNode)
         );
     }
 }

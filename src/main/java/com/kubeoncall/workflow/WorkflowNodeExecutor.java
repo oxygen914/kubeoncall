@@ -39,6 +39,8 @@ public class WorkflowNodeExecutor {
                 if (!definition.continueOnFailure()) {
                     context.terminate(nodeName);
                 }
+            } else {
+                context.addCompletedNode(nodeName);
             }
             context.addNodeResult(enrichPayload(result, context, durationMs));
             return result;
@@ -68,6 +70,8 @@ public class WorkflowNodeExecutor {
         payload.put("durationMs", durationMs);
         payload.put("degraded", context.isDegraded());
         payload.put("failedNodes", context.getFailedNodes());
+        payload.put("skippedNodes", context.getSkippedNodes());
+        payload.put("completedNodes", context.getCompletedNodes());
         payload.put("terminated", context.isTerminated());
         Object terminatedBy = context.getAttribute("workflowTerminatedBy");
         if (terminatedBy != null) {

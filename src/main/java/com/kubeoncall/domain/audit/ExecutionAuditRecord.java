@@ -13,6 +13,12 @@ public record ExecutionAuditRecord(
         String summary,
         String failureReason,
         List<String> tools,
-        Instant occurredAt
+        Instant occurredAt,
+        int retryCount,
+        boolean replanRequired,
+        boolean degraded,
+        long approvalLatencyMs,
+        long toolSuccessCount,
+        long toolFailureCount
 ) {
 }

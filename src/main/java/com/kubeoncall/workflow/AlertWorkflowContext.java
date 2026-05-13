@@ -6,8 +6,10 @@ import com.kubeoncall.domain.graph.NodeResult;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 public class AlertWorkflowContext {
 
@@ -15,6 +17,8 @@ public class AlertWorkflowContext {
     private final Instant startedAt;
     private final List<NodeResult> nodeResults = new ArrayList<>();
     private final List<String> failedNodes = new ArrayList<>();
+    private final List<String> skippedNodes = new ArrayList<>();
+    private final Set<String> completedNodes = new LinkedHashSet<>();
     private final Map<String, Object> attributes = new LinkedHashMap<>();
     private boolean degraded;
     private boolean terminated;
@@ -46,6 +50,22 @@ public class AlertWorkflowContext {
 
     public void addFailedNode(String nodeName) {
         this.failedNodes.add(nodeName);
+    }
+
+    public List<String> getSkippedNodes() {
+        return List.copyOf(skippedNodes);
+    }
+
+    public void addSkippedNode(String nodeName) {
+        this.skippedNodes.add(nodeName);
+    }
+
+    public Set<String> getCompletedNodes() {
+        return Set.copyOf(completedNodes);
+    }
+
+    public void addCompletedNode(String nodeName) {
+        this.completedNodes.add(nodeName);
     }
 
     public boolean isDegraded() {
