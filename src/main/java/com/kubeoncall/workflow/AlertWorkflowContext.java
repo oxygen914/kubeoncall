@@ -1,5 +1,7 @@
 package com.kubeoncall.workflow;
 
+import com.kubeoncall.alarm.domain.AlarmEvaluationResult;
+import com.kubeoncall.alarm.domain.NormalizedAlarmEvent;
 import com.kubeoncall.domain.alarm.AlarmEvent;
 import com.kubeoncall.domain.graph.NodeResult;
 
@@ -11,9 +13,19 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+/**
+ * Mutable per-execution state for an alarm workflow run.
+ *
+ * <p>Carries both the legacy {@link AlarmEvent} (for backwards-compatible node access) and the
+ * normalized event plus policy evaluation result produced by the new alarm governance layer. Nodes
+ * that have been migrated read from {@link #getNormalizedAlarm()} / {@link #getEvaluationResult()};
+ * nodes that have not yet been migrated continue to read from {@link #getAlarmEvent()}.
+ */
 public class AlertWorkflowContext {
 
     private final AlarmEvent alarmEvent;
+    private final NormalizedAlarmEvent normalizedAlarm;
+    private final AlarmEvaluationResult evaluationResult;
     private final Instant startedAt;
     private final List<NodeResult> nodeResults = new ArrayList<>();
     private final List<String> failedNodes = new ArrayList<>();
@@ -23,13 +35,31 @@ public class AlertWorkflowContext {
     private boolean degraded;
     private boolean terminated;
 
+    /** Legacy entry point: no normalized event, no policy evaluation. */
     public AlertWorkflowContext(AlarmEvent alarmEvent, Instant startedAt) {
+        this(alarmEvent, null, null, startedAt);
+    }
+
+    public AlertWorkflowContext(AlarmEvent alarmEvent,
+                                NormalizedAlarmEvent normalizedAlarm,
+                                AlarmEvaluationResult evaluationResult,
+                                Instant startedAt) {
         this.alarmEvent = alarmEvent;
+        this.normalizedAlarm = normalizedAlarm;
+        this.evaluationResult = evaluationResult;
         this.startedAt = startedAt;
     }
 
     public AlarmEvent getAlarmEvent() {
         return alarmEvent;
+    }
+
+    public NormalizedAlarmEvent getNormalizedAlarm() {
+        return normalizedAlarm;
+    }
+
+    public AlarmEvaluationResult getEvaluationResult() {
+        return evaluationResult;
     }
 
     public Instant getStartedAt() {

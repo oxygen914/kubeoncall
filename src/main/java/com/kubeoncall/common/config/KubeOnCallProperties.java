@@ -13,6 +13,8 @@ public class KubeOnCallProperties {
     private final Workflow workflow = new Workflow();
     private final Audit audit = new Audit();
     private final Integrations integrations = new Integrations();
+    private final Alarm alarm = new Alarm();
+    private final Memory memory = new Memory();
 
     public Agent getAgent() {
         return agent;
@@ -44,6 +46,14 @@ public class KubeOnCallProperties {
 
     public Audit getAudit() {
         return audit;
+    }
+
+    public Alarm getAlarm() {
+        return alarm;
+    }
+
+    public Memory getMemory() {
+        return memory;
     }
 
     public static class Agent {
@@ -99,6 +109,15 @@ public class KubeOnCallProperties {
         private String vectorEndpoint;
         private int vectorTimeoutMillis = 3000;
         private int vectorCandidateTopN = 20;
+        private boolean esKnnEnabled = false;
+        private boolean embeddingEnabled = false;
+        private boolean mockEmbeddingEnabled = false;
+        private String embeddingEndpoint;
+        private int embeddingTimeoutMillis = 3000;
+        private int embeddingDimensions = 8;
+        private String chunkStrategy = "recursive";
+        private int chunkSize = 280;
+        private int chunkOverlap = 0;
         private int rrfK = 60;
         private int rerankTopN = 20;
 
@@ -180,6 +199,78 @@ public class KubeOnCallProperties {
 
         public void setVectorCandidateTopN(int vectorCandidateTopN) {
             this.vectorCandidateTopN = vectorCandidateTopN;
+        }
+
+        public boolean isEsKnnEnabled() {
+            return esKnnEnabled;
+        }
+
+        public void setEsKnnEnabled(boolean esKnnEnabled) {
+            this.esKnnEnabled = esKnnEnabled;
+        }
+
+        public boolean isEmbeddingEnabled() {
+            return embeddingEnabled;
+        }
+
+        public void setEmbeddingEnabled(boolean embeddingEnabled) {
+            this.embeddingEnabled = embeddingEnabled;
+        }
+
+        public boolean isMockEmbeddingEnabled() {
+            return mockEmbeddingEnabled;
+        }
+
+        public void setMockEmbeddingEnabled(boolean mockEmbeddingEnabled) {
+            this.mockEmbeddingEnabled = mockEmbeddingEnabled;
+        }
+
+        public String getEmbeddingEndpoint() {
+            return embeddingEndpoint;
+        }
+
+        public void setEmbeddingEndpoint(String embeddingEndpoint) {
+            this.embeddingEndpoint = embeddingEndpoint;
+        }
+
+        public int getEmbeddingTimeoutMillis() {
+            return embeddingTimeoutMillis;
+        }
+
+        public void setEmbeddingTimeoutMillis(int embeddingTimeoutMillis) {
+            this.embeddingTimeoutMillis = embeddingTimeoutMillis;
+        }
+
+        public int getEmbeddingDimensions() {
+            return embeddingDimensions;
+        }
+
+        public void setEmbeddingDimensions(int embeddingDimensions) {
+            this.embeddingDimensions = embeddingDimensions;
+        }
+
+        public String getChunkStrategy() {
+            return chunkStrategy;
+        }
+
+        public void setChunkStrategy(String chunkStrategy) {
+            this.chunkStrategy = chunkStrategy;
+        }
+
+        public int getChunkSize() {
+            return chunkSize;
+        }
+
+        public void setChunkSize(int chunkSize) {
+            this.chunkSize = chunkSize;
+        }
+
+        public int getChunkOverlap() {
+            return chunkOverlap;
+        }
+
+        public void setChunkOverlap(int chunkOverlap) {
+            this.chunkOverlap = chunkOverlap;
         }
 
         public int getRrfK() {
@@ -324,6 +415,156 @@ public class KubeOnCallProperties {
 
         public void setRetentionHours(int retentionHours) {
             this.retentionHours = retentionHours;
+        }
+    }
+
+    public static class Alarm {
+        private boolean enabled = true;
+        private String policyLocation = "classpath:alarm-policies.yml";
+        private String defaultSeverity = "P3";
+        private long activeTtlSeconds = 86400;
+        private long resolvedRetentionSeconds = 3600;
+        private long p0DedupTtlSeconds = 1800;
+        private long p1DedupTtlSeconds = 1200;
+        private long p2DedupTtlSeconds = 600;
+        private long p3DedupTtlSeconds = 300;
+        private long infoDedupTtlSeconds = 120;
+
+        public boolean isEnabled() {
+            return enabled;
+        }
+
+        public void setEnabled(boolean enabled) {
+            this.enabled = enabled;
+        }
+
+        public String getPolicyLocation() {
+            return policyLocation;
+        }
+
+        public void setPolicyLocation(String policyLocation) {
+            this.policyLocation = policyLocation;
+        }
+
+        public String getDefaultSeverity() {
+            return defaultSeverity;
+        }
+
+        public void setDefaultSeverity(String defaultSeverity) {
+            this.defaultSeverity = defaultSeverity;
+        }
+
+        public long getActiveTtlSeconds() {
+            return activeTtlSeconds;
+        }
+
+        public void setActiveTtlSeconds(long activeTtlSeconds) {
+            this.activeTtlSeconds = activeTtlSeconds;
+        }
+
+        public long getResolvedRetentionSeconds() {
+            return resolvedRetentionSeconds;
+        }
+
+        public void setResolvedRetentionSeconds(long resolvedRetentionSeconds) {
+            this.resolvedRetentionSeconds = resolvedRetentionSeconds;
+        }
+
+        public long getP0DedupTtlSeconds() {
+            return p0DedupTtlSeconds;
+        }
+
+        public void setP0DedupTtlSeconds(long p0DedupTtlSeconds) {
+            this.p0DedupTtlSeconds = p0DedupTtlSeconds;
+        }
+
+        public long getP1DedupTtlSeconds() {
+            return p1DedupTtlSeconds;
+        }
+
+        public void setP1DedupTtlSeconds(long p1DedupTtlSeconds) {
+            this.p1DedupTtlSeconds = p1DedupTtlSeconds;
+        }
+
+        public long getP2DedupTtlSeconds() {
+            return p2DedupTtlSeconds;
+        }
+
+        public void setP2DedupTtlSeconds(long p2DedupTtlSeconds) {
+            this.p2DedupTtlSeconds = p2DedupTtlSeconds;
+        }
+
+        public long getP3DedupTtlSeconds() {
+            return p3DedupTtlSeconds;
+        }
+
+        public void setP3DedupTtlSeconds(long p3DedupTtlSeconds) {
+            this.p3DedupTtlSeconds = p3DedupTtlSeconds;
+        }
+
+        public long getInfoDedupTtlSeconds() {
+            return infoDedupTtlSeconds;
+        }
+
+        public void setInfoDedupTtlSeconds(long infoDedupTtlSeconds) {
+            this.infoDedupTtlSeconds = infoDedupTtlSeconds;
+        }
+    }
+
+    public static class Memory {
+        private boolean enabled = true;
+        private long sessionTtlSeconds = 86400;
+        private int maxSessionTurns = 12;
+        private boolean longTermEnabled = true;
+        private int injectMaxEntries = 5;
+        private int staleAfterDays = 30;
+
+        public boolean isEnabled() {
+            return enabled;
+        }
+
+        public void setEnabled(boolean enabled) {
+            this.enabled = enabled;
+        }
+
+        public long getSessionTtlSeconds() {
+            return sessionTtlSeconds;
+        }
+
+        public void setSessionTtlSeconds(long sessionTtlSeconds) {
+            this.sessionTtlSeconds = sessionTtlSeconds;
+        }
+
+        public int getMaxSessionTurns() {
+            return maxSessionTurns;
+        }
+
+        public void setMaxSessionTurns(int maxSessionTurns) {
+            this.maxSessionTurns = maxSessionTurns;
+        }
+
+        public boolean isLongTermEnabled() {
+            return longTermEnabled;
+        }
+
+        public void setLongTermEnabled(boolean longTermEnabled) {
+            this.longTermEnabled = longTermEnabled;
+        }
+
+        public int getInjectMaxEntries() {
+            return injectMaxEntries;
+        }
+
+        public void setInjectMaxEntries(int injectMaxEntries) {
+            this.injectMaxEntries = injectMaxEntries;
+        }
+
+        public int getStaleAfterDays() {
+            return staleAfterDays;
+        }
+
+        public void setStaleAfterDays(int staleAfterDays) {
+            this.staleAfterDays = staleAfterDays;
         }
     }
 

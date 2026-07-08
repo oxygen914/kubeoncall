@@ -1,0 +1,5 @@
+{"query":"How to handle HostHighCpuUsage on a kubernetes node?","topK":5,"retrieveMethod":"HYBRID","filters":{"alertName":"HostHighCpuUsage","resourceType":"NODE","service":"infra-exporter","runbookId":"runbook-host-cpu-high"}}
+{"query":"What to do when a Pod is in CrashLoopBackOff?","topK":5,"retrieveMethod":"HYBRID","filters":{"alertName":"PodCrashLoopBackOff","resourceType":"POD","service":"payment-api","runbookId":"runbook-pod-crashloop"}}
+{"query":"Node NotReady troubleshooting steps","topK":3,"retrieveMethod":"KEYWORD","filters":{"alertName":"KubeNodeNotReady","resourceType":"NODE","runbookId":"runbook-node-notready"}}
+{"query":"Deployment replicas unavailable - how to diagnose","topK":5,"retrieveMethod":"VECTOR","filters":{"alertName":"DeploymentReplicasUnavailable","resourceType":"DEPLOYMENT","service":"gateway","runbookId":"runbook-deployment-unavailable"}}
+{"query":"Pod OOMKilled memory limit troubleshooting","topK":5,"retrieveMethod":"HYBRID","filters":{"alertName":"PodOOMKilled","resourceType":"POD","service":"payment-api","runbookId":"runbook-pod-oom"}}

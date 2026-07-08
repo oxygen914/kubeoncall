@@ -31,7 +31,7 @@ public class PlannerQueryToolNode extends QueryToolNode {
 
     @Override
     public NodeResult execute(GraphState state) {
-        String request = state.getUserRequest() == null ? "" : state.getUserRequest();
+        String request = planningRequest(state);
         String target = inferTarget(request);
         List<Map<String, Object>> availableTools = agentToolCatalog.plannerTools().stream()
                 .map(this::toToolMap)
@@ -170,6 +170,29 @@ public class PlannerQueryToolNode extends QueryToolNode {
             return list.stream().map(String::valueOf).filter(v -> !v.isBlank()).toList();
         }
         return List.of();
+    }
+
+    private String planningRequest(GraphState state) {
+        String currentRequest = state.getUserRequest() == null ? "" : state.getUserRequest();
+        Object sessionContext = state.getContext().get("sessionContext");
+        String sessionText = sessionContext == null ? "" : String.valueOf(sessionContext).trim();
+        Object memoryContext = state.getContext().get("memoryContext");
+        String memoryText = memoryContext == null ? "" : String.valueOf(memoryContext).trim();
+        if (sessionText.isBlank() && memoryText.isBlank()) {
+            return currentRequest;
+        }
+        StringBuilder builder = new StringBuilder();
+        if (!memoryText.isBlank()) {
+            builder.append(memoryText);
+        }
+        if (!sessionText.isBlank()) {
+            if (!builder.isEmpty()) {
+                builder.append("\n");
+            }
+            builder.append(sessionText);
+        }
+        builder.append("\nCurrent user: ").append(currentRequest);
+        return builder.toString();
     }
 
     private Map<String, Object> toToolMap(ToolDefinition tool) {

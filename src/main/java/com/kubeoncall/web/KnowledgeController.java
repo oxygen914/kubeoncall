@@ -1,6 +1,7 @@
 package com.kubeoncall.web;
 
 import com.kubeoncall.domain.rag.KnowledgeDocument;
+import com.kubeoncall.domain.rag.RetrieveMethod;
 import com.kubeoncall.domain.rag.RetrievalResult;
 import com.kubeoncall.rag.KnowledgeIngestService;
 import com.kubeoncall.web.dto.KnowledgeIngestRequest;
@@ -28,6 +29,11 @@ public class KnowledgeController {
 
     @PostMapping("/query")
     public RetrievalResult query(@Valid @RequestBody KnowledgeQueryRequest request) {
-        return knowledgeIngestService.retrieve(request.question(), request.filters());
+        return knowledgeIngestService.retrieve(
+                request.question(),
+                request.filters(),
+                request.topK(),
+                RetrieveMethod.fromRaw(request.retrieveMethod()),
+                Boolean.TRUE.equals(request.includeTrace()));
     }
 }

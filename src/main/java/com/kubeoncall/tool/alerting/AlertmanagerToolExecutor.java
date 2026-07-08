@@ -41,9 +41,19 @@ public class AlertmanagerToolExecutor implements ToolExecutor {
                         List.of("alertmanager")
                 ),
                 new ToolDefinition(
+                        "alertmanager.sendAlertEvent",
+                        "alertmanager",
+                        "Send a non-mutating alert event (annotation/status update) for an alarm diagnosis",
+                        true,
+                        false,
+                        List.of(TaskType.QUERY_LOGS, TaskType.QUERY_METRICS),
+                        List.of("alertName"),
+                        List.of("alertmanager")
+                ),
+                new ToolDefinition(
                         "alertmanager.createSilence",
                         "alertmanager",
-                        "Create a maintenance silence for planned changes",
+                        "Create a maintenance silence for planned changes (approval/maintenance only)",
                         false,
                         true,
                         List.of(TaskType.RESTART_SERVICE, TaskType.SCALE_WORKLOAD, TaskType.PATCH_CONFIG),

@@ -56,7 +56,9 @@ class KnowledgeIngestServiceTest {
 
         assertEquals("stored", document.metadata().get("storageStatus"));
         assertEquals("knowledge/doc.txt", document.metadata().get("objectKey"));
-        verify(repository, times(3)).save(any(KnowledgeDocument.class));
+        assertEquals("false", document.metadata().get("chunk_enable"));
+        assertEquals(document.id(), document.metadata().get("doc_id"));
+        verify(repository, times(4)).save(any(KnowledgeDocument.class));
     }
 
     @Test
@@ -126,5 +128,63 @@ class KnowledgeIngestServiceTest {
         verify(rerankService).rerank(anyString(), any());
         verify(repository).loadParents(anyList());
         verify(repository, never()).search(any());
+    }
+
+    @Test
+    void shouldExcludeMemoryDocumentsFromDefaultRetrieval() {
+        KnowledgeRepository repository = mock(KnowledgeRepository.class);
+        QueryRewriteService rewriteService = new QueryRewriteService();
+        RagRouter ragRouter = new RagRouter();
+        HybridRetrievalService retrievalService = mock(HybridRetrievalService.class);
+        RerankService rerankService = mock(RerankService.class);
+        KubeOnCallProperties properties = new KubeOnCallProperties();
+        KnowledgeChunker chunker = new KnowledgeChunker();
+        KnowledgeObjectStorageService storageService = mock(KnowledgeObjectStorageService.class);
+
+        when(storageService.store(anyString(), anyString(), anyString()))
+                .thenReturn(new StoredDocumentReference(null, null, false, "skip"));
+
+        KnowledgeDocument sop = new KnowledgeDocument(
+                "sop-1",
+                "payment sop",
+                "restart runbook",
+                "manual",
+                Map.of("source_type", "sop"),
+                Instant.now()
+        );
+        KnowledgeDocument memory = new KnowledgeDocument(
+                "memory-1",
+                "payment memory",
+                "last incident note",
+                "memory",
+                Map.of("source_type", "memory"),
+                Instant.now()
+        );
+        when(retrievalService.retrieveWithTrace(any(RetrievalRequest.class)))
+                .thenReturn(new HybridRetrievalService.RetrievalTrace(
+                        List.of(memory, sop),
+                        List.of("Applied lexical retrieval over title/content"),
+                        Map.of("candidateCount", 2)
+                ));
+        when(rerankService.rerank(anyString(), any()))
+                .thenReturn(new RerankService.RerankTrace(List.of(sop), Map.of("scoreByDocument", Map.of("sop-1", 1))));
+
+        KnowledgeIngestService service = new KnowledgeIngestService(
+                repository,
+                rewriteService,
+                ragRouter,
+                retrievalService,
+                rerankService,
+                properties,
+                chunker,
+                storageService
+        );
+
+        RetrievalResult result = service.retrieve("payment 怎么处理", Map.of());
+
+        assertEquals(List.of("sop-1"), result.documents().stream().map(KnowledgeDocument::id).toList());
+        assertEquals(1, result.diagnostics().get("memoryDocumentsExcluded"));
+        assertEquals(false, result.diagnostics().get("memorySearchExplicit"));
+        assertTrue(result.retrievalReasons().stream().anyMatch(reason -> reason.contains("Excluded long-term memory")));
     }
 }

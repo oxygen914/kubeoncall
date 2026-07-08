@@ -44,7 +44,7 @@ public class PlannerThinkNode extends ThinkNode {
         state.setExecutionId(executionId);
 
         String userRequest = state.getUserRequest();
-        String normalized = normalizeRequest(userRequest);
+        String normalized = normalizeRequest(planningRequest(state, userRequest));
         String intent = inferIntent(normalized);
         String confidence = inferConfidence(normalized, intent);
         String target = inferTarget(normalized);
@@ -154,6 +154,28 @@ public class PlannerThinkNode extends ThinkNode {
     private String normalizeRequest(String request) {
         if (request == null) return "";
         return request.trim().replaceAll("\\s+", " ");
+    }
+
+    private String planningRequest(GraphState state, String currentRequest) {
+        Object sessionContext = state.getContext().get("sessionContext");
+        String sessionText = sessionContext == null ? "" : String.valueOf(sessionContext).trim();
+        Object memoryContext = state.getContext().get("memoryContext");
+        String memoryText = memoryContext == null ? "" : String.valueOf(memoryContext).trim();
+        if (sessionText.isBlank() && memoryText.isBlank()) {
+            return currentRequest;
+        }
+        StringBuilder builder = new StringBuilder();
+        if (!memoryText.isBlank()) {
+            builder.append(memoryText);
+        }
+        if (!sessionText.isBlank()) {
+            if (!builder.isEmpty()) {
+                builder.append("\n");
+            }
+            builder.append(sessionText);
+        }
+        builder.append("\nCurrent user: ").append(currentRequest == null ? "" : currentRequest);
+        return builder.toString();
     }
 
     private List<String> splitTaskRequests(String normalized) {

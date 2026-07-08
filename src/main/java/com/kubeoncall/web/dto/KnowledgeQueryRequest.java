@@ -6,6 +6,9 @@ import java.util.Map;
 
 public record KnowledgeQueryRequest(
         @NotBlank String question,
-        Map<String, String> filters
+        Map<String, String> filters,
+        Integer topK,
+        String retrieveMethod,
+        Boolean includeTrace
 ) {
 }

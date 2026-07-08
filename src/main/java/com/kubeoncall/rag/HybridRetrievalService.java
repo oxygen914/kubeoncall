@@ -2,6 +2,7 @@ package com.kubeoncall.rag;
 
 import com.kubeoncall.common.config.KubeOnCallProperties;
 import com.kubeoncall.domain.rag.KnowledgeDocument;
+import com.kubeoncall.domain.rag.RetrieveMethod;
 import com.kubeoncall.domain.rag.RetrievalRequest;
 import com.kubeoncall.rag.repository.KnowledgeRepository;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -21,15 +22,15 @@ public class HybridRetrievalService {
 
     private final KnowledgeRepository knowledgeRepository;
     private final KubeOnCallProperties properties;
-    private final List<VectorRetrievalClient> vectorRetrievalClients;
+    private final List<VectorRetriever> vectorRetrievers;
 
     @Autowired
     public HybridRetrievalService(KnowledgeRepository knowledgeRepository,
                                   KubeOnCallProperties properties,
-                                  List<VectorRetrievalClient> vectorRetrievalClients) {
+                                  List<VectorRetriever> vectorRetrievers) {
         this.knowledgeRepository = knowledgeRepository;
         this.properties = properties;
-        this.vectorRetrievalClients = vectorRetrievalClients == null ? List.of() : vectorRetrievalClients;
+        this.vectorRetrievers = vectorRetrievers == null ? List.of() : vectorRetrievers;
     }
 
     public HybridRetrievalService(KnowledgeRepository knowledgeRepository,
@@ -46,22 +47,28 @@ public class HybridRetrievalService {
         int topK = Math.max(1, request.topK());
         int lexicalCandidateTopN = Math.max(topK, properties.getRag().getLexicalCandidateTopN());
         int vectorCandidateTopN = Math.max(topK, properties.getRag().getVectorCandidateTopN());
+        RetrieveMethod method = request.retrieveMethod() == null ? RetrieveMethod.HYBRID : request.retrieveMethod();
+        boolean lexicalRequested = method == RetrieveMethod.KEYWORD || method == RetrieveMethod.HYBRID;
+        boolean vectorRequested = method == RetrieveMethod.VECTOR || method == RetrieveMethod.HYBRID;
 
-        List<KnowledgeDocument> lexicalCandidates = knowledgeRepository.searchLexical(request, lexicalCandidateTopN);
         List<String> reasons = new ArrayList<>();
-        reasons.add("Applied lexical retrieval over title/content");
+        List<KnowledgeDocument> lexicalCandidates = List.of();
+        if (lexicalRequested) {
+            lexicalCandidates = knowledgeRepository.searchLexical(request, lexicalCandidateTopN);
+            reasons.add("Applied lexical retrieval over title/content");
+        } else {
+            reasons.add("Skipped lexical retrieval for VECTOR mode");
+        }
 
         List<KnowledgeDocument> vectorCandidates = List.of();
         boolean vectorEnabled = properties.getRag().isVectorEnabled();
         boolean vectorFallback = false;
         String vectorFallbackReason = null;
         String vectorSource = "disabled";
-        if (vectorEnabled) {
+        if (vectorRequested && vectorEnabled) {
             try {
                 vectorCandidates = searchVectorCandidates(request, vectorCandidateTopN);
-                vectorSource = vectorRetrievalClients.stream().anyMatch(VectorRetrievalClient::available)
-                        ? "external_vector_service"
-                        : "repository_compat";
+                vectorSource = vectorSource();
                 reasons.add("Applied vector retrieval over content semantics");
             } catch (RuntimeException ex) {
                 vectorFallback = true;
@@ -69,6 +76,9 @@ public class HybridRetrievalService {
                 vectorSource = "fallback";
                 reasons.add("Vector retrieval failed and fell back to lexical");
             }
+        } else if (!vectorRequested) {
+            vectorSource = "not_requested";
+            reasons.add("Skipped vector retrieval for KEYWORD mode");
         } else {
             reasons.add("Vector retrieval disabled by configuration");
         }
@@ -93,7 +103,11 @@ public class HybridRetrievalService {
                 .limit(topK)
                 .toList();
 
-        if (!vectorEnabled || vectorFallback || vectorCandidates.isEmpty()) {
+        if (method == RetrieveMethod.KEYWORD) {
+            fused = lexicalCandidates.stream().limit(topK).toList();
+        } else if (method == RetrieveMethod.VECTOR) {
+            fused = vectorCandidates.stream().limit(topK).toList();
+        } else if (!vectorEnabled || vectorFallback || vectorCandidates.isEmpty()) {
             fused = lexicalCandidates.stream().limit(topK).toList();
         } else {
             reasons.add("Applied reciprocal rank fusion");
@@ -104,6 +118,8 @@ public class HybridRetrievalService {
         diagnostics.put("latencyMs", Duration.between(startedAt, Instant.now()).toMillis());
         diagnostics.put("queryLength", request.question() == null ? 0 : request.question().trim().length());
         diagnostics.put("topK", topK);
+        diagnostics.put("retrieveMethod", method.name());
+        diagnostics.put("includeTrace", request.includeTrace());
         diagnostics.put("filterCount", request.filters() == null ? 0 : request.filters().size());
         diagnostics.put("lexicalCandidateCount", lexicalCandidates.size());
         diagnostics.put("vectorCandidateCount", vectorCandidates.size());
@@ -119,16 +135,24 @@ public class HybridRetrievalService {
     }
 
     private List<KnowledgeDocument> searchVectorCandidates(RetrievalRequest request, int candidateSize) {
-        for (VectorRetrievalClient client : vectorRetrievalClients) {
-            if (!client.available()) {
+        for (VectorRetriever retriever : vectorRetrievers) {
+            if (!retriever.available()) {
                 continue;
             }
-            List<KnowledgeDocument> documents = client.search(request, candidateSize);
+            List<KnowledgeDocument> documents = retriever.retrieve(request, candidateSize);
             if (documents != null && !documents.isEmpty()) {
                 return documents;
             }
         }
         return knowledgeRepository.searchVector(request, candidateSize);
+    }
+
+    private String vectorSource() {
+        return vectorRetrievers.stream()
+                .filter(VectorRetriever::available)
+                .findFirst()
+                .map(VectorRetriever::source)
+                .orElse("repository_compat");
     }
 
     private Map<String, Double> rankScores(List<KnowledgeDocument> documents, int rrfK) {

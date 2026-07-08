@@ -2,6 +2,7 @@ package com.kubeoncall.rag;
 
 import com.kubeoncall.common.config.KubeOnCallProperties;
 import com.kubeoncall.domain.rag.KnowledgeDocument;
+import com.kubeoncall.domain.rag.RetrieveMethod;
 import com.kubeoncall.domain.rag.RetrievalRequest;
 import com.kubeoncall.rag.repository.KnowledgeRepository;
 import org.junit.jupiter.api.Test;
@@ -13,6 +14,7 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -66,5 +68,62 @@ class HybridRetrievalServiceTest {
         assertEquals(List.of("doc-1"), trace.documents().stream().map(KnowledgeDocument::id).toList());
         assertEquals(true, trace.reasons().stream().anyMatch(reason -> reason.contains("disabled")));
         assertEquals(true, trace.diagnostics().get("vectorEnabled").equals(false));
+    }
+
+    @Test
+    void keywordModeShouldNotCallVectorRetrieval() {
+        KnowledgeRepository repository = mock(KnowledgeRepository.class);
+        KubeOnCallProperties properties = new KubeOnCallProperties();
+        properties.getRag().setVectorEnabled(true);
+        properties.getRag().setLexicalCandidateTopN(4);
+        HybridRetrievalService service = new HybridRetrievalService(repository, properties);
+        RetrievalRequest request = new RetrievalRequest("payment timeout", Map.of(), 2, RetrieveMethod.KEYWORD, true);
+
+        KnowledgeDocument lexical = new KnowledgeDocument("doc-1", "t", "c", "manual", Map.of(), Instant.now());
+        when(repository.searchLexical(request, 4)).thenReturn(List.of(lexical));
+
+        HybridRetrievalService.RetrievalTrace trace = service.retrieveWithTrace(request);
+
+        verify(repository).searchLexical(request, 4);
+        verify(repository, never()).searchVector(request, 4);
+        assertEquals(List.of("doc-1"), trace.documents().stream().map(KnowledgeDocument::id).toList());
+        assertEquals("KEYWORD", trace.diagnostics().get("retrieveMethod"));
+        assertEquals(true, trace.diagnostics().get("includeTrace"));
+    }
+
+    @Test
+    void failedVectorRetrieverShouldFallbackToLexical() {
+        KnowledgeRepository repository = mock(KnowledgeRepository.class);
+        KubeOnCallProperties properties = new KubeOnCallProperties();
+        properties.getRag().setVectorEnabled(true);
+        properties.getRag().setLexicalCandidateTopN(4);
+        properties.getRag().setVectorCandidateTopN(4);
+        VectorRetriever failingRetriever = new VectorRetriever() {
+            @Override
+            public boolean available() {
+                return true;
+            }
+
+            @Override
+            public List<KnowledgeDocument> retrieve(RetrievalRequest request, int candidateSize) {
+                throw new IllegalStateException("embedding service unavailable");
+            }
+
+            @Override
+            public String source() {
+                return "failing_mock";
+            }
+        };
+        HybridRetrievalService service = new HybridRetrievalService(repository, properties, List.of(failingRetriever));
+        RetrievalRequest request = new RetrievalRequest("payment timeout", Map.of(), 2);
+
+        KnowledgeDocument lexical = new KnowledgeDocument("doc-1", "t", "c", "manual", Map.of(), Instant.now());
+        when(repository.searchLexical(request, 4)).thenReturn(List.of(lexical));
+
+        HybridRetrievalService.RetrievalTrace trace = service.retrieveWithTrace(request);
+
+        assertEquals(List.of("doc-1"), trace.documents().stream().map(KnowledgeDocument::id).toList());
+        assertEquals(true, trace.diagnostics().get("vectorFallback"));
+        assertEquals("embedding service unavailable", trace.diagnostics().get("vectorFallbackReason"));
     }
 }

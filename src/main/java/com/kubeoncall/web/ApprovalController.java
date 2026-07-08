@@ -39,6 +39,6 @@ public class ApprovalController {
                 request.comment(),
                 request.decidedBy()
         );
-        return new AskResponse(result.executionId(), result.status(), result.message());
+        return new AskResponse(result.executionId(), result.status(), result.message(), result.sessionId());
     }
 }

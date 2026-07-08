@@ -41,6 +41,15 @@ kubeoncall:
     vector-enabled: false
     vector-endpoint: http://localhost:18086/api/vector/search
     vector-timeout-millis: 3000
+    es-knn-enabled: false
+    embedding-enabled: false
+    mock-embedding-enabled: false
+    embedding-endpoint: http://localhost:18086/api/embedding
+    embedding-timeout-millis: 3000
+    embedding-dimensions: 8
+    chunk-strategy: recursive
+    chunk-size: 280
+    chunk-overlap: 0
     cross-encoder-enabled: false
     cross-encoder-endpoint: http://localhost:18086/api/rerank
     cross-encoder-timeout-millis: 3000
@@ -77,6 +86,24 @@ kubeoncall:
       timeout-millis: 3000
   workflow:
     alarm-dedup-ttl-seconds: 600
+  alarm:
+    enabled: true
+    policy-location: classpath:alarm-policies.yml
+    default-severity: P3
+    active-ttl-seconds: 86400
+    resolved-retention-seconds: 3600
+    p0-dedup-ttl-seconds: 1800
+    p1-dedup-ttl-seconds: 1200
+    p2-dedup-ttl-seconds: 600
+    p3-dedup-ttl-seconds: 300
+    info-dedup-ttl-seconds: 120
+  memory:
+    enabled: true
+    session-ttl-seconds: 86400
+    max-session-turns: 12
+    long-term-enabled: true
+    inject-max-entries: 5
+    stale-after-days: 30
   audit:
     repository: redis
     retention-hours: 168

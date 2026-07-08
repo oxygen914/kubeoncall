@@ -99,6 +99,16 @@ public class KubernetesToolExecutor implements ToolExecutor {
                         List.of(TaskType.QUERY_LOGS, TaskType.QUERY_METRICS, TaskType.RESTART_SERVICE, TaskType.SCALE_WORKLOAD, TaskType.PATCH_CONFIG),
                         List.of("namespace"),
                         List.of("k8s-api")
+                ),
+                new ToolDefinition(
+                        "kubernetes.describeResource",
+                        "kubernetes",
+                        "Describe a Kubernetes resource (node/pod/deployment) for safe read-only diagnosis",
+                        true,
+                        false,
+                        List.of(TaskType.QUERY_LOGS, TaskType.QUERY_METRICS),
+                        List.of("resourceType", "resourceName"),
+                        List.of("k8s-api")
                 )
         );
     }

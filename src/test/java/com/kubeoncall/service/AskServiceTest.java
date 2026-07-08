@@ -16,16 +16,31 @@ import com.kubeoncall.domain.task.SopReference;
 import com.kubeoncall.domain.task.Task;
 import com.kubeoncall.domain.task.TaskPlan;
 import com.kubeoncall.domain.task.TaskType;
+import com.kubeoncall.memory.MemoryEntry;
+import com.kubeoncall.memory.MemoryExtractor;
+import com.kubeoncall.memory.MemoryInjection;
+import com.kubeoncall.memory.MemoryInjector;
+import com.kubeoncall.memory.MemoryScope;
+import com.kubeoncall.memory.MemoryType;
+import com.kubeoncall.memory.SessionSnapshot;
+import com.kubeoncall.memory.SessionStore;
+import com.kubeoncall.memory.SessionTurn;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -83,6 +98,147 @@ class AskServiceTest {
         verify(executorAgent).plan(any());
         verify(verifierAgent).run(any());
         verify(executorAgent).executePrepared(any());
+        verify(executionAuditService).recordGraphExecution(any(), any(), any());
+    }
+
+    @Test
+    void shouldLoadAndAppendSessionHistoryWhenSessionIdProvided() {
+        PlannerAgent plannerAgent = mock(PlannerAgent.class);
+        VerifierAgent verifierAgent = mock(VerifierAgent.class);
+        ExecutorAgent executorAgent = mock(ExecutorAgent.class);
+        ApprovalService approvalService = mock(ApprovalService.class);
+        ResponseComposer responseComposer = mock(ResponseComposer.class);
+        ExecutionAuditService executionAuditService = mock(ExecutionAuditService.class);
+        SessionStore sessionStore = mock(SessionStore.class);
+
+        AskService service = new AskService(
+                plannerAgent,
+                verifierAgent,
+                executorAgent,
+                approvalService,
+                responseComposer,
+                executionAuditService,
+                sessionStore
+        );
+
+        when(sessionStore.find("session-1")).thenReturn(Optional.of(new SessionSnapshot(
+                "session-1",
+                List.of(new SessionTurn("exec-prev", "payment-service CPU 高", "checked metrics", "SUCCESS", Instant.now())),
+                Instant.now(),
+                Instant.now()
+        )));
+        when(responseComposer.compose(any())).thenReturn("ok");
+        doAnswer(invocation -> {
+            GraphState state = invocation.getArgument(0);
+            assertEquals("session-1", state.getContext().get("sessionId"));
+            assertTrue(String.valueOf(state.getContext().get("sessionContext")).contains("payment-service"));
+            Task task = restartTask();
+            state.setExecutionId("exec-session");
+            state.setTaskPlan(new TaskPlan("exec-session", "继续看下 CPU", List.of(task), Instant.now(), true));
+            state.setCurrentTask(task);
+            state.setStatus(GraphStatus.SUCCESS);
+            return null;
+        }).when(plannerAgent).run(any(GraphState.class));
+        doAnswer(invocation -> {
+            GraphState state = invocation.getArgument(0);
+            state.setStatus(GraphStatus.SUCCESS);
+            return null;
+        }).when(executorAgent).plan(any(GraphState.class));
+        doAnswer(invocation -> {
+            GraphState state = invocation.getArgument(0);
+            state.setStatus(GraphStatus.SUCCESS);
+            return null;
+        }).when(verifierAgent).run(any(GraphState.class));
+        doAnswer(invocation -> {
+            GraphState state = invocation.getArgument(0);
+            state.setStatus(GraphStatus.SUCCESS);
+            return null;
+        }).when(executorAgent).executePrepared(any(GraphState.class));
+
+        AskService.AskExecutionResult result = service.handle("继续看下 CPU", " session-1 ");
+
+        assertEquals("session-1", result.sessionId());
+        ArgumentCaptor<SessionTurn> turnCaptor = ArgumentCaptor.forClass(SessionTurn.class);
+        verify(sessionStore).append(eq("session-1"), turnCaptor.capture());
+        assertEquals("继续看下 CPU", turnCaptor.getValue().question());
+        assertEquals("SUCCESS", turnCaptor.getValue().status());
+    }
+
+    @Test
+    void shouldInjectMemoryContextAndIgnoreExtractorFailure() {
+        PlannerAgent plannerAgent = mock(PlannerAgent.class);
+        VerifierAgent verifierAgent = mock(VerifierAgent.class);
+        ExecutorAgent executorAgent = mock(ExecutorAgent.class);
+        ApprovalService approvalService = mock(ApprovalService.class);
+        ResponseComposer responseComposer = mock(ResponseComposer.class);
+        ExecutionAuditService executionAuditService = mock(ExecutionAuditService.class);
+        SessionStore sessionStore = mock(SessionStore.class);
+        MemoryInjector memoryInjector = mock(MemoryInjector.class);
+        MemoryExtractor memoryExtractor = mock(MemoryExtractor.class);
+
+        AskService service = new AskService(
+                plannerAgent,
+                verifierAgent,
+                executorAgent,
+                approvalService,
+                responseComposer,
+                executionAuditService,
+                sessionStore,
+                memoryInjector,
+                memoryExtractor
+        );
+
+        when(memoryInjector.inject(eq("payment owner 是谁"), any()))
+                .thenReturn(new MemoryInjection(
+                        List.of(new MemoryEntry(
+                                "memory-1",
+                                MemoryType.SERVICE_FACT,
+                                MemoryScope.SERVICE,
+                                "payment owner",
+                                "payment-service owned by team-payments",
+                                "payment-service",
+                                null,
+                                null,
+                                Instant.now(),
+                                Instant.now(),
+                                Map.of()
+                        )),
+                        "Long-term memory hints. Verify current cluster state before using them.",
+                        ""
+                ));
+        when(responseComposer.compose(any())).thenReturn("ok");
+        doThrow(new IllegalStateException("extract failed"))
+                .when(memoryExtractor).extractFromAsk(any(GraphState.class), anyString());
+        doAnswer(invocation -> {
+            GraphState state = invocation.getArgument(0);
+            assertEquals("Long-term memory hints. Verify current cluster state before using them.",
+                    state.getContext().get("memoryContext"));
+            Task task = restartTask();
+            state.setExecutionId("exec-memory");
+            state.setTaskPlan(new TaskPlan("exec-memory", "payment owner 是谁", List.of(task), Instant.now(), false));
+            state.setCurrentTask(task);
+            state.setStatus(GraphStatus.SUCCESS);
+            return null;
+        }).when(plannerAgent).run(any(GraphState.class));
+        doAnswer(invocation -> {
+            GraphState state = invocation.getArgument(0);
+            state.setStatus(GraphStatus.SUCCESS);
+            return null;
+        }).when(executorAgent).plan(any(GraphState.class));
+        doAnswer(invocation -> {
+            GraphState state = invocation.getArgument(0);
+            state.setStatus(GraphStatus.SUCCESS);
+            return null;
+        }).when(verifierAgent).run(any(GraphState.class));
+        doAnswer(invocation -> {
+            GraphState state = invocation.getArgument(0);
+            state.setStatus(GraphStatus.SUCCESS);
+            return null;
+        }).when(executorAgent).executePrepared(any(GraphState.class));
+
+        AskService.AskExecutionResult result = service.handle("payment owner 是谁");
+
+        assertEquals("SUCCESS", result.status());
         verify(executionAuditService).recordGraphExecution(any(), any(), any());
     }
 

@@ -1,0 +1,18 @@
+{
+  "alarmId": "alarm-legacy-001",
+  "dedupKey": "dedup-node-a-cpu",
+  "source": "prometheus",
+  "severity": "critical",
+  "nodeName": "node-a",
+  "summary": "CPU usage is high on node-a",
+  "occurredAt": "2026-07-08T08:00:00Z",
+  "metadata": {
+    "namespace": "monitoring",
+    "service": "infra-exporter",
+    "cluster": "lab-cluster",
+    "alertName": "HostHighCpuUsage",
+    "runbookId": "runbook-host-cpu-high",
+    "baseline": "lab-default",
+    "compareQuery": "100 * (1 - avg by (cluster, instance) (rate(node_cpu_seconds_total{mode=\"idle\"}[5m])))"
+  }
+}

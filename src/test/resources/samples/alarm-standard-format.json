@@ -1,0 +1,33 @@
+{
+  "alarmId": "alarm-standard-001",
+  "source": "alertmanager",
+  "severity": "warning",
+  "alertName": "HostHighCpuUsage",
+  "resourceType": "NODE",
+  "resourceName": "node-a",
+  "cluster": "lab-cluster",
+  "namespace": "monitoring",
+  "service": "infra-exporter",
+  "metricName": "host.cpu.usage_percent",
+  "currentValue": 85.1,
+  "threshold": 85.0,
+  "unit": "%",
+  "duration": "5m",
+  "labels": {
+    "team": "infra",
+    "env": "lab",
+    "instance": "node-a"
+  },
+  "annotations": {
+    "summary": "CPU usage above 85% on node-a",
+    "description": "node-a CPU usage has been above 85% for 5m"
+  },
+  "runbookId": "runbook-host-cpu-high",
+  "status": "FIRING",
+  "occurredAt": "2026-07-08T08:05:00Z",
+  "summary": "CPU usage above 85% on node-a",
+  "metadata": {
+    "env": "lab",
+    "tier": "tier2"
+  }
+}
