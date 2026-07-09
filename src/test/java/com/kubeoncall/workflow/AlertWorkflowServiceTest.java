@@ -8,7 +8,9 @@ import com.kubeoncall.alarm.domain.AlarmStatus;
 import com.kubeoncall.alarm.domain.NormalizedAlarmEvent;
 import com.kubeoncall.alarm.policy.AlarmPolicyEngine;
 import com.kubeoncall.alarm.policy.AlarmPolicyRepository;
+import com.kubeoncall.alarm.state.ActiveAlarmState;
 import com.kubeoncall.alarm.state.ActiveAlarmStore;
+import com.kubeoncall.alarm.state.AlarmSilenceApprovalStore;
 import com.kubeoncall.common.config.KubeOnCallProperties;
 import com.kubeoncall.domain.alarm.AlarmEvent;
 import com.kubeoncall.domain.graph.NodeResult;
@@ -241,6 +243,79 @@ class AlertWorkflowServiceTest {
         assertTrue(summaryCaptor.getValue().contains("fingerprint=fp-memory"));
         assertTrue(summaryCaptor.getValue().contains("memoryRecallCount=1"));
         assertTrue(summaryCaptor.getValue().contains("latestMessage=ok"));
+    }
+
+    @Test
+    void shouldAttachSilenceApprovalToWorkflowContextAndAuditMetadata() {
+        StringRedisTemplate redisTemplate = mock(StringRedisTemplate.class);
+        ValueOperations<String, String> valueOperations = mock(ValueOperations.class);
+        when(redisTemplate.opsForValue()).thenReturn(valueOperations);
+        when(valueOperations.setIfAbsent(anyString(), anyString(), any())).thenReturn(true);
+
+        KubeOnCallProperties properties = new KubeOnCallProperties();
+        ExecutionAuditService auditService = mock(ExecutionAuditService.class);
+        AlarmPolicyEngine engine = new AlarmPolicyEngine(emptyRepository());
+        ActiveAlarmStore activeAlarmStore = mock(ActiveAlarmStore.class);
+        when(activeAlarmStore.record(any(NormalizedAlarmEvent.class), any(AlarmEvaluationResult.class), eq("fp-silence")))
+                .thenReturn(new ActiveAlarmState(
+                        "fp-silence", "alarm-silence", "PodCrashLoop", "cluster-a", "prod", "payment-service", "payment-pod",
+                        AlarmSeverity.P1, AlarmStatus.FIRING, null,
+                        Instant.now().minusSeconds(60), Instant.now(), 1));
+        Instant expiresAt = Instant.now().plusSeconds(600);
+        AlarmSilenceApprovalStore silenceApprovalStore = mock(AlarmSilenceApprovalStore.class);
+        when(silenceApprovalStore.find("fp-silence")).thenReturn(Optional.of(
+                new AlarmSilenceApprovalStore.SilenceApproval(
+                        "fp-silence",
+                        "incident-commander",
+                        "approved maintenance silence",
+                        Instant.now(),
+                        expiresAt
+                )));
+        when(silenceApprovalStore.keyFor("fp-silence")).thenReturn("alarm-silence-approval:fp-silence");
+
+        AlertWorkflowDefinition capturing = new AlertWorkflowDefinition(
+                "capturingNode",
+                true,
+                List.of(),
+                context -> {
+                    assertEquals(true, context.getAttribute("silenceApproved"));
+                    assertEquals("incident-commander", context.getAttribute("silenceApprovedBy"));
+                    assertEquals("approved maintenance silence", context.getAttribute("silenceApprovalReason"));
+                    assertEquals(expiresAt.toString(), context.getAttribute("silenceApprovalExpiresAt"));
+                    return new NodeResult("capturingNode", NodeStatus.SUCCESS, "ok", Map.of());
+                }
+        );
+        AlertWorkflowFactory factory = mock(AlertWorkflowFactory.class);
+        when(factory.buildWorkflow()).thenReturn(List.of(capturing));
+
+        AlertWorkflowService service = new AlertWorkflowService(
+                redisTemplate,
+                properties,
+                factory,
+                new WorkflowNodeExecutor(),
+                auditService,
+                engine,
+                activeAlarmStore,
+                null,
+                MemoryExtractor.noop(),
+                silenceApprovalStore
+        );
+
+        List<NodeResult> results = service.process(new NormalizedAlarmEvent(
+                "alarm-silence", "fp-silence", "PodCrashLoop", "prometheus", "warning", AlarmSeverity.P1,
+                com.kubeoncall.alarm.domain.AlarmResourceType.POD, "payment-pod", "cluster-a", "prod", "payment-service",
+                "kube_pod_container_status_restarts_total", 4.0, 3.0, "count", "5m",
+                Map.of(), Map.of(), "runbook-pod", null, Instant.now(), "pod crash", Map.of()));
+
+        assertEquals(1, results.size());
+        verify(silenceApprovalStore).find("fp-silence");
+        @SuppressWarnings("unchecked")
+        org.mockito.ArgumentCaptor<Map<String, Object>> metadataCaptor = org.mockito.ArgumentCaptor.forClass(Map.class);
+        verify(auditService).recordAlarmExecution(anyString(), anyString(), anyBoolean(), anyBoolean(), anyString(), any(), any(), any(), metadataCaptor.capture());
+        assertEquals(true, metadataCaptor.getValue().get("silenceApproved"));
+        assertEquals("incident-commander", metadataCaptor.getValue().get("silenceApprovedBy"));
+        assertEquals("approved maintenance silence", metadataCaptor.getValue().get("silenceApprovalReason"));
+        assertEquals("alarm-silence-approval:fp-silence", metadataCaptor.getValue().get("silenceApprovalKey"));
     }
 
     @Test

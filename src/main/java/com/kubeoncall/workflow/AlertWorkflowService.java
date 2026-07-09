@@ -10,6 +10,7 @@ import com.kubeoncall.alarm.policy.AlarmFingerprintService;
 import com.kubeoncall.alarm.policy.AlarmPolicyEngine;
 import com.kubeoncall.alarm.state.ActiveAlarmState;
 import com.kubeoncall.alarm.state.ActiveAlarmStore;
+import com.kubeoncall.alarm.state.AlarmSilenceApprovalStore;
 import com.kubeoncall.common.config.KubeOnCallProperties;
 import com.kubeoncall.domain.alarm.AlarmEvent;
 import com.kubeoncall.domain.graph.NodeResult;
@@ -42,6 +43,7 @@ public class AlertWorkflowService {
     private final ActiveAlarmStore activeAlarmStore;
     private final AlertMemoryService alertMemoryService;
     private final MemoryExtractor memoryExtractor;
+    private final AlarmSilenceApprovalStore silenceApprovalStore;
     private final AlarmFingerprintService alarmFingerprintService = new AlarmFingerprintService();
 
     public AlertWorkflowService(StringRedisTemplate redisTemplate,
@@ -52,7 +54,20 @@ public class AlertWorkflowService {
                                 AlarmPolicyEngine alarmPolicyEngine) {
         this(redisTemplate, properties, alertWorkflowFactory, workflowNodeExecutor, executionAuditService,
                 alarmPolicyEngine, new ActiveAlarmStore(redisTemplate, new ObjectMapper(), properties),
-                null, MemoryExtractor.noop());
+                null, MemoryExtractor.noop(), null);
+    }
+
+    public AlertWorkflowService(StringRedisTemplate redisTemplate,
+                                KubeOnCallProperties properties,
+                                AlertWorkflowFactory alertWorkflowFactory,
+                                WorkflowNodeExecutor workflowNodeExecutor,
+                                ExecutionAuditService executionAuditService,
+                                AlarmPolicyEngine alarmPolicyEngine,
+                                ActiveAlarmStore activeAlarmStore,
+                                AlertMemoryService alertMemoryService,
+                                MemoryExtractor memoryExtractor) {
+        this(redisTemplate, properties, alertWorkflowFactory, workflowNodeExecutor, executionAuditService,
+                alarmPolicyEngine, activeAlarmStore, alertMemoryService, memoryExtractor, null);
     }
 
     @Autowired
@@ -64,7 +79,8 @@ public class AlertWorkflowService {
                                 AlarmPolicyEngine alarmPolicyEngine,
                                 ActiveAlarmStore activeAlarmStore,
                                 AlertMemoryService alertMemoryService,
-                                MemoryExtractor memoryExtractor) {
+                                MemoryExtractor memoryExtractor,
+                                AlarmSilenceApprovalStore silenceApprovalStore) {
         this.redisTemplate = redisTemplate;
         this.properties = properties;
         this.alertWorkflowFactory = alertWorkflowFactory;
@@ -74,6 +90,7 @@ public class AlertWorkflowService {
         this.activeAlarmStore = activeAlarmStore;
         this.alertMemoryService = alertMemoryService;
         this.memoryExtractor = memoryExtractor == null ? MemoryExtractor.noop() : memoryExtractor;
+        this.silenceApprovalStore = silenceApprovalStore;
     }
 
     /**
@@ -203,6 +220,7 @@ public class AlertWorkflowService {
         context.putAttribute("activeAlarm", activeState);
         context.putAttribute("alertMemories", memoryPayload(memoryRecall.entries()));
         context.putAttribute("alertMemoryEntries", memoryRecall.entries());
+        attachSilenceApproval(fingerprint, context);
         if (!memoryRecall.warning().isBlank()) {
             context.putAttribute("alertMemoryWarning", memoryRecall.warning());
         }
@@ -441,6 +459,23 @@ public class AlertWorkflowService {
         }
     }
 
+    private void attachSilenceApproval(String fingerprint, AlertWorkflowContext context) {
+        if (silenceApprovalStore == null || fingerprint == null || fingerprint.isBlank()) {
+            return;
+        }
+        try {
+            silenceApprovalStore.find(fingerprint).ifPresent(approval -> {
+                context.putAttribute("silenceApproved", true);
+                context.putAttribute("silenceApprovedBy", approval.approvedBy());
+                context.putAttribute("silenceApprovalReason", approval.reason());
+                context.putAttribute("silenceApprovalExpiresAt", approval.expiresAt() == null ? null : approval.expiresAt().toString());
+                context.putAttribute("silenceApprovalKey", silenceApprovalStore.keyFor(fingerprint));
+            });
+        } catch (RuntimeException ex) {
+            context.putAttribute("silenceApprovalWarning", "silence approval lookup failed: " + ex.getMessage());
+        }
+    }
+
     private void extractAlarmMemory(NormalizedAlarmEvent event, String summary, AlertWorkflowContext context) {
         try {
             memoryExtractor.extractFromAlarm(event, summary);
@@ -476,6 +511,7 @@ public class AlertWorkflowService {
             appendPart(builder, "failedNodes", context.getFailedNodes());
             appendPart(builder, "skippedNodes", context.getSkippedNodes());
             appendPart(builder, "degraded", context.isDegraded());
+            appendPart(builder, "silenceApproved", context.getAttribute("silenceApproved"));
         }
         if (latest != null) {
             appendPart(builder, "latestNode", latest.nodeName());
@@ -530,6 +566,11 @@ public class AlertWorkflowService {
             putIfPresent(metadata, "skippedNodes", context.getSkippedNodes());
             putIfPresent(metadata, "alertMemoryExtractionWarning", context.getAttribute("alertMemoryExtractionWarning"));
             putIfPresent(metadata, "silenceApproved", context.getAttribute("silenceApproved"));
+            putIfPresent(metadata, "silenceApprovedBy", context.getAttribute("silenceApprovedBy"));
+            putIfPresent(metadata, "silenceApprovalReason", context.getAttribute("silenceApprovalReason"));
+            putIfPresent(metadata, "silenceApprovalExpiresAt", context.getAttribute("silenceApprovalExpiresAt"));
+            putIfPresent(metadata, "silenceApprovalKey", context.getAttribute("silenceApprovalKey"));
+            putIfPresent(metadata, "silenceApprovalWarning", context.getAttribute("silenceApprovalWarning"));
         }
         if (results != null && !results.isEmpty()) {
             putIfPresent(metadata, "nodeResultCount", results.size());

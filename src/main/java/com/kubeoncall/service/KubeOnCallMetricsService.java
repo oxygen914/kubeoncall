@@ -36,6 +36,13 @@ public class KubeOnCallMetricsService {
         );
     }
 
+    public void recordAlarmSilenceApproval(String outcome) {
+        increment(
+                "kubeoncall.alarm.silence_approvals",
+                "outcome", safe(outcome)
+        );
+    }
+
     public void recordRagRetrieval(String method, String vectorSource, boolean vectorFallback, long resultCount, long latencyMs) {
         increment(
                 "kubeoncall.rag.retrievals",

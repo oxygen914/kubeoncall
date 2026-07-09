@@ -99,6 +99,7 @@ kubeoncall:
     info-dedup-ttl-seconds: 120
     node-not-ready-suppression-ttl-seconds: 1800
     escalation-ttl-seconds: 3600
+    silence-approval-ttl-seconds: 1800
     p0-escalation-count: 2
     p1-escalation-count: 3
   memory:

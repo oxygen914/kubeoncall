@@ -436,6 +436,7 @@ public class KubeOnCallProperties {
         private long infoDedupTtlSeconds = 120;
         private long nodeNotReadySuppressionTtlSeconds = 1800;
         private long escalationTtlSeconds = 3600;
+        private long silenceApprovalTtlSeconds = 1800;
         private long p0EscalationCount = 2;
         private long p1EscalationCount = 3;
 
@@ -533,6 +534,14 @@ public class KubeOnCallProperties {
 
         public void setEscalationTtlSeconds(long escalationTtlSeconds) {
             this.escalationTtlSeconds = escalationTtlSeconds;
+        }
+
+        public long getSilenceApprovalTtlSeconds() {
+            return silenceApprovalTtlSeconds;
+        }
+
+        public void setSilenceApprovalTtlSeconds(long silenceApprovalTtlSeconds) {
+            this.silenceApprovalTtlSeconds = silenceApprovalTtlSeconds;
         }
 
         public long getP0EscalationCount() {

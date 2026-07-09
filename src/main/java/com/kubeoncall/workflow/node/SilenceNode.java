@@ -31,6 +31,10 @@ public class SilenceNode implements AlertWorkflowNode {
         payload.put("action", "createSilence");
         payload.put("silenceCreated", false);
         payload.put("summary", context.getAttribute("resultSummary"));
+        putIfPresent(payload, "approvedBy", context.getAttribute("silenceApprovedBy"));
+        putIfPresent(payload, "approvalReason", context.getAttribute("silenceApprovalReason"));
+        putIfPresent(payload, "approvalExpiresAt", context.getAttribute("silenceApprovalExpiresAt"));
+        putIfPresent(payload, "approvalKey", context.getAttribute("silenceApprovalKey"));
 
         if (!isSilenceApproved(context)) {
             payload.put("skipped", true);
@@ -48,6 +52,9 @@ public class SilenceNode implements AlertWorkflowNode {
         params.put("serviceName", context.getAlarmEvent().nodeName());
         params.put("durationMinutes", 30);
         params.put("summary", payload.get("summary"));
+        putIfPresent(params, "approvedBy", context.getAttribute("silenceApprovedBy"));
+        putIfPresent(params, "approvalReason", context.getAttribute("silenceApprovalReason"));
+        putIfPresent(params, "approvalExpiresAt", context.getAttribute("silenceApprovalExpiresAt"));
         Map<String, Object> result = alertmanager.execute("createSilence", params);
         payload.put("result", result);
         payload.put("silenceCreated", !isFailure(result));
@@ -78,5 +85,15 @@ public class SilenceNode implements AlertWorkflowNode {
             return true;
         }
         return httpStatus instanceof Number number && number.intValue() >= 400;
+    }
+
+    private void putIfPresent(Map<String, Object> payload, String key, Object value) {
+        if (value == null) {
+            return;
+        }
+        if (value instanceof String text && text.isBlank()) {
+            return;
+        }
+        payload.put(key, value);
     }
 }
