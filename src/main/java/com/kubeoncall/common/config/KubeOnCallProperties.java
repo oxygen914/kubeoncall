@@ -15,6 +15,7 @@ public class KubeOnCallProperties {
     private final Integrations integrations = new Integrations();
     private final Alarm alarm = new Alarm();
     private final Memory memory = new Memory();
+    private final Skill skill = new Skill();
 
     public Agent getAgent() {
         return agent;
@@ -54,6 +55,10 @@ public class KubeOnCallProperties {
 
     public Memory getMemory() {
         return memory;
+    }
+
+    public Skill getSkill() {
+        return skill;
     }
 
     public static class Agent {
@@ -429,6 +434,10 @@ public class KubeOnCallProperties {
         private long p2DedupTtlSeconds = 600;
         private long p3DedupTtlSeconds = 300;
         private long infoDedupTtlSeconds = 120;
+        private long nodeNotReadySuppressionTtlSeconds = 1800;
+        private long escalationTtlSeconds = 3600;
+        private long p0EscalationCount = 2;
+        private long p1EscalationCount = 3;
 
         public boolean isEnabled() {
             return enabled;
@@ -509,6 +518,38 @@ public class KubeOnCallProperties {
         public void setInfoDedupTtlSeconds(long infoDedupTtlSeconds) {
             this.infoDedupTtlSeconds = infoDedupTtlSeconds;
         }
+
+        public long getNodeNotReadySuppressionTtlSeconds() {
+            return nodeNotReadySuppressionTtlSeconds;
+        }
+
+        public void setNodeNotReadySuppressionTtlSeconds(long nodeNotReadySuppressionTtlSeconds) {
+            this.nodeNotReadySuppressionTtlSeconds = nodeNotReadySuppressionTtlSeconds;
+        }
+
+        public long getEscalationTtlSeconds() {
+            return escalationTtlSeconds;
+        }
+
+        public void setEscalationTtlSeconds(long escalationTtlSeconds) {
+            this.escalationTtlSeconds = escalationTtlSeconds;
+        }
+
+        public long getP0EscalationCount() {
+            return p0EscalationCount;
+        }
+
+        public void setP0EscalationCount(long p0EscalationCount) {
+            this.p0EscalationCount = p0EscalationCount;
+        }
+
+        public long getP1EscalationCount() {
+            return p1EscalationCount;
+        }
+
+        public void setP1EscalationCount(long p1EscalationCount) {
+            this.p1EscalationCount = p1EscalationCount;
+        }
     }
 
     public static class Memory {
@@ -565,6 +606,54 @@ public class KubeOnCallProperties {
 
         public void setStaleAfterDays(int staleAfterDays) {
             this.staleAfterDays = staleAfterDays;
+        }
+    }
+
+    public static class Skill {
+        private boolean enabled = true;
+        private String location = "classpath*:skills/*.md";
+        private int maxActiveSkills = 3;
+        private int activationThreshold = 3;
+        private int promptMaxChars = 4000;
+
+        public boolean isEnabled() {
+            return enabled;
+        }
+
+        public void setEnabled(boolean enabled) {
+            this.enabled = enabled;
+        }
+
+        public String getLocation() {
+            return location;
+        }
+
+        public void setLocation(String location) {
+            this.location = location;
+        }
+
+        public int getMaxActiveSkills() {
+            return maxActiveSkills;
+        }
+
+        public void setMaxActiveSkills(int maxActiveSkills) {
+            this.maxActiveSkills = maxActiveSkills;
+        }
+
+        public int getActivationThreshold() {
+            return activationThreshold;
+        }
+
+        public void setActivationThreshold(int activationThreshold) {
+            this.activationThreshold = activationThreshold;
+        }
+
+        public int getPromptMaxChars() {
+            return promptMaxChars;
+        }
+
+        public void setPromptMaxChars(int promptMaxChars) {
+            this.promptMaxChars = promptMaxChars;
         }
     }
 

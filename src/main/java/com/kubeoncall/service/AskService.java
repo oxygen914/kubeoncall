@@ -17,6 +17,8 @@ import com.kubeoncall.memory.MemoryInjector;
 import com.kubeoncall.memory.SessionSnapshot;
 import com.kubeoncall.memory.SessionStore;
 import com.kubeoncall.memory.SessionTurn;
+import com.kubeoncall.skill.SkillActivation;
+import com.kubeoncall.skill.SkillActivationService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
@@ -38,6 +40,7 @@ public class AskService {
     private final SessionStore sessionStore;
     private final MemoryInjector memoryInjector;
     private final MemoryExtractor memoryExtractor;
+    private final SkillActivationService skillActivationService;
 
     @Autowired
     public AskService(PlannerAgent plannerAgent,
@@ -48,7 +51,8 @@ public class AskService {
                       ExecutionAuditService executionAuditService,
                       SessionStore sessionStore,
                       MemoryInjector memoryInjector,
-                      MemoryExtractor memoryExtractor) {
+                      MemoryExtractor memoryExtractor,
+                      SkillActivationService skillActivationService) {
         this.plannerAgent = plannerAgent;
         this.verifierAgent = verifierAgent;
         this.executorAgent = executorAgent;
@@ -58,6 +62,28 @@ public class AskService {
         this.sessionStore = sessionStore;
         this.memoryInjector = memoryInjector;
         this.memoryExtractor = memoryExtractor;
+        this.skillActivationService = skillActivationService;
+    }
+
+    public AskService(PlannerAgent plannerAgent,
+                      VerifierAgent verifierAgent,
+                      ExecutorAgent executorAgent,
+                      ApprovalService approvalService,
+                      ResponseComposer responseComposer,
+                      ExecutionAuditService executionAuditService,
+                      SessionStore sessionStore,
+                      MemoryInjector memoryInjector,
+                      MemoryExtractor memoryExtractor) {
+        this(plannerAgent,
+                verifierAgent,
+                executorAgent,
+                approvalService,
+                responseComposer,
+                executionAuditService,
+                sessionStore,
+                memoryInjector,
+                memoryExtractor,
+                null);
     }
 
     public AskService(PlannerAgent plannerAgent,
@@ -75,7 +101,8 @@ public class AskService {
                 executionAuditService,
                 sessionStore,
                 MemoryInjector.noop(),
-                MemoryExtractor.noop());
+                MemoryExtractor.noop(),
+                null);
     }
 
     public AskService(PlannerAgent plannerAgent,
@@ -92,7 +119,8 @@ public class AskService {
                 executionAuditService,
                 SessionStore.noop(),
                 MemoryInjector.noop(),
-                MemoryExtractor.noop());
+                MemoryExtractor.noop(),
+                null);
     }
 
     public AskExecutionResult handle(String question) {
@@ -106,6 +134,7 @@ public class AskService {
         String sessionId = normalizeSessionId(requestedSessionId);
         attachSessionContext(state, sessionId);
         attachMemoryContext(state, question);
+        attachSkillContext(state, question);
 
         plannerAgent.run(state);
         if (state.getStatus() != GraphStatus.SUCCESS) {
@@ -286,6 +315,47 @@ public class AskService {
         } catch (RuntimeException ex) {
             state.getContext().put("memoryWarning", "memory injection failed: " + ex.getMessage());
         }
+    }
+
+    private void attachSkillContext(GraphState state, String question) {
+        if (skillActivationService == null) {
+            return;
+        }
+        try {
+            SkillActivation activation = skillActivationService.activate(question, state.getContext());
+            if (!activation.active()) {
+                state.getContext().put("activatedSkills", List.of());
+                return;
+            }
+            state.getContext().put("activatedSkills", activation.skillSummaries());
+            state.getContext().put("activatedSkillIds", activation.skillIds());
+            state.getContext().put("skillPrompt", activation.prompt());
+            state.getContext().put("activatedSkillToolWhitelist", activation.toolWhitelist());
+            if (activation.maxRisk() != null) {
+                state.getContext().put("activatedSkillMaxRisk", activation.maxRisk().name());
+            }
+            mergePlannerSkillKnowledge(state, activation);
+        } catch (RuntimeException ex) {
+            state.getContext().put("skillWarning", "skill activation failed: " + ex.getMessage());
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private void mergePlannerSkillKnowledge(GraphState state, SkillActivation activation) {
+        Object value = state.getContext().get("plannerKnowledge");
+        Map<String, Object> plannerKnowledge;
+        if (value instanceof Map<?, ?> raw) {
+            plannerKnowledge = new LinkedHashMap<>();
+            raw.forEach((key, entryValue) -> plannerKnowledge.put(String.valueOf(key), entryValue));
+        } else {
+            plannerKnowledge = new LinkedHashMap<>();
+        }
+        plannerKnowledge.put("activatedSkills", activation.skillSummaries());
+        plannerKnowledge.put("activatedSkillIds", activation.skillIds());
+        plannerKnowledge.put("activatedSkillToolWhitelist", activation.toolWhitelist());
+        plannerKnowledge.put("activatedSkillMaxRisk", activation.maxRisk() == null ? null : activation.maxRisk().name());
+        plannerKnowledge.put("skillPrompt", activation.prompt());
+        state.getContext().put("plannerKnowledge", plannerKnowledge);
     }
 
     private String buildSessionContext(List<SessionTurn> turns) {

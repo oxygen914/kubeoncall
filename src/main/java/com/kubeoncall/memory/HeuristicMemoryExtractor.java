@@ -3,6 +3,7 @@ package com.kubeoncall.memory;
 import com.kubeoncall.alarm.domain.NormalizedAlarmEvent;
 import com.kubeoncall.common.config.KubeOnCallProperties;
 import com.kubeoncall.domain.graph.GraphState;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
 import java.time.Instant;
@@ -21,6 +22,7 @@ public class HeuristicMemoryExtractor implements MemoryExtractor {
     }
 
     @Override
+    @Async
     public void extractFromAsk(GraphState state, String answer) {
         if (!properties.getMemory().isEnabled() || shouldSkip(answer)) {
             return;
@@ -47,8 +49,10 @@ public class HeuristicMemoryExtractor implements MemoryExtractor {
     }
 
     @Override
+    @Async
     public void extractFromAlarm(NormalizedAlarmEvent event, String summary) {
-        if (!properties.getMemory().isEnabled() || event == null || shouldSkip(summary)) {
+        String sanitizedSummary = sanitizeAlarmSummary(summary);
+        if (!properties.getMemory().isEnabled() || event == null || shouldSkip(sanitizedSummary)) {
             return;
         }
         memoryService.remember(new MemoryEntry(
@@ -56,7 +60,7 @@ public class HeuristicMemoryExtractor implements MemoryExtractor {
                 MemoryType.INCIDENT_SUMMARY,
                 event.fingerprint() == null || event.fingerprint().isBlank() ? MemoryScope.SERVICE : MemoryScope.FINGERPRINT,
                 safe(event.alertName()),
-                abbreviate(summary, 1000),
+                abbreviate(sanitizedSummary, 1000),
                 event.service(),
                 event.resourceName(),
                 event.fingerprint(),
@@ -82,13 +86,35 @@ public class HeuristicMemoryExtractor implements MemoryExtractor {
             return true;
         }
         String lower = content.toLowerCase();
-        if (lower.contains("kubectl ")) {
-            return true;
-        }
-        if (lower.contains("current value") || lower.contains("当前值") || lower.contains("实时")) {
+        if (isVolatileMemoryFragment(lower)) {
             return true;
         }
         return content.length() > 3000 && (lower.contains("sop-") || lower.contains("standard procedure"));
+    }
+
+    private String sanitizeAlarmSummary(String summary) {
+        if (summary == null || summary.isBlank()) {
+            return "";
+        }
+        StringBuilder builder = new StringBuilder();
+        for (String rawPart : summary.split(";\\s*")) {
+            String part = rawPart == null ? "" : rawPart.trim();
+            if (part.isBlank() || isVolatileMemoryFragment(part.toLowerCase())) {
+                continue;
+            }
+            if (builder.length() > 0) {
+                builder.append("; ");
+            }
+            builder.append(part);
+        }
+        return builder.toString();
+    }
+
+    private boolean isVolatileMemoryFragment(String lowerContent) {
+        return lowerContent.contains("kubectl ")
+                || lowerContent.contains("current value")
+                || lowerContent.contains("当前值")
+                || lowerContent.contains("实时");
     }
 
     private String buildSubject(MemoryType type, String service) {

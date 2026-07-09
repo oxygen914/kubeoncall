@@ -16,6 +16,7 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -63,5 +64,53 @@ class VerifierThinkNodeTest {
         assertEquals(NodeStatus.SUCCESS, result.status());
         assertEquals("APPROVAL_REQUIRED", state.getContext().get("verifierDecision"));
         assertEquals("Verifier requires approval before execution", result.message());
+    }
+
+    @Test
+    void shouldRequireApprovalWhenTaskRiskExceedsActivatedSkillMaxRisk() {
+        AgentToolCatalog catalog = mock(AgentToolCatalog.class);
+        ToolDefinition tool = new ToolDefinition(
+                "kubernetes.queryLogs",
+                "kubernetes",
+                "query logs",
+                true,
+                false,
+                List.of(TaskType.QUERY_LOGS),
+                List.of("namespace"),
+                List.of("k8s")
+        );
+        when(catalog.findExecutorTool("kubernetes", "queryLogs")).thenReturn(tool);
+
+        VerifierThinkNode node = new VerifierThinkNode(catalog);
+        GraphState state = new GraphState();
+        state.setCurrentTask(new Task(
+                "task-2",
+                "query logs",
+                TaskType.QUERY_LOGS,
+                RiskLevel.MEDIUM,
+                "order-service",
+                Map.of("namespace", "default"),
+                new SopReference("SOP-QUERY_LOGS", "logs", "v1", "rag:sop")
+        ));
+        state.getContext().put("activatedSkillIds", List.of("payment-oom-triage"));
+        state.getContext().put("activatedSkillMaxRisk", "LOW");
+        state.getContext().put("executionPlan", new ExecutionPlan(
+                "kubernetes",
+                "queryLogs",
+                Map.of("namespace", "default"),
+                List.of("namespace"),
+                List.of(),
+                Map.of("namespace", "from_planner"),
+                "summary",
+                null
+        ));
+
+        NodeResult result = node.execute(state);
+
+        assertEquals(NodeStatus.SUCCESS, result.status());
+        assertEquals("APPROVAL_REQUIRED", state.getContext().get("verifierDecision"));
+        assertTrue(((List<?>) result.payload().get("riskReasons")).stream()
+                .anyMatch(reason -> String.valueOf(reason).contains("maxRisk LOW")));
+        assertEquals("LOW", result.payload().get("activatedSkillMaxRisk"));
     }
 }

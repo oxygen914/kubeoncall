@@ -97,6 +97,10 @@ kubeoncall:
     p2-dedup-ttl-seconds: 600
     p3-dedup-ttl-seconds: 300
     info-dedup-ttl-seconds: 120
+    node-not-ready-suppression-ttl-seconds: 1800
+    escalation-ttl-seconds: 3600
+    p0-escalation-count: 2
+    p1-escalation-count: 3
   memory:
     enabled: true
     session-ttl-seconds: 86400
@@ -104,6 +108,12 @@ kubeoncall:
     long-term-enabled: true
     inject-max-entries: 5
     stale-after-days: 30
+  skill:
+    enabled: true
+    location: classpath*:skills/*.md
+    max-active-skills: 3
+    activation-threshold: 3
+    prompt-max-chars: 4000
   audit:
     repository: redis
     retention-hours: 168

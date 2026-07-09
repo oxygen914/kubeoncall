@@ -12,9 +12,11 @@ import com.kubeoncall.domain.alarm.AlarmEvent;
 import com.kubeoncall.domain.graph.NodeResult;
 import com.kubeoncall.domain.graph.NodeStatus;
 import com.kubeoncall.tool.ToolExecutor;
+import com.kubeoncall.workflow.node.NotificationNode;
 import com.kubeoncall.workflow.node.ResultPushNode;
+import com.kubeoncall.workflow.node.SilenceNode;
+import com.kubeoncall.workflow.node.TicketNode;
 import org.junit.jupiter.api.Test;
-import org.mockito.ArgumentCaptor;
 
 import java.time.Instant;
 import java.util.LinkedHashMap;
@@ -24,7 +26,9 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -47,10 +51,7 @@ class ResultPushNodeTest {
         NodeResult result = node.execute(context);
 
         assertEquals(NodeStatus.SUCCESS, result.status());
-        // createSilence must never be invoked by default.
-        verify(alertmanager, never()).execute(org.mockito.ArgumentMatchers.eq("createSilence"), org.mockito.ArgumentMatchers.any());
-        // The non-mutating alert event is the only alertmanager call.
-        verify(alertmanager).execute(org.mockito.ArgumentMatchers.eq("sendAlertEvent"), org.mockito.ArgumentMatchers.any());
+        verify(alertmanager, never()).execute(anyString(), any());
         assertEquals(false, result.payload().get("silenceCreated"));
         assertEquals("P0", result.payload().get("severity"));
     }
@@ -62,21 +63,18 @@ class ResultPushNodeTest {
         Map<String, Object> ok = new LinkedHashMap<>();
         ok.put("status", "success");
         ok.put("httpStatus", 200);
-        ArgumentCaptor<Map<String, Object>> params = ArgumentCaptor.forClass(Map.class);
-        when(alertmanager.execute(anyString(), params.capture())).thenReturn(ok);
+        when(alertmanager.execute(eq("createSilence"), any())).thenReturn(ok);
 
-        ResultPushNode node = new ResultPushNode(List.of(alertmanager), new KubeOnCallProperties());
+        SilenceNode node = new SilenceNode(List.of(alertmanager));
         AlertWorkflowContext context = contextWithPolicy(AlarmSeverity.P2, true);
         context.putAttribute("silenceApproved", true);
+        context.putAttribute("resultSummary", Map.of("fingerprint", "fp-cpu"));
 
         NodeResult result = node.execute(context);
 
         assertEquals(NodeStatus.SUCCESS, result.status());
-        boolean silenceCalled = params.getAllValues().stream().anyMatch(p -> false);
-        // createSilence path exercised: the summary should reflect a created silence.
         assertEquals(true, result.payload().get("silenceCreated"));
-        // Silence action must have been called exactly once.
-        verify(alertmanager).execute(org.mockito.ArgumentMatchers.eq("createSilence"), org.mockito.ArgumentMatchers.any());
+        verify(alertmanager).execute(eq("createSilence"), any());
     }
 
     @Test
@@ -86,15 +84,17 @@ class ResultPushNodeTest {
         Map<String, Object> ok = new LinkedHashMap<>();
         ok.put("status", "success");
         ok.put("httpStatus", 200);
-        when(alertmanager.execute(anyString(), org.mockito.ArgumentMatchers.any())).thenReturn(ok);
+        when(alertmanager.execute(anyString(), any())).thenReturn(ok);
 
-        ResultPushNode node = new ResultPushNode(List.of(alertmanager), new KubeOnCallProperties());
+        SilenceNode node = new SilenceNode(List.of(alertmanager));
         AlertWorkflowContext context = contextWithPolicy(AlarmSeverity.P2, true);
         // silenceApproved NOT set.
 
-        node.execute(context);
+        NodeResult result = node.execute(context);
 
-        verify(alertmanager, never()).execute(org.mockito.ArgumentMatchers.eq("createSilence"), org.mockito.ArgumentMatchers.any());
+        assertEquals(NodeStatus.SUCCESS, result.status());
+        assertEquals(true, result.payload().get("skipped"));
+        verify(alertmanager, never()).execute(eq("createSilence"), any());
     }
 
     @Test
@@ -109,6 +109,38 @@ class ResultPushNodeTest {
         assertTrue(result.payload().containsKey("alertName"));
         assertEquals("host-high-cpu-p1", result.payload().get("policyId"));
         assertFalse(Boolean.TRUE.equals(result.payload().get("silenceCreated")));
+    }
+
+    @Test
+    void notificationNodeShouldSendSafeAlertEventOnly() {
+        ToolExecutor alertmanager = mock(ToolExecutor.class);
+        when(alertmanager.getExecutorKind()).thenReturn("alertmanager");
+        Map<String, Object> ok = new LinkedHashMap<>();
+        ok.put("status", "success");
+        ok.put("httpStatus", 200);
+        when(alertmanager.execute(eq("sendAlertEvent"), any())).thenReturn(ok);
+        NotificationNode node = new NotificationNode(List.of(alertmanager));
+        AlertWorkflowContext context = contextWithPolicy(AlarmSeverity.P1, false);
+        context.putAttribute("resultSummary", Map.of("fingerprint", "fp-cpu"));
+
+        NodeResult result = node.execute(context);
+
+        assertEquals(NodeStatus.SUCCESS, result.status());
+        verify(alertmanager).execute(eq("sendAlertEvent"), any());
+        verify(alertmanager, never()).execute(eq("createSilence"), any());
+    }
+
+    @Test
+    void ticketNodeShouldPrepareTicketPayload() {
+        TicketNode node = new TicketNode();
+        AlertWorkflowContext context = contextWithPolicy(AlarmSeverity.P1, false);
+        context.putAttribute("resultSummary", Map.of("fingerprint", "fp-cpu"));
+
+        NodeResult result = node.execute(context);
+
+        assertEquals(NodeStatus.SUCCESS, result.status());
+        assertEquals("prepared", result.payload().get("status"));
+        assertEquals(result.payload(), context.getAttribute("ticket"));
     }
 
     private AlertWorkflowContext contextWithPolicy(AlarmSeverity severity, boolean autoSilence) {

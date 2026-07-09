@@ -42,7 +42,17 @@ public class ExecutorThinkNode extends ThinkNode {
 
         String executorKind = inferExecutorKind(task.taskType());
         String action = inferAction(task.taskType());
-        ToolDefinition toolDefinition = agentToolCatalog.findExecutorTool(executorKind, action);
+        List<String> toolWhitelist = readToolWhitelist(state);
+        ToolDefinition toolDefinition = toolWhitelist.isEmpty()
+                ? agentToolCatalog.findExecutorTool(executorKind, action)
+                : agentToolCatalog.findExecutorTool(executorKind, action, toolWhitelist);
+        if (toolDefinition == null && !toolWhitelist.isEmpty()) {
+            String toolName = executorKind + "." + action;
+            String warning = "Activated skill tool whitelist does not include planned tool " + toolName + "; falling back to catalog";
+            state.getContext().put("skillToolWhitelistWarning", warning);
+            state.addObservation("Executor: " + warning);
+            toolDefinition = agentToolCatalog.findExecutorTool(executorKind, action);
+        }
         if (toolDefinition == null) {
             return new NodeResult(getName(), NodeStatus.FAILURE, "No executor tool registered for " + executorKind + "." + action, Map.of());
         }
@@ -120,6 +130,9 @@ public class ExecutorThinkNode extends ThinkNode {
         state.getContext().put("executionPlan", plan);
         state.getContext().put("executorPayload", buildPayload(executorKind, action, parameters, true, toolDefinition));
         state.getContext().put("executorToolDefinition", toolDefinition);
+        if (!toolWhitelist.isEmpty()) {
+            state.getContext().put("activatedSkillToolWhitelist", toolWhitelist);
+        }
         state.addObservation("Executor: kind=" + executorKind + ", action=" + action + ", tool=" + toolDefinition.name() + ", target=" + task.target());
 
         return new NodeResult(
@@ -204,6 +217,17 @@ public class ExecutorThinkNode extends ThinkNode {
         LinkedHashMap<String, Object> result = new LinkedHashMap<>();
         supplementalMap.forEach((key, value) -> result.put(String.valueOf(key), value));
         return result;
+    }
+
+    private List<String> readToolWhitelist(GraphState state) {
+        Object value = state.getContext().get("activatedSkillToolWhitelist");
+        if (value instanceof List<?> list) {
+            return list.stream()
+                    .map(String::valueOf)
+                    .filter(item -> !item.isBlank())
+                    .toList();
+        }
+        return List.of();
     }
 
     @SuppressWarnings("unchecked")

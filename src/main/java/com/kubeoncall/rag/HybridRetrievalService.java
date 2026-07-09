@@ -5,6 +5,7 @@ import com.kubeoncall.domain.rag.KnowledgeDocument;
 import com.kubeoncall.domain.rag.RetrieveMethod;
 import com.kubeoncall.domain.rag.RetrievalRequest;
 import com.kubeoncall.rag.repository.KnowledgeRepository;
+import com.kubeoncall.service.KubeOnCallMetricsService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
@@ -23,19 +24,28 @@ public class HybridRetrievalService {
     private final KnowledgeRepository knowledgeRepository;
     private final KubeOnCallProperties properties;
     private final List<VectorRetriever> vectorRetrievers;
+    private final KubeOnCallMetricsService metricsService;
 
     @Autowired
     public HybridRetrievalService(KnowledgeRepository knowledgeRepository,
                                   KubeOnCallProperties properties,
-                                  List<VectorRetriever> vectorRetrievers) {
+                                  List<VectorRetriever> vectorRetrievers,
+                                  KubeOnCallMetricsService metricsService) {
         this.knowledgeRepository = knowledgeRepository;
         this.properties = properties;
         this.vectorRetrievers = vectorRetrievers == null ? List.of() : vectorRetrievers;
+        this.metricsService = metricsService;
+    }
+
+    public HybridRetrievalService(KnowledgeRepository knowledgeRepository,
+                                  KubeOnCallProperties properties,
+                                  List<VectorRetriever> vectorRetrievers) {
+        this(knowledgeRepository, properties, vectorRetrievers, null);
     }
 
     public HybridRetrievalService(KnowledgeRepository knowledgeRepository,
                                   KubeOnCallProperties properties) {
-        this(knowledgeRepository, properties, List.of());
+        this(knowledgeRepository, properties, List.of(), null);
     }
 
     public List<KnowledgeDocument> retrieve(RetrievalRequest request) {
@@ -113,9 +123,10 @@ public class HybridRetrievalService {
             reasons.add("Applied reciprocal rank fusion");
         }
 
+        long latencyMs = Duration.between(startedAt, Instant.now()).toMillis();
         Map<String, Object> diagnostics = new LinkedHashMap<>();
         diagnostics.put("candidateCount", fused.size());
-        diagnostics.put("latencyMs", Duration.between(startedAt, Instant.now()).toMillis());
+        diagnostics.put("latencyMs", latencyMs);
         diagnostics.put("queryLength", request.question() == null ? 0 : request.question().trim().length());
         diagnostics.put("topK", topK);
         diagnostics.put("retrieveMethod", method.name());
@@ -131,6 +142,7 @@ public class HybridRetrievalService {
         diagnostics.put("fusedDocumentIds", fused.stream().map(KnowledgeDocument::id).toList());
         diagnostics.put("lexicalDocumentIds", lexicalCandidates.stream().map(KnowledgeDocument::id).toList());
         diagnostics.put("vectorDocumentIds", vectorCandidates.stream().map(KnowledgeDocument::id).toList());
+        recordMetrics(method, vectorSource, vectorFallback, fused.size(), latencyMs);
         return new RetrievalTrace(fused, reasons, diagnostics);
     }
 
@@ -163,6 +175,12 @@ public class HybridRetrievalService {
             rank++;
         }
         return scores;
+    }
+
+    private void recordMetrics(RetrieveMethod method, String vectorSource, boolean vectorFallback, long resultCount, long latencyMs) {
+        if (metricsService != null) {
+            metricsService.recordRagRetrieval(method.name(), vectorSource, vectorFallback, resultCount, latencyMs);
+        }
     }
 
     public record RetrievalTrace(

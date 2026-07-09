@@ -18,6 +18,7 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -96,5 +97,43 @@ class ExecutorThinkNodeTest {
         assertEquals("QUERY_ADDITIONAL_CONTEXT", result.retryStrategy());
         assertTrue(((List<?>) result.payload().get("missingParameters")).contains("namespace"));
         assertTrue(((List<?>) result.payload().get("missingParameters")).contains("replicas"));
+    }
+
+    @Test
+    void shouldWarnAndFallbackWhenSkillWhitelistIsTooStrict() {
+        ToolDefinition tool = new ToolDefinition(
+                "kubernetes.scaleWorkload",
+                "kubernetes",
+                "Scale deployment",
+                false,
+                true,
+                List.of(TaskType.SCALE_WORKLOAD),
+                List.of("namespace", "replicas"),
+                List.of("kubernetes")
+        );
+        AgentToolCatalog catalog = mock(AgentToolCatalog.class);
+        List<String> whitelist = List.of("kubernetes.describeResource");
+        when(catalog.findExecutorTool(eq("kubernetes"), eq("scaleWorkload"), eq(whitelist))).thenReturn(null);
+        when(catalog.findExecutorTool("kubernetes", "scaleWorkload")).thenReturn(tool);
+        ExecutorThinkNode node = new ExecutorThinkNode(catalog);
+
+        GraphState state = new GraphState();
+        state.getContext().put("activatedSkillToolWhitelist", whitelist);
+        state.setCurrentTask(new Task(
+                "task-3",
+                "scale service",
+                TaskType.SCALE_WORKLOAD,
+                RiskLevel.MEDIUM,
+                "order-service",
+                Map.of("namespace", "prod", "replicas", 3),
+                new SopReference("SOP-1", "scale", "v1", "rag:sop")
+        ));
+
+        NodeResult result = node.execute(state);
+
+        assertEquals(NodeStatus.SUCCESS, result.status());
+        assertTrue(String.valueOf(state.getContext().get("skillToolWhitelistWarning")).contains("falling back"));
+        ExecutionPlan plan = (ExecutionPlan) state.getContext().get("executionPlan");
+        assertEquals("scaleWorkload", plan.action());
     }
 }

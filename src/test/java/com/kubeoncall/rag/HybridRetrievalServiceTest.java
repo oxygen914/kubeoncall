@@ -5,6 +5,7 @@ import com.kubeoncall.domain.rag.KnowledgeDocument;
 import com.kubeoncall.domain.rag.RetrieveMethod;
 import com.kubeoncall.domain.rag.RetrievalRequest;
 import com.kubeoncall.rag.repository.KnowledgeRepository;
+import com.kubeoncall.service.KubeOnCallMetricsService;
 import org.junit.jupiter.api.Test;
 
 import java.time.Instant;
@@ -98,6 +99,7 @@ class HybridRetrievalServiceTest {
         properties.getRag().setVectorEnabled(true);
         properties.getRag().setLexicalCandidateTopN(4);
         properties.getRag().setVectorCandidateTopN(4);
+        KubeOnCallMetricsService metricsService = mock(KubeOnCallMetricsService.class);
         VectorRetriever failingRetriever = new VectorRetriever() {
             @Override
             public boolean available() {
@@ -114,7 +116,7 @@ class HybridRetrievalServiceTest {
                 return "failing_mock";
             }
         };
-        HybridRetrievalService service = new HybridRetrievalService(repository, properties, List.of(failingRetriever));
+        HybridRetrievalService service = new HybridRetrievalService(repository, properties, List.of(failingRetriever), metricsService);
         RetrievalRequest request = new RetrievalRequest("payment timeout", Map.of(), 2);
 
         KnowledgeDocument lexical = new KnowledgeDocument("doc-1", "t", "c", "manual", Map.of(), Instant.now());
@@ -125,5 +127,6 @@ class HybridRetrievalServiceTest {
         assertEquals(List.of("doc-1"), trace.documents().stream().map(KnowledgeDocument::id).toList());
         assertEquals(true, trace.diagnostics().get("vectorFallback"));
         assertEquals("embedding service unavailable", trace.diagnostics().get("vectorFallbackReason"));
+        verify(metricsService).recordRagRetrieval("HYBRID", "fallback", true, 1, (Long) trace.diagnostics().get("latencyMs"));
     }
 }

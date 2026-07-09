@@ -4,8 +4,11 @@ import com.kubeoncall.common.config.KubeOnCallProperties;
 import com.kubeoncall.domain.rag.KnowledgeDocument;
 import com.kubeoncall.domain.rag.RetrievalRequest;
 import com.kubeoncall.rag.repository.KnowledgeRepository;
+import com.kubeoncall.service.KubeOnCallMetricsService;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.LinkedHashMap;
@@ -16,11 +19,20 @@ public class MemoryService {
 
     private final KnowledgeRepository knowledgeRepository;
     private final KubeOnCallProperties properties;
+    private final KubeOnCallMetricsService metricsService;
+
+    @Autowired
+    public MemoryService(KnowledgeRepository knowledgeRepository,
+                         KubeOnCallProperties properties,
+                         KubeOnCallMetricsService metricsService) {
+        this.knowledgeRepository = knowledgeRepository;
+        this.properties = properties;
+        this.metricsService = metricsService;
+    }
 
     public MemoryService(KnowledgeRepository knowledgeRepository,
                          KubeOnCallProperties properties) {
-        this.knowledgeRepository = knowledgeRepository;
-        this.properties = properties;
+        this(knowledgeRepository, properties, null);
     }
 
     public MemoryEntry remember(MemoryEntry entry) {
@@ -28,14 +40,17 @@ public class MemoryService {
             throw new IllegalArgumentException("memory entry must not be null");
         }
         if (!properties.getMemory().isEnabled() || !properties.getMemory().isLongTermEnabled()) {
+            recordMetric("remember", "disabled", 0);
             return entry;
         }
         knowledgeRepository.save(toKnowledgeDocument(entry));
+        recordMetric("remember", "success", 1);
         return entry;
     }
 
     public List<MemoryEntry> search(String query, Map<String, String> filters, int topK) {
         if (!properties.getMemory().isEnabled()) {
+            recordMetric("search", "disabled", 0);
             return List.of();
         }
         Map<String, String> effectiveFilters = new LinkedHashMap<>();
@@ -48,9 +63,36 @@ public class MemoryService {
                 effectiveFilters,
                 Math.max(1, topK)
         );
-        return knowledgeRepository.searchLexical(request, Math.max(1, topK)).stream()
+        List<MemoryEntry> entries = knowledgeRepository.searchLexical(request, Math.max(1, topK)).stream()
                 .map(this::toMemoryEntry)
                 .toList();
+        recordMetric("search", "success", entries.size());
+        return entries;
+    }
+
+    public MemoryCleanupResult cleanupStale(Instant now, int scanLimit) {
+        if (!properties.getMemory().isEnabled() || !properties.getMemory().isLongTermEnabled()) {
+            recordMetric("cleanup", "disabled", 0);
+            return new MemoryCleanupResult(0, 0, "disabled");
+        }
+        Instant reference = now == null ? Instant.now() : now;
+        int limit = Math.max(1, scanLimit);
+        int staleAfterDays = Math.max(1, properties.getMemory().getStaleAfterDays());
+        Instant threshold = reference.minus(Duration.ofDays(staleAfterDays));
+        RetrievalRequest request = new RetrievalRequest("", Map.of("source_type", "memory"), limit);
+        List<KnowledgeDocument> candidates = knowledgeRepository.searchLexical(request, limit);
+
+        int deleted = 0;
+        for (KnowledgeDocument document : candidates) {
+            MemoryEntry entry = toMemoryEntry(document);
+            Instant updatedAt = entry.updatedAt() == null ? entry.createdAt() : entry.updatedAt();
+            if (updatedAt != null && updatedAt.isBefore(threshold)) {
+                knowledgeRepository.deleteById(document.id());
+                deleted++;
+            }
+        }
+        recordMetric("cleanup", "success", deleted);
+        return new MemoryCleanupResult(candidates.size(), deleted, "success");
     }
 
     private KnowledgeDocument toKnowledgeDocument(MemoryEntry entry) {
@@ -114,5 +156,14 @@ public class MemoryService {
         if (value != null && !value.isBlank()) {
             metadata.put(key, value);
         }
+    }
+
+    private void recordMetric(String operation, String outcome, long count) {
+        if (metricsService != null) {
+            metricsService.recordMemory(operation, outcome, count);
+        }
+    }
+
+    public record MemoryCleanupResult(int scanned, int deleted, String status) {
     }
 }

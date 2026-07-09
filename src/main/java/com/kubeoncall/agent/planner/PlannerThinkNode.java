@@ -161,11 +161,19 @@ public class PlannerThinkNode extends ThinkNode {
         String sessionText = sessionContext == null ? "" : String.valueOf(sessionContext).trim();
         Object memoryContext = state.getContext().get("memoryContext");
         String memoryText = memoryContext == null ? "" : String.valueOf(memoryContext).trim();
-        if (sessionText.isBlank() && memoryText.isBlank()) {
+        Object skillPrompt = state.getContext().get("skillPrompt");
+        String skillText = skillPrompt == null ? "" : String.valueOf(skillPrompt).trim();
+        if (sessionText.isBlank() && memoryText.isBlank() && skillText.isBlank()) {
             return currentRequest;
         }
         StringBuilder builder = new StringBuilder();
+        if (!skillText.isBlank()) {
+            builder.append(skillText);
+        }
         if (!memoryText.isBlank()) {
+            if (!builder.isEmpty()) {
+                builder.append("\n");
+            }
             builder.append(memoryText);
         }
         if (!sessionText.isBlank()) {
@@ -485,9 +493,27 @@ public class PlannerThinkNode extends ThinkNode {
         if (value instanceof Map<?, ?> raw) {
             Map<String, Object> casted = new LinkedHashMap<>();
             raw.forEach((key, entryValue) -> casted.put(String.valueOf(key), entryValue));
+            mergeSkillKnowledge(casted, state);
             return casted;
         }
-        return Map.of();
+        Map<String, Object> knowledge = new LinkedHashMap<>();
+        mergeSkillKnowledge(knowledge, state);
+        return knowledge;
+    }
+
+    private void mergeSkillKnowledge(Map<String, Object> knowledge, GraphState state) {
+        putIfPresent(knowledge, state, "activatedSkills");
+        putIfPresent(knowledge, state, "activatedSkillIds");
+        putIfPresent(knowledge, state, "activatedSkillToolWhitelist");
+        putIfPresent(knowledge, state, "activatedSkillMaxRisk");
+        putIfPresent(knowledge, state, "skillPrompt");
+    }
+
+    private void putIfPresent(Map<String, Object> knowledge, GraphState state, String key) {
+        Object value = state.getContext().get(key);
+        if (value != null) {
+            knowledge.putIfAbsent(key, value);
+        }
     }
 
     private List<String> consultedTools(GraphState state) {

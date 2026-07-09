@@ -43,7 +43,7 @@ public class VerifierThinkNode extends ThinkNode {
         }
 
         ExecutionPlan executionPlan = state.getContext().get("executionPlan") instanceof ExecutionPlan plan ? plan : null;
-        Evaluation evaluation = evaluate(task, executionPlan);
+        Evaluation evaluation = evaluate(task, executionPlan, state.getContext());
         state.getContext().put("verifierDecision", evaluation.decision());
         state.getContext().put("verifierRiskReasons", evaluation.reasons());
         state.getContext().put("verifierTool", evaluation.details().get("toolName"));
@@ -72,15 +72,16 @@ public class VerifierThinkNode extends ThinkNode {
         return new NodeResult(getName(), NodeStatus.SUCCESS, "Task passed verification", evaluation.details());
     }
 
-    private Evaluation evaluate(Task task, ExecutionPlan executionPlan) {
+    private Evaluation evaluate(Task task, ExecutionPlan executionPlan, Map<String, Object> context) {
         List<String> reasons = new ArrayList<>();
         String description = task.description() == null ? "" : task.description().toLowerCase(Locale.ROOT);
         String target = task.target() == null ? "" : task.target().toLowerCase(Locale.ROOT);
         ToolDefinition toolDefinition = resolveToolDefinition(task, executionPlan);
+        RiskLevel activatedSkillMaxRisk = readActivatedSkillMaxRisk(context);
 
         if (toolDefinition == null) {
             reasons.add("No executor tool is registered for the planned task action");
-            return new Evaluation("REJECT", reasons, detailMap(task, executionPlan, null, reasons));
+            return new Evaluation("REJECT", reasons, detailMap(task, executionPlan, null, reasons, context));
         }
 
         if (!toolDefinition.supportedTaskTypes().contains(task.taskType())) {
@@ -106,9 +107,12 @@ public class VerifierThinkNode extends ThinkNode {
                 || task.taskType() == TaskType.EXECUTE_SCRIPT
                 || task.riskLevel().ordinal() >= RiskLevel.CRITICAL.ordinal()
                 || toolDefinition.name().equals("database.cleanData"))) {
-            return new Evaluation("REJECT", reasons, detailMap(task, executionPlan, toolDefinition, reasons));
+            return new Evaluation("REJECT", reasons, detailMap(task, executionPlan, toolDefinition, reasons, context));
         }
 
+        if (activatedSkillMaxRisk != null && task.riskLevel().ordinal() > activatedSkillMaxRisk.ordinal()) {
+            reasons.add("Activated skill maxRisk " + activatedSkillMaxRisk + " is below task risk " + task.riskLevel());
+        }
         if (task.riskLevel().ordinal() >= RiskLevel.HIGH.ordinal()) {
             reasons.add("Risk level requires human approval");
         }
@@ -123,11 +127,11 @@ public class VerifierThinkNode extends ThinkNode {
         }
 
         if (!reasons.isEmpty()) {
-            return new Evaluation("APPROVAL_REQUIRED", reasons, detailMap(task, executionPlan, toolDefinition, reasons));
+            return new Evaluation("APPROVAL_REQUIRED", reasons, detailMap(task, executionPlan, toolDefinition, reasons, context));
         }
 
         List<String> allowReasons = List.of("Task is within automatic execution guardrails");
-        return new Evaluation("ALLOW", allowReasons, detailMap(task, executionPlan, toolDefinition, allowReasons));
+        return new Evaluation("ALLOW", allowReasons, detailMap(task, executionPlan, toolDefinition, allowReasons, context));
     }
 
     private ToolDefinition resolveToolDefinition(Task task, ExecutionPlan executionPlan) {
@@ -143,7 +147,11 @@ public class VerifierThinkNode extends ThinkNode {
                 .orElse(null);
     }
 
-    private Map<String, Object> detailMap(Task task, ExecutionPlan executionPlan, ToolDefinition toolDefinition, List<String> reasons) {
+    private Map<String, Object> detailMap(Task task,
+                                          ExecutionPlan executionPlan,
+                                          ToolDefinition toolDefinition,
+                                          List<String> reasons,
+                                          Map<String, Object> context) {
         Map<String, Object> details = new LinkedHashMap<>();
         details.put("taskId", task.taskId());
         details.put("taskType", task.taskType() == null ? null : task.taskType().name());
@@ -159,7 +167,39 @@ public class VerifierThinkNode extends ThinkNode {
             details.put("plannedAction", executionPlan.action());
             details.put("plannedExecutorKind", executionPlan.executorKind());
         }
+        if (context != null) {
+            putIfPresent(details, context, "activatedSkills");
+            putIfPresent(details, context, "activatedSkillIds");
+            putIfPresent(details, context, "activatedSkillMaxRisk");
+            putIfPresent(details, context, "activatedSkillToolWhitelist");
+            putIfPresent(details, context, "skillToolWhitelistWarning");
+        }
         return details;
+    }
+
+    private RiskLevel readActivatedSkillMaxRisk(Map<String, Object> context) {
+        if (context == null) {
+            return null;
+        }
+        Object value = context.get("activatedSkillMaxRisk");
+        if (value instanceof RiskLevel riskLevel) {
+            return riskLevel;
+        }
+        if (value == null || String.valueOf(value).isBlank()) {
+            return null;
+        }
+        try {
+            return RiskLevel.valueOf(String.valueOf(value).trim().toUpperCase(Locale.ROOT));
+        } catch (IllegalArgumentException ignored) {
+            return null;
+        }
+    }
+
+    private void putIfPresent(Map<String, Object> details, Map<String, Object> context, String key) {
+        Object value = context.get(key);
+        if (value != null) {
+            details.put(key, value);
+        }
     }
 
     private record Evaluation(String decision, List<String> reasons, Map<String, Object> details) {

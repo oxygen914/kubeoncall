@@ -139,6 +139,7 @@ public class PlannerQueryToolNode extends QueryToolNode {
         }
 
         state.getContext().put("plannerAvailableTools", availableTools);
+        attachSkillKnowledge(payload, state);
         state.getContext().put("plannerKnowledge", payload);
         state.addObservation("Planner queried read-only tools for target=" + target + ", tools="
                 + availableTools.stream().map(tool -> String.valueOf(tool.get("name"))).toList());
@@ -178,11 +179,19 @@ public class PlannerQueryToolNode extends QueryToolNode {
         String sessionText = sessionContext == null ? "" : String.valueOf(sessionContext).trim();
         Object memoryContext = state.getContext().get("memoryContext");
         String memoryText = memoryContext == null ? "" : String.valueOf(memoryContext).trim();
-        if (sessionText.isBlank() && memoryText.isBlank()) {
+        Object skillPrompt = state.getContext().get("skillPrompt");
+        String skillText = skillPrompt == null ? "" : String.valueOf(skillPrompt).trim();
+        if (sessionText.isBlank() && memoryText.isBlank() && skillText.isBlank()) {
             return currentRequest;
         }
         StringBuilder builder = new StringBuilder();
+        if (!skillText.isBlank()) {
+            builder.append(skillText);
+        }
         if (!memoryText.isBlank()) {
+            if (!builder.isEmpty()) {
+                builder.append("\n");
+            }
             builder.append(memoryText);
         }
         if (!sessionText.isBlank()) {
@@ -193,6 +202,21 @@ public class PlannerQueryToolNode extends QueryToolNode {
         }
         builder.append("\nCurrent user: ").append(currentRequest);
         return builder.toString();
+    }
+
+    private void attachSkillKnowledge(Map<String, Object> payload, GraphState state) {
+        putIfPresent(payload, state, "activatedSkills");
+        putIfPresent(payload, state, "activatedSkillIds");
+        putIfPresent(payload, state, "activatedSkillToolWhitelist");
+        putIfPresent(payload, state, "activatedSkillMaxRisk");
+        putIfPresent(payload, state, "skillPrompt");
+    }
+
+    private void putIfPresent(Map<String, Object> payload, GraphState state, String key) {
+        Object value = state.getContext().get(key);
+        if (value != null) {
+            payload.put(key, value);
+        }
     }
 
     private Map<String, Object> toToolMap(ToolDefinition tool) {

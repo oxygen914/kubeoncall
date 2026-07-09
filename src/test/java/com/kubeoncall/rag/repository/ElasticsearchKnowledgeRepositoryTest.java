@@ -34,4 +34,16 @@ class ElasticsearchKnowledgeRepositoryTest {
 
         verify(template).save(any(EsKnowledgeDocumentEntity.class), any());
     }
+
+    @Test
+    void shouldDeleteDocumentFromConfiguredIndex() {
+        ElasticsearchTemplate template = mock(ElasticsearchTemplate.class);
+        KubeOnCallProperties properties = new KubeOnCallProperties();
+        properties.getRag().setKnowledgeIndex("kubeoncall-knowledge-test");
+        ElasticsearchKnowledgeRepository repository = new ElasticsearchKnowledgeRepository(template, properties);
+
+        repository.deleteById("memory-old");
+
+        verify(template).delete(any(org.springframework.data.elasticsearch.core.query.Query.class), org.mockito.ArgumentMatchers.eq(EsKnowledgeDocumentEntity.class), any());
+    }
 }

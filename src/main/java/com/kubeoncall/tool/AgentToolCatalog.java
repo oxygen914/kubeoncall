@@ -33,6 +33,16 @@ public class AgentToolCatalog {
                 .toList();
     }
 
+    public List<ToolDefinition> executorTools(List<String> toolWhitelist) {
+        List<ToolDefinition> tools = executorTools();
+        if (toolWhitelist == null || toolWhitelist.isEmpty()) {
+            return tools;
+        }
+        return tools.stream()
+                .filter(tool -> isWhitelisted(tool.name(), toolWhitelist))
+                .toList();
+    }
+
     public List<Map<String, Object>> verifierCapabilities() {
         return List.of(
                 Map.of(
@@ -63,6 +73,17 @@ public class AgentToolCatalog {
         return allToolsByName().get(toolName);
     }
 
+    public ToolDefinition findExecutorTool(String executorKind, String action, List<String> toolWhitelist) {
+        ToolDefinition definition = findExecutorTool(executorKind, action);
+        if (definition == null) {
+            return null;
+        }
+        if (toolWhitelist == null || toolWhitelist.isEmpty() || isWhitelisted(definition.name(), toolWhitelist)) {
+            return definition;
+        }
+        return null;
+    }
+
     public boolean isPlannerReadOnly() {
         return plannerTools().stream().allMatch(ToolDefinition::readOnly);
     }
@@ -74,5 +95,14 @@ public class AgentToolCatalog {
     public List<TaskType> taskTypesFor(String toolName) {
         ToolDefinition definition = allToolsByName().get(toolName);
         return definition == null ? List.of() : definition.supportedTaskTypes();
+    }
+
+    private boolean isWhitelisted(String toolName, List<String> toolWhitelist) {
+        if (toolWhitelist == null || toolWhitelist.isEmpty()) {
+            return true;
+        }
+        return toolWhitelist.stream()
+                .filter(entry -> entry != null && !entry.isBlank())
+                .anyMatch(entry -> entry.equals(toolName) || entry.endsWith(".*") && toolName.startsWith(entry.substring(0, entry.length() - 1)));
     }
 }

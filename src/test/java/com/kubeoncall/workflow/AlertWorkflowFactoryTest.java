@@ -3,8 +3,11 @@ package com.kubeoncall.workflow;
 import com.kubeoncall.workflow.node.DeviceInfoNode;
 import com.kubeoncall.workflow.node.KnowledgeRetrieveNode;
 import com.kubeoncall.workflow.node.LogCollectionNode;
+import com.kubeoncall.workflow.node.NotificationNode;
 import com.kubeoncall.workflow.node.ResultPushNode;
+import com.kubeoncall.workflow.node.SilenceNode;
 import com.kubeoncall.workflow.node.StateCompareNode;
+import com.kubeoncall.workflow.node.TicketNode;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -28,7 +31,10 @@ class AlertWorkflowFactoryTest {
                 "deviceInfoNode",
                 "stateCompareNode",
                 "knowledgeRetrieveNode",
-                "resultPushNode"
+                "resultPushNode",
+                "notificationNode",
+                "ticketNode",
+                "silenceNode"
         ), nodeNames);
     }
 
@@ -44,7 +50,10 @@ class AlertWorkflowFactoryTest {
                 "logCollectionNode",
                 "stateCompareNode",
                 "knowledgeRetrieveNode",
-                "resultPushNode"
+                "resultPushNode",
+                "notificationNode",
+                "ticketNode",
+                "silenceNode"
         ), nodeNames);
     }
 
@@ -79,6 +88,9 @@ class AlertWorkflowFactoryTest {
                 mock(StateCompareNode.class),
                 mock(KnowledgeRetrieveNode.class),
                 mock(ResultPushNode.class),
+                mock(NotificationNode.class),
+                mock(TicketNode.class),
+                mock(SilenceNode.class),
                 new WorkflowTemplateRegistry()
         );
     }

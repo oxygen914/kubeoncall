@@ -16,6 +16,9 @@ public interface KnowledgeRepository {
 
     Map<String, KnowledgeDocument> loadParents(List<String> parentDocumentIds);
 
+    default void deleteById(String documentId) {
+    }
+
     default List<KnowledgeDocument> search(RetrievalRequest request) {
         return searchLexical(request, Math.max(1, request.topK()));
     }

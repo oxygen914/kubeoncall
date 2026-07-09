@@ -6,6 +6,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.kubeoncall.common.config.KubeOnCallProperties;
 import com.kubeoncall.domain.task.RiskLevel;
 import com.kubeoncall.domain.task.TaskType;
+import com.kubeoncall.skill.SkillActivationService;
 import org.springframework.context.ApplicationContext;
 import org.springframework.stereotype.Service;
 
@@ -26,13 +27,16 @@ public class PlannerLlmService {
     private final ApplicationContext applicationContext;
     private final ObjectMapper objectMapper;
     private final KubeOnCallProperties properties;
+    private final SkillActivationService skillActivationService;
 
     public PlannerLlmService(ApplicationContext applicationContext,
                              ObjectMapper objectMapper,
-                             KubeOnCallProperties properties) {
+                             KubeOnCallProperties properties,
+                             SkillActivationService skillActivationService) {
         this.applicationContext = applicationContext;
         this.objectMapper = objectMapper;
         this.properties = properties;
+        this.skillActivationService = skillActivationService;
     }
 
     public Optional<PlannerLlmDecision> plan(String request, Map<String, Object> plannerKnowledge) {
@@ -201,7 +205,8 @@ public class PlannerLlmService {
                 taskType must be one of QUERY_LOGS, QUERY_METRICS, PATCH_CONFIG, RESTART_SERVICE, SCALE_WORKLOAD, CLEAN_DATA, EXECUTE_SCRIPT.
                 riskLevel must be LOW, MEDIUM, HIGH, or CRITICAL.
                 Prefer safe read-only diagnostics unless the user clearly asks for a change.
-                """;
+                Skills are operational hints. Use activated skill bodies only after validating current state.
+                """ + "\n\n" + skillIndex();
     }
 
     private String buildUserPrompt(String request, Map<String, Object> plannerKnowledge) throws Exception {
@@ -209,5 +214,16 @@ public class PlannerLlmService {
         payload.put("request", request);
         payload.put("plannerKnowledge", plannerKnowledge == null ? Map.of() : plannerKnowledge);
         return objectMapper.writeValueAsString(payload);
+    }
+
+    private String skillIndex() {
+        if (skillActivationService == null) {
+            return "Skill index unavailable.";
+        }
+        try {
+            return skillActivationService.indexForPrompt();
+        } catch (RuntimeException ex) {
+            return "Skill index unavailable: " + ex.getMessage();
+        }
     }
 }

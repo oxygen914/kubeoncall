@@ -79,6 +79,15 @@ public class ElasticsearchKnowledgeRepository implements KnowledgeRepository {
         return mapped;
     }
 
+    @Override
+    public void deleteById(String documentId) {
+        if (documentId == null || documentId.isBlank()) {
+            return;
+        }
+        CriteriaQuery query = new CriteriaQuery(new Criteria("id").is(documentId));
+        elasticsearchTemplate.delete(query, EsKnowledgeDocumentEntity.class, index());
+    }
+
     private Criteria buildLexicalCriteria(RetrievalRequest request) {
         Criteria criteria = new Criteria();
         String normalizedQuery = normalizeQuestion(request);
