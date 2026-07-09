@@ -124,6 +124,9 @@ class MemoryServiceTest {
 
         assertEquals(2, result.scanned());
         assertEquals(1, result.deleted());
+        assertEquals(10, result.scanLimit());
+        assertEquals(30, result.staleAfterDays());
+        assertEquals(Instant.parse("2026-06-08T00:00:00Z"), result.staleThreshold());
         verify(repository).deleteById("memory-old");
         verify(metricsService).recordMemory("cleanup", "success", 1);
     }

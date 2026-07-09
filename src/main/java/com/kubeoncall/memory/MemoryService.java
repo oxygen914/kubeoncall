@@ -71,14 +71,14 @@ public class MemoryService {
     }
 
     public MemoryCleanupResult cleanupStale(Instant now, int scanLimit) {
-        if (!properties.getMemory().isEnabled() || !properties.getMemory().isLongTermEnabled()) {
-            recordMetric("cleanup", "disabled", 0);
-            return new MemoryCleanupResult(0, 0, "disabled");
-        }
         Instant reference = now == null ? Instant.now() : now;
         int limit = Math.max(1, scanLimit);
         int staleAfterDays = Math.max(1, properties.getMemory().getStaleAfterDays());
         Instant threshold = reference.minus(Duration.ofDays(staleAfterDays));
+        if (!properties.getMemory().isEnabled() || !properties.getMemory().isLongTermEnabled()) {
+            recordMetric("cleanup", "disabled", 0);
+            return new MemoryCleanupResult(0, 0, "disabled", limit, threshold, staleAfterDays);
+        }
         RetrievalRequest request = new RetrievalRequest("", Map.of("source_type", "memory"), limit);
         List<KnowledgeDocument> candidates = knowledgeRepository.searchLexical(request, limit);
 
@@ -92,7 +92,7 @@ public class MemoryService {
             }
         }
         recordMetric("cleanup", "success", deleted);
-        return new MemoryCleanupResult(candidates.size(), deleted, "success");
+        return new MemoryCleanupResult(candidates.size(), deleted, "success", limit, threshold, staleAfterDays);
     }
 
     private KnowledgeDocument toKnowledgeDocument(MemoryEntry entry) {
@@ -164,6 +164,13 @@ public class MemoryService {
         }
     }
 
-    public record MemoryCleanupResult(int scanned, int deleted, String status) {
+    public record MemoryCleanupResult(
+            int scanned,
+            int deleted,
+            String status,
+            int scanLimit,
+            Instant staleThreshold,
+            int staleAfterDays
+    ) {
     }
 }

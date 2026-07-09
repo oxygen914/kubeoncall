@@ -52,6 +52,10 @@ class RerankServiceTest {
         assertEquals(List.of("doc-high-new", "doc-high-old", "doc-low"),
                 trace.documents().stream().map(KnowledgeDocument::id).toList());
         assertTrue(trace.diagnostics().containsKey("scoreByDocument"));
+        assertEquals(List.of("doc-high-new", "doc-high-old", "doc-low"),
+                trace.diagnostics().get("rerankedDocumentIds"));
+        assertEquals("rule_overlap", trace.diagnostics().get("rerankStrategy"));
+        assertTrue(trace.diagnostics().get("rankTrace") instanceof List<?> rankTrace && rankTrace.size() == 3);
         assertEquals(false, trace.diagnostics().get("crossEncoderApplied"));
     }
 

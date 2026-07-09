@@ -26,6 +26,12 @@ public class MemoryController {
     public MemoryCleanupResponse cleanup(@RequestBody(required = false) MemoryCleanupRequest request) {
         int scanLimit = request == null || request.scanLimit() == null ? DEFAULT_SCAN_LIMIT : request.scanLimit();
         MemoryService.MemoryCleanupResult result = memoryService.cleanupStale(Instant.now(), scanLimit);
-        return new MemoryCleanupResponse(result.scanned(), result.deleted(), result.status());
+        return new MemoryCleanupResponse(
+                result.scanned(),
+                result.deleted(),
+                result.status(),
+                result.scanLimit(),
+                result.staleThreshold(),
+                result.staleAfterDays());
     }
 }

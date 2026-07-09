@@ -55,6 +55,9 @@ public class RerankService {
         Map<String, Object> diagnostics = new LinkedHashMap<>();
         diagnostics.put("rerankLatencyMs", Duration.between(startedAt, Instant.now()).toMillis());
         diagnostics.put("queryTokens", tokens);
+        diagnostics.put("rerankInputDocumentIds", documents.stream().map(KnowledgeDocument::id).toList());
+        diagnostics.put("rerankedDocumentIds", ranked.stream().map(KnowledgeDocument::id).toList());
+        diagnostics.put("rerankCandidateCount", documents.size());
         diagnostics.put("scoreByDocument", scoreMap);
         diagnostics.put("crossEncoderScoreByDocument", crossEncoderScores);
         diagnostics.put("crossEncoderEnabled", crossEncoderEnabled);
@@ -63,8 +66,28 @@ public class RerankService {
         diagnostics.put("crossEncoderFallbackReason", crossEncoderEnabled
                 ? (crossEncoderApplied ? null : "Cross-encoder adapter unavailable or returned no scores; fallback to rule rerank")
                 : "Cross-encoder disabled by configuration");
+        diagnostics.put("rerankStrategy", crossEncoderApplied ? "cross_encoder_then_rule_overlap" : "rule_overlap");
+        diagnostics.put("rankTrace", rankTrace(ranked, scoreMap, crossEncoderScores));
         diagnostics.put("rerankTopN", properties.getRag().getRerankTopN());
         return new RerankTrace(ranked, diagnostics);
+    }
+
+    private List<Map<String, Object>> rankTrace(List<KnowledgeDocument> ranked,
+                                                Map<String, Integer> ruleScores,
+                                                Map<String, Double> crossEncoderScores) {
+        int rank = 1;
+        java.util.ArrayList<Map<String, Object>> trace = new java.util.ArrayList<>();
+        for (KnowledgeDocument document : ranked) {
+            Map<String, Object> item = new LinkedHashMap<>();
+            item.put("rank", rank++);
+            item.put("documentId", document.id());
+            item.put("ruleScore", ruleScores.getOrDefault(document.id(), 0));
+            if (crossEncoderScores.containsKey(document.id())) {
+                item.put("crossEncoderScore", crossEncoderScores.get(document.id()));
+            }
+            trace.add(item);
+        }
+        return trace;
     }
 
     private Map<String, Double> crossEncoderScores(String query, List<KnowledgeDocument> documents) {
