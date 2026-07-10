@@ -34,20 +34,33 @@ public class RerankService {
     public RerankTrace rerank(String query, List<KnowledgeDocument> documents) {
         Instant startedAt = Instant.now();
         Set<String> tokens = tokenize(query);
+        int rerankTopN = Math.max(1, properties.getRag().getRerankTopN());
+        List<KnowledgeDocument> candidates = documents == null
+                ? List.of()
+                : documents.stream().limit(rerankTopN).toList();
         boolean crossEncoderEnabled = properties.getRag().isCrossEncoderEnabled();
         Map<String, Double> crossEncoderScores = crossEncoderEnabled
-                ? crossEncoderScores(query, documents)
+                ? crossEncoderScores(query, candidates)
                 : Map.of();
         boolean crossEncoderApplied = !crossEncoderScores.isEmpty();
 
         Map<String, Integer> scoreMap = new LinkedHashMap<>();
-        List<KnowledgeDocument> ranked = documents.stream()
-                .sorted(Comparator
-                        .comparingDouble((KnowledgeDocument doc) -> crossEncoderScores.getOrDefault(doc.id(), 0.0)).reversed()
-                        .thenComparing(Comparator.comparingInt((KnowledgeDocument doc) -> score(tokens, doc)).reversed())
-                        .thenComparing(KnowledgeDocument::createdAt, Comparator.nullsLast(Comparator.reverseOrder())))
-                .limit(Math.max(1, properties.getRag().getRerankTopN()))
-                .toList();
+        List<KnowledgeDocument> ranked;
+        if (crossEncoderApplied) {
+            ranked = candidates.stream()
+                    .sorted(Comparator.comparingDouble(
+                            (KnowledgeDocument doc) -> crossEncoderScores.getOrDefault(doc.id(), Double.NEGATIVE_INFINITY))
+                            .reversed())
+                    .toList();
+        } else if (crossEncoderEnabled) {
+            ranked = candidates;
+        } else {
+            ranked = candidates.stream()
+                    .sorted(Comparator
+                            .comparingInt((KnowledgeDocument doc) -> score(tokens, doc)).reversed()
+                            .thenComparing(KnowledgeDocument::createdAt, Comparator.nullsLast(Comparator.reverseOrder())))
+                    .toList();
+        }
         for (KnowledgeDocument document : ranked) {
             scoreMap.put(document.id(), score(tokens, document));
         }
@@ -55,20 +68,22 @@ public class RerankService {
         Map<String, Object> diagnostics = new LinkedHashMap<>();
         diagnostics.put("rerankLatencyMs", Duration.between(startedAt, Instant.now()).toMillis());
         diagnostics.put("queryTokens", tokens);
-        diagnostics.put("rerankInputDocumentIds", documents.stream().map(KnowledgeDocument::id).toList());
+        diagnostics.put("rerankInputDocumentIds", candidates.stream().map(KnowledgeDocument::id).toList());
         diagnostics.put("rerankedDocumentIds", ranked.stream().map(KnowledgeDocument::id).toList());
-        diagnostics.put("rerankCandidateCount", documents.size());
+        diagnostics.put("rerankCandidateCount", candidates.size());
         diagnostics.put("scoreByDocument", scoreMap);
         diagnostics.put("crossEncoderScoreByDocument", crossEncoderScores);
         diagnostics.put("crossEncoderEnabled", crossEncoderEnabled);
         diagnostics.put("crossEncoderApplied", crossEncoderApplied);
         diagnostics.put("crossEncoderFallback", crossEncoderEnabled && !crossEncoderApplied);
         diagnostics.put("crossEncoderFallbackReason", crossEncoderEnabled
-                ? (crossEncoderApplied ? null : "Cross-encoder adapter unavailable or returned no scores; fallback to rule rerank")
+                ? (crossEncoderApplied ? null : "Cross-encoder adapter unavailable or returned no scores; preserved retrieval order")
                 : "Cross-encoder disabled by configuration");
-        diagnostics.put("rerankStrategy", crossEncoderApplied ? "cross_encoder_then_rule_overlap" : "rule_overlap");
+        diagnostics.put("rerankStrategy", crossEncoderApplied
+                ? "cross_encoder"
+                : (crossEncoderEnabled ? "retrieval_order_fallback" : "rule_overlap"));
         diagnostics.put("rankTrace", rankTrace(ranked, scoreMap, crossEncoderScores));
-        diagnostics.put("rerankTopN", properties.getRag().getRerankTopN());
+        diagnostics.put("rerankTopN", rerankTopN);
         return new RerankTrace(ranked, diagnostics);
     }
 

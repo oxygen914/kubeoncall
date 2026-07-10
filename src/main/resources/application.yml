@@ -39,24 +39,28 @@ kubeoncall:
     default-top-k: 5
     knowledge-index: kubeoncall-knowledge
     vector-enabled: false
+    vector-backend: es
     vector-endpoint: http://localhost:18086/api/vector/search
     vector-timeout-millis: 3000
     es-knn-enabled: false
     embedding-enabled: false
     mock-embedding-enabled: false
     embedding-endpoint: http://localhost:18086/api/embedding
+    embedding-model: text-embedding-3-small
+    embedding-version: v1
     embedding-timeout-millis: 3000
-    embedding-dimensions: 8
+    embedding-dimensions: 1536
     chunk-strategy: recursive
     chunk-size: 280
     chunk-overlap: 0
     cross-encoder-enabled: false
     cross-encoder-endpoint: http://localhost:18086/api/rerank
+    cross-encoder-model: cross-encoder
     cross-encoder-timeout-millis: 3000
     lexical-candidate-top-n: 20
     vector-candidate-top-n: 20
     rrf-k: 60
-    rerank-top-n: 20
+    rerank-top-n: 30
   storage:
     minio:
       endpoint: http://localhost:9000

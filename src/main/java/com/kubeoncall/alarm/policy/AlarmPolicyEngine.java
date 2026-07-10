@@ -51,7 +51,10 @@ public class AlarmPolicyEngine {
             }
         }
         if (fired.isEmpty()) {
-            return AlarmEvaluationResult.unmatched(defaultSeverity, "No policy matched the alarm event");
+            AlarmSeverity fallbackSeverity = maxSeverity(defaultSeverity, event.severity());
+            return AlarmEvaluationResult.unmatched(
+                    fallbackSeverity,
+                    "No policy matched the alarm event; preserved upstream severity when more severe than default");
         }
         // Most severe fired policy wins; ties broken by declaration order (stable).
         AlarmPolicy winner = fired.stream()
@@ -106,6 +109,13 @@ public class AlarmPolicyEngine {
 
     private boolean matches(AlarmPolicy policy, NormalizedAlarmEvent event) {
         AlarmCondition cond = policy.condition();
+        boolean metricMatches = cond.metricName() != null
+                && !cond.metricName().isBlank()
+                && event.metricName() != null
+                && cond.metricName().equalsIgnoreCase(event.metricName());
+        if (!metricMatches && !alertNameMatches(cond.alertName(), event.alertName())) {
+            return false;
+        }
         if (cond.metricName() != null && !cond.metricName().isBlank()
                 && event.metricName() != null
                 && !cond.metricName().equalsIgnoreCase(event.metricName())) {
@@ -115,8 +125,8 @@ public class AlarmPolicyEngine {
                 && cond.resourceType() != event.resourceType()) {
             return false;
         }
-        if (cond.labels() != null && !cond.labels().isEmpty()) {
-            for (Map.Entry<String, String> required : cond.labels().entrySet()) {
+        if (cond.matchLabels() != null && !cond.matchLabels().isEmpty()) {
+            for (Map.Entry<String, String> required : cond.matchLabels().entrySet()) {
                 String actual = event.labels().get(required.getKey());
                 if (actual == null || !actual.equalsIgnoreCase(required.getValue())) {
                     return false;
@@ -132,7 +142,36 @@ public class AlarmPolicyEngine {
             // State/root-cause policy (e.g. KubeNodeNotReady): fires on match alone.
             return true;
         }
+        if (event.currentValue() == null) {
+            // Alertmanager payloads often omit the sampled numeric value because the upstream rule
+            // already evaluated it. Exact policy names are trusted; a family name such as
+            // HostHighCpuUsage selects the sibling policy matching the upstream severity.
+            if (equalsIgnoreCase(cond.alertName(), event.alertName())) {
+                return true;
+            }
+            return event.severity() != null && event.severity() == policy.severity();
+        }
         return cond.thresholdSatisfied(event.currentValue());
+    }
+
+    private boolean alertNameMatches(String policyAlertName, String eventAlertName) {
+        if (policyAlertName == null || policyAlertName.isBlank()) {
+            return true;
+        }
+        if (eventAlertName == null || eventAlertName.isBlank()) {
+            return false;
+        }
+        return canonicalAlertName(policyAlertName).equals(canonicalAlertName(eventAlertName));
+    }
+
+    private String canonicalAlertName(String value) {
+        return value.trim()
+                .toLowerCase(java.util.Locale.ROOT)
+                .replaceAll("(?:[-_]?p[0-3]|[-_]?info)$", "");
+    }
+
+    private boolean equalsIgnoreCase(String left, String right) {
+        return left != null && right != null && left.equalsIgnoreCase(right);
     }
 
     private AlarmSeverity applyImpactFactors(AlarmSeverity base, NormalizedAlarmEvent event) {

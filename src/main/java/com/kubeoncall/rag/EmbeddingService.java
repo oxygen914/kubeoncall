@@ -21,7 +21,7 @@ public class EmbeddingService {
 
     public EmbeddingResult embed(String text) {
         if (properties.getRag().isMockEmbeddingEnabled()) {
-            return new EmbeddingResult(deterministicEmbedding(text), "deterministic_mock", true);
+            return validated(deterministicEmbedding(text), "deterministic_mock", true);
         }
         if (!properties.getRag().isEmbeddingEnabled()) {
             throw new IllegalStateException("Embedding is disabled");
@@ -32,10 +32,23 @@ public class EmbeddingService {
             }
             List<Double> vector = client.embed(text);
             if (vector != null && !vector.isEmpty()) {
-                return new EmbeddingResult(vector, client.provider(), false);
+                return validated(vector, client.provider(), false);
             }
         }
         throw new IllegalStateException("No available embedding client");
+    }
+
+    private EmbeddingResult validated(List<Double> vector, String provider, boolean mock) {
+        int expectedDimensions = Math.max(1, properties.getRag().getEmbeddingDimensions());
+        if (vector.size() != expectedDimensions) {
+            throw new IllegalStateException(
+                    "Embedding dimensions " + vector.size()
+                            + " do not match configured dimensions " + expectedDimensions);
+        }
+        if (vector.stream().anyMatch(value -> value == null || !Double.isFinite(value))) {
+            throw new IllegalStateException("Embedding contains non-finite values");
+        }
+        return new EmbeddingResult(List.copyOf(vector), provider, mock);
     }
 
     private List<Double> deterministicEmbedding(String text) {

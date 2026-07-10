@@ -33,19 +33,19 @@ public class HttpCrossEncoderReranker implements CrossEncoderReranker {
             return Map.of();
         }
 
-        List<Map<String, Object>> items = documents.stream()
-                .map(document -> {
-                    Map<String, Object> item = new LinkedHashMap<>();
-                    item.put("id", document.id());
-                    item.put("title", document.title());
-                    item.put("content", document.content());
-                    item.put("metadata", document.metadata());
-                    return item;
-                })
+        List<String> items = documents.stream()
+                .map(document -> (document.title() == null ? "" : document.title())
+                        + "\n"
+                        + (document.content() == null ? "" : document.content()))
                 .toList();
         Map<String, Object> response = toolHttpClient.post(
                 properties.getRag().getCrossEncoderEndpoint(),
-                Map.of("query", query == null ? "" : query, "documents", items),
+                Map.of(
+                        "model", properties.getRag().getCrossEncoderModel(),
+                        "query", query == null ? "" : query,
+                        "documents", items,
+                        "top_n", Math.min(documents.size(), Math.max(1, properties.getRag().getRerankTopN()))
+                ),
                 properties.getRag().getCrossEncoderTimeoutMillis(),
                 Map.of("targetSystem", "cross-encoder", "tool", "crossEncoder.rerank")
         );
@@ -56,17 +56,38 @@ public class HttpCrossEncoderReranker implements CrossEncoderReranker {
         if (!(body instanceof Map<?, ?> bodyMap)) {
             return Map.of();
         }
+        Map<String, Double> standardResult = parseStandardResults(bodyMap.get("results"), documents);
+        if (!standardResult.isEmpty()) {
+            return standardResult;
+        }
         Object scores = bodyMap.get("scores");
-        if (!(scores instanceof Map<?, ?> scoreMap)) {
+        Map<String, Double> result = new LinkedHashMap<>();
+        if (scores instanceof Map<?, ?> scoreMap) {
+            scoreMap.forEach((key, value) -> {
+                if (value instanceof Number number) {
+                    result.put(String.valueOf(key), number.doubleValue());
+                }
+            });
+        }
+        return result;
+    }
+
+    private Map<String, Double> parseStandardResults(Object rawResults, List<KnowledgeDocument> documents) {
+        if (!(rawResults instanceof List<?> results)) {
             return Map.of();
         }
-
-        Map<String, Double> result = new LinkedHashMap<>();
-        scoreMap.forEach((key, value) -> {
-            if (value instanceof Number number) {
-                result.put(String.valueOf(key), number.doubleValue());
+        Map<String, Double> scores = new LinkedHashMap<>();
+        for (Object raw : results) {
+            if (!(raw instanceof Map<?, ?> item)
+                    || !(item.get("index") instanceof Number index)
+                    || !(item.get("relevance_score") instanceof Number score)) {
+                continue;
             }
-        });
-        return result;
+            int position = index.intValue();
+            if (position >= 0 && position < documents.size()) {
+                scores.put(documents.get(position).id(), score.doubleValue());
+            }
+        }
+        return scores;
     }
 }

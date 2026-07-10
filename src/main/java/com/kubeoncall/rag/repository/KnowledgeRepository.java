@@ -14,6 +14,12 @@ public interface KnowledgeRepository {
 
     List<KnowledgeDocument> searchVector(RetrievalRequest request, int candidateSize);
 
+    default List<KnowledgeDocument> searchVector(RetrievalRequest request,
+                                                 int candidateSize,
+                                                 List<Double> queryVector) {
+        return searchVector(request, candidateSize);
+    }
+
     Map<String, KnowledgeDocument> loadParents(List<String> parentDocumentIds);
 
     default void deleteById(String documentId) {

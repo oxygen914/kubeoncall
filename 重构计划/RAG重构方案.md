@@ -151,18 +151,9 @@ rrf_k = 60
 
 不要再使用 `0.7 * cosine + 0.3 * _score` 这类线性分数融合。向量相似度和 BM25 分数不在同一量纲上，RRF 对 rank 更鲁棒，也不依赖 ES 原生 RRF license。
 
-### 3.6 评估闭环
+### 3.6 后续效果治理（非本轮范围）
 
-参考项目有两类评估值得借鉴：
-
-- 检索评估：MTEB 风格，计算 NDCG、Recall、MAP、MRR、Hit Rate、Capped Recall。
-- 生成评估：RAGAS 风格，计算 ContextPrecision、ContextRecall、Faithfulness、AnswerRelevancy。
-
-对 KubeOnCall 更现实的第一步是建立“小型运维评估集”：
-
-- 50 到 100 条真实/模拟问题
-- 每条问题绑定相关 SOP chunk、runbook、故障复盘或期望答案
-- 每次改 embedding、chunk、RRF、rerank 时自动输出对比报告
+本轮只完成 RAG 架构边界、真实向量链路、排序和 fallback 设计。检索/生成评估属于后续效果治理，不新增评估数据集、指标脚本或 baseline 交付物，不阻塞架构重构验收。
 
 ## 4. 目标架构
 
@@ -475,22 +466,6 @@ kubeoncall:
 
 ## 7. 分阶段重构计划
 
-### 阶段 0：基线冻结与最小评估集
-
-目标：先知道现在是什么效果，避免后面只凭感觉调。
-
-任务：
-
-- 收集 30 到 50 条 KubeOnCall 运维知识问题，覆盖 SOP、告警排查、Kubernetes、Prometheus、审批说明等。
-- 为每条问题标注期望命中的 `doc_id/chunk_id` 或至少标注期望文档标题。
-- 固化当前 `/api/knowledge/query` 的返回结果，作为 baseline。
-- 增加一份 `docs/rag-eval/queries.jsonl` 与简单评估脚本，先计算 Recall@K、MRR@K、HitRate@K。
-
-验收：
-
-- 可以一键跑出 baseline 报告。
-- 后续每个阶段都能和 baseline 对比。
-
 ### 阶段 1：拆分入库与检索职责
 
 目标：让代码边界支撑后续扩展。
@@ -620,15 +595,12 @@ kubeoncall:
 - 可按版本过滤检索。
 - 软删除 chunk 不再参与 keyword/vector 检索。
 
-### 阶段 8：评估与可观测性
+### 阶段 8：可观测性
 
 目标：把 RAG 改造成可调系统。
 
 任务：
 
-- 建立 `scripts/rag_eval` 或 `src/test/resources/rag-eval`。
-- 指标先覆盖 Recall@K、MRR@K、HitRate@K、NDCG@K。
-- 后续引入 RAGAS 风格端到端评估，衡量回答忠实度和上下文充分性。
 - 线上 diagnostics 结构化输出：
   - rewrite query
   - retrieve method

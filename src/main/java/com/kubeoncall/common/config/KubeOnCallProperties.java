@@ -109,22 +109,26 @@ public class KubeOnCallProperties {
         private boolean vectorEnabled = false;
         private boolean crossEncoderEnabled = false;
         private String crossEncoderEndpoint;
+        private String crossEncoderModel = "cross-encoder";
         private int crossEncoderTimeoutMillis = 3000;
         private int lexicalCandidateTopN = 20;
         private String vectorEndpoint;
         private int vectorTimeoutMillis = 3000;
         private int vectorCandidateTopN = 20;
+        private String vectorBackend = "es";
         private boolean esKnnEnabled = false;
         private boolean embeddingEnabled = false;
         private boolean mockEmbeddingEnabled = false;
         private String embeddingEndpoint;
+        private String embeddingModel = "text-embedding-3-small";
+        private String embeddingVersion = "v1";
         private int embeddingTimeoutMillis = 3000;
-        private int embeddingDimensions = 8;
+        private int embeddingDimensions = 1536;
         private String chunkStrategy = "recursive";
         private int chunkSize = 280;
         private int chunkOverlap = 0;
         private int rrfK = 60;
-        private int rerankTopN = 20;
+        private int rerankTopN = 30;
 
         public int getDefaultTopK() {
             return defaultTopK;
@@ -164,6 +168,14 @@ public class KubeOnCallProperties {
 
         public void setCrossEncoderEndpoint(String crossEncoderEndpoint) {
             this.crossEncoderEndpoint = crossEncoderEndpoint;
+        }
+
+        public String getCrossEncoderModel() {
+            return crossEncoderModel;
+        }
+
+        public void setCrossEncoderModel(String crossEncoderModel) {
+            this.crossEncoderModel = crossEncoderModel;
         }
 
         public int getCrossEncoderTimeoutMillis() {
@@ -206,6 +218,14 @@ public class KubeOnCallProperties {
             this.vectorCandidateTopN = vectorCandidateTopN;
         }
 
+        public String getVectorBackend() {
+            return vectorBackend;
+        }
+
+        public void setVectorBackend(String vectorBackend) {
+            this.vectorBackend = vectorBackend;
+        }
+
         public boolean isEsKnnEnabled() {
             return esKnnEnabled;
         }
@@ -236,6 +256,22 @@ public class KubeOnCallProperties {
 
         public void setEmbeddingEndpoint(String embeddingEndpoint) {
             this.embeddingEndpoint = embeddingEndpoint;
+        }
+
+        public String getEmbeddingModel() {
+            return embeddingModel;
+        }
+
+        public void setEmbeddingModel(String embeddingModel) {
+            this.embeddingModel = embeddingModel;
+        }
+
+        public String getEmbeddingVersion() {
+            return embeddingVersion;
+        }
+
+        public void setEmbeddingVersion(String embeddingVersion) {
+            this.embeddingVersion = embeddingVersion;
         }
 
         public int getEmbeddingTimeoutMillis() {

@@ -138,7 +138,7 @@ public class YamlAlarmPolicyRepository implements AlarmPolicyRepository {
                 dto.operator(),
                 dto.threshold(),
                 dto.for_() != null ? dto.for_() : dto.forDuration(),
-                dto.labels());
+                dto.matchLabels());
         AlarmAction actions = dto.actions() == null
                 ? new AlarmAction(null, null, false, false, List.of())
                 : new AlarmAction(
@@ -226,6 +226,7 @@ public class YamlAlarmPolicyRepository implements AlarmPolicyRepository {
             String recover,
             String runbookId,
             String owner,
+            Map<String, String> matchLabels,
             Map<String, String> labels,
             ActionDto actions
     ) {

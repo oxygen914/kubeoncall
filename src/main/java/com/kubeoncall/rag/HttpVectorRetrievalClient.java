@@ -25,6 +25,7 @@ public class HttpVectorRetrievalClient implements VectorRetrievalClient {
     @Override
     public boolean available() {
         return properties.getRag().isVectorEnabled()
+                && "external".equalsIgnoreCase(properties.getRag().getVectorBackend())
                 && properties.getRag().getVectorEndpoint() != null
                 && !properties.getRag().getVectorEndpoint().isBlank();
     }

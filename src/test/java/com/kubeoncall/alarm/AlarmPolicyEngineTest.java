@@ -1,12 +1,17 @@
 package com.kubeoncall.alarm;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.kubeoncall.alarm.domain.AlarmEvaluationResult;
 import com.kubeoncall.alarm.domain.AlarmResourceType;
 import com.kubeoncall.alarm.domain.AlarmSeverity;
 import com.kubeoncall.alarm.domain.NormalizedAlarmEvent;
 import com.kubeoncall.alarm.policy.AlarmPolicyEngine;
+import com.kubeoncall.alarm.policy.AlarmFingerprintService;
 import com.kubeoncall.alarm.policy.YamlAlarmPolicyRepository;
+import com.kubeoncall.alarm.ingest.AlarmNormalizer;
+import com.kubeoncall.web.dto.AlarmRequest;
 import org.junit.jupiter.api.Test;
+import org.springframework.core.io.ClassPathResource;
 
 import java.time.Instant;
 import java.util.LinkedHashMap;
@@ -111,6 +116,65 @@ class AlarmPolicyEngineTest {
         // Safety invariant: no default policy may default to auto-silence.
         repository.findAll().forEach(p -> assertFalse(p.actions().autoSilence(),
                 "policy " + p.id() + " must not auto-silence by default"));
+    }
+
+    @Test
+    void legacyCriticalPayloadShouldKeepP0AndMatchCpuPolicyWithoutTeamLabel() throws Exception {
+        ObjectMapper mapper = new ObjectMapper().findAndRegisterModules();
+        AlarmRequest request;
+        try (var input = new ClassPathResource("samples/alarm-legacy-format.json").getInputStream()) {
+            request = mapper.readValue(input, AlarmRequest.class);
+        }
+        NormalizedAlarmEvent event = new AlarmNormalizer(new AlarmFingerprintService()).normalize(request);
+
+        AlarmEvaluationResult result = engine.evaluate(event);
+
+        assertTrue(result.matched());
+        assertEquals("host-high-cpu-p0", result.policyId());
+        assertEquals(AlarmSeverity.P0, result.finalSeverity());
+    }
+
+    @Test
+    void unmatchedAlarmShouldPreserveMoreSevereUpstreamSeverity() {
+        NormalizedAlarmEvent event = new NormalizedAlarmEvent(
+                "id", "fp", "UnknownCriticalAlert", "prometheus", "critical", AlarmSeverity.P0,
+                AlarmResourceType.SERVICE, "svc-x", "prod", "ns", "svc",
+                "custom.metric", null, null, null, null,
+                Map.of(), Map.of(), null, null, Instant.now(), "critical unknown", Map.of());
+
+        AlarmEvaluationResult result = engine.evaluate(event);
+
+        assertFalse(result.matched());
+        assertEquals(AlarmSeverity.P0, result.finalSeverity());
+    }
+
+    @Test
+    void customAlertNameShouldStillMatchKnownMetricPolicy() {
+        NormalizedAlarmEvent event = new NormalizedAlarmEvent(
+                "id", "fp", "CustomCpuSaturation", "prometheus", "warning", AlarmSeverity.P2,
+                AlarmResourceType.NODE, "node-a", "prod", "monitoring", "infra-exporter",
+                "host.cpu.usage_percent", 72.0, null, "%", "10m",
+                Map.of(), Map.of(), null, null, Instant.now(), "cpu high", Map.of());
+
+        AlarmEvaluationResult result = engine.evaluate(event);
+
+        assertTrue(result.matched());
+        assertEquals("host-high-cpu-p1", result.policyId());
+        assertEquals(AlarmSeverity.P1, result.finalSeverity());
+    }
+
+    @Test
+    void eventWithoutAlertNameOrMetricShouldNotMatchStatePolicy() {
+        NormalizedAlarmEvent event = new NormalizedAlarmEvent(
+                "id", "fp", null, "legacy", "critical", AlarmSeverity.P0,
+                null, "node-a", null, null, null,
+                null, null, null, null, null,
+                Map.of(), Map.of(), null, null, Instant.now(), "legacy alarm", Map.of());
+
+        AlarmEvaluationResult result = engine.evaluate(event);
+
+        assertFalse(result.matched());
+        assertEquals(AlarmSeverity.P0, result.finalSeverity());
     }
 
     private NormalizedAlarmEvent cpuEvent(double currentValue) {

@@ -23,8 +23,37 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import org.mockito.ArgumentCaptor;
 
 class KnowledgeIngestServiceTest {
+
+    @Test
+    void shouldGenerateAndPersistEmbeddingForChunks() {
+        KnowledgeRepository repository = mock(KnowledgeRepository.class);
+        KubeOnCallProperties properties = new KubeOnCallProperties();
+        properties.getRag().setMockEmbeddingEnabled(true);
+        properties.getRag().setEmbeddingDimensions(6);
+        KnowledgeObjectStorageService storageService = mock(KnowledgeObjectStorageService.class);
+        when(storageService.store(anyString(), anyString(), anyString()))
+                .thenReturn(new StoredDocumentReference(null, null, false, "skip"));
+        KnowledgeIngestionFacade facade = new KnowledgeIngestionFacade(
+                repository,
+                new KnowledgeChunker(properties),
+                storageService,
+                new EmbeddingService(List.of(), properties),
+                properties
+        );
+
+        facade.ingest("CPU runbook", "check cpu usage", "manual", Map.of());
+
+        ArgumentCaptor<KnowledgeDocument> documentCaptor = ArgumentCaptor.forClass(KnowledgeDocument.class);
+        verify(repository, times(2)).save(documentCaptor.capture());
+        KnowledgeDocument chunk = documentCaptor.getAllValues().get(1);
+        assertEquals("ready", chunk.metadata().get("embedding_status"));
+        assertEquals("deterministic_mock", chunk.metadata().get("embedding_provider"));
+        assertEquals("check cpu usage", chunk.embeddingText());
+        assertEquals(6, chunk.embedding().size());
+    }
 
     @Test
     void shouldIngestChunksAndStoreMetadata() {
@@ -123,6 +152,8 @@ class KnowledgeIngestServiceTest {
         assertEquals("parent-1", result.documents().get(0).id());
         assertEquals(1, result.diagnostics().get("resultCount"));
         assertEquals(true, result.diagnostics().get("parentAggregationApplied"));
+        assertEquals("payment timeout 怎么处理", result.diagnostics().get("rawQuery"));
+        assertEquals(result.rewrittenQuery(), result.diagnostics().get("rewrittenQuery"));
         assertTrue(result.retrievalReasons().stream().anyMatch(reason -> reason.contains("Aggregated parent")));
         verify(retrievalService).retrieveWithTrace(any(RetrievalRequest.class));
         verify(rerankService).rerank(anyString(), any());

@@ -23,6 +23,9 @@ class YamlAlarmPolicyRepositoryTest {
         assertTrue(repo.findByName("KubeNodeNotReadyP0").isPresent());
         assertTrue(repo.findByName("PodOOMKilledP1").isPresent());
         assertTrue(repo.findById("host-high-cpu-p0").isPresent());
+        var cpuPolicy = repo.findById("host-high-cpu-p1").orElseThrow();
+        assertTrue(cpuPolicy.condition().matchLabels().isEmpty(), "routing labels must not become match requirements");
+        assertEquals("infra", cpuPolicy.labels().get("team"));
     }
 
     @Test

@@ -2,6 +2,8 @@
 #
 # Thresholds are initial values; tune with historical p95/p99 and false-positive rates.
 # Every policy must declare a runbookId — alarms without a runbook cannot be triaged.
+# `labels` are labels emitted for ownership/routing. Use `matchLabels` only for labels that an
+# incoming alarm must contain to match the policy.
 # autoSilence defaults to false everywhere: silence is a maintenance action, never a
 # default outcome of a P0/P1 alarm.
 version: 2026-07-08

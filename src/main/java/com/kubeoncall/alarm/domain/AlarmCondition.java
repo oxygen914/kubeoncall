@@ -5,7 +5,8 @@ import java.util.Map;
 /**
  * Match/trigger condition for a policy.
  *
- * <p>Matching fields ({@code alertName}, {@code metricName}, {@code resourceType}, {@code labels})
+ * <p>Matching fields ({@code alertName}, {@code metricName}, {@code resourceType},
+ * {@code matchLabels})
  * are optional — a null/blank field matches anything. The {@code threshold} and {@code operator}
  * define the numeric trigger on {@code currentValue}; when {@code threshold} is null the policy is
  * treated as a state/root-cause policy that fires on match alone (e.g. {@code KubeNodeNotReady}).
@@ -17,12 +18,12 @@ public record AlarmCondition(
         String operator,
         Double threshold,
         String duration,
-        Map<String, String> labels
+        Map<String, String> matchLabels
 ) {
 
     public AlarmCondition {
-        if (labels == null) {
-            labels = Map.of();
+        if (matchLabels == null) {
+            matchLabels = Map.of();
         }
     }
 

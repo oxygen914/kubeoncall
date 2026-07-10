@@ -32,4 +32,30 @@ class EmbeddingServiceTest {
 
         assertThrows(IllegalStateException.class, () -> service.embed("payment timeout"));
     }
+
+    @Test
+    void shouldRejectProviderVectorWithUnexpectedDimensions() {
+        KubeOnCallProperties properties = new KubeOnCallProperties();
+        properties.getRag().setEmbeddingEnabled(true);
+        properties.getRag().setEmbeddingDimensions(3);
+        EmbeddingClient client = new EmbeddingClient() {
+            @Override
+            public boolean available() {
+                return true;
+            }
+
+            @Override
+            public List<Double> embed(String text) {
+                return List.of(0.1, 0.2);
+            }
+
+            @Override
+            public String provider() {
+                return "dimension-mismatch";
+            }
+        };
+        EmbeddingService service = new EmbeddingService(List.of(client), properties);
+
+        assertThrows(IllegalStateException.class, () -> service.embed("payment timeout"));
+    }
 }

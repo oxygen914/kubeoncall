@@ -63,36 +63,49 @@ public class MemoryService {
                 effectiveFilters,
                 Math.max(1, topK)
         );
-        List<MemoryEntry> entries = knowledgeRepository.searchLexical(request, Math.max(1, topK)).stream()
+        int candidateSize = Math.max(1, topK) * 3;
+        List<MemoryEntry> entries = knowledgeRepository.searchLexical(request, candidateSize).stream()
+                .filter(this::isEnabledMemoryDocument)
                 .map(this::toMemoryEntry)
+                .limit(Math.max(1, topK))
                 .toList();
         recordMetric("search", "success", entries.size());
         return entries;
     }
 
     public MemoryCleanupResult cleanupStale(Instant now, int scanLimit) {
+        return cleanupStale(now, scanLimit, false);
+    }
+
+    public MemoryCleanupResult cleanupStale(Instant now, int scanLimit, boolean dryRun) {
         Instant reference = now == null ? Instant.now() : now;
         int limit = Math.max(1, scanLimit);
         int staleAfterDays = Math.max(1, properties.getMemory().getStaleAfterDays());
         Instant threshold = reference.minus(Duration.ofDays(staleAfterDays));
         if (!properties.getMemory().isEnabled() || !properties.getMemory().isLongTermEnabled()) {
             recordMetric("cleanup", "disabled", 0);
-            return new MemoryCleanupResult(0, 0, "disabled", limit, threshold, staleAfterDays);
+            return new MemoryCleanupResult(0, 0, 0, "disabled", limit, threshold, staleAfterDays, dryRun);
         }
         RetrievalRequest request = new RetrievalRequest("", Map.of("source_type", "memory"), limit);
         List<KnowledgeDocument> candidates = knowledgeRepository.searchLexical(request, limit);
 
+        int eligible = 0;
         int deleted = 0;
         for (KnowledgeDocument document : candidates) {
             MemoryEntry entry = toMemoryEntry(document);
             Instant updatedAt = entry.updatedAt() == null ? entry.createdAt() : entry.updatedAt();
-            if (updatedAt != null && updatedAt.isBefore(threshold)) {
-                knowledgeRepository.deleteById(document.id());
+            if (isCleanupEligible(document, entry, updatedAt, threshold)) {
+                eligible++;
+                if (dryRun) {
+                    continue;
+                }
+                knowledgeRepository.save(softDeleted(document, reference));
                 deleted++;
             }
         }
-        recordMetric("cleanup", "success", deleted);
-        return new MemoryCleanupResult(candidates.size(), deleted, "success", limit, threshold, staleAfterDays);
+        String status = dryRun ? "dry_run" : "success";
+        recordMetric("cleanup", status, dryRun ? eligible : deleted);
+        return new MemoryCleanupResult(candidates.size(), eligible, deleted, status, limit, threshold, staleAfterDays, dryRun);
     }
 
     private KnowledgeDocument toKnowledgeDocument(MemoryEntry entry) {
@@ -106,6 +119,8 @@ public class MemoryService {
         putIfPresent(metadata, "fingerprint", entry.fingerprint());
         metadata.put("created_at", entry.createdAt().toString());
         metadata.put("updated_at", entry.updatedAt().toString());
+        metadata.put("memory_enabled", "true");
+        metadata.put("chunk_enable", "true");
 
         String title = entry.subject() == null || entry.subject().isBlank()
                 ? entry.type().name() + " memory"
@@ -158,6 +173,42 @@ public class MemoryService {
         }
     }
 
+    private boolean isEnabledMemoryDocument(KnowledgeDocument document) {
+        if (document == null || document.metadata() == null) {
+            return true;
+        }
+        return !"false".equalsIgnoreCase(document.metadata().get("memory_enabled"));
+    }
+
+    private boolean isCleanupEligible(KnowledgeDocument document,
+                                      MemoryEntry entry,
+                                      Instant updatedAt,
+                                      Instant threshold) {
+        if (!isEnabledMemoryDocument(document) || updatedAt == null || !updatedAt.isBefore(threshold)) {
+            return false;
+        }
+        return entry.type() == MemoryType.DEVICE_HISTORY || entry.type() == MemoryType.INCIDENT_SUMMARY;
+    }
+
+    private KnowledgeDocument softDeleted(KnowledgeDocument document, Instant deletedAt) {
+        Map<String, String> metadata = new LinkedHashMap<>();
+        if (document.metadata() != null) {
+            metadata.putAll(document.metadata());
+        }
+        metadata.put("memory_enabled", "false");
+        metadata.put("chunk_enable", "false");
+        metadata.put("deleted_at", deletedAt.toString());
+        metadata.put("delete_reason", "stale_cleanup");
+        metadata.put("updated_at", deletedAt.toString());
+        return new KnowledgeDocument(
+                document.id(),
+                document.title(),
+                document.content(),
+                document.source(),
+                metadata,
+                document.createdAt());
+    }
+
     private void recordMetric(String operation, String outcome, long count) {
         if (metricsService != null) {
             metricsService.recordMemory(operation, outcome, count);
@@ -166,11 +217,13 @@ public class MemoryService {
 
     public record MemoryCleanupResult(
             int scanned,
+            int eligible,
             int deleted,
             String status,
             int scanLimit,
             Instant staleThreshold,
-            int staleAfterDays
+            int staleAfterDays,
+            boolean dryRun
     ) {
     }
 }

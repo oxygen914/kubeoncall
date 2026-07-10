@@ -60,7 +60,10 @@ public class KnowledgeRetrievalFacade {
         MemoryFilterResult memoryFilter = filterMemoryDocuments(retrievalTrace.documents(), filters);
         RerankService.RerankTrace rerankTrace = rerankService.rerank(rewritten, memoryFilter.documents());
 
-        ParentAggregation parentAggregation = aggregateParents(rerankTrace.documents());
+        List<KnowledgeDocument> finalCandidates = rerankTrace.documents().stream()
+                .limit(effectiveTopK)
+                .toList();
+        ParentAggregation parentAggregation = aggregateParents(finalCandidates);
         List<KnowledgeDocument> documents = parentAggregation.documents();
 
         List<String> reasons = new ArrayList<>(retrievalTrace.reasons());
@@ -74,9 +77,12 @@ public class KnowledgeRetrievalFacade {
 
         Map<String, Object> diagnostics = new LinkedHashMap<>(retrievalTrace.diagnostics());
         diagnostics.putAll(rerankTrace.diagnostics());
+        diagnostics.put("rawQuery", question == null ? "" : question);
+        diagnostics.put("rewrittenQuery", rewritten);
         diagnostics.put("filters", filters == null ? Map.of() : filters);
         diagnostics.put("route", route);
         diagnostics.put("resultCount", documents.size());
+        diagnostics.put("finalTopK", effectiveTopK);
         diagnostics.put("parentAggregationApplied", parentAggregation.parentLookupCount() > 0);
         diagnostics.put("parentLookupCount", parentAggregation.parentLookupCount());
         diagnostics.put("childChunkCount", parentAggregation.childChunkCount());

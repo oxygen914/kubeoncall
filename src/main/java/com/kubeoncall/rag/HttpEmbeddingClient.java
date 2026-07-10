@@ -30,7 +30,10 @@ public class HttpEmbeddingClient implements EmbeddingClient {
     public List<Double> embed(String text) {
         Map<String, Object> response = toolHttpClient.post(
                 properties.getRag().getEmbeddingEndpoint(),
-                Map.of("text", text == null ? "" : text),
+                Map.of(
+                        "model", properties.getRag().getEmbeddingModel(),
+                        "input", text == null ? "" : text
+                ),
                 properties.getRag().getEmbeddingTimeoutMillis(),
                 Map.of("targetSystem", "embedding", "tool", "embedding.embed")
         );
@@ -39,10 +42,11 @@ public class HttpEmbeddingClient implements EmbeddingClient {
         }
         Object body = response.getOrDefault("response", response);
         if (body instanceof Map<?, ?> map) {
-            Object embedding = map.get("embedding");
-            if (embedding instanceof List<?> list) {
-                return toDoubles(list);
+            List<Double> openAiEmbedding = openAiEmbedding(map);
+            if (!openAiEmbedding.isEmpty()) {
+                return openAiEmbedding;
             }
+            return vectorValue(map.get("embedding"));
         }
         return List.of();
     }
@@ -60,5 +64,17 @@ public class HttpEmbeddingClient implements EmbeddingClient {
             }
         }
         return values;
+    }
+
+    private List<Double> openAiEmbedding(Map<?, ?> body) {
+        Object data = body.get("data");
+        if (!(data instanceof List<?> list) || list.isEmpty() || !(list.get(0) instanceof Map<?, ?> first)) {
+            return List.of();
+        }
+        return vectorValue(first.get("embedding"));
+    }
+
+    private List<Double> vectorValue(Object raw) {
+        return raw instanceof List<?> list ? toDoubles(list) : List.of();
     }
 }

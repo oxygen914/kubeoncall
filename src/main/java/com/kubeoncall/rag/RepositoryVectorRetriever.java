@@ -25,13 +25,17 @@ public class RepositoryVectorRetriever implements VectorRetriever {
 
     @Override
     public boolean available() {
-        return properties.getRag().isVectorEnabled() && properties.getRag().isEsKnnEnabled();
+        return properties.getRag().isVectorEnabled()
+                && properties.getRag().isEsKnnEnabled()
+                && (properties.getRag().isEmbeddingEnabled() || properties.getRag().isMockEmbeddingEnabled())
+                && "es".equalsIgnoreCase(properties.getRag().getVectorBackend());
     }
 
     @Override
     public List<KnowledgeDocument> retrieve(RetrievalRequest request, int candidateSize) {
         EmbeddingService.EmbeddingResult embedding = embeddingService.embed(request.question());
-        List<KnowledgeDocument> documents = knowledgeRepository.searchVector(request, candidateSize);
+        List<KnowledgeDocument> documents = knowledgeRepository.searchVector(
+                request, candidateSize, embedding.vector());
         return documents.stream()
                 .map(document -> withEmbeddingTrace(document, embedding))
                 .toList();
@@ -48,6 +52,8 @@ public class RepositoryVectorRetriever implements VectorRetriever {
             metadata.putAll(document.metadata());
         }
         metadata.put("embedding_provider", embedding.provider());
+        metadata.put("embedding_model", properties.getRag().getEmbeddingModel());
+        metadata.put("embedding_version", properties.getRag().getEmbeddingVersion());
         metadata.put("embedding_mock", String.valueOf(embedding.mock()));
         metadata.put("embedding_dimensions", String.valueOf(embedding.vector().size()));
         return new KnowledgeDocument(
@@ -56,7 +62,9 @@ public class RepositoryVectorRetriever implements VectorRetriever {
                 document.content(),
                 document.source(),
                 metadata,
-                document.createdAt()
+                document.createdAt(),
+                document.embeddingText(),
+                document.embedding()
         );
     }
 }

@@ -74,6 +74,36 @@ class RerankServiceTest {
         assertEquals(1, trace.documents().size());
         assertEquals(true, trace.diagnostics().get("crossEncoderFallback"));
         assertEquals(true, trace.diagnostics().containsKey("crossEncoderFallbackReason"));
+        assertEquals("retrieval_order_fallback", trace.diagnostics().get("rerankStrategy"));
+        assertEquals("doc-a", trace.documents().get(0).id());
+    }
+
+    @Test
+    void shouldUseCrossEncoderAsPrimaryRankingPath() {
+        KubeOnCallProperties properties = new KubeOnCallProperties();
+        properties.getRag().setCrossEncoderEnabled(true);
+        CrossEncoderReranker reranker = new CrossEncoderReranker() {
+            @Override
+            public boolean available() {
+                return true;
+            }
+
+            @Override
+            public Map<String, Double> score(String query, List<KnowledgeDocument> documents) {
+                return Map.of("doc-a", 0.1, "doc-b", 0.9);
+            }
+        };
+        RerankService service = new RerankService(properties, List.of(reranker));
+        KnowledgeDocument docA = new KnowledgeDocument(
+                "doc-a", "timeout exact keyword", "timeout", "manual", Map.of(), Instant.now());
+        KnowledgeDocument docB = new KnowledgeDocument(
+                "doc-b", "other", "other", "manual", Map.of(), Instant.now());
+
+        RerankService.RerankTrace trace = service.rerank("timeout", List.of(docA, docB));
+
+        assertEquals(List.of("doc-b", "doc-a"), trace.documents().stream().map(KnowledgeDocument::id).toList());
+        assertEquals("cross_encoder", trace.diagnostics().get("rerankStrategy"));
+        assertEquals(false, trace.diagnostics().get("crossEncoderFallback"));
     }
 
     @Test

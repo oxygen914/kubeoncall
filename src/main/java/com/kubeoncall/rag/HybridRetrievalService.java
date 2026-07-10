@@ -49,14 +49,20 @@ public class HybridRetrievalService {
     }
 
     public List<KnowledgeDocument> retrieve(RetrievalRequest request) {
-        return retrieveWithTrace(request).documents();
+        return retrieveWithTrace(request).documents().stream()
+                .limit(Math.max(1, request.topK()))
+                .toList();
     }
 
     public RetrievalTrace retrieveWithTrace(RetrievalRequest request) {
         Instant startedAt = Instant.now();
         int topK = Math.max(1, request.topK());
-        int lexicalCandidateTopN = Math.max(topK, properties.getRag().getLexicalCandidateTopN());
-        int vectorCandidateTopN = Math.max(topK, properties.getRag().getVectorCandidateTopN());
+        int policyCandidateTopN = (int) Math.min(200L, Math.max(50L, 10L * topK));
+        int lexicalCandidateTopN = Math.min(200,
+                Math.max(policyCandidateTopN, properties.getRag().getLexicalCandidateTopN()));
+        int vectorCandidateTopN = Math.min(200,
+                Math.max(policyCandidateTopN, properties.getRag().getVectorCandidateTopN()));
+        int rerankCandidateTopN = Math.max(topK, properties.getRag().getRerankTopN());
         RetrieveMethod method = request.retrieveMethod() == null ? RetrieveMethod.HYBRID : request.retrieveMethod();
         boolean lexicalRequested = method == RetrieveMethod.KEYWORD || method == RetrieveMethod.HYBRID;
         boolean vectorRequested = method == RetrieveMethod.VECTOR || method == RetrieveMethod.HYBRID;
@@ -77,8 +83,9 @@ public class HybridRetrievalService {
         String vectorSource = "disabled";
         if (vectorRequested && vectorEnabled) {
             try {
-                vectorCandidates = searchVectorCandidates(request, vectorCandidateTopN);
-                vectorSource = vectorSource();
+                VectorSearchResult vectorSearch = searchVectorCandidates(request, vectorCandidateTopN);
+                vectorCandidates = vectorSearch.documents();
+                vectorSource = vectorSearch.source();
                 reasons.add("Applied vector retrieval over content semantics");
             } catch (RuntimeException ex) {
                 vectorFallback = true;
@@ -96,7 +103,7 @@ public class HybridRetrievalService {
         if (request.filters() != null && !request.filters().isEmpty()) {
             reasons.add("Applied metadata filters: " + request.filters().keySet());
         }
-        reasons.add("Limited topK to " + topK);
+        reasons.add("Prepared up to " + rerankCandidateTopN + " candidates for rerank; final topK is " + topK);
 
         Map<String, Double> lexicalRanks = rankScores(lexicalCandidates, properties.getRag().getRrfK());
         Map<String, Double> vectorRanks = rankScores(vectorCandidates, properties.getRag().getRrfK());
@@ -110,15 +117,15 @@ public class HybridRetrievalService {
                         .comparingDouble((KnowledgeDocument doc) -> lexicalRanks.getOrDefault(doc.id(), 0.0)
                                 + vectorRanks.getOrDefault(doc.id(), 0.0)).reversed()
                         .thenComparing(KnowledgeDocument::createdAt, Comparator.nullsLast(Comparator.reverseOrder())))
-                .limit(topK)
+                .limit(rerankCandidateTopN)
                 .toList();
 
         if (method == RetrieveMethod.KEYWORD) {
-            fused = lexicalCandidates.stream().limit(topK).toList();
+            fused = lexicalCandidates.stream().limit(rerankCandidateTopN).toList();
         } else if (method == RetrieveMethod.VECTOR) {
-            fused = vectorCandidates.stream().limit(topK).toList();
+            fused = vectorCandidates.stream().limit(rerankCandidateTopN).toList();
         } else if (!vectorEnabled || vectorFallback || vectorCandidates.isEmpty()) {
-            fused = lexicalCandidates.stream().limit(topK).toList();
+            fused = lexicalCandidates.stream().limit(rerankCandidateTopN).toList();
         } else {
             reasons.add("Applied reciprocal rank fusion");
         }
@@ -129,6 +136,8 @@ public class HybridRetrievalService {
         diagnostics.put("latencyMs", latencyMs);
         diagnostics.put("queryLength", request.question() == null ? 0 : request.question().trim().length());
         diagnostics.put("topK", topK);
+        diagnostics.put("policyCandidateTopN", policyCandidateTopN);
+        diagnostics.put("rerankCandidateTopN", rerankCandidateTopN);
         diagnostics.put("retrieveMethod", method.name());
         diagnostics.put("includeTrace", request.includeTrace());
         diagnostics.put("filterCount", request.filters() == null ? 0 : request.filters().size());
@@ -139,6 +148,9 @@ public class HybridRetrievalService {
         diagnostics.put("vectorFallback", vectorFallback);
         diagnostics.put("vectorFallbackReason", vectorFallbackReason);
         diagnostics.put("vectorSource", vectorSource);
+        diagnostics.put("rankingSource", rankingSource(method, vectorEnabled, vectorFallback, vectorCandidates));
+        diagnostics.put("lexicalRankingSource", "repository_hit_order");
+        diagnostics.put("vectorRankingSource", vectorSource);
         diagnostics.put("fusedDocumentIds", fused.stream().map(KnowledgeDocument::id).toList());
         diagnostics.put("lexicalDocumentIds", lexicalCandidates.stream().map(KnowledgeDocument::id).toList());
         diagnostics.put("vectorDocumentIds", vectorCandidates.stream().map(KnowledgeDocument::id).toList());
@@ -146,25 +158,33 @@ public class HybridRetrievalService {
         return new RetrievalTrace(fused, reasons, diagnostics);
     }
 
-    private List<KnowledgeDocument> searchVectorCandidates(RetrievalRequest request, int candidateSize) {
+    private String rankingSource(RetrieveMethod method,
+                                 boolean vectorEnabled,
+                                 boolean vectorFallback,
+                                 List<KnowledgeDocument> vectorCandidates) {
+        if (method == RetrieveMethod.KEYWORD) {
+            return "lexical_repository_hit_order";
+        }
+        if (method == RetrieveMethod.VECTOR) {
+            return "vector_retriever_order";
+        }
+        if (!vectorEnabled || vectorFallback || vectorCandidates.isEmpty()) {
+            return "lexical_repository_hit_order";
+        }
+        return "reciprocal_rank_fusion";
+    }
+
+    private VectorSearchResult searchVectorCandidates(RetrievalRequest request, int candidateSize) {
         for (VectorRetriever retriever : vectorRetrievers) {
             if (!retriever.available()) {
                 continue;
             }
             List<KnowledgeDocument> documents = retriever.retrieve(request, candidateSize);
-            if (documents != null && !documents.isEmpty()) {
-                return documents;
-            }
+            return new VectorSearchResult(
+                    documents == null ? List.of() : documents,
+                    retriever.source());
         }
-        return knowledgeRepository.searchVector(request, candidateSize);
-    }
-
-    private String vectorSource() {
-        return vectorRetrievers.stream()
-                .filter(VectorRetriever::available)
-                .findFirst()
-                .map(VectorRetriever::source)
-                .orElse("repository_compat");
+        throw new IllegalStateException("No available vector retriever for configured backend");
     }
 
     private Map<String, Double> rankScores(List<KnowledgeDocument> documents, int rrfK) {
@@ -188,5 +208,8 @@ public class HybridRetrievalService {
             List<String> reasons,
             Map<String, Object> diagnostics
     ) {
+    }
+
+    private record VectorSearchResult(List<KnowledgeDocument> documents, String source) {
     }
 }
