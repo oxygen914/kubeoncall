@@ -129,6 +129,8 @@ public class KubeOnCallProperties {
         private int chunkOverlap = 0;
         private int rrfK = 60;
         private int rerankTopN = 30;
+        private String runbookLocation = "classpath*:runbooks/*.md";
+        private boolean runbookBootstrapEnabled = false;
 
         public int getDefaultTopK() {
             return defaultTopK;
@@ -328,6 +330,22 @@ public class KubeOnCallProperties {
 
         public void setRerankTopN(int rerankTopN) {
             this.rerankTopN = rerankTopN;
+        }
+
+        public String getRunbookLocation() {
+            return runbookLocation;
+        }
+
+        public void setRunbookLocation(String runbookLocation) {
+            this.runbookLocation = runbookLocation;
+        }
+
+        public boolean isRunbookBootstrapEnabled() {
+            return runbookBootstrapEnabled;
+        }
+
+        public void setRunbookBootstrapEnabled(boolean runbookBootstrapEnabled) {
+            this.runbookBootstrapEnabled = runbookBootstrapEnabled;
         }
     }
 
@@ -610,6 +628,7 @@ public class KubeOnCallProperties {
         private boolean longTermEnabled = true;
         private int injectMaxEntries = 5;
         private int staleAfterDays = 30;
+        private String temporalNormalizationZone = "Asia/Shanghai";
         private boolean consolidationEnabled = false;
         private String consolidationCron = "0 0 3 * * *";
         private int consolidationScanLimit = 500;
@@ -710,6 +729,14 @@ public class KubeOnCallProperties {
 
         public void setStaleAfterDays(int staleAfterDays) {
             this.staleAfterDays = staleAfterDays;
+        }
+
+        public String getTemporalNormalizationZone() {
+            return temporalNormalizationZone;
+        }
+
+        public void setTemporalNormalizationZone(String temporalNormalizationZone) {
+            this.temporalNormalizationZone = temporalNormalizationZone;
         }
 
         public boolean isConsolidationEnabled() {

@@ -89,6 +89,37 @@ class MemoryConsolidationServiceTest {
         verify(metrics).recordMemory("consolidate", "dry_run", 1);
     }
 
+    @Test
+    void shouldNormalizeLegacyRelativeDatesAndKeepDryRunReadOnly() {
+        KnowledgeRepository repository = mock(KnowledgeRepository.class);
+        KubeOnCallProperties properties = new KubeOnCallProperties();
+        KubeOnCallMetricsService metrics = mock(KubeOnCallMetricsService.class);
+        MemoryTemporalNormalizer normalizer = new MemoryTemporalNormalizer(properties);
+        MemoryConsolidationService service = new MemoryConsolidationService(
+                repository, properties, metrics, null, normalizer);
+        KnowledgeDocument legacy = memory(
+                "memory-relative", "昨天 payment-service OOM", "2026-07-10T01:00:00Z");
+        when(repository.searchLexical(any(RetrievalRequest.class), eq(10)))
+                .thenReturn(List.of(legacy));
+
+        MemoryConsolidationService.ConsolidationResult dryRun = service.consolidate(
+                Instant.parse("2026-07-10T12:00:00Z"), 10, true);
+
+        assertEquals(1, dryRun.normalizationEligible());
+        assertEquals(0, dryRun.normalized());
+        verify(repository, never()).save(any());
+
+        MemoryConsolidationService.ConsolidationResult applied = service.consolidate(
+                Instant.parse("2026-07-10T12:00:00Z"), 10, false);
+
+        assertEquals(1, applied.normalizationEligible());
+        assertEquals(1, applied.normalized());
+        ArgumentCaptor<KnowledgeDocument> saved = ArgumentCaptor.forClass(KnowledgeDocument.class);
+        verify(repository).save(saved.capture());
+        assertEquals("2026-07-09 payment-service OOM", saved.getValue().content());
+        assertEquals("normalized", saved.getValue().metadata().get("temporal_normalization_status"));
+    }
+
     private KnowledgeDocument memory(String id, String content, String updatedAt) {
         return new KnowledgeDocument(
                 id, "payment owner", content, "memory",

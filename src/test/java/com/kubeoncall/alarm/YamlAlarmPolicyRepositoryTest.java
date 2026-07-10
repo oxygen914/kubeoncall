@@ -26,6 +26,10 @@ class YamlAlarmPolicyRepositoryTest {
         var cpuPolicy = repo.findById("host-high-cpu-p1").orElseThrow();
         assertTrue(cpuPolicy.condition().matchLabels().isEmpty(), "routing labels must not become match requirements");
         assertEquals("infra", cpuPolicy.labels().get("team"));
+        assertEquals("runbook", cpuPolicy.ragFilters().get("document_type"));
+        assertEquals("host", cpuPolicy.ragFilters().get("category"));
+        var oomPolicy = repo.findById("pod-oom-killed-p1").orElseThrow();
+        assertEquals("k8s-pod", oomPolicy.ragFilters().get("category"));
     }
 
     @Test

@@ -45,18 +45,32 @@ public class KnowledgeIndexAdmin {
             } else {
                 Map<String, Object> currentMapping = operations.getMapping();
                 Integer existingDimensions = vectorDimensions(currentMapping);
-                if (existingDimensions == null) {
-                    if (!operations.putMapping(vectorOnlyMapping(configuredDimensions))) {
-                        throw new IllegalStateException("Failed to add knowledge index vector mapping");
-                    }
-                } else if (existingDimensions != configuredDimensions) {
+                String existingMetadataType = fieldType(currentMapping, "metadata");
+                if (existingMetadataType != null && !"flattened".equals(existingMetadataType)) {
+                    throw new IllegalStateException(
+                            "Knowledge index metadata mapping is " + existingMetadataType
+                                    + "; use a new index and reimport knowledge with flattened metadata");
+                }
+                if (existingDimensions != null && existingDimensions != configuredDimensions) {
                     throw new IllegalStateException(
                             "Knowledge index embedding dimensions " + existingDimensions
                                     + " do not match configured dimensions " + configuredDimensions);
                 }
+                if (existingDimensions == null || existingMetadataType == null) {
+                    if (!operations.putMapping(missingFieldsMapping(
+                            configuredDimensions,
+                            existingDimensions == null,
+                            existingMetadataType == null))) {
+                        throw new IllegalStateException("Failed to add knowledge index mapping fields");
+                    }
+                }
             }
             vectorMappingReady = true;
         }
+    }
+
+    public boolean indexExists() {
+        return elasticsearchTemplate.indexOps(index()).exists();
     }
 
     Document fullMapping(int dimensions) {
@@ -64,15 +78,22 @@ public class KnowledgeIndexAdmin {
         fields.put("title", Map.of("type", "text"));
         fields.put("content", Map.of("type", "text"));
         fields.put("source", Map.of("type", "keyword"));
-        fields.put("metadata", Map.of("type", "object"));
+        fields.put("metadata", Map.of("type", "flattened"));
         fields.put("createdAtEpochMs", Map.of("type", "long"));
         fields.put("embedding_text", Map.of("type", "text", "index", false));
         fields.put("embedding", vectorField(dimensions));
         return Document.from(Map.of("properties", fields));
     }
 
-    Document vectorOnlyMapping(int dimensions) {
-        return Document.from(Map.of("properties", Map.of("embedding", vectorField(dimensions))));
+    Document missingFieldsMapping(int dimensions, boolean includeVector, boolean includeMetadata) {
+        Map<String, Object> fields = new LinkedHashMap<>();
+        if (includeVector) {
+            fields.put("embedding", vectorField(dimensions));
+        }
+        if (includeMetadata) {
+            fields.put("metadata", Map.of("type", "flattened"));
+        }
+        return Document.from(Map.of("properties", fields));
     }
 
     private Map<String, Object> vectorField(int dimensions) {
@@ -105,6 +126,19 @@ public class KnowledgeIndexAdmin {
             }
         }
         return null;
+    }
+
+    private String fieldType(Map<String, Object> mapping, String fieldName) {
+        Object propertiesNode = mapping == null ? null : mapping.get("properties");
+        if (!(propertiesNode instanceof Map<?, ?> fields)) {
+            return null;
+        }
+        Object fieldNode = fields.get(fieldName);
+        if (!(fieldNode instanceof Map<?, ?> field)) {
+            return null;
+        }
+        Object type = field.get("type");
+        return type == null ? null : String.valueOf(type);
     }
 
     private int configuredDimensions() {

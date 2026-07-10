@@ -26,18 +26,29 @@ public class MemoryService {
     private final KubeOnCallMetricsService metricsService;
     private final KnowledgeRetrievalFacade retrievalFacade;
     private final ExecutionAuditService auditService;
+    private final MemoryTemporalNormalizer temporalNormalizer;
 
     @Autowired
     public MemoryService(KnowledgeRepository knowledgeRepository,
                          KubeOnCallProperties properties,
                          KubeOnCallMetricsService metricsService,
                          KnowledgeRetrievalFacade retrievalFacade,
-                         ExecutionAuditService auditService) {
+                         ExecutionAuditService auditService,
+                         MemoryTemporalNormalizer temporalNormalizer) {
         this.knowledgeRepository = knowledgeRepository;
         this.properties = properties;
         this.metricsService = metricsService;
         this.retrievalFacade = retrievalFacade;
         this.auditService = auditService;
+        this.temporalNormalizer = temporalNormalizer;
+    }
+
+    public MemoryService(KnowledgeRepository knowledgeRepository,
+                         KubeOnCallProperties properties,
+                         KubeOnCallMetricsService metricsService,
+                         KnowledgeRetrievalFacade retrievalFacade,
+                         ExecutionAuditService auditService) {
+        this(knowledgeRepository, properties, metricsService, retrievalFacade, auditService, null);
     }
 
     public MemoryService(KnowledgeRepository knowledgeRepository,
@@ -66,9 +77,26 @@ public class MemoryService {
             recordMetric("remember", "disabled", 0);
             return entry;
         }
-        knowledgeRepository.save(toKnowledgeDocument(entry));
+        MemoryEntry normalized = normalizeTemporal(entry);
+        knowledgeRepository.save(toKnowledgeDocument(normalized));
         recordMetric("remember", "success", 1);
-        return entry;
+        return normalized;
+    }
+
+    private MemoryEntry normalizeTemporal(MemoryEntry entry) {
+        if (temporalNormalizer == null) {
+            return entry;
+        }
+        try {
+            MemoryEntry normalized = temporalNormalizer.normalize(entry, Instant.now());
+            if (!normalized.equals(entry)) {
+                recordMetric("normalize", "success", 1);
+            }
+            return normalized;
+        } catch (RuntimeException ex) {
+            recordMetric("normalize", "failed", 1);
+            return entry;
+        }
     }
 
     public List<MemoryEntry> search(String query, Map<String, String> filters, int topK) {

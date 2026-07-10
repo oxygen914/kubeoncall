@@ -49,7 +49,7 @@ class MemoryControllerTest {
         MemoryConsolidationService consolidationService = mock(MemoryConsolidationService.class);
         when(consolidationService.consolidate(any(Instant.class), org.mockito.ArgumentMatchers.eq(40), org.mockito.ArgumentMatchers.eq(true)))
                 .thenReturn(new MemoryConsolidationService.ConsolidationResult(
-                        10, 2, 3, 0, "dry_run", 40, 0.92d, true));
+                        10, 2, 3, 0, 4, 0, "dry_run", 40, 0.92d, true));
         MemoryController controller = new MemoryController(memoryService, consolidationService);
 
         MemoryConsolidationResponse response = controller.consolidate(
@@ -57,6 +57,8 @@ class MemoryControllerTest {
 
         assertEquals(3, response.eligible());
         assertEquals(0, response.consolidated());
+        assertEquals(4, response.normalizationEligible());
+        assertEquals(0, response.normalized());
         assertEquals(true, response.dryRun());
     }
 

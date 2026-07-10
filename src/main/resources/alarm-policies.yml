@@ -4,6 +4,8 @@
 # Every policy must declare a runbookId — alarms without a runbook cannot be triaged.
 # `labels` are labels emitted for ownership/routing. Use `matchLabels` only for labels that an
 # incoming alarm must contain to match the policy.
+# `ragFilters` are static SOP metadata constraints. Runtime alert dimensions are added by the
+# workflow and take precedence for reserved keys such as runbookId/service/resourceType.
 # autoSilence defaults to false everywhere: silence is a maintenance action, never a
 # default outcome of a P0/P1 alarm.
 version: 2026-07-08
@@ -24,6 +26,9 @@ policies:
     recover: cpu_usage_percent < 65 for 10m
     runbookId: runbook-host-cpu-high
     owner: infra
+    ragFilters:
+      document_type: runbook
+      category: host
     labels:
       team: infra
     actions:
@@ -46,6 +51,9 @@ policies:
     recover: cpu_usage_percent < 75 for 10m
     runbookId: runbook-host-cpu-high
     owner: infra
+    ragFilters:
+      document_type: runbook
+      category: host
     labels:
       team: infra
     actions:
@@ -70,6 +78,9 @@ policies:
     recover: available_percent > 25 for 10m
     runbookId: runbook-host-memory-pressure
     owner: infra
+    ragFilters:
+      document_type: runbook
+      category: host
     labels:
       team: infra
     actions:
@@ -92,6 +103,9 @@ policies:
     recover: available_percent > 20 for 10m
     runbookId: runbook-host-memory-pressure
     owner: infra
+    ragFilters:
+      document_type: runbook
+      category: host
     labels:
       team: infra
     actions:
@@ -116,6 +130,9 @@ policies:
     recover: usage_percent < 80 for 15m
     runbookId: runbook-host-disk-usage
     owner: infra
+    ragFilters:
+      document_type: runbook
+      category: host
     labels:
       team: infra
     actions:
@@ -138,6 +155,9 @@ policies:
     recover: usage_percent < 85 for 15m
     runbookId: runbook-host-disk-usage
     owner: infra
+    ragFilters:
+      document_type: runbook
+      category: host
     labels:
       team: infra
     actions:
@@ -162,6 +182,9 @@ policies:
     recover: usage_percent < 80 for 15m
     runbookId: runbook-host-inode-usage
     owner: infra
+    ragFilters:
+      document_type: runbook
+      category: host
     labels:
       team: infra
     actions:
@@ -184,6 +207,9 @@ policies:
     recover: usage_percent < 85 for 15m
     runbookId: runbook-host-inode-usage
     owner: infra
+    ragFilters:
+      document_type: runbook
+      category: host
     labels:
       team: infra
     actions:
@@ -206,6 +232,9 @@ policies:
     recover: ready == true for 5m
     runbookId: runbook-node-notready
     owner: infra
+    ragFilters:
+      document_type: runbook
+      category: k8s-node
     labels:
       team: infra
     actions:
@@ -228,6 +257,9 @@ policies:
     recover: waiting_reason != CrashLoopBackOff for 5m
     runbookId: runbook-pod-crashloop
     owner: app
+    ragFilters:
+      document_type: runbook
+      category: k8s-pod
     labels:
       team: app
     actions:
@@ -250,6 +282,9 @@ policies:
     recover: no new oom_killed for 10m
     runbookId: runbook-pod-oom
     owner: app
+    ragFilters:
+      document_type: runbook
+      category: k8s-pod
     labels:
       team: app
     actions:
@@ -273,6 +308,9 @@ policies:
     recover: unavailable_replicas == 0 for 10m
     runbookId: runbook-deployment-unavailable
     owner: app
+    ragFilters:
+      document_type: runbook
+      category: workload
     labels:
       team: app
     actions:

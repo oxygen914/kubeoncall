@@ -61,6 +61,8 @@ kubeoncall:
     vector-candidate-top-n: 20
     rrf-k: 60
     rerank-top-n: 30
+    runbook-location: classpath*:runbooks/*.md
+    runbook-bootstrap-enabled: false
   storage:
     minio:
       endpoint: http://localhost:9000
@@ -119,6 +121,7 @@ kubeoncall:
     long-term-enabled: true
     inject-max-entries: 5
     stale-after-days: 30
+    temporal-normalization-zone: Asia/Shanghai
     consolidation-enabled: false
     consolidation-cron: "0 0 3 * * *"
     consolidation-scan-limit: 500

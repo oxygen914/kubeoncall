@@ -5,6 +5,8 @@ public record MemoryConsolidationResponse(
         int duplicateGroups,
         int eligible,
         int consolidated,
+        int normalizationEligible,
+        int normalized,
         String status,
         int scanLimit,
         double similarityThreshold,

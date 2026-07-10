@@ -161,7 +161,8 @@ public class YamlAlarmPolicyRepository implements AlarmPolicyRepository {
                 dto.runbookId() != null ? dto.runbookId() : runbookFromLabels(dto.labels()),
                 dto.owner(),
                 actions,
-                dto.labels() == null ? Map.of() : dto.labels());
+                dto.labels() == null ? Map.of() : dto.labels(),
+                dto.ragFilters() == null ? Map.of() : dto.ragFilters());
     }
 
     private void validate(AlarmPolicy policy, List<AlarmPolicy> alreadyLoaded) {
@@ -228,6 +229,7 @@ public class YamlAlarmPolicyRepository implements AlarmPolicyRepository {
             String owner,
             Map<String, String> matchLabels,
             Map<String, String> labels,
+            Map<String, String> ragFilters,
             ActionDto actions
     ) {
     }

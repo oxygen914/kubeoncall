@@ -83,6 +83,7 @@ public class MemoryController {
                 Instant.now(), scanLimit, dryRun);
         return new MemoryConsolidationResponse(
                 result.scanned(), result.duplicateGroups(), result.eligible(), result.consolidated(),
+                result.normalizationEligible(), result.normalized(),
                 result.status(), result.scanLimit(), result.similarityThreshold(), result.dryRun());
     }
 

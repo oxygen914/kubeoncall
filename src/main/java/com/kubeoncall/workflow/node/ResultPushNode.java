@@ -50,6 +50,7 @@ public class ResultPushNode implements AlertWorkflowNode {
         summary.put("skippedNodes", context.getSkippedNodes());
         summary.put("steps", context.getNodeResults().stream().map(result -> result.nodeName() + ":" + result.status()).toList());
         summary.put("knowledgeHints", context.getAttribute("knowledgeHints"));
+        summary.put("diagnosis", context.getAttribute("diagnosis"));
         if (normalized != null) {
             summary.put("fingerprint", normalized.fingerprint());
             summary.put("alertName", normalized.alertName());

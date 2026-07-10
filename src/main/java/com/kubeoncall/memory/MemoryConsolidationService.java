@@ -27,22 +27,32 @@ public class MemoryConsolidationService {
     private final KubeOnCallProperties properties;
     private final KubeOnCallMetricsService metricsService;
     private final ExecutionAuditService auditService;
+    private final MemoryTemporalNormalizer temporalNormalizer;
 
     @Autowired
     public MemoryConsolidationService(KnowledgeRepository knowledgeRepository,
                                       KubeOnCallProperties properties,
                                       KubeOnCallMetricsService metricsService,
-                                      ExecutionAuditService auditService) {
+                                      ExecutionAuditService auditService,
+                                      MemoryTemporalNormalizer temporalNormalizer) {
         this.knowledgeRepository = knowledgeRepository;
         this.properties = properties;
         this.metricsService = metricsService;
         this.auditService = auditService;
+        this.temporalNormalizer = temporalNormalizer;
+    }
+
+    public MemoryConsolidationService(KnowledgeRepository knowledgeRepository,
+                                      KubeOnCallProperties properties,
+                                      KubeOnCallMetricsService metricsService,
+                                      ExecutionAuditService auditService) {
+        this(knowledgeRepository, properties, metricsService, auditService, null);
     }
 
     public MemoryConsolidationService(KnowledgeRepository knowledgeRepository,
                                       KubeOnCallProperties properties,
                                       KubeOnCallMetricsService metricsService) {
-        this(knowledgeRepository, properties, metricsService, null);
+        this(knowledgeRepository, properties, metricsService, null, null);
     }
 
     public ConsolidationResult consolidate(Instant now, int scanLimit, boolean dryRun) {
@@ -53,14 +63,18 @@ public class MemoryConsolidationService {
         if (!properties.getMemory().isEnabled() || !properties.getMemory().isLongTermEnabled()) {
             recordMetric("disabled", 0);
             ConsolidationResult result = new ConsolidationResult(
-                    0, 0, 0, 0, "disabled", limit, threshold, dryRun);
+                    0, 0, 0, 0, 0, 0, "disabled", limit, threshold, dryRun);
             audit(result, startedAt);
             return result;
         }
 
         RetrievalRequest request = new RetrievalRequest("", Map.of("source_type", "memory"), limit);
-        List<KnowledgeDocument> candidates = knowledgeRepository.searchLexical(request, limit).stream()
+        List<DocumentCandidate> scanned = knowledgeRepository.searchLexical(request, limit).stream()
                 .filter(this::isEnabledMemory)
+                .map(document -> normalize(document, reference))
+                .toList();
+        List<KnowledgeDocument> candidates = scanned.stream()
+                .map(DocumentCandidate::document)
                 .sorted(Comparator.comparing(this::updatedAt).reversed())
                 .toList();
         Map<String, List<KnowledgeDocument>> canonicalByGroup = new LinkedHashMap<>();
@@ -83,18 +97,30 @@ public class MemoryConsolidationService {
         }
 
         int consolidated = 0;
+        int normalizationEligible = (int) scanned.stream().filter(DocumentCandidate::normalizationChanged).count();
+        int normalized = 0;
         if (!dryRun) {
+            Set<String> duplicateIds = duplicates.stream()
+                    .map(match -> match.duplicate().id())
+                    .collect(java.util.stream.Collectors.toSet());
             for (DuplicateMatch duplicate : duplicates) {
                 knowledgeRepository.save(softDeletedDuplicate(
                         duplicate.duplicate(), duplicate.canonical().id(), reference));
                 consolidated++;
             }
+            for (DocumentCandidate candidate : scanned) {
+                if (candidate.normalizationChanged() && !duplicateIds.contains(candidate.document().id())) {
+                    knowledgeRepository.save(candidate.document());
+                }
+            }
+            normalized = normalizationEligible;
         }
         String status = dryRun ? "dry_run" : "success";
         recordMetric(status, dryRun ? duplicates.size() : consolidated);
+        recordNormalizationMetric(status, dryRun ? normalizationEligible : normalized);
         ConsolidationResult result = new ConsolidationResult(
                 candidates.size(), duplicateGroups.size(), duplicates.size(), consolidated,
-                status, limit, threshold, dryRun);
+                normalizationEligible, normalized, status, limit, threshold, dryRun);
         audit(result, startedAt);
         return result;
     }
@@ -178,6 +204,19 @@ public class MemoryConsolidationService {
         return Math.max(0.0d, Math.min(1.0d, value));
     }
 
+    private DocumentCandidate normalize(KnowledgeDocument document, Instant reference) {
+        if (temporalNormalizer == null) {
+            return new DocumentCandidate(document, false);
+        }
+        try {
+            MemoryTemporalNormalizer.DocumentNormalization result = temporalNormalizer.normalize(document, reference);
+            return new DocumentCandidate(result.document(), result.changed());
+        } catch (RuntimeException ex) {
+            recordNormalizationMetric("failed", 1);
+            return new DocumentCandidate(document, false);
+        }
+    }
+
     private String normalized(String value) {
         return value == null ? "" : value.toLowerCase(Locale.ROOT).replaceAll("\\s+", " ").trim();
     }
@@ -185,6 +224,12 @@ public class MemoryConsolidationService {
     private void recordMetric(String outcome, long count) {
         if (metricsService != null) {
             metricsService.recordMemory("consolidate", outcome, count);
+        }
+    }
+
+    private void recordNormalizationMetric(String outcome, long count) {
+        if (metricsService != null) {
+            metricsService.recordMemory("normalize", outcome, count);
         }
     }
 
@@ -203,6 +248,8 @@ public class MemoryConsolidationService {
                             "duplicateGroups", result.duplicateGroups(),
                             "eligible", result.eligible(),
                             "consolidated", result.consolidated(),
+                            "normalizationEligible", result.normalizationEligible(),
+                            "normalized", result.normalized(),
                             "dryRun", result.dryRun(),
                             "scanLimit", result.scanLimit(),
                             "similarityThreshold", result.similarityThreshold()));
@@ -216,6 +263,8 @@ public class MemoryConsolidationService {
             int duplicateGroups,
             int eligible,
             int consolidated,
+            int normalizationEligible,
+            int normalized,
             String status,
             int scanLimit,
             double similarityThreshold,
@@ -224,5 +273,8 @@ public class MemoryConsolidationService {
     }
 
     private record DuplicateMatch(KnowledgeDocument duplicate, KnowledgeDocument canonical) {
+    }
+
+    private record DocumentCandidate(KnowledgeDocument document, boolean normalizationChanged) {
     }
 }

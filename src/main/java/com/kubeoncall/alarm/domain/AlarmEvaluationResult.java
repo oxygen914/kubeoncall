@@ -1,6 +1,7 @@
 package com.kubeoncall.alarm.domain;
 
 import java.util.List;
+import java.util.Map;
 
 /**
  * Outcome of running the policy engine over a {@link NormalizedAlarmEvent}.
@@ -33,5 +34,9 @@ public record AlarmEvaluationResult(
     public static AlarmEvaluationResult unmatched(AlarmSeverity severity, String reason) {
         return new AlarmEvaluationResult(
                 false, null, null, severity, null, null, null, null, null, reason, List.of());
+    }
+
+    public Map<String, String> ragFilters() {
+        return matchedPolicy == null ? Map.of() : matchedPolicy.ragFilters();
     }
 }

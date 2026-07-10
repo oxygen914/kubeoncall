@@ -305,6 +305,9 @@ public class AlertWorkflowService {
         if (!memoryRecall.warning().isBlank()) {
             toolNames.add("memory.alert.recall_failed");
         }
+        if (consumedMemoryCount(context) > 0) {
+            toolNames.add("memory.alert.consume");
+        }
         if (toolNames.isEmpty()) {
             toolNames.addAll(results.stream().map(NodeResult::nodeName).toList());
         }
@@ -512,6 +515,8 @@ public class AlertWorkflowService {
             appendPart(builder, "skippedNodes", context.getSkippedNodes());
             appendPart(builder, "degraded", context.isDegraded());
             appendPart(builder, "silenceApproved", context.getAttribute("silenceApproved"));
+            appendPart(builder, "memoryConsumedCount", context.getAttribute("alertMemoryConsumed"));
+            appendPart(builder, "repeatIncident", context.getAttribute("repeatIncident"));
         }
         if (latest != null) {
             appendPart(builder, "latestNode", latest.nodeName());
@@ -547,6 +552,7 @@ public class AlertWorkflowService {
             putIfPresent(metadata, "severity", evaluation.finalSeverity());
             putIfPresent(metadata, "workflowTemplate", evaluation.workflowTemplate());
             putIfPresent(metadata, "policyReason", evaluation.reason());
+            putIfPresent(metadata, "policyRagFilters", evaluation.ragFilters());
         }
         if (activeState != null) {
             putIfPresent(metadata, "activeStatus", activeState.status());
@@ -565,6 +571,9 @@ public class AlertWorkflowService {
             putIfPresent(metadata, "failedNodes", context.getFailedNodes());
             putIfPresent(metadata, "skippedNodes", context.getSkippedNodes());
             putIfPresent(metadata, "alertMemoryExtractionWarning", context.getAttribute("alertMemoryExtractionWarning"));
+            putIfPresent(metadata, "alertMemoryConsumed", context.getAttribute("alertMemoryConsumed"));
+            putIfPresent(metadata, "alertMemoryConsumedIds", context.getAttribute("alertMemoryConsumedIds"));
+            putIfPresent(metadata, "repeatIncident", context.getAttribute("repeatIncident"));
             putIfPresent(metadata, "silenceApproved", context.getAttribute("silenceApproved"));
             putIfPresent(metadata, "silenceApprovedBy", context.getAttribute("silenceApprovedBy"));
             putIfPresent(metadata, "silenceApprovalReason", context.getAttribute("silenceApprovalReason"));
@@ -597,6 +606,11 @@ public class AlertWorkflowService {
             builder.append("; ");
         }
         builder.append(key).append('=').append(text);
+    }
+
+    private long consumedMemoryCount(AlertWorkflowContext context) {
+        Object value = context.getAttribute("alertMemoryConsumed");
+        return value instanceof Number number ? number.longValue() : 0L;
     }
 
     private void putIfPresent(Map<String, Object> metadata, String key, Object value) {

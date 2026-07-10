@@ -60,6 +60,9 @@ public class ElasticsearchKnowledgeRepository implements KnowledgeRepository {
 
     @Override
     public List<KnowledgeDocument> searchLexical(RetrievalRequest request, int candidateSize) {
+        if (indexAdmin != null && !indexAdmin.indexExists()) {
+            return List.of();
+        }
         Criteria criteria = buildLexicalCriteria(request);
         CriteriaQuery query = new CriteriaQuery(criteria);
         query.setMaxResults(Math.max(1, candidateSize));
@@ -206,8 +209,8 @@ public class ElasticsearchKnowledgeRepository implements KnowledgeRepository {
         String title = document.title() == null ? "" : document.title();
         String content = document.content() == null ? "" : document.content();
         String source = document.source() == null ? "manual" : document.source().toLowerCase(Locale.ROOT);
-        List<Float> embedding = document.embedding() == null
-                ? List.of()
+        List<Float> embedding = document.embedding() == null || document.embedding().isEmpty()
+                ? null
                 : document.embedding().stream().map(Double::floatValue).toList();
         return new EsKnowledgeDocumentEntity(
                 document.id(), title, content, source, metadata, createdAt.toEpochMilli(),

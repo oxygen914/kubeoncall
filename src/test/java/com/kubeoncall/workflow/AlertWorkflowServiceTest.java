@@ -20,7 +20,9 @@ import com.kubeoncall.memory.MemoryEntry;
 import com.kubeoncall.memory.MemoryExtractor;
 import com.kubeoncall.memory.MemoryScope;
 import com.kubeoncall.memory.MemoryType;
+import com.kubeoncall.memory.TokenBudget;
 import com.kubeoncall.service.ExecutionAuditService;
+import com.kubeoncall.workflow.node.IntelligentDiagnosisNode;
 import org.junit.jupiter.api.Test;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.ValueOperations;
@@ -204,20 +206,11 @@ class AlertWorkflowServiceTest {
         );
         when(alertMemoryService.recall(any(NormalizedAlarmEvent.class))).thenReturn(List.of(memory));
 
-        AlertWorkflowDefinition capturing = new AlertWorkflowDefinition(
-                "capturingNode",
-                true,
-                List.of(),
-                context -> {
-                    Object value = context.getAttribute("alertMemories");
-                    assertTrue(value instanceof List<?> list && !list.isEmpty());
-                    Object first = ((List<?>) value).get(0);
-                    assertTrue(first instanceof Map<?, ?> map && "memory-1".equals(map.get("id")));
-                    return new NodeResult("capturingNode", NodeStatus.SUCCESS, "ok", Map.of());
-                }
-        );
+        IntelligentDiagnosisNode diagnosisNode = new IntelligentDiagnosisNode(properties, new TokenBudget());
+        AlertWorkflowDefinition diagnosis = new AlertWorkflowDefinition(
+                "intelligentDiagnosisNode", false, List.of(), diagnosisNode);
         AlertWorkflowFactory factory = mock(AlertWorkflowFactory.class);
-        when(factory.buildWorkflow()).thenReturn(List.of(capturing));
+        when(factory.buildWorkflow()).thenReturn(List.of(diagnosis));
         AlertWorkflowService service = new AlertWorkflowService(
                 redisTemplate,
                 properties,
@@ -237,12 +230,22 @@ class AlertWorkflowServiceTest {
                 Map.of(), Map.of(), "runbook-oom", null, Instant.now(), "oom", Map.of()));
 
         assertEquals(1, results.size());
+        assertEquals("intelligentDiagnosisNode", results.get(0).nodeName());
+        assertEquals(true, results.get(0).payload().get("memoryConsumed"));
+        assertEquals(1, results.get(0).payload().get("memoryConsumedCount"));
         verify(alertMemoryService).recall(any(NormalizedAlarmEvent.class));
         org.mockito.ArgumentCaptor<String> summaryCaptor = org.mockito.ArgumentCaptor.forClass(String.class);
         verify(memoryExtractor).extractFromAlarm(any(NormalizedAlarmEvent.class), summaryCaptor.capture());
         assertTrue(summaryCaptor.getValue().contains("fingerprint=fp-memory"));
         assertTrue(summaryCaptor.getValue().contains("memoryRecallCount=1"));
-        assertTrue(summaryCaptor.getValue().contains("latestMessage=ok"));
+        assertTrue(summaryCaptor.getValue().contains("memoryConsumedCount=1"));
+        @SuppressWarnings("unchecked")
+        org.mockito.ArgumentCaptor<Map<String, Object>> metadataCaptor = org.mockito.ArgumentCaptor.forClass(Map.class);
+        verify(auditService).recordAlarmExecution(
+                anyString(), anyString(), anyBoolean(), anyBoolean(), anyString(), any(), any(), any(), metadataCaptor.capture());
+        assertEquals(1, metadataCaptor.getValue().get("alertMemoryConsumed"));
+        assertEquals(List.of("memory-1"), metadataCaptor.getValue().get("alertMemoryConsumedIds"));
+        assertEquals(true, metadataCaptor.getValue().get("repeatIncident"));
     }
 
     @Test

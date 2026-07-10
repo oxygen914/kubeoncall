@@ -15,11 +15,13 @@ import java.util.List;
 import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import org.mockito.ArgumentCaptor;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -43,7 +45,9 @@ class ElasticsearchKnowledgeRepositoryTest {
 
         repository.save(document);
 
-        verify(template).save(any(EsKnowledgeDocumentEntity.class), any());
+        ArgumentCaptor<EsKnowledgeDocumentEntity> entity = ArgumentCaptor.forClass(EsKnowledgeDocumentEntity.class);
+        verify(template).save(entity.capture(), any());
+        assertNull(entity.getValue().getEmbedding());
     }
 
     @Test
@@ -121,6 +125,25 @@ class ElasticsearchKnowledgeRepositoryTest {
 
         assertEquals(List.of("relevant-old", "less-relevant-new"),
                 result.stream().map(KnowledgeDocument::id).toList());
+    }
+
+    @Test
+    void shouldReturnNoLexicalHitsWhenManagedIndexDoesNotExist() {
+        ElasticsearchTemplate template = mock(ElasticsearchTemplate.class);
+        KnowledgeIndexAdmin indexAdmin = mock(KnowledgeIndexAdmin.class);
+        KubeOnCallProperties properties = new KubeOnCallProperties();
+        when(indexAdmin.indexExists()).thenReturn(false);
+        ElasticsearchKnowledgeRepository repository = new ElasticsearchKnowledgeRepository(
+                template, properties, indexAdmin);
+
+        List<KnowledgeDocument> result = repository.searchLexical(
+                new RetrievalRequest("", Map.of("runbookId", "runbook-pod-oom"), 1), 1);
+
+        assertTrue(result.isEmpty());
+        verify(template, never()).search(
+                any(org.springframework.data.elasticsearch.core.query.Query.class),
+                eq(EsKnowledgeDocumentEntity.class),
+                any(org.springframework.data.elasticsearch.core.mapping.IndexCoordinates.class));
     }
 
     @Test

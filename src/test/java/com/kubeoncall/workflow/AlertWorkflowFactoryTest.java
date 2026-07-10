@@ -1,6 +1,7 @@
 package com.kubeoncall.workflow;
 
 import com.kubeoncall.workflow.node.DeviceInfoNode;
+import com.kubeoncall.workflow.node.IntelligentDiagnosisNode;
 import com.kubeoncall.workflow.node.KnowledgeRetrieveNode;
 import com.kubeoncall.workflow.node.LogCollectionNode;
 import com.kubeoncall.workflow.node.NotificationNode;
@@ -31,6 +32,7 @@ class AlertWorkflowFactoryTest {
                 "deviceInfoNode",
                 "stateCompareNode",
                 "knowledgeRetrieveNode",
+                "intelligentDiagnosisNode",
                 "resultPushNode",
                 "notificationNode",
                 "ticketNode",
@@ -50,6 +52,7 @@ class AlertWorkflowFactoryTest {
                 "logCollectionNode",
                 "stateCompareNode",
                 "knowledgeRetrieveNode",
+                "intelligentDiagnosisNode",
                 "resultPushNode",
                 "notificationNode",
                 "ticketNode",
@@ -87,6 +90,7 @@ class AlertWorkflowFactoryTest {
                 mock(DeviceInfoNode.class),
                 mock(StateCompareNode.class),
                 mock(KnowledgeRetrieveNode.class),
+                mock(IntelligentDiagnosisNode.class),
                 mock(ResultPushNode.class),
                 mock(NotificationNode.class),
                 mock(TicketNode.class),

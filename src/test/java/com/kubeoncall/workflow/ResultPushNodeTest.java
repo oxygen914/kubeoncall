@@ -101,6 +101,7 @@ class ResultPushNodeTest {
     void shouldRecordStructuredSummaryEvenWithoutAlertmanager() {
         ResultPushNode node = new ResultPushNode(List.of(), new KubeOnCallProperties());
         AlertWorkflowContext context = contextWithPolicy(AlarmSeverity.P1, false);
+        context.putAttribute("diagnosis", Map.of("strategy", "CURRENT_EVIDENCE_ONLY"));
 
         NodeResult result = node.execute(context);
 
@@ -108,6 +109,7 @@ class ResultPushNodeTest {
         assertTrue(result.payload().containsKey("fingerprint"));
         assertTrue(result.payload().containsKey("alertName"));
         assertEquals("host-high-cpu-p1", result.payload().get("policyId"));
+        assertEquals(Map.of("strategy", "CURRENT_EVIDENCE_ONLY"), result.payload().get("diagnosis"));
         assertFalse(Boolean.TRUE.equals(result.payload().get("silenceCreated")));
     }
 

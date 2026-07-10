@@ -23,7 +23,7 @@ public class EsKnowledgeDocumentEntity {
     @Field(type = FieldType.Keyword)
     private String source;
 
-    @Field(type = FieldType.Object)
+    @Field(type = FieldType.Flattened)
     private Map<String, String> metadata;
 
     @Field(type = FieldType.Long)

@@ -61,6 +61,28 @@ class MemoryServiceTest {
     }
 
     @Test
+    void shouldNormalizeRelativeDateOnEveryMemoryWritePath() {
+        KnowledgeRepository repository = mock(KnowledgeRepository.class);
+        KubeOnCallProperties properties = new KubeOnCallProperties();
+        MemoryTemporalNormalizer normalizer = new MemoryTemporalNormalizer(properties);
+        MemoryService service = new MemoryService(
+                repository, properties, null, null, null, normalizer);
+        Instant createdAt = Instant.parse("2026-07-10T01:00:00Z");
+        MemoryEntry entry = new MemoryEntry(
+                "memory-date", MemoryType.INCIDENT_SUMMARY, MemoryScope.SERVICE,
+                "payment incident", "昨天 payment-service OOM", "payment-service", null, null,
+                createdAt, createdAt, Map.of("source", "alarm"));
+
+        MemoryEntry remembered = service.remember(entry);
+
+        assertEquals("2026-07-09 payment-service OOM", remembered.content());
+        ArgumentCaptor<KnowledgeDocument> saved = ArgumentCaptor.forClass(KnowledgeDocument.class);
+        verify(repository).save(saved.capture());
+        assertEquals(remembered.content(), saved.getValue().content());
+        assertEquals("normalized", saved.getValue().metadata().get("temporal_normalization_status"));
+    }
+
+    @Test
     void shouldSearchOnlyMemoryDocuments() {
         KnowledgeRepository repository = mock(KnowledgeRepository.class);
         KubeOnCallMetricsService metricsService = mock(KubeOnCallMetricsService.class);
