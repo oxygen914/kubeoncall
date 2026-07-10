@@ -5,6 +5,7 @@ import com.kubeoncall.domain.rag.RetrievalRequest;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 public interface KnowledgeRepository {
 
@@ -21,6 +22,10 @@ public interface KnowledgeRepository {
     }
 
     Map<String, KnowledgeDocument> loadParents(List<String> parentDocumentIds);
+
+    default Optional<KnowledgeDocument> findById(String documentId) {
+        return Optional.empty();
+    }
 
     default void deleteById(String documentId) {
     }

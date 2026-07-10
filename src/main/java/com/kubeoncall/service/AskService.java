@@ -14,6 +14,8 @@ import com.kubeoncall.domain.task.Task;
 import com.kubeoncall.memory.MemoryInjection;
 import com.kubeoncall.memory.MemoryExtractor;
 import com.kubeoncall.memory.MemoryInjector;
+import com.kubeoncall.memory.ContextCompressor;
+import com.kubeoncall.memory.ConversationHistoryCompactor;
 import com.kubeoncall.memory.SessionSnapshot;
 import com.kubeoncall.memory.SessionStore;
 import com.kubeoncall.memory.SessionTurn;
@@ -41,6 +43,8 @@ public class AskService {
     private final MemoryInjector memoryInjector;
     private final MemoryExtractor memoryExtractor;
     private final SkillActivationService skillActivationService;
+    private final ContextCompressor contextCompressor;
+    private final ConversationHistoryCompactor historyCompactor;
 
     @Autowired
     public AskService(PlannerAgent plannerAgent,
@@ -52,7 +56,9 @@ public class AskService {
                       SessionStore sessionStore,
                       MemoryInjector memoryInjector,
                       MemoryExtractor memoryExtractor,
-                      SkillActivationService skillActivationService) {
+                      SkillActivationService skillActivationService,
+                      ContextCompressor contextCompressor,
+                      ConversationHistoryCompactor historyCompactor) {
         this.plannerAgent = plannerAgent;
         this.verifierAgent = verifierAgent;
         this.executorAgent = executorAgent;
@@ -63,6 +69,23 @@ public class AskService {
         this.memoryInjector = memoryInjector;
         this.memoryExtractor = memoryExtractor;
         this.skillActivationService = skillActivationService;
+        this.contextCompressor = contextCompressor;
+        this.historyCompactor = historyCompactor;
+    }
+
+    public AskService(PlannerAgent plannerAgent,
+                      VerifierAgent verifierAgent,
+                      ExecutorAgent executorAgent,
+                      ApprovalService approvalService,
+                      ResponseComposer responseComposer,
+                      ExecutionAuditService executionAuditService,
+                      SessionStore sessionStore,
+                      MemoryInjector memoryInjector,
+                      MemoryExtractor memoryExtractor,
+                      SkillActivationService skillActivationService) {
+        this(plannerAgent, verifierAgent, executorAgent, approvalService, responseComposer,
+                executionAuditService, sessionStore, memoryInjector, memoryExtractor,
+                skillActivationService, null, null);
     }
 
     public AskService(PlannerAgent plannerAgent,
@@ -135,6 +158,7 @@ public class AskService {
         attachSessionContext(state, sessionId);
         attachMemoryContext(state, question);
         attachSkillContext(state, question);
+        compressPlanningContext(state);
 
         plannerAgent.run(state);
         if (state.getStatus() != GraphStatus.SUCCESS) {
@@ -151,6 +175,7 @@ public class AskService {
         String sessionId = contextSessionId(state);
         if (state.getStatus() == GraphStatus.REJECTED) {
             state.addApprovalAudit("Execution terminated after rejection");
+            compressRuntime(state);
             String message = responseComposer.compose(state);
             AskExecutionResult result = new AskExecutionResult(state.getExecutionId(), state.getStatus().name(), message, sessionId);
             appendSessionTurn(sessionId, state, message);
@@ -174,6 +199,7 @@ public class AskService {
         if (state.getStatus() == GraphStatus.SUCCESS) {
             runPlannedTasks(state, state.getCurrentTaskIndex() + 1);
         }
+        compressRuntime(state);
         String message = responseComposer.compose(state);
         AskExecutionResult result = new AskExecutionResult(state.getExecutionId(), state.getStatus().name(), message, sessionId);
         appendSessionTurn(sessionId, state, message);
@@ -243,6 +269,7 @@ public class AskService {
                 return;
             }
             recordCompletedTask(state, task.taskId());
+            compressRuntime(state);
         }
         state.setStatus(GraphStatus.SUCCESS);
     }
@@ -261,6 +288,7 @@ public class AskService {
     }
 
     private AskExecutionResult finishAsk(GraphState state, Instant startedAt, String sessionId) {
+        compressRuntime(state);
         String message = responseComposer.compose(state);
         appendSessionTurn(sessionId, state, message);
         extractMemory(state, message);
@@ -284,7 +312,11 @@ public class AskService {
                     .map(this::toSessionHistoryMap)
                     .toList();
             state.getContext().put("sessionHistory", history);
-            state.getContext().put("sessionContext", buildSessionContext(snapshot.turns()));
+            state.getContext().put("sessionSummary", snapshot.summary());
+            state.getContext().put("sessionCompactedTurnCount", snapshot.compactedTurnCount());
+            state.getContext().put("sessionContext", historyCompactor == null
+                    ? buildSessionContext(snapshot.turns())
+                    : historyCompactor.buildContext(snapshot));
         } catch (RuntimeException ex) {
             state.getContext().put("sessionHistory", List.of());
             state.getContext().put("sessionContext", "");
@@ -397,6 +429,18 @@ public class AskService {
             memoryExtractor.extractFromAsk(state, message);
         } catch (RuntimeException ex) {
             state.getContext().put("memoryExtractionWarning", "memory extraction failed: " + ex.getMessage());
+        }
+    }
+
+    private void compressPlanningContext(GraphState state) {
+        if (contextCompressor != null) {
+            contextCompressor.compressPlanningContext(state);
+        }
+    }
+
+    private void compressRuntime(GraphState state) {
+        if (contextCompressor != null) {
+            contextCompressor.compressRuntime(state);
         }
     }
 

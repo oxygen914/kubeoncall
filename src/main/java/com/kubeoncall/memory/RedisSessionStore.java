@@ -3,6 +3,7 @@ package com.kubeoncall.memory;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.kubeoncall.common.config.KubeOnCallProperties;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Component;
 
@@ -17,13 +18,24 @@ public class RedisSessionStore implements SessionStore {
     private final StringRedisTemplate redisTemplate;
     private final ObjectMapper objectMapper;
     private final KubeOnCallProperties properties;
+    private final ConversationHistoryCompactor historyCompactor;
+
+    @Autowired
+    public RedisSessionStore(StringRedisTemplate redisTemplate,
+                             ObjectMapper objectMapper,
+                             KubeOnCallProperties properties,
+                             ConversationHistoryCompactor historyCompactor) {
+        this.redisTemplate = redisTemplate;
+        this.objectMapper = objectMapper;
+        this.properties = properties;
+        this.historyCompactor = historyCompactor;
+    }
 
     public RedisSessionStore(StringRedisTemplate redisTemplate,
                              ObjectMapper objectMapper,
                              KubeOnCallProperties properties) {
-        this.redisTemplate = redisTemplate;
-        this.objectMapper = objectMapper;
-        this.properties = properties;
+        this(redisTemplate, objectMapper, properties,
+                new ConversationHistoryCompactor(properties, new TokenBudget()));
     }
 
     @Override
@@ -51,7 +63,7 @@ public class RedisSessionStore implements SessionStore {
         }
         SessionSnapshot current = find(normalized)
                 .orElseGet(() -> new SessionSnapshot(normalized, java.util.List.of(), null, null));
-        SessionSnapshot next = current.append(turn, properties.getMemory().getMaxSessionTurns());
+        SessionSnapshot next = historyCompactor.append(current, turn);
         try {
             redisTemplate.opsForValue().set(key(normalized), objectMapper.writeValueAsString(next), ttl());
         } catch (JsonProcessingException e) {

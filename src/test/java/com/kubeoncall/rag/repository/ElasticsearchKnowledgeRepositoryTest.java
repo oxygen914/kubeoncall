@@ -76,6 +76,21 @@ class ElasticsearchKnowledgeRepositoryTest {
     }
 
     @Test
+    void shouldFindDocumentById() {
+        ElasticsearchTemplate template = mock(ElasticsearchTemplate.class);
+        KubeOnCallProperties properties = new KubeOnCallProperties();
+        ElasticsearchKnowledgeRepository repository = new ElasticsearchKnowledgeRepository(template, properties);
+        EsKnowledgeDocumentEntity entity = new EsKnowledgeDocumentEntity(
+                "memory-1", "title", "content", "memory", Map.of("source_type", "memory"),
+                Instant.now().toEpochMilli());
+        when(template.get(eq("memory-1"), eq(EsKnowledgeDocumentEntity.class), any())).thenReturn(entity);
+
+        java.util.Optional<KnowledgeDocument> result = repository.findById("memory-1");
+
+        assertEquals("memory-1", result.orElseThrow().id());
+    }
+
+    @Test
     void shouldPreserveElasticsearchHitOrderInsteadOfSortingByCreatedAt() {
         ElasticsearchTemplate template = mock(ElasticsearchTemplate.class);
         KubeOnCallProperties properties = new KubeOnCallProperties();

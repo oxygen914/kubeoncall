@@ -78,4 +78,22 @@ class ExecutionAuditServiceTest {
         assertEquals("success", metadata.get("executorResultStatus"));
         verify(metricsService).recordGraphExecution(eq("ASK"), anyString(), eq(false), eq(false));
     }
+
+    @Test
+    void shouldPersistMemoryOperationAudit() {
+        ExecutionAuditRepository repository = mock(ExecutionAuditRepository.class);
+        ExecutionAuditService auditService = new ExecutionAuditService(
+                repository, mock(KubeOnCallMetricsService.class));
+
+        auditService.recordMemoryOperation(
+                "restore", "success", "restored memory-1", Instant.now(),
+                Map.of("memoryId", "memory-1"));
+
+        org.mockito.ArgumentCaptor<ExecutionAuditRecord> recordCaptor =
+                org.mockito.ArgumentCaptor.forClass(ExecutionAuditRecord.class);
+        verify(repository).save(recordCaptor.capture());
+        assertEquals(ExecutionRequestType.MEMORY, recordCaptor.getValue().requestType());
+        assertEquals("restore", recordCaptor.getValue().metadata().get("memoryOperation"));
+        assertEquals("memory-1", recordCaptor.getValue().metadata().get("memoryId"));
+    }
 }

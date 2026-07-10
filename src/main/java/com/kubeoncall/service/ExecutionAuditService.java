@@ -17,6 +17,8 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Locale;
+import java.util.UUID;
 
 @Service
 public class ExecutionAuditService {
@@ -105,6 +107,37 @@ public class ExecutionAuditService {
         );
         record(record);
         metricsService.recordAlarmExecution(record.status(), record.degraded(), record.autoHandled());
+    }
+
+    public void recordMemoryOperation(String operation,
+                                      String status,
+                                      String summary,
+                                      Instant startedAt,
+                                      Map<String, Object> metadata) {
+        String normalizedOperation = operation == null || operation.isBlank() ? "unknown" : operation.trim();
+        String normalizedStatus = status == null || status.isBlank()
+                ? "UNKNOWN"
+                : status.trim().toUpperCase(Locale.ROOT);
+        ExecutionAuditRecord record = new ExecutionAuditRecord(
+                "memory-" + normalizedOperation + "-" + UUID.randomUUID(),
+                ExecutionRequestType.MEMORY,
+                normalizedStatus,
+                false,
+                true,
+                durationMs(startedAt, Instant.now()),
+                summary,
+                "FAILED".equals(normalizedStatus) ? summary : null,
+                List.of(),
+                Instant.now(),
+                0,
+                false,
+                "FAILED".equals(normalizedStatus),
+                0,
+                0,
+                0,
+                mergeMemoryMetadata(normalizedOperation, metadata)
+        );
+        record(record);
     }
 
     public ExecutionStats stats() {
@@ -274,6 +307,15 @@ public class ExecutionAuditService {
         if (value != null) {
             metadata.put(key, value);
         }
+    }
+
+    private Map<String, Object> mergeMemoryMetadata(String operation, Map<String, Object> metadata) {
+        LinkedHashMap<String, Object> merged = new LinkedHashMap<>();
+        merged.put("memoryOperation", operation);
+        if (metadata != null) {
+            merged.putAll(metadata);
+        }
+        return merged;
     }
 
     private int readRetryCount(GraphState state) {

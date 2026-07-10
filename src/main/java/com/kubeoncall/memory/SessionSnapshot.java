@@ -8,7 +8,9 @@ public record SessionSnapshot(
         String sessionId,
         List<SessionTurn> turns,
         Instant createdAt,
-        Instant updatedAt
+        Instant updatedAt,
+        String summary,
+        int compactedTurnCount
 ) {
     public SessionSnapshot {
         turns = turns == null ? List.of() : List.copyOf(turns);
@@ -19,6 +21,15 @@ public record SessionSnapshot(
         if (updatedAt == null) {
             updatedAt = now;
         }
+        summary = summary == null ? "" : summary;
+        compactedTurnCount = Math.max(0, compactedTurnCount);
+    }
+
+    public SessionSnapshot(String sessionId,
+                           List<SessionTurn> turns,
+                           Instant createdAt,
+                           Instant updatedAt) {
+        this(sessionId, turns, createdAt, updatedAt, "", 0);
     }
 
     public SessionSnapshot append(SessionTurn turn, int maxTurns) {
@@ -28,6 +39,6 @@ public record SessionSnapshot(
         if (nextTurns.size() > limit) {
             nextTurns = nextTurns.subList(nextTurns.size() - limit, nextTurns.size());
         }
-        return new SessionSnapshot(sessionId, nextTurns, createdAt, Instant.now());
+        return new SessionSnapshot(sessionId, nextTurns, createdAt, Instant.now(), summary, compactedTurnCount);
     }
 }

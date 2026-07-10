@@ -22,6 +22,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 
 @Repository
 @Primary
@@ -119,6 +120,16 @@ public class ElasticsearchKnowledgeRepository implements KnowledgeRepository {
             mapped.put(parent.id(), parent);
         }
         return mapped;
+    }
+
+    @Override
+    public Optional<KnowledgeDocument> findById(String documentId) {
+        if (documentId == null || documentId.isBlank()) {
+            return Optional.empty();
+        }
+        EsKnowledgeDocumentEntity entity = elasticsearchTemplate.get(
+                documentId.trim(), EsKnowledgeDocumentEntity.class, index());
+        return Optional.ofNullable(entity).map(this::toDomain);
     }
 
     @Override

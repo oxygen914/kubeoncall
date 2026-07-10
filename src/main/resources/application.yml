@@ -110,9 +110,20 @@ kubeoncall:
     enabled: true
     session-ttl-seconds: 86400
     max-session-turns: 12
+    session-recent-turns: 6
+    session-token-budget: 1200
+    session-summary-token-budget: 600
+    context-token-budget: 2400
+    observation-token-budget: 800
+    max-observation-entries: 20
     long-term-enabled: true
     inject-max-entries: 5
     stale-after-days: 30
+    consolidation-enabled: false
+    consolidation-cron: "0 0 3 * * *"
+    consolidation-scan-limit: 500
+    consolidation-lock-ttl-seconds: 1800
+    duplicate-similarity-threshold: 0.92
   skill:
     enabled: true
     location: classpath*:skills/*.md

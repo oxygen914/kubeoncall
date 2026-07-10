@@ -2,9 +2,13 @@ package com.kubeoncall.memory;
 
 import com.kubeoncall.common.config.KubeOnCallProperties;
 import com.kubeoncall.domain.rag.KnowledgeDocument;
+import com.kubeoncall.domain.rag.RetrieveMethod;
 import com.kubeoncall.domain.rag.RetrievalRequest;
+import com.kubeoncall.domain.rag.RetrievalResult;
+import com.kubeoncall.rag.KnowledgeRetrievalFacade;
 import com.kubeoncall.rag.repository.KnowledgeRepository;
 import com.kubeoncall.service.KubeOnCallMetricsService;
+import com.kubeoncall.service.ExecutionAuditService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
@@ -20,14 +24,33 @@ public class MemoryService {
     private final KnowledgeRepository knowledgeRepository;
     private final KubeOnCallProperties properties;
     private final KubeOnCallMetricsService metricsService;
+    private final KnowledgeRetrievalFacade retrievalFacade;
+    private final ExecutionAuditService auditService;
 
     @Autowired
     public MemoryService(KnowledgeRepository knowledgeRepository,
                          KubeOnCallProperties properties,
-                         KubeOnCallMetricsService metricsService) {
+                         KubeOnCallMetricsService metricsService,
+                         KnowledgeRetrievalFacade retrievalFacade,
+                         ExecutionAuditService auditService) {
         this.knowledgeRepository = knowledgeRepository;
         this.properties = properties;
         this.metricsService = metricsService;
+        this.retrievalFacade = retrievalFacade;
+        this.auditService = auditService;
+    }
+
+    public MemoryService(KnowledgeRepository knowledgeRepository,
+                         KubeOnCallProperties properties,
+                         KubeOnCallMetricsService metricsService,
+                         KnowledgeRetrievalFacade retrievalFacade) {
+        this(knowledgeRepository, properties, metricsService, retrievalFacade, null);
+    }
+
+    public MemoryService(KnowledgeRepository knowledgeRepository,
+                         KubeOnCallProperties properties,
+                         KubeOnCallMetricsService metricsService) {
+        this(knowledgeRepository, properties, metricsService, null, null);
     }
 
     public MemoryService(KnowledgeRepository knowledgeRepository,
@@ -49,28 +72,50 @@ public class MemoryService {
     }
 
     public List<MemoryEntry> search(String query, Map<String, String> filters, int topK) {
+        return searchWithTrace(query, filters, topK).entries();
+    }
+
+    public MemorySearchResult searchWithTrace(String query, Map<String, String> filters, int topK) {
         if (!properties.getMemory().isEnabled()) {
             recordMetric("search", "disabled", 0);
-            return List.of();
+            return new MemorySearchResult(List.of(), Map.of(
+                    "memorySearch", true,
+                    "status", "disabled"));
         }
         Map<String, String> effectiveFilters = new LinkedHashMap<>();
         if (filters != null) {
             effectiveFilters.putAll(filters);
         }
         effectiveFilters.put("source_type", "memory");
-        RetrievalRequest request = new RetrievalRequest(
-                query,
-                effectiveFilters,
-                Math.max(1, topK)
-        );
-        int candidateSize = Math.max(1, topK) * 3;
-        List<MemoryEntry> entries = knowledgeRepository.searchLexical(request, candidateSize).stream()
+        int resultLimit = Math.max(1, topK);
+        int candidateSize = resultLimit * 3;
+        List<KnowledgeDocument> documents;
+        Map<String, Object> diagnostics = new LinkedHashMap<>();
+        if (retrievalFacade == null) {
+            RetrievalRequest request = new RetrievalRequest(query, effectiveFilters, resultLimit);
+            documents = knowledgeRepository.searchLexical(request, candidateSize);
+            diagnostics.put("rankingSource", "lexical_repository_compat");
+            diagnostics.put("retrieveMethod", RetrieveMethod.KEYWORD.name());
+        } else {
+            RetrievalResult result = retrievalFacade.retrieve(
+                    query, effectiveFilters, candidateSize, RetrieveMethod.HYBRID, true);
+            documents = result.documents();
+            if (result.diagnostics() != null) {
+                diagnostics.putAll(result.diagnostics());
+            }
+            diagnostics.put("retrieveMethod", RetrieveMethod.HYBRID.name());
+        }
+        List<MemoryEntry> entries = documents.stream()
+                .filter(this::isMemoryDocument)
                 .filter(this::isEnabledMemoryDocument)
                 .map(this::toMemoryEntry)
-                .limit(Math.max(1, topK))
+                .limit(resultLimit)
                 .toList();
+        diagnostics.put("memorySearch", true);
+        diagnostics.put("memoryIsolationFilter", "source_type=memory");
+        diagnostics.put("memoryResultCount", entries.size());
         recordMetric("search", "success", entries.size());
-        return entries;
+        return new MemorySearchResult(entries, diagnostics);
     }
 
     public MemoryCleanupResult cleanupStale(Instant now, int scanLimit) {
@@ -78,13 +123,17 @@ public class MemoryService {
     }
 
     public MemoryCleanupResult cleanupStale(Instant now, int scanLimit, boolean dryRun) {
+        Instant startedAt = Instant.now();
         Instant reference = now == null ? Instant.now() : now;
         int limit = Math.max(1, scanLimit);
         int staleAfterDays = Math.max(1, properties.getMemory().getStaleAfterDays());
         Instant threshold = reference.minus(Duration.ofDays(staleAfterDays));
         if (!properties.getMemory().isEnabled() || !properties.getMemory().isLongTermEnabled()) {
             recordMetric("cleanup", "disabled", 0);
-            return new MemoryCleanupResult(0, 0, 0, "disabled", limit, threshold, staleAfterDays, dryRun);
+            MemoryCleanupResult result = new MemoryCleanupResult(
+                    0, 0, 0, "disabled", limit, threshold, staleAfterDays, dryRun);
+            auditCleanup(result, startedAt);
+            return result;
         }
         RetrievalRequest request = new RetrievalRequest("", Map.of("source_type", "memory"), limit);
         List<KnowledgeDocument> candidates = knowledgeRepository.searchLexical(request, limit);
@@ -105,7 +154,51 @@ public class MemoryService {
         }
         String status = dryRun ? "dry_run" : "success";
         recordMetric("cleanup", status, dryRun ? eligible : deleted);
-        return new MemoryCleanupResult(candidates.size(), eligible, deleted, status, limit, threshold, staleAfterDays, dryRun);
+        MemoryCleanupResult result = new MemoryCleanupResult(
+                candidates.size(), eligible, deleted, status, limit, threshold, staleAfterDays, dryRun);
+        auditCleanup(result, startedAt);
+        return result;
+    }
+
+    public MemoryRestoreResult restore(String memoryId, Instant now) {
+        Instant startedAt = Instant.now();
+        Instant restoredAt = now == null ? Instant.now() : now;
+        String normalizedId = memoryId == null ? "" : memoryId.trim();
+        if (normalizedId.isBlank()) {
+            return auditedRestore(new MemoryRestoreResult(
+                    normalizedId, "invalid_id", null, null), startedAt);
+        }
+        if (!properties.getMemory().isEnabled() || !properties.getMemory().isLongTermEnabled()) {
+            return auditedRestore(new MemoryRestoreResult(
+                    normalizedId, "disabled", null, null), startedAt);
+        }
+        KnowledgeDocument document = knowledgeRepository.findById(normalizedId).orElse(null);
+        if (document == null) {
+            return auditedRestore(new MemoryRestoreResult(
+                    normalizedId, "not_found", null, null), startedAt);
+        }
+        if (!isMemoryDocument(document)) {
+            return auditedRestore(new MemoryRestoreResult(
+                    normalizedId, "not_memory", null, null), startedAt);
+        }
+        Map<String, String> metadata = new LinkedHashMap<>(document.metadata());
+        String previousDeleteReason = metadata.get("delete_reason");
+        if (!"false".equalsIgnoreCase(metadata.get("memory_enabled"))) {
+            return auditedRestore(new MemoryRestoreResult(
+                    normalizedId, "already_active", null, previousDeleteReason), startedAt);
+        }
+        metadata.put("memory_enabled", "true");
+        metadata.put("chunk_enable", "true");
+        metadata.put("restored_at", restoredAt.toString());
+        metadata.put("updated_at", restoredAt.toString());
+        metadata.remove("deleted_at");
+        metadata.remove("delete_reason");
+        metadata.remove("duplicate_of");
+        knowledgeRepository.save(new KnowledgeDocument(
+                document.id(), document.title(), document.content(), document.source(),
+                metadata, document.createdAt(), document.embeddingText(), document.embedding()));
+        return auditedRestore(new MemoryRestoreResult(
+                normalizedId, "success", restoredAt, previousDeleteReason), startedAt);
     }
 
     private KnowledgeDocument toKnowledgeDocument(MemoryEntry entry) {
@@ -180,6 +273,17 @@ public class MemoryService {
         return !"false".equalsIgnoreCase(document.metadata().get("memory_enabled"));
     }
 
+    private boolean isMemoryDocument(KnowledgeDocument document) {
+        if (document == null) {
+            return false;
+        }
+        if ("memory".equalsIgnoreCase(document.source())) {
+            return true;
+        }
+        return document.metadata() != null
+                && "memory".equalsIgnoreCase(document.metadata().get("source_type"));
+    }
+
     private boolean isCleanupEligible(KnowledgeDocument document,
                                       MemoryEntry entry,
                                       Instant updatedAt,
@@ -215,6 +319,38 @@ public class MemoryService {
         }
     }
 
+    private void auditCleanup(MemoryCleanupResult result, Instant startedAt) {
+        audit("cleanup", result.status(), "memory cleanup " + result.status(), startedAt, Map.of(
+                "scanned", result.scanned(),
+                "eligible", result.eligible(),
+                "deleted", result.deleted(),
+                "dryRun", result.dryRun(),
+                "scanLimit", result.scanLimit()));
+    }
+
+    private MemoryRestoreResult auditedRestore(MemoryRestoreResult result, Instant startedAt) {
+        recordMetric("restore", result.status(), "success".equals(result.status()) ? 1 : 0);
+        audit("restore", result.status(), "memory restore " + result.status(), startedAt, Map.of(
+                "memoryId", result.memoryId(),
+                "previousDeleteReason", result.previousDeleteReason() == null ? "" : result.previousDeleteReason()));
+        return result;
+    }
+
+    private void audit(String operation,
+                       String status,
+                       String summary,
+                       Instant startedAt,
+                       Map<String, Object> metadata) {
+        if (auditService == null) {
+            return;
+        }
+        try {
+            auditService.recordMemoryOperation(operation, status, summary, startedAt, metadata);
+        } catch (RuntimeException ignored) {
+            // Audit failure must not change the maintenance operation result.
+        }
+    }
+
     public record MemoryCleanupResult(
             int scanned,
             int eligible,
@@ -224,6 +360,24 @@ public class MemoryService {
             Instant staleThreshold,
             int staleAfterDays,
             boolean dryRun
+    ) {
+    }
+
+    public record MemorySearchResult(
+            List<MemoryEntry> entries,
+            Map<String, Object> diagnostics
+    ) {
+        public MemorySearchResult {
+            entries = entries == null ? List.of() : List.copyOf(entries);
+            diagnostics = diagnostics == null ? Map.of() : Map.copyOf(diagnostics);
+        }
+    }
+
+    public record MemoryRestoreResult(
+            String memoryId,
+            String status,
+            Instant restoredAt,
+            String previousDeleteReason
     ) {
     }
 }

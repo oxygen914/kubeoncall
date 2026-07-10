@@ -3,17 +3,22 @@ package com.kubeoncall.memory;
 import com.kubeoncall.common.config.KubeOnCallProperties;
 import com.kubeoncall.domain.rag.KnowledgeDocument;
 import com.kubeoncall.domain.rag.RetrievalRequest;
+import com.kubeoncall.domain.rag.RetrievalResult;
+import com.kubeoncall.rag.KnowledgeRetrievalFacade;
 import com.kubeoncall.rag.repository.KnowledgeRepository;
 import com.kubeoncall.service.KubeOnCallMetricsService;
+import com.kubeoncall.service.ExecutionAuditService;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -100,12 +105,53 @@ class MemoryServiceTest {
     }
 
     @Test
+    void shouldReuseHybridRetrievalWithMandatoryMemoryIsolationAndTrace() {
+        KnowledgeRepository repository = mock(KnowledgeRepository.class);
+        KubeOnCallMetricsService metricsService = mock(KubeOnCallMetricsService.class);
+        KnowledgeRetrievalFacade retrievalFacade = mock(KnowledgeRetrievalFacade.class);
+        MemoryService service = new MemoryService(
+                repository, new KubeOnCallProperties(), metricsService, retrievalFacade);
+        KnowledgeDocument memory = new KnowledgeDocument(
+                "memory-hybrid", "payment owner", "team-payments", "memory",
+                Map.of(
+                        "source_type", "memory",
+                        "memory_type", "SERVICE_FACT",
+                        "memory_scope", "SERVICE",
+                        "memory_enabled", "true"),
+                Instant.now());
+        KnowledgeDocument sop = new KnowledgeDocument(
+                "sop-1", "payment sop", "restart", "manual",
+                Map.of("source_type", "sop"), Instant.now());
+        when(retrievalFacade.retrieve(
+                eq("payment owner"), any(), eq(6), eq(com.kubeoncall.domain.rag.RetrieveMethod.HYBRID), eq(true)))
+                .thenReturn(new RetrievalResult(
+                        "payment owner", List.of(sop, memory), "RAG", "ok", List.of(),
+                        Map.of("rankingSource", "reciprocal_rank_fusion")));
+
+        MemoryService.MemorySearchResult result = service.searchWithTrace(
+                "payment owner", Map.of("service", "payment-service"), 2);
+
+        assertEquals(List.of("memory-hybrid"), result.entries().stream().map(MemoryEntry::id).toList());
+        assertEquals("reciprocal_rank_fusion", result.diagnostics().get("rankingSource"));
+        assertEquals("source_type=memory", result.diagnostics().get("memoryIsolationFilter"));
+        ArgumentCaptor<Map<String, String>> filtersCaptor = ArgumentCaptor.forClass(Map.class);
+        verify(retrievalFacade).retrieve(
+                eq("payment owner"), filtersCaptor.capture(), eq(6),
+                eq(com.kubeoncall.domain.rag.RetrieveMethod.HYBRID), eq(true));
+        assertEquals("memory", filtersCaptor.getValue().get("source_type"));
+        assertEquals("payment-service", filtersCaptor.getValue().get("service"));
+        verify(repository, never()).searchLexical(any(), anyInt());
+    }
+
+    @Test
     void shouldSoftDeleteOnlyStaleIncidentMemoriesAndKeepStableFacts() {
         KnowledgeRepository repository = mock(KnowledgeRepository.class);
         KubeOnCallMetricsService metricsService = mock(KubeOnCallMetricsService.class);
+        ExecutionAuditService auditService = mock(ExecutionAuditService.class);
         KubeOnCallProperties properties = new KubeOnCallProperties();
         properties.getMemory().setStaleAfterDays(30);
-        MemoryService service = new MemoryService(repository, properties, metricsService);
+        MemoryService service = new MemoryService(
+                repository, properties, metricsService, null, auditService);
         Instant now = Instant.parse("2026-07-08T00:00:00Z");
         KnowledgeDocument stale = new KnowledgeDocument(
                 "memory-old",
@@ -165,15 +211,19 @@ class MemoryServiceTest {
         assertEquals("stale_cleanup", softDeletedCaptor.getValue().metadata().get("delete_reason"));
         verify(repository, never()).deleteById(any());
         verify(metricsService).recordMemory("cleanup", "success", 1);
+        verify(auditService).recordMemoryOperation(
+                eq("cleanup"), eq("success"), any(String.class), any(Instant.class), any(Map.class));
     }
 
     @Test
     void cleanupDryRunShouldReportEligibleWithoutWriting() {
         KnowledgeRepository repository = mock(KnowledgeRepository.class);
         KubeOnCallMetricsService metricsService = mock(KubeOnCallMetricsService.class);
+        ExecutionAuditService auditService = mock(ExecutionAuditService.class);
         KubeOnCallProperties properties = new KubeOnCallProperties();
         properties.getMemory().setStaleAfterDays(30);
-        MemoryService service = new MemoryService(repository, properties, metricsService);
+        MemoryService service = new MemoryService(
+                repository, properties, metricsService, null, auditService);
         KnowledgeDocument stale = new KnowledgeDocument(
                 "memory-old", "old incident", "old content", "memory",
                 Map.of(
@@ -193,5 +243,45 @@ class MemoryServiceTest {
         verify(repository, never()).save(any());
         verify(repository, never()).deleteById(any());
         verify(metricsService).recordMemory("cleanup", "dry_run", 1);
+        verify(auditService).recordMemoryOperation(
+                eq("cleanup"), eq("dry_run"), any(String.class), any(Instant.class), any(Map.class));
+    }
+
+    @Test
+    void shouldRestoreSoftDeletedMemoryAndClearDeletionMetadata() {
+        KnowledgeRepository repository = mock(KnowledgeRepository.class);
+        KubeOnCallMetricsService metrics = mock(KubeOnCallMetricsService.class);
+        ExecutionAuditService audit = mock(ExecutionAuditService.class);
+        MemoryService service = new MemoryService(
+                repository, new KubeOnCallProperties(), metrics, null, audit);
+        KnowledgeDocument deleted = new KnowledgeDocument(
+                "memory-deleted", "payment owner", "team-payments", "memory",
+                Map.of(
+                        "source_type", "memory",
+                        "memory_type", "SERVICE_FACT",
+                        "memory_enabled", "false",
+                        "chunk_enable", "false",
+                        "deleted_at", "2026-07-01T00:00:00Z",
+                        "delete_reason", "duplicate_consolidation",
+                        "duplicate_of", "memory-canonical"),
+                Instant.parse("2026-06-01T00:00:00Z"));
+        when(repository.findById("memory-deleted")).thenReturn(Optional.of(deleted));
+        Instant restoredAt = Instant.parse("2026-07-10T12:00:00Z");
+
+        MemoryService.MemoryRestoreResult result = service.restore("memory-deleted", restoredAt);
+
+        assertEquals("success", result.status());
+        assertEquals("duplicate_consolidation", result.previousDeleteReason());
+        ArgumentCaptor<KnowledgeDocument> restored = ArgumentCaptor.forClass(KnowledgeDocument.class);
+        verify(repository).save(restored.capture());
+        assertEquals("true", restored.getValue().metadata().get("memory_enabled"));
+        assertEquals("true", restored.getValue().metadata().get("chunk_enable"));
+        assertEquals(restoredAt.toString(), restored.getValue().metadata().get("restored_at"));
+        assertEquals(false, restored.getValue().metadata().containsKey("deleted_at"));
+        assertEquals(false, restored.getValue().metadata().containsKey("delete_reason"));
+        assertEquals(false, restored.getValue().metadata().containsKey("duplicate_of"));
+        verify(metrics).recordMemory("restore", "success", 1);
+        verify(audit).recordMemoryOperation(
+                eq("restore"), eq("success"), any(String.class), any(Instant.class), any(Map.class));
     }
 }
