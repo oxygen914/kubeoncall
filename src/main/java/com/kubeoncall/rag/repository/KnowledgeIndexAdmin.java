@@ -5,9 +5,16 @@ import org.springframework.data.elasticsearch.client.elc.ElasticsearchTemplate;
 import org.springframework.data.elasticsearch.core.IndexOperations;
 import org.springframework.data.elasticsearch.core.document.Document;
 import org.springframework.data.elasticsearch.core.mapping.IndexCoordinates;
+import org.springframework.data.elasticsearch.core.index.AliasAction;
+import org.springframework.data.elasticsearch.core.index.AliasActionParameters;
+import org.springframework.data.elasticsearch.core.index.AliasActions;
+import org.springframework.data.elasticsearch.core.reindex.ReindexRequest;
+import org.springframework.data.elasticsearch.core.reindex.ReindexResponse;
 import org.springframework.stereotype.Component;
 
 import java.util.LinkedHashMap;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 
 @Component
@@ -38,6 +45,18 @@ public class KnowledgeIndexAdmin {
                 return;
             }
             IndexOperations operations = elasticsearchTemplate.indexOps(index());
+            if (aliasEnabled() && !operations.exists()) {
+                String initialIndex = versionedIndex("v1");
+                IndexOperations initialOperations = elasticsearchTemplate.indexOps(IndexCoordinates.of(initialIndex));
+                if (!initialOperations.exists()
+                        && !initialOperations.create(Map.of(), fullMapping(configuredDimensions))) {
+                    throw new IllegalStateException("Failed to create initial knowledge version index");
+                }
+                if (!aliasAction(initialIndex, true, false)) {
+                    throw new IllegalStateException("Failed to activate initial knowledge index alias");
+                }
+                operations = elasticsearchTemplate.indexOps(index());
+            }
             if (!operations.exists()) {
                 if (!operations.create(Map.of(), fullMapping(configuredDimensions))) {
                     throw new IllegalStateException("Failed to create knowledge index vector mapping");
@@ -71,6 +90,123 @@ public class KnowledgeIndexAdmin {
 
     public boolean indexExists() {
         return elasticsearchTemplate.indexOps(index()).exists();
+    }
+
+    public boolean aliasEnabled() {
+        return properties.getRag().getKnowledgeIndexAlias() != null
+                && !properties.getRag().getKnowledgeIndexAlias().isBlank();
+    }
+
+    public VersionPreparation prepareVersion(String rawVersion, boolean reindex) {
+        requireAlias();
+        String version = normalizeVersion(rawVersion);
+        String target = versionedIndex(version);
+        IndexOperations targetOperations = elasticsearchTemplate.indexOps(IndexCoordinates.of(target));
+        boolean created = !targetOperations.exists();
+        if (created && !targetOperations.create(Map.of(), fullMapping(configuredDimensions()))) {
+            throw new IllegalStateException("Failed to create knowledge version index " + target);
+        }
+        ReindexResponse response = null;
+        if (reindex) {
+            if (!indexExists()) {
+                throw new IllegalStateException("Knowledge source index/alias does not exist");
+            }
+            response = elasticsearchTemplate.reindex(ReindexRequest.builder(index(), IndexCoordinates.of(target))
+                    .withRefresh(true)
+                    .build());
+        }
+        return new VersionPreparation(version, target, created, response == null ? 0 : response.getTotal(),
+                response == null ? 0 : response.getCreated(), response == null ? 0 : response.getUpdated());
+    }
+
+    public AliasStatus aliasStatus() {
+        if (!aliasEnabled()) {
+            return new AliasStatus("", "", List.of());
+        }
+        if (!elasticsearchTemplate.indexOps(index()).exists()) {
+            return new AliasStatus(aliasName(), "", List.of());
+        }
+        Map<String, java.util.Set<org.springframework.data.elasticsearch.core.index.AliasData>> aliases =
+                elasticsearchTemplate.indexOps(index()).getAliases(properties.getRag().getKnowledgeIndexAlias());
+        List<String> backing = aliases == null ? List.of() : aliases.keySet().stream().sorted().toList();
+        String active = backing.size() == 1 ? backing.get(0) : "";
+        return new AliasStatus(properties.getRag().getKnowledgeIndexAlias(), active, backing);
+    }
+
+    public AliasStatus activateVersion(String rawVersion) {
+        requireAlias();
+        String version = normalizeVersion(rawVersion);
+        String target = versionedIndex(version);
+        if (!elasticsearchTemplate.indexOps(IndexCoordinates.of(target)).exists()) {
+            throw new IllegalArgumentException("Knowledge version does not exist: " + version);
+        }
+        AliasStatus current = aliasStatus();
+        if (current.backingIndices().isEmpty() && elasticsearchTemplate.indexOps(index()).exists()) {
+            throw new IllegalStateException("Configured knowledge-index-alias points to a concrete legacy index; migrate it before activation");
+        }
+        List<AliasAction> actions = new ArrayList<>();
+        for (String backing : current.backingIndices()) {
+            actions.add(new AliasAction.Remove(AliasActionParameters.builder()
+                    .withIndices(backing).withAliases(aliasName()).build()));
+        }
+        actions.add(new AliasAction.Add(AliasActionParameters.builder()
+                .withIndices(target).withAliases(aliasName()).withIsWriteIndex(true).build()));
+        if (!elasticsearchTemplate.indexOps(IndexCoordinates.of(target)).alias(
+                new AliasActions(actions.toArray(AliasAction[]::new)))) {
+            throw new IllegalStateException("Failed to activate knowledge alias " + aliasName());
+        }
+        return aliasStatus();
+    }
+
+    public AliasStatus rollback(String rawVersion) {
+        return activateVersion(rawVersion);
+    }
+
+    String normalizeVersion(String rawVersion) {
+        if (rawVersion == null || rawVersion.isBlank()) {
+            throw new IllegalArgumentException("version is required");
+        }
+        String version = rawVersion.trim().toLowerCase(java.util.Locale.ROOT);
+        if (!version.matches("v?[a-z0-9][a-z0-9._-]{0,31}")) {
+            throw new IllegalArgumentException("version must contain only letters, digits, dot, underscore or hyphen");
+        }
+        return version.startsWith("v") ? version : "v" + version;
+    }
+
+    String versionedIndex(String version) {
+        return properties.getRag().getKnowledgeIndex() + "-" + normalizeVersion(version);
+    }
+
+    private boolean aliasAction(String target, boolean writeIndex, boolean removeExisting) {
+        List<AliasAction> actions = new ArrayList<>();
+        if (removeExisting) {
+            for (String backing : aliasStatus().backingIndices()) {
+                actions.add(new AliasAction.Remove(AliasActionParameters.builder()
+                        .withIndices(backing).withAliases(aliasName()).build()));
+            }
+        }
+        actions.add(new AliasAction.Add(AliasActionParameters.builder()
+                .withIndices(target).withAliases(aliasName()).withIsWriteIndex(writeIndex).build()));
+        return elasticsearchTemplate.indexOps(IndexCoordinates.of(target)).alias(
+                new AliasActions(actions.toArray(AliasAction[]::new)));
+    }
+
+    private void requireAlias() {
+        if (!aliasEnabled()) {
+            throw new IllegalStateException("knowledge-index-alias is not configured");
+        }
+    }
+
+    private String aliasName() {
+        requireAlias();
+        return properties.getRag().getKnowledgeIndexAlias().trim();
+    }
+
+    public record VersionPreparation(String version, String index, boolean created,
+                                     long total, long createdDocuments, long updatedDocuments) {
+    }
+
+    public record AliasStatus(String alias, String activeIndex, List<String> backingIndices) {
     }
 
     Document fullMapping(int dimensions) {
@@ -146,6 +282,8 @@ public class KnowledgeIndexAdmin {
     }
 
     private IndexCoordinates index() {
-        return IndexCoordinates.of(properties.getRag().getKnowledgeIndex());
+        return IndexCoordinates.of(aliasEnabled()
+                ? properties.getRag().getKnowledgeIndexAlias().trim()
+                : properties.getRag().getKnowledgeIndex());
     }
 }

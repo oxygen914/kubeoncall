@@ -1,0 +1,32 @@
+replicaCount: 2
+
+image:
+  repository: kubeoncall
+  tag: latest
+  pullPolicy: IfNotPresent
+
+service:
+  type: ClusterIP
+  port: 8080
+
+resources:
+  requests: {cpu: 250m, memory: 512Mi}
+  limits: {cpu: "2", memory: 2Gi}
+
+config:
+  redisHost: redis
+  elasticsearchUri: http://elasticsearch:9200
+  minioEndpoint: http://minio:9000
+  embeddingEndpoint: http://rag-model:8080/v1/embeddings
+  rerankEndpoint: http://rag-model:8080/v1/rerank
+  alertmanagerToolEndpoint: http://alertmanager-adapter:8080/api/tools/alertmanager
+  incidentToolEndpoint: http://incident-adapter:8080/api/tools/incident
+
+secrets:
+  existingSecret: kubeoncall-secrets
+  minioAccessKeyKey: minio-access-key
+  minioSecretKeyKey: minio-secret-key
+
+serviceMonitor:
+  enabled: false
+  interval: 30s

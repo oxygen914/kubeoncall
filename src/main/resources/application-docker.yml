@@ -1,0 +1,50 @@
+spring:
+  data:
+    redis:
+      host: redis
+      port: 6379
+  elasticsearch:
+    uris: http://elasticsearch:9200
+
+kubeoncall:
+  rag:
+    knowledge-index-alias: ${RAG_KNOWLEDGE_INDEX_ALIAS:kubeoncall-knowledge-active}
+    vector-enabled: true
+    vector-backend: es
+    es-knn-enabled: true
+    embedding-enabled: true
+    mock-embedding-enabled: false
+    embedding-endpoint: ${RAG_EMBEDDING_ENDPOINT:http://host.docker.internal:18086/v1/embeddings}
+    embedding-model: ${RAG_EMBEDDING_MODEL:text-embedding-3-small}
+    embedding-version: ${RAG_EMBEDDING_VERSION:v1}
+    embedding-dimensions: ${RAG_EMBEDDING_DIMENSIONS:1536}
+    cross-encoder-enabled: true
+    cross-encoder-endpoint: ${RAG_RERANK_ENDPOINT:http://host.docker.internal:18086/v1/rerank}
+    cross-encoder-model: ${RAG_RERANK_MODEL:cross-encoder}
+    runbook-bootstrap-enabled: true
+  storage:
+    minio:
+      endpoint: http://minio:9000
+      access-key: ${MINIO_ROOT_USER:minioadmin}
+      secret-key: ${MINIO_ROOT_PASSWORD:minioadmin}
+      bucket: kubeoncall-docs
+  mcp:
+    endpoint: ${MCP_ENDPOINT:http://host.docker.internal:18080/mcp/call}
+  integrations:
+    kubernetes:
+      endpoint: ${KUBERNETES_TOOL_ENDPOINT:http://host.docker.internal:18081/api/tools/kubernetes}
+    prometheus:
+      endpoint: ${PROMETHEUS_TOOL_ENDPOINT:http://host.docker.internal:18082/api/tools/prometheus}
+    alertmanager:
+      endpoint: ${ALERTMANAGER_TOOL_ENDPOINT:http://host.docker.internal:18083/api/tools/alertmanager}
+    incident:
+      endpoint: ${INCIDENT_TOOL_ENDPOINT:http://host.docker.internal:18087/api/tools/incident}
+    device:
+      endpoint: ${DEVICE_TOOL_ENDPOINT:http://host.docker.internal:18084/api/tools/device}
+    database:
+      endpoint: ${DATABASE_TOOL_ENDPOINT:http://host.docker.internal:18085/api/tools/database}
+  alarm:
+    recovery-health-check-required: true
+    recovery-health-check-endpoint: ${ALARM_RECOVERY_HEALTH_CHECK_ENDPOINT:http://host.docker.internal:18088/api/health/alarm-recovery}
+    recovery-health-check-timeout-millis: ${ALARM_RECOVERY_HEALTH_CHECK_TIMEOUT_MILLIS:3000}
+    recovery-confirmation-timeout-seconds: ${ALARM_RECOVERY_CONFIRMATION_TIMEOUT_SECONDS:86400}

@@ -13,6 +13,7 @@ import org.springframework.stereotype.Service;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 /**
  * Matches a {@link NormalizedAlarmEvent} against the configured policies and produces an
@@ -79,6 +80,10 @@ public class AlarmPolicyEngine {
                 workflowTemplate,
                 reason,
                 List.of());
+    }
+
+    public Optional<AlarmPolicy> findPolicyById(String policyId) {
+        return policyId == null || policyId.isBlank() ? Optional.empty() : policyRepository.findById(policyId);
     }
 
     private List<AlarmPolicy> findCandidates(NormalizedAlarmEvent event) {

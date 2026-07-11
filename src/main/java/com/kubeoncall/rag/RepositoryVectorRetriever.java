@@ -3,6 +3,7 @@ package com.kubeoncall.rag;
 import com.kubeoncall.common.config.KubeOnCallProperties;
 import com.kubeoncall.domain.rag.KnowledgeDocument;
 import com.kubeoncall.domain.rag.RetrievalRequest;
+import com.kubeoncall.domain.rag.RetrievalHit;
 import com.kubeoncall.rag.repository.KnowledgeRepository;
 import org.springframework.stereotype.Component;
 
@@ -33,11 +34,17 @@ public class RepositoryVectorRetriever implements VectorRetriever {
 
     @Override
     public List<KnowledgeDocument> retrieve(RetrievalRequest request, int candidateSize) {
+        return retrieveHits(request, candidateSize).stream().map(RetrievalHit::document).toList();
+    }
+
+    @Override
+    public List<RetrievalHit> retrieveHits(RetrievalRequest request, int candidateSize) {
         EmbeddingService.EmbeddingResult embedding = embeddingService.embed(request.question());
-        List<KnowledgeDocument> documents = knowledgeRepository.searchVector(
+        List<RetrievalHit> hits = knowledgeRepository.searchVectorHits(
                 request, candidateSize, embedding.vector());
-        return documents.stream()
-                .map(document -> withEmbeddingTrace(document, embedding))
+        return hits.stream()
+                .map(hit -> new RetrievalHit(
+                        withEmbeddingTrace(hit.document(), embedding), hit.rawScore(), hit.rank(), hit.channel()))
                 .toList();
     }
 

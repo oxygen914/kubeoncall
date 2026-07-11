@@ -43,7 +43,9 @@ public class KnowledgeIngestService {
     }
 
     public RetrievalResult retrieve(String question, Map<String, String> filters) {
-        return retrievalFacade.retrieve(question, filters);
+        // Preserve the legacy service contract: callers of this overload receive diagnostics.
+        // The explicit API overload remains the opt-in trace boundary.
+        return retrievalFacade.retrieve(question, filters, null, RetrieveMethod.HYBRID, true);
     }
 
     public RetrievalResult retrieve(String question,

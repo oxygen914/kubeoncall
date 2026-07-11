@@ -41,6 +41,20 @@ class SkillActivationServiceTest {
         verify(metricsService).recordSkillActivation(false, 0);
     }
 
+    @Test
+    void shouldActivateEnabledSkillExplicitlyRequestedByPlanner() {
+        KubeOnCallMetricsService metricsService = mock(KubeOnCallMetricsService.class);
+
+        SkillActivation activation = service(metricsService).activate(
+                "unrelated wording",
+                Map.of(),
+                List.of("payment-oom-triage"));
+
+        assertTrue(activation.active());
+        assertEquals(List.of("payment-oom-triage"), activation.skillIds());
+        assertTrue(activation.prompt().contains("Payment OOM"));
+    }
+
     private SkillActivationService service(KubeOnCallMetricsService metricsService) {
         KubeOnCallProperties properties = new KubeOnCallProperties();
         SkillFrontmatterParser parser = new SkillFrontmatterParser();

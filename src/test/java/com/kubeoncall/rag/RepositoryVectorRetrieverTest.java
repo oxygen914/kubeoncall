@@ -3,6 +3,7 @@ package com.kubeoncall.rag;
 import com.kubeoncall.common.config.KubeOnCallProperties;
 import com.kubeoncall.domain.rag.KnowledgeDocument;
 import com.kubeoncall.domain.rag.RetrievalRequest;
+import com.kubeoncall.domain.rag.RetrievalHit;
 import com.kubeoncall.rag.repository.KnowledgeRepository;
 import com.kubeoncall.tool.http.ToolHttpClient;
 import org.junit.jupiter.api.Test;
@@ -34,13 +35,14 @@ class RepositoryVectorRetrieverTest {
                 "doc-1", "CPU", "runbook", "manual", Map.of(), Instant.now());
         when(embeddingService.embed("cpu high"))
                 .thenReturn(new EmbeddingService.EmbeddingResult(vector, "mock-provider", false));
-        when(repository.searchVector(request, 3, vector)).thenReturn(List.of(document));
+        when(repository.searchVectorHits(request, 3, vector))
+                .thenReturn(List.of(new RetrievalHit(document, 0.91, 1, "VECTOR")));
         RepositoryVectorRetriever retriever = new RepositoryVectorRetriever(repository, embeddingService, properties);
 
         List<KnowledgeDocument> result = retriever.retrieve(request, 3);
 
         assertTrue(retriever.available());
-        verify(repository).searchVector(request, 3, vector);
+        verify(repository).searchVectorHits(request, 3, vector);
         assertEquals("mock-provider", result.get(0).metadata().get("embedding_provider"));
     }
 
@@ -70,5 +72,37 @@ class RepositoryVectorRetrieverTest {
 
         assertTrue(external.available());
         assertEquals(false, local.available());
+    }
+
+    @Test
+    void shouldPreserveExternalVectorScoreRankAndChannel() {
+        KubeOnCallProperties properties = new KubeOnCallProperties();
+        properties.getRag().setVectorEnabled(true);
+        properties.getRag().setVectorBackend("external");
+        properties.getRag().setVectorEndpoint("http://vector/search");
+        ToolHttpClient httpClient = mock(ToolHttpClient.class);
+        when(httpClient.post(
+                org.mockito.ArgumentMatchers.eq("http://vector/search"),
+                org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.anyInt(),
+                org.mockito.ArgumentMatchers.any()))
+                .thenReturn(Map.of(
+                        "status", "success",
+                        "response", Map.of("documents", List.of(Map.of(
+                                "id", "doc-vector",
+                                "title", "vector hit",
+                                "content", "content",
+                                "score", 0.87,
+                                "rank", 2
+                        )))
+                ));
+        HttpVectorRetrievalClient client = new HttpVectorRetrievalClient(httpClient, properties);
+
+        List<RetrievalHit> hits = client.retrieveHits(new RetrievalRequest("cpu", Map.of(), 3), 3);
+
+        assertEquals(1, hits.size());
+        assertEquals(0.87, hits.get(0).rawScore());
+        assertEquals(2, hits.get(0).rank());
+        assertEquals("EXTERNAL_VECTOR", hits.get(0).channel());
     }
 }

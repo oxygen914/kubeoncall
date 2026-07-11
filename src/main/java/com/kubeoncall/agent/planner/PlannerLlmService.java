@@ -7,6 +7,7 @@ import com.kubeoncall.common.config.KubeOnCallProperties;
 import com.kubeoncall.domain.task.RiskLevel;
 import com.kubeoncall.domain.task.TaskType;
 import com.kubeoncall.skill.SkillActivationService;
+import com.kubeoncall.skill.SkillActivation;
 import org.springframework.context.ApplicationContext;
 import org.springframework.stereotype.Service;
 
@@ -53,7 +54,32 @@ public class PlannerLlmService {
             if (response == null || response.isBlank()) {
                 return Optional.empty();
             }
-            return parseDecision(response);
+            Optional<PlannerLlmDecision> firstDecision = parseDecision(response);
+            if (firstDecision.isEmpty() || firstDecision.get().requestedSkills().isEmpty()
+                    || skillActivationService == null) {
+                return firstDecision;
+            }
+            SkillActivation activation = skillActivationService.activate(
+                    request, plannerKnowledge, firstDecision.get().requestedSkills());
+            if (!activation.active()) {
+                return firstDecision;
+            }
+            Map<String, Object> expandedKnowledge = new LinkedHashMap<>(
+                    plannerKnowledge == null ? Map.of() : plannerKnowledge);
+            expandedKnowledge.put("activatedSkillIds", activation.skillIds());
+            expandedKnowledge.put("activatedSkills", activation.skillSummaries());
+            expandedKnowledge.put("activatedSkillToolWhitelist", activation.toolWhitelist());
+            expandedKnowledge.put("activatedSkillMaxRisk", activation.maxRisk() == null ? null : activation.maxRisk().name());
+            expandedKnowledge.put("skillPrompt", activation.prompt());
+            String refinedResponse = invokeChatClient(
+                    chatClient, buildSystemPrompt(), buildUserPrompt(request, expandedKnowledge));
+            Optional<PlannerLlmDecision> refined = refinedResponse == null || refinedResponse.isBlank()
+                    ? Optional.empty()
+                    : parseDecision(refinedResponse);
+            return refined.map(decision -> decision.requestedSkills().isEmpty()
+                            ? decision.withRequestedSkills(activation.skillIds())
+                            : decision)
+                    .or(() -> firstDecision);
         } catch (Exception ex) {
             return Optional.empty();
         }
@@ -156,6 +182,9 @@ public class PlannerLlmService {
         List<String> missingSignals = root.has("missingSignals") && root.get("missingSignals").isArray()
                 ? objectMapper.convertValue(root.get("missingSignals"), STRING_LIST_TYPE)
                 : List.of();
+        List<String> requestedSkills = root.has("requestedSkills") && root.get("requestedSkills").isArray()
+                ? objectMapper.convertValue(root.get("requestedSkills"), STRING_LIST_TYPE)
+                : List.of();
 
         if ((intent == null || intent.isBlank()) && taskType == null) {
             return Optional.empty();
@@ -169,6 +198,7 @@ public class PlannerLlmService {
                 riskLevel,
                 new LinkedHashMap<>(parameters),
                 missingSignals,
+                requestedSkills,
                 text(root, "summary")
         ));
     }
@@ -201,12 +231,22 @@ public class PlannerLlmService {
     private String buildSystemPrompt() {
         return """
                 You are KubeOnCall's planner agent. Produce one compact JSON object only.
-                Required fields: intent, confidence, target, targetSource, taskType, riskLevel, parameters, missingSignals, summary.
+                Required fields: intent, confidence, target, targetSource, taskType, riskLevel, parameters, missingSignals, requestedSkills, summary.
                 taskType must be one of QUERY_LOGS, QUERY_METRICS, PATCH_CONFIG, RESTART_SERVICE, SCALE_WORKLOAD, CLEAN_DATA, EXECUTE_SCRIPT.
                 riskLevel must be LOW, MEDIUM, HIGH, or CRITICAL.
                 Prefer safe read-only diagnostics unless the user clearly asks for a change.
                 Skills are operational hints. Use activated skill bodies only after validating current state.
+                Set requestedSkills to registered skill ids when a listed skill is relevant; otherwise use an empty array.
                 """ + "\n\n" + skillIndex();
+    }
+
+    public SkillActivation activateRequestedSkills(String request,
+                                                   Map<String, Object> context,
+                                                   List<String> requestedSkillIds) {
+        if (skillActivationService == null || requestedSkillIds == null || requestedSkillIds.isEmpty()) {
+            return SkillActivation.empty();
+        }
+        return skillActivationService.activate(request, context, requestedSkillIds);
     }
 
     private String buildUserPrompt(String request, Map<String, Object> plannerKnowledge) throws Exception {

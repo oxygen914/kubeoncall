@@ -17,9 +17,13 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class ExecutorThinkNodeTest {
@@ -100,21 +104,10 @@ class ExecutorThinkNodeTest {
     }
 
     @Test
-    void shouldWarnAndFallbackWhenSkillWhitelistIsTooStrict() {
-        ToolDefinition tool = new ToolDefinition(
-                "kubernetes.scaleWorkload",
-                "kubernetes",
-                "Scale deployment",
-                false,
-                true,
-                List.of(TaskType.SCALE_WORKLOAD),
-                List.of("namespace", "replicas"),
-                List.of("kubernetes")
-        );
+    void shouldRejectWhenPlannedToolIsNotInSkillWhitelist() {
         AgentToolCatalog catalog = mock(AgentToolCatalog.class);
         List<String> whitelist = List.of("kubernetes.describeResource");
         when(catalog.findExecutorTool(eq("kubernetes"), eq("scaleWorkload"), eq(whitelist))).thenReturn(null);
-        when(catalog.findExecutorTool("kubernetes", "scaleWorkload")).thenReturn(tool);
         ExecutorThinkNode node = new ExecutorThinkNode(catalog);
 
         GraphState state = new GraphState();
@@ -131,9 +124,52 @@ class ExecutorThinkNodeTest {
 
         NodeResult result = node.execute(state);
 
+        assertEquals(NodeStatus.FAILURE, result.status());
+        assertEquals("SKILL_TOOL_NOT_ALLOWED", result.payload().get("reason"));
+        assertEquals("kubernetes.scaleWorkload", result.payload().get("plannedTool"));
+        assertEquals(whitelist, result.payload().get("allowedTools"));
+        assertTrue(state.getContext().containsKey("skillToolWhitelistViolation"));
+        assertFalse(state.getContext().containsKey("executorPayload"));
+        assertNull(state.getContext().get("executionPlan"));
+        verify(catalog, never()).findExecutorTool("kubernetes", "scaleWorkload");
+    }
+
+    @Test
+    void shouldUsePlannedToolWhenItIsInSkillWhitelist() {
+        ToolDefinition tool = new ToolDefinition(
+                "kubernetes.scaleWorkload",
+                "kubernetes",
+                "Scale deployment",
+                false,
+                true,
+                List.of(TaskType.SCALE_WORKLOAD),
+                List.of("namespace", "replicas"),
+                List.of("kubernetes")
+        );
+        AgentToolCatalog catalog = mock(AgentToolCatalog.class);
+        List<String> whitelist = List.of("kubernetes.scaleWorkload");
+        when(catalog.findExecutorTool(eq("kubernetes"), eq("scaleWorkload"), eq(whitelist))).thenReturn(tool);
+        ExecutorThinkNode node = new ExecutorThinkNode(catalog);
+
+        GraphState state = new GraphState();
+        state.getContext().put("activatedSkillToolWhitelist", whitelist);
+        state.setCurrentTask(new Task(
+                "task-4",
+                "scale service",
+                TaskType.SCALE_WORKLOAD,
+                RiskLevel.MEDIUM,
+                "order-service",
+                Map.of("namespace", "prod", "replicas", 3),
+                new SopReference("SOP-1", "scale", "v1", "rag:sop")
+        ));
+
+        NodeResult result = node.execute(state);
+
         assertEquals(NodeStatus.SUCCESS, result.status());
-        assertTrue(String.valueOf(state.getContext().get("skillToolWhitelistWarning")).contains("falling back"));
+        assertFalse(state.getContext().containsKey("skillToolWhitelistViolation"));
         ExecutionPlan plan = (ExecutionPlan) state.getContext().get("executionPlan");
         assertEquals("scaleWorkload", plan.action());
+        assertEquals("kubernetes.scaleWorkload", result.payload().get("toolName"));
+        verify(catalog, never()).findExecutorTool("kubernetes", "scaleWorkload");
     }
 }

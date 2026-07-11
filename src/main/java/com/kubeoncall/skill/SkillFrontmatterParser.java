@@ -21,6 +21,13 @@ public class SkillFrontmatterParser {
     private final ObjectMapper yamlMapper = new ObjectMapper(new YAMLFactory());
 
     public Skill parse(String resourceName, String content) {
+        return parse(resourceName, content, SkillSource.BUILTIN, resourceName);
+    }
+
+    public Skill parse(String resourceName,
+                       String content,
+                       SkillSource source,
+                       String skillPath) {
         ParsedDocument parsed = splitFrontmatter(content == null ? "" : content);
         Map<String, Object> metadata = parseMetadata(parsed.frontmatter());
         String id = text(metadata, "id");
@@ -34,6 +41,9 @@ public class SkillFrontmatterParser {
         return new Skill(
                 id,
                 name,
+                defaultString(text(metadata, "version"), "v1"),
+                source == null ? SkillSource.BUILTIN : source,
+                skillPath,
                 defaultString(text(metadata, "description"), ""),
                 stringList(metadata.get("triggers")),
                 stringList(metadata.get("services")),

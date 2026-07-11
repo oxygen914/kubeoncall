@@ -1,0 +1,25 @@
+groups:
+  - name: kubeoncall
+    rules:
+      - alert: KubeOnCallDown
+        expr: up{job="kubeoncall"} == 0
+        for: 2m
+        labels: {severity: P0}
+        annotations:
+          summary: KubeOnCall is unavailable
+      - alert: KubeOnCallAlarmDegraded
+        expr: increase(kubeoncall_alarm_executions_total{degraded="true"}[10m]) > 5
+        for: 5m
+        labels: {severity: P1}
+        annotations:
+          summary: Alarm workflows are repeatedly degraded
+      - alert: KubeOnCallMemoryExtractionDeadLetters
+        expr: increase(kubeoncall_memory_operations_total{operation="extract_dead_letter"}[15m]) > 0
+        labels: {severity: P1}
+        annotations:
+          summary: Memory extraction tasks entered the dead-letter queue
+      - alert: KubeOnCallRecoveryFinalizationFailures
+        expr: increase(kubeoncall_alarm_recoveries_total{outcome="finalization_failed"}[15m]) > 0
+        labels: {severity: P1}
+        annotations:
+          summary: Alarm recovery external finalization failed

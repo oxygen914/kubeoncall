@@ -2,6 +2,7 @@ package com.kubeoncall.web;
 
 import com.kubeoncall.memory.MemoryService;
 import com.kubeoncall.memory.MemoryConsolidationService;
+import com.kubeoncall.memory.MemoryExtractionQueue;
 import com.kubeoncall.web.dto.MemoryCleanupRequest;
 import com.kubeoncall.web.dto.MemoryCleanupResponse;
 import com.kubeoncall.web.dto.MemorySearchRequest;
@@ -9,6 +10,8 @@ import com.kubeoncall.web.dto.MemorySearchResponse;
 import com.kubeoncall.web.dto.MemoryConsolidationRequest;
 import com.kubeoncall.web.dto.MemoryConsolidationResponse;
 import com.kubeoncall.web.dto.MemoryRestoreResponse;
+import com.kubeoncall.web.dto.MemoryExtractionReplayRequest;
+import com.kubeoncall.web.dto.MemoryExtractionReplayResponse;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -28,12 +31,20 @@ public class MemoryController {
 
     private final MemoryService memoryService;
     private final MemoryConsolidationService consolidationService;
+    private final MemoryExtractionQueue extractionQueue;
+
+    public MemoryController(MemoryService memoryService,
+                            MemoryConsolidationService consolidationService) {
+        this(memoryService, consolidationService, null);
+    }
 
     @Autowired
     public MemoryController(MemoryService memoryService,
-                            MemoryConsolidationService consolidationService) {
+                            MemoryConsolidationService consolidationService,
+                            MemoryExtractionQueue extractionQueue) {
         this.memoryService = memoryService;
         this.consolidationService = consolidationService;
+        this.extractionQueue = extractionQueue;
     }
 
     public MemoryController(MemoryService memoryService) {
@@ -92,5 +103,15 @@ public class MemoryController {
         MemoryService.MemoryRestoreResult result = memoryService.restore(memoryId, Instant.now());
         return new MemoryRestoreResponse(
                 result.memoryId(), result.status(), result.restoredAt(), result.previousDeleteReason());
+    }
+
+    @PostMapping("/extractions/dead-letter/replay")
+    public MemoryExtractionReplayResponse replayExtractions(
+            @RequestBody(required = false) MemoryExtractionReplayRequest request) {
+        if (extractionQueue == null) {
+            throw new IllegalStateException("Memory extraction queue is unavailable");
+        }
+        int limit = request == null || request.limit() == null ? 100 : request.limit();
+        return new MemoryExtractionReplayResponse(extractionQueue.replayDeadLetters(limit));
     }
 }

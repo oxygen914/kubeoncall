@@ -6,8 +6,15 @@ import com.kubeoncall.alarm.domain.AlarmResourceType;
 import com.kubeoncall.alarm.domain.AlarmSeverity;
 import com.kubeoncall.alarm.domain.AlarmStatus;
 import com.kubeoncall.alarm.domain.NormalizedAlarmEvent;
+import com.kubeoncall.alarm.domain.AlarmPolicy;
 import com.kubeoncall.alarm.policy.AlarmFingerprintService;
 import com.kubeoncall.alarm.policy.AlarmPolicyEngine;
+import com.kubeoncall.alarm.recovery.AlarmRecoveryService;
+import com.kubeoncall.alarm.recovery.AlarmRecoveryState;
+import com.kubeoncall.alarm.escalation.AlarmEscalationService;
+import com.kubeoncall.alarm.maintenance.AlarmMaintenanceWindow;
+import com.kubeoncall.alarm.maintenance.AlarmMaintenanceWindowService;
+import com.kubeoncall.alarm.suppression.AlarmSuppressionService;
 import com.kubeoncall.alarm.state.ActiveAlarmState;
 import com.kubeoncall.alarm.state.ActiveAlarmStore;
 import com.kubeoncall.alarm.state.AlarmSilenceApprovalStore;
@@ -44,6 +51,10 @@ public class AlertWorkflowService {
     private final AlertMemoryService alertMemoryService;
     private final MemoryExtractor memoryExtractor;
     private final AlarmSilenceApprovalStore silenceApprovalStore;
+    private final AlarmRecoveryService alarmRecoveryService;
+    private final AlarmEscalationService alarmEscalationService;
+    private final AlarmMaintenanceWindowService maintenanceWindowService;
+    private final AlarmSuppressionService alarmSuppressionService;
     private final AlarmFingerprintService alarmFingerprintService = new AlarmFingerprintService();
 
     public AlertWorkflowService(StringRedisTemplate redisTemplate,
@@ -54,7 +65,7 @@ public class AlertWorkflowService {
                                 AlarmPolicyEngine alarmPolicyEngine) {
         this(redisTemplate, properties, alertWorkflowFactory, workflowNodeExecutor, executionAuditService,
                 alarmPolicyEngine, new ActiveAlarmStore(redisTemplate, new ObjectMapper(), properties),
-                null, MemoryExtractor.noop(), null);
+                null, MemoryExtractor.noop(), null, null, null);
     }
 
     public AlertWorkflowService(StringRedisTemplate redisTemplate,
@@ -67,7 +78,72 @@ public class AlertWorkflowService {
                                 AlertMemoryService alertMemoryService,
                                 MemoryExtractor memoryExtractor) {
         this(redisTemplate, properties, alertWorkflowFactory, workflowNodeExecutor, executionAuditService,
-                alarmPolicyEngine, activeAlarmStore, alertMemoryService, memoryExtractor, null);
+                alarmPolicyEngine, activeAlarmStore, alertMemoryService, memoryExtractor, null, null, null);
+    }
+
+    public AlertWorkflowService(StringRedisTemplate redisTemplate,
+                                KubeOnCallProperties properties,
+                                AlertWorkflowFactory alertWorkflowFactory,
+                                WorkflowNodeExecutor workflowNodeExecutor,
+                                ExecutionAuditService executionAuditService,
+                                AlarmPolicyEngine alarmPolicyEngine,
+                                ActiveAlarmStore activeAlarmStore,
+                                AlertMemoryService alertMemoryService,
+                                MemoryExtractor memoryExtractor,
+                                AlarmSilenceApprovalStore silenceApprovalStore) {
+        this(redisTemplate, properties, alertWorkflowFactory, workflowNodeExecutor, executionAuditService,
+                alarmPolicyEngine, activeAlarmStore, alertMemoryService, memoryExtractor, silenceApprovalStore, null, null);
+    }
+
+    public AlertWorkflowService(StringRedisTemplate redisTemplate,
+                                KubeOnCallProperties properties,
+                                AlertWorkflowFactory alertWorkflowFactory,
+                                WorkflowNodeExecutor workflowNodeExecutor,
+                                ExecutionAuditService executionAuditService,
+                                AlarmPolicyEngine alarmPolicyEngine,
+                                ActiveAlarmStore activeAlarmStore,
+                                AlertMemoryService alertMemoryService,
+                                MemoryExtractor memoryExtractor,
+                                AlarmSilenceApprovalStore silenceApprovalStore,
+                                AlarmRecoveryService alarmRecoveryService) {
+        this(redisTemplate, properties, alertWorkflowFactory, workflowNodeExecutor, executionAuditService,
+                alarmPolicyEngine, activeAlarmStore, alertMemoryService, memoryExtractor, silenceApprovalStore,
+                alarmRecoveryService, null);
+    }
+
+    public AlertWorkflowService(StringRedisTemplate redisTemplate,
+                                KubeOnCallProperties properties,
+                                AlertWorkflowFactory alertWorkflowFactory,
+                                WorkflowNodeExecutor workflowNodeExecutor,
+                                ExecutionAuditService executionAuditService,
+                                AlarmPolicyEngine alarmPolicyEngine,
+                                ActiveAlarmStore activeAlarmStore,
+                                AlertMemoryService alertMemoryService,
+                                MemoryExtractor memoryExtractor,
+                                AlarmSilenceApprovalStore silenceApprovalStore,
+                                AlarmRecoveryService alarmRecoveryService,
+                                AlarmEscalationService alarmEscalationService) {
+        this(redisTemplate, properties, alertWorkflowFactory, workflowNodeExecutor, executionAuditService,
+                alarmPolicyEngine, activeAlarmStore, alertMemoryService, memoryExtractor, silenceApprovalStore,
+                alarmRecoveryService, alarmEscalationService, null);
+    }
+
+    public AlertWorkflowService(StringRedisTemplate redisTemplate,
+                                KubeOnCallProperties properties,
+                                AlertWorkflowFactory alertWorkflowFactory,
+                                WorkflowNodeExecutor workflowNodeExecutor,
+                                ExecutionAuditService executionAuditService,
+                                AlarmPolicyEngine alarmPolicyEngine,
+                                ActiveAlarmStore activeAlarmStore,
+                                AlertMemoryService alertMemoryService,
+                                MemoryExtractor memoryExtractor,
+                                AlarmSilenceApprovalStore silenceApprovalStore,
+                                AlarmRecoveryService alarmRecoveryService,
+                                AlarmEscalationService alarmEscalationService,
+                                AlarmMaintenanceWindowService maintenanceWindowService) {
+        this(redisTemplate, properties, alertWorkflowFactory, workflowNodeExecutor, executionAuditService,
+                alarmPolicyEngine, activeAlarmStore, alertMemoryService, memoryExtractor, silenceApprovalStore,
+                alarmRecoveryService, alarmEscalationService, maintenanceWindowService, null);
     }
 
     @Autowired
@@ -80,7 +156,11 @@ public class AlertWorkflowService {
                                 ActiveAlarmStore activeAlarmStore,
                                 AlertMemoryService alertMemoryService,
                                 MemoryExtractor memoryExtractor,
-                                AlarmSilenceApprovalStore silenceApprovalStore) {
+                                AlarmSilenceApprovalStore silenceApprovalStore,
+                                AlarmRecoveryService alarmRecoveryService,
+                                AlarmEscalationService alarmEscalationService,
+                                AlarmMaintenanceWindowService maintenanceWindowService,
+                                AlarmSuppressionService alarmSuppressionService) {
         this.redisTemplate = redisTemplate;
         this.properties = properties;
         this.alertWorkflowFactory = alertWorkflowFactory;
@@ -91,6 +171,10 @@ public class AlertWorkflowService {
         this.alertMemoryService = alertMemoryService;
         this.memoryExtractor = memoryExtractor == null ? MemoryExtractor.noop() : memoryExtractor;
         this.silenceApprovalStore = silenceApprovalStore;
+        this.alarmRecoveryService = alarmRecoveryService;
+        this.alarmEscalationService = alarmEscalationService;
+        this.maintenanceWindowService = maintenanceWindowService;
+        this.alarmSuppressionService = alarmSuppressionService;
     }
 
     /**
@@ -118,38 +202,157 @@ public class AlertWorkflowService {
         }
         AlarmEvaluationResult evaluation = alarmPolicyEngine.evaluate(event);
         ActiveAlarmState activeState = activeAlarmStore.record(event, evaluation, fingerprint);
+        if (event.status() != AlarmStatus.RESOLVED && alarmRecoveryService != null) {
+            alarmRecoveryService.cancelIfPending(fingerprint);
+        }
         MemoryRecallResult memoryRecall = recallAlertMemory(event);
-        recordNodeNotReadySuppression(event);
+        if (alarmSuppressionService == null) {
+            recordNodeNotReadySuppression(event);
+        } else {
+            alarmSuppressionService.recordSources(event);
+        }
         if (event.status() == AlarmStatus.RESOLVED) {
+            if (alarmRecoveryService != null) {
+                AlarmPolicy recoveryPolicy = evaluation.matchedPolicy();
+                if (recoveryPolicy == null && activeState != null) {
+                    recoveryPolicy = alarmPolicyEngine.findPolicyById(activeState.policyId()).orElse(null);
+                }
+                AlarmRecoveryState recoveryState = alarmRecoveryService.begin(event, recoveryPolicy, activeState);
+                LinkedHashMap<String, Object> payload = recoveryPayload(recoveryState);
+                payload.put("activeAlarm", activeAlarmPayload(activeState));
+                NodeResult result = new NodeResult(
+                        "alarmRecoveryPending",
+                        NodeStatus.SUCCESS,
+                        recoveryState.manualConfirmationRequired()
+                                ? "Alarm recovery is stable-window pending and requires manual confirmation"
+                                : "Alarm recovery is pending the configured stability window",
+                        payload
+                );
+                executionAuditService.recordAlarmExecution(
+                        event.alarmId() == null ? fingerprint : event.alarmId(),
+                        "RECOVERY_PENDING",
+                        false,
+                        recoveryState.manualConfirmationRequired(),
+                        result.message(),
+                        null,
+                        List.of("alarm.recovery.candidate"),
+                        startedAt,
+                        buildAlarmAuditMetadata(event, evaluation, activeState, memoryRecall, null, List.of(result), Map.of(
+                                "recoveryStatus", recoveryState.status(),
+                                "recoveryConfirmAfter", recoveryState.confirmAfter().toString(),
+                                "manualRecoveryConfirmation", recoveryState.manualConfirmationRequired()
+                        ))
+                );
+                return List.of(result);
+            }
             LinkedHashMap<String, Object> payload = new LinkedHashMap<>();
             payload.put("fingerprint", fingerprint);
             payload.put("activeAlarm", activeAlarmPayload(activeState));
-            payload.put("alertMemories", memoryPayload(memoryRecall.entries()));
-            if (!memoryRecall.warning().isBlank()) {
-                payload.put("alertMemoryWarning", memoryRecall.warning());
-            }
+            payload.put("reason", "RECOVERY_SERVICE_UNAVAILABLE");
             NodeResult result = new NodeResult(
-                    "alarmRecovery",
-                    NodeStatus.SUCCESS,
-                    "Alarm recovery confirmed",
+                    "alarmRecoveryUnavailable",
+                    NodeStatus.FAILURE,
+                    "Alarm recovery cannot be confirmed because the recovery service is unavailable",
                     payload
             );
-            String handlingSummary = buildAlarmHandlingSummary(event, evaluation, activeState, memoryRecall, null, result, "RECOVERED");
-            extractAlarmMemory(event, handlingSummary, null);
             executionAuditService.recordAlarmExecution(
                     event.alarmId() == null ? fingerprint : event.alarmId(),
-                    "RECOVERED",
-                    true,
+                    "DEGRADED",
                     false,
-                    handlingSummary,
-                    null,
-                    List.of("alarm.recovery"),
+                    false,
+                    result.message(),
+                    "RECOVERY_SERVICE_UNAVAILABLE",
+                    List.of("alarm.recovery.candidate"),
                     startedAt,
-                    buildAlarmAuditMetadata(event, evaluation, activeState, memoryRecall, null, List.of(result), Map.of("recovered", true))
+                    buildAlarmAuditMetadata(event, evaluation, activeState, memoryRecall, null, List.of(result), Map.of(
+                            "recoveryStatus", "UNAVAILABLE",
+                            "recovered", false
+                    ))
             );
             return List.of(result);
         }
-        SuppressionDecision suppression = suppressPodNoise(event);
+        AlarmMaintenanceWindow maintenanceWindow = maintenanceWindowService == null
+                ? null
+                : maintenanceWindowService.matchingWindow(event, Instant.now()).orElse(null);
+        if (maintenanceWindow != null) {
+            LinkedHashMap<String, Object> payload = new LinkedHashMap<>();
+            payload.put("fingerprint", fingerprint);
+            payload.put("suppressed", true);
+            payload.put("suppressedBy", "maintenance_window");
+            payload.put("maintenanceWindowId", maintenanceWindow.id());
+            payload.put("reason", maintenanceWindow.reason());
+            payload.put("startsAt", maintenanceWindow.startsAt());
+            payload.put("endsAt", maintenanceWindow.endsAt());
+            payload.put("matchers", maintenanceWindow.matchers());
+            payload.put("approvalReference", maintenanceWindow.approvalReference());
+            payload.put("activeAlarm", activeAlarmPayload(activeState));
+            NodeResult result = new NodeResult(
+                    "alarmMaintenanceSuppressed",
+                    NodeStatus.SUCCESS,
+                    "Alarm suppressed by approved maintenance window " + maintenanceWindow.id(),
+                    payload
+            );
+            executionAuditService.recordAlarmExecution(
+                    event.alarmId() == null ? fingerprint : event.alarmId(),
+                    "SUPPRESSED",
+                    true,
+                    true,
+                    result.message(),
+                    null,
+                    List.of("alarm.suppression", "alarm.suppression.maintenance_window"),
+                    startedAt,
+                    buildAlarmAuditMetadata(event, evaluation, activeState, memoryRecall, null, List.of(result), Map.of(
+                            "suppressed", true,
+                            "suppressedBy", "maintenance_window",
+                            "maintenanceWindowId", maintenanceWindow.id(),
+                            "maintenanceApprovalReference", maintenanceWindow.approvalReference()
+                    ))
+            );
+            return List.of(result);
+        }
+        AlarmSuppressionService.SuppressionDecision configuredSuppression = alarmSuppressionService == null
+                ? null
+                : alarmSuppressionService.evaluate(event);
+        if (configuredSuppression != null && configuredSuppression.suppressed()) {
+            LinkedHashMap<String, Object> payload = new LinkedHashMap<>();
+            payload.put("fingerprint", fingerprint);
+            payload.put("suppressed", true);
+            payload.put("suppressedBy", "configured_rule");
+            payload.put("ruleId", configuredSuppression.ruleId());
+            payload.put("ruleVersion", configuredSuppression.ruleVersion());
+            payload.put("reason", configuredSuppression.reason());
+            payload.put("suppressionKey", configuredSuppression.suppressionKey());
+            payload.put("sourceFingerprint", configuredSuppression.sourceFingerprint());
+            payload.put("activeAlarm", activeAlarmPayload(activeState));
+            NodeResult result = new NodeResult(
+                    "alarmSuppressed",
+                    NodeStatus.SUCCESS,
+                    "Alarm suppressed by rule " + configuredSuppression.ruleId(),
+                    payload
+            );
+            executionAuditService.recordAlarmExecution(
+                    event.alarmId() == null ? fingerprint : event.alarmId(),
+                    "SUPPRESSED",
+                    true,
+                    false,
+                    result.message(),
+                    null,
+                    List.of("alarm.suppression", "alarm.suppression." + configuredSuppression.ruleId()),
+                    startedAt,
+                    buildAlarmAuditMetadata(event, evaluation, activeState, memoryRecall, null, List.of(result), Map.of(
+                            "suppressed", true,
+                            "suppressedBy", "configured_rule",
+                            "suppressionRuleId", configuredSuppression.ruleId(),
+                            "suppressionRuleVersion", configuredSuppression.ruleVersion(),
+                            "suppressionKey", configuredSuppression.suppressionKey(),
+                            "suppressionSourceFingerprint", configuredSuppression.sourceFingerprint()
+                    ))
+            );
+            return List.of(result);
+        }
+        SuppressionDecision suppression = alarmSuppressionService == null
+                ? suppressPodNoise(event)
+                : SuppressionDecision.none();
         if (suppression.suppressed()) {
             LinkedHashMap<String, Object> payload = new LinkedHashMap<>();
             payload.put("fingerprint", fingerprint);
@@ -434,20 +637,22 @@ public class AlertWorkflowService {
         if (Boolean.FALSE.equals(accepted)) {
             return;
         }
-        LinkedHashMap<String, Object> payload = new LinkedHashMap<>();
-        payload.put("fingerprint", fingerprint);
-        payload.put("severity", severity.name());
-        payload.put("count", activeState.count());
-        payload.put("threshold", threshold);
-        payload.put("ackKey", "alarm-ack:" + fingerprint);
-        payload.put("executorKind", "alarm");
-        payload.put("action", "escalateUnacknowledged");
-        context.addNodeResult(new NodeResult(
-                "alarmEscalation",
-                NodeStatus.SUCCESS,
-                "Unacknowledged " + severity.name() + " alarm escalated",
-                payload
-        ));
+        if (alarmEscalationService == null) {
+            context.addNodeResult(new NodeResult(
+                    "alarmEscalation",
+                    NodeStatus.FAILURE,
+                    "Alarm escalation integration is unavailable",
+                    Map.of(
+                            "fingerprint", fingerprint,
+                            "severity", severity.name(),
+                            "count", activeState.count(),
+                            "threshold", threshold,
+                            "reason", "ESCALATION_SERVICE_UNAVAILABLE"
+                    )
+            ));
+            return;
+        }
+        context.addNodeResult(alarmEscalationService.escalate(event, evaluation, activeState.count(), threshold));
     }
 
     private MemoryRecallResult recallAlertMemory(NormalizedAlarmEvent event) {
@@ -548,6 +753,8 @@ public class AlertWorkflowService {
         putIfPresent(metadata, "runbookId", event.runbookId());
         if (evaluation != null) {
             putIfPresent(metadata, "policyId", evaluation.policyId());
+            putIfPresent(metadata, "policyVersion",
+                    evaluation.matchedPolicy() == null ? null : evaluation.matchedPolicy().version());
             putIfPresent(metadata, "policyMatched", evaluation.matched());
             putIfPresent(metadata, "severity", evaluation.finalSeverity());
             putIfPresent(metadata, "workflowTemplate", evaluation.workflowTemplate());
@@ -646,12 +853,30 @@ public class AlertWorkflowService {
 
     private Map<String, Object> activeAlarmPayload(ActiveAlarmState activeState) {
         LinkedHashMap<String, Object> payload = new LinkedHashMap<>();
+        if (activeState == null) {
+            payload.put("present", false);
+            return payload;
+        }
+        payload.put("present", true);
         payload.put("fingerprint", activeState.fingerprint());
         payload.put("status", activeState.status() == null ? null : activeState.status().name());
         payload.put("severity", activeState.severity() == null ? null : activeState.severity().name());
         payload.put("firstSeen", activeState.firstSeen() == null ? null : activeState.firstSeen().toString());
         payload.put("lastSeen", activeState.lastSeen() == null ? null : activeState.lastSeen().toString());
         payload.put("count", activeState.count());
+        return payload;
+    }
+
+    private LinkedHashMap<String, Object> recoveryPayload(AlarmRecoveryState state) {
+        LinkedHashMap<String, Object> payload = new LinkedHashMap<>();
+        payload.put("fingerprint", state.fingerprint());
+        payload.put("status", state.status());
+        payload.put("severity", state.severity() == null ? null : state.severity().name());
+        payload.put("policyId", state.policyId());
+        payload.put("recoverExpression", state.recoverExpression());
+        payload.put("candidateAt", state.candidateAt().toString());
+        payload.put("confirmAfter", state.confirmAfter().toString());
+        payload.put("manualConfirmationRequired", state.manualConfirmationRequired());
         return payload;
     }
 

@@ -22,7 +22,7 @@ management:
   endpoints:
     web:
       exposure:
-        include: health,info,metrics
+        include: health,info,metrics,prometheus
 
 server:
   port: 8080
@@ -84,6 +84,9 @@ kubeoncall:
     alertmanager:
       endpoint: http://localhost:18083/api/tools/alertmanager
       timeout-millis: 3000
+    incident:
+      endpoint: http://localhost:18087/api/tools/incident
+      timeout-millis: 3000
     device:
       endpoint: http://localhost:18084/api/tools/device
       timeout-millis: 3000
@@ -105,7 +108,21 @@ kubeoncall:
     info-dedup-ttl-seconds: 120
     node-not-ready-suppression-ttl-seconds: 1800
     escalation-ttl-seconds: 3600
+    acknowledgement-ttl-seconds: 86400
     silence-approval-ttl-seconds: 1800
+    p0-recovery-window-seconds: 900
+    p1-recovery-window-seconds: 600
+    p2-recovery-window-seconds: 300
+    p3-recovery-window-seconds: 120
+    info-recovery-window-seconds: 0
+    recovery-state-ttl-seconds: 259200
+    recovery-scheduler-enabled: true
+    recovery-check-interval-millis: 30000
+    recovery-batch-size: 100
+    recovery-health-check-required: true
+    recovery-health-check-endpoint: ${ALARM_RECOVERY_HEALTH_CHECK_ENDPOINT:}
+    recovery-health-check-timeout-millis: 3000
+    recovery-confirmation-timeout-seconds: 86400
     p0-escalation-count: 2
     p1-escalation-count: 3
   memory:
@@ -114,6 +131,7 @@ kubeoncall:
     max-session-turns: 12
     session-recent-turns: 6
     session-token-budget: 1200
+    session-append-max-retries: 5
     session-summary-token-budget: 600
     context-token-budget: 2400
     observation-token-budget: 800
@@ -127,9 +145,13 @@ kubeoncall:
     consolidation-scan-limit: 500
     consolidation-lock-ttl-seconds: 1800
     duplicate-similarity-threshold: 0.92
+    extraction-worker-enabled: true
+    extraction-poll-interval-millis: 5000
+    extraction-max-attempts: 3
   skill:
     enabled: true
-    location: classpath*:skills/*.md
+    location: classpath*:skills/**/*.md
+    project-location: file:./skills/**/SKILL.md
     max-active-skills: 3
     activation-threshold: 3
     prompt-max-chars: 4000

@@ -4,6 +4,7 @@ import com.kubeoncall.common.config.KubeOnCallProperties;
 import com.kubeoncall.domain.rag.KnowledgeDocument;
 import com.kubeoncall.domain.rag.RetrieveMethod;
 import com.kubeoncall.domain.rag.RetrievalRequest;
+import com.kubeoncall.domain.rag.RetrievalHit;
 import com.kubeoncall.rag.repository.KnowledgeRepository;
 import com.kubeoncall.service.KubeOnCallMetricsService;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -68,15 +69,19 @@ public class HybridRetrievalService {
         boolean vectorRequested = method == RetrieveMethod.VECTOR || method == RetrieveMethod.HYBRID;
 
         List<String> reasons = new ArrayList<>();
-        List<KnowledgeDocument> lexicalCandidates = List.of();
+        Instant lexicalStartedAt = Instant.now();
+        List<RetrievalHit> lexicalHits = List.of();
         if (lexicalRequested) {
-            lexicalCandidates = knowledgeRepository.searchLexical(request, lexicalCandidateTopN);
+            lexicalHits = lexicalHits(request, lexicalCandidateTopN);
             reasons.add("Applied lexical retrieval over title/content");
         } else {
             reasons.add("Skipped lexical retrieval for VECTOR mode");
         }
+        long lexicalLatencyMs = Duration.between(lexicalStartedAt, Instant.now()).toMillis();
+        List<KnowledgeDocument> lexicalCandidates = lexicalHits.stream().map(RetrievalHit::document).toList();
 
-        List<KnowledgeDocument> vectorCandidates = List.of();
+        Instant vectorStartedAt = Instant.now();
+        List<RetrievalHit> vectorHits = List.of();
         boolean vectorEnabled = properties.getRag().isVectorEnabled();
         boolean vectorFallback = false;
         String vectorFallbackReason = null;
@@ -84,7 +89,7 @@ public class HybridRetrievalService {
         if (vectorRequested && vectorEnabled) {
             try {
                 VectorSearchResult vectorSearch = searchVectorCandidates(request, vectorCandidateTopN);
-                vectorCandidates = vectorSearch.documents();
+                vectorHits = vectorSearch.hits();
                 vectorSource = vectorSearch.source();
                 reasons.add("Applied vector retrieval over content semantics");
             } catch (RuntimeException ex) {
@@ -99,14 +104,17 @@ public class HybridRetrievalService {
         } else {
             reasons.add("Vector retrieval disabled by configuration");
         }
+        long vectorLatencyMs = Duration.between(vectorStartedAt, Instant.now()).toMillis();
+        List<KnowledgeDocument> vectorCandidates = vectorHits.stream().map(RetrievalHit::document).toList();
 
         if (request.filters() != null && !request.filters().isEmpty()) {
             reasons.add("Applied metadata filters: " + request.filters().keySet());
         }
         reasons.add("Prepared up to " + rerankCandidateTopN + " candidates for rerank; final topK is " + topK);
 
-        Map<String, Double> lexicalRanks = rankScores(lexicalCandidates, properties.getRag().getRrfK());
-        Map<String, Double> vectorRanks = rankScores(vectorCandidates, properties.getRag().getRrfK());
+        Instant fusionStartedAt = Instant.now();
+        Map<String, Double> lexicalRanks = rankScores(lexicalHits, properties.getRag().getRrfK());
+        Map<String, Double> vectorRanks = rankScores(vectorHits, properties.getRag().getRrfK());
 
         Map<String, KnowledgeDocument> all = new LinkedHashMap<>();
         lexicalCandidates.forEach(doc -> all.putIfAbsent(doc.id(), doc));
@@ -129,11 +137,16 @@ public class HybridRetrievalService {
         } else {
             reasons.add("Applied reciprocal rank fusion");
         }
+        long fusionLatencyMs = Duration.between(fusionStartedAt, Instant.now()).toMillis();
+        List<RetrievalHit> fusedHits = fusedHits(fused, lexicalRanks, vectorRanks);
 
         long latencyMs = Duration.between(startedAt, Instant.now()).toMillis();
         Map<String, Object> diagnostics = new LinkedHashMap<>();
         diagnostics.put("candidateCount", fused.size());
         diagnostics.put("latencyMs", latencyMs);
+        diagnostics.put("lexicalLatencyMs", lexicalLatencyMs);
+        diagnostics.put("vectorLatencyMs", vectorLatencyMs);
+        diagnostics.put("fusionLatencyMs", fusionLatencyMs);
         diagnostics.put("queryLength", request.question() == null ? 0 : request.question().trim().length());
         diagnostics.put("topK", topK);
         diagnostics.put("policyCandidateTopN", policyCandidateTopN);
@@ -154,6 +167,9 @@ public class HybridRetrievalService {
         diagnostics.put("fusedDocumentIds", fused.stream().map(KnowledgeDocument::id).toList());
         diagnostics.put("lexicalDocumentIds", lexicalCandidates.stream().map(KnowledgeDocument::id).toList());
         diagnostics.put("vectorDocumentIds", vectorCandidates.stream().map(KnowledgeDocument::id).toList());
+        diagnostics.put("lexicalHits", hitTrace(lexicalHits));
+        diagnostics.put("vectorHits", hitTrace(vectorHits));
+        diagnostics.put("fusedHits", hitTrace(fusedHits));
         recordMetrics(method, vectorSource, vectorFallback, fused.size(), latencyMs);
         return new RetrievalTrace(fused, reasons, diagnostics);
     }
@@ -179,22 +195,68 @@ public class HybridRetrievalService {
             if (!retriever.available()) {
                 continue;
             }
-            List<KnowledgeDocument> documents = retriever.retrieve(request, candidateSize);
+            List<RetrievalHit> hits = retriever.retrieveHits(request, candidateSize);
+            if (hits == null) {
+                List<KnowledgeDocument> documents = retriever.retrieve(request, candidateSize);
+                hits = toHits(documents, "VECTOR");
+            }
             return new VectorSearchResult(
-                    documents == null ? List.of() : documents,
+                    hits,
                     retriever.source());
         }
         throw new IllegalStateException("No available vector retriever for configured backend");
     }
 
-    private Map<String, Double> rankScores(List<KnowledgeDocument> documents, int rrfK) {
-        Map<String, Double> scores = new LinkedHashMap<>();
+    private List<RetrievalHit> lexicalHits(RetrievalRequest request, int candidateSize) {
+        List<RetrievalHit> hits = knowledgeRepository.searchLexicalHits(request, candidateSize);
+        if (hits != null) {
+            return hits;
+        }
+        return toHits(knowledgeRepository.searchLexical(request, candidateSize), "LEXICAL");
+    }
+
+    private List<RetrievalHit> toHits(List<KnowledgeDocument> documents, String channel) {
+        if (documents == null) {
+            return List.of();
+        }
         int rank = 1;
-        for (KnowledgeDocument document : new LinkedHashSet<>(documents)) {
-            scores.put(document.id(), 1.0 / (Math.max(1, rrfK) + rank));
-            rank++;
+        List<RetrievalHit> hits = new ArrayList<>();
+        for (KnowledgeDocument document : documents) {
+            hits.add(new RetrievalHit(document, null, rank++, channel));
+        }
+        return hits;
+    }
+
+    private Map<String, Double> rankScores(List<RetrievalHit> hits, int rrfK) {
+        Map<String, Double> scores = new LinkedHashMap<>();
+        for (RetrievalHit hit : hits) {
+            scores.putIfAbsent(hit.document().id(), 1.0 / (Math.max(1, rrfK) + Math.max(1, hit.rank())));
         }
         return scores;
+    }
+
+    private List<RetrievalHit> fusedHits(List<KnowledgeDocument> documents,
+                                         Map<String, Double> lexicalRanks,
+                                         Map<String, Double> vectorRanks) {
+        List<RetrievalHit> hits = new ArrayList<>();
+        int rank = 1;
+        for (KnowledgeDocument document : documents) {
+            double score = lexicalRanks.getOrDefault(document.id(), 0.0)
+                    + vectorRanks.getOrDefault(document.id(), 0.0);
+            hits.add(new RetrievalHit(document, score, rank++, "FUSED"));
+        }
+        return hits;
+    }
+
+    private List<Map<String, Object>> hitTrace(List<RetrievalHit> hits) {
+        return hits.stream().map(hit -> {
+            Map<String, Object> trace = new LinkedHashMap<>();
+            trace.put("documentId", hit.document().id());
+            trace.put("rawScore", hit.rawScore());
+            trace.put("rank", hit.rank());
+            trace.put("channel", hit.channel());
+            return trace;
+        }).toList();
     }
 
     private void recordMetrics(RetrieveMethod method, String vectorSource, boolean vectorFallback, long resultCount, long latencyMs) {
@@ -210,6 +272,6 @@ public class HybridRetrievalService {
     ) {
     }
 
-    private record VectorSearchResult(List<KnowledgeDocument> documents, String source) {
+    private record VectorSearchResult(List<RetrievalHit> hits, String source) {
     }
 }

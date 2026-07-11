@@ -10,6 +10,7 @@ import com.kubeoncall.domain.task.SopReference;
 import com.kubeoncall.domain.task.Task;
 import com.kubeoncall.domain.task.TaskPlan;
 import com.kubeoncall.domain.task.TaskType;
+import com.kubeoncall.skill.SkillActivation;
 import org.springframework.stereotype.Component;
 
 import java.time.Instant;
@@ -61,6 +62,12 @@ public class PlannerThinkNode extends ThinkNode {
 
         PlannerLlmDecision llmDecision = plannerLlmService.plan(normalized, plannerKnowledge).orElse(null);
         if (llmDecision != null) {
+            SkillActivation requestedActivation = plannerLlmService.activateRequestedSkills(
+                    normalized, state.getContext(), llmDecision.requestedSkills());
+            if (requestedActivation.active()) {
+                applySkillActivation(state, requestedActivation);
+                plannerKnowledge = getPlannerKnowledge(state);
+            }
             intent = defaultString(llmDecision.intent(), intent);
             confidence = defaultString(llmDecision.confidence(), confidence);
             target = defaultString(llmDecision.target(), target);
@@ -149,6 +156,23 @@ public class PlannerThinkNode extends ThinkNode {
                         "evidenceSources", evidenceSources
                 )
         );
+    }
+
+    private void applySkillActivation(GraphState state, SkillActivation activation) {
+        state.getContext().put("activatedSkills", activation.skillSummaries());
+        state.getContext().put("activatedSkillIds", activation.skillIds());
+        state.getContext().put("skillPrompt", activation.prompt());
+        state.getContext().put("activatedSkillToolWhitelist", activation.toolWhitelist());
+        if (activation.maxRisk() != null) {
+            state.getContext().put("activatedSkillMaxRisk", activation.maxRisk().name());
+        }
+        Map<String, Object> knowledge = new LinkedHashMap<>(getPlannerKnowledge(state));
+        knowledge.put("activatedSkills", activation.skillSummaries());
+        knowledge.put("activatedSkillIds", activation.skillIds());
+        knowledge.put("activatedSkillToolWhitelist", activation.toolWhitelist());
+        knowledge.put("activatedSkillMaxRisk", activation.maxRisk() == null ? null : activation.maxRisk().name());
+        knowledge.put("skillPrompt", activation.prompt());
+        state.getContext().put("plannerKnowledge", knowledge);
     }
 
     private String normalizeRequest(String request) {

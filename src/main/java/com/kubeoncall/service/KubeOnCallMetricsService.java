@@ -43,6 +43,21 @@ public class KubeOnCallMetricsService {
         );
     }
 
+    public void recordAlarmAcknowledgement(String outcome) {
+        increment(
+                "kubeoncall.alarm.acknowledgements",
+                "outcome", safe(outcome)
+        );
+    }
+
+    public void recordAlarmRecovery(String outcome, String severity) {
+        increment(
+                "kubeoncall.alarm.recoveries",
+                "outcome", safe(outcome),
+                "severity", safe(severity)
+        );
+    }
+
     public void recordRagRetrieval(String method, String vectorSource, boolean vectorFallback, long resultCount, long latencyMs) {
         increment(
                 "kubeoncall.rag.retrievals",
@@ -52,6 +67,28 @@ public class KubeOnCallMetricsService {
         );
         recordAmount("kubeoncall.rag.result_count", Math.max(0, resultCount), "method", safe(method));
         recordAmount("kubeoncall.rag.latency_ms", Math.max(0, latencyMs), "method", safe(method));
+        if (resultCount <= 0) {
+            increment("kubeoncall.rag.empty_results", "method", safe(method));
+        }
+    }
+
+    public void recordRagRerank(boolean crossEncoderEnabled, boolean applied, boolean fallback) {
+        increment(
+                "kubeoncall.rag.reranks",
+                "cross_encoder_enabled", String.valueOf(crossEncoderEnabled),
+                "applied", String.valueOf(applied),
+                "fallback", String.valueOf(fallback)
+        );
+    }
+
+    public void recordKnowledge(String operation, String outcome, long count) {
+        increment(
+                "kubeoncall.knowledge.operations",
+                "operation", safe(operation),
+                "outcome", safe(outcome)
+        );
+        recordAmount("kubeoncall.knowledge.operation_count", Math.max(0, count),
+                "operation", safe(operation), "outcome", safe(outcome));
     }
 
     public void recordMemory(String operation, String outcome, long count) {
@@ -69,6 +106,14 @@ public class KubeOnCallMetricsService {
                 "active", String.valueOf(active)
         );
         recordAmount("kubeoncall.skill.activated_count", Math.max(0, skillCount), "active", String.valueOf(active));
+    }
+
+    public void recordSkillGovernance(String operation, String outcome) {
+        increment(
+                "kubeoncall.skill.governance",
+                "operation", safe(operation),
+                "outcome", safe(outcome)
+        );
     }
 
     private void increment(String name, String... tags) {

@@ -106,6 +106,7 @@ public class KubeOnCallProperties {
     public static class Rag {
         private int defaultTopK = 5;
         private String knowledgeIndex = "kubeoncall-knowledge";
+        private String knowledgeIndexAlias = "";
         private boolean vectorEnabled = false;
         private boolean crossEncoderEnabled = false;
         private String crossEncoderEndpoint;
@@ -146,6 +147,14 @@ public class KubeOnCallProperties {
 
         public void setKnowledgeIndex(String knowledgeIndex) {
             this.knowledgeIndex = knowledgeIndex;
+        }
+
+        public String getKnowledgeIndexAlias() {
+            return knowledgeIndexAlias;
+        }
+
+        public void setKnowledgeIndexAlias(String knowledgeIndexAlias) {
+            this.knowledgeIndexAlias = knowledgeIndexAlias;
         }
 
         public boolean isVectorEnabled() {
@@ -490,7 +499,19 @@ public class KubeOnCallProperties {
         private long infoDedupTtlSeconds = 120;
         private long nodeNotReadySuppressionTtlSeconds = 1800;
         private long escalationTtlSeconds = 3600;
+        private long acknowledgementTtlSeconds = 86400;
         private long silenceApprovalTtlSeconds = 1800;
+        private long p0RecoveryWindowSeconds = 900;
+        private long p1RecoveryWindowSeconds = 600;
+        private long p2RecoveryWindowSeconds = 300;
+        private long p3RecoveryWindowSeconds = 120;
+        private long infoRecoveryWindowSeconds = 0;
+        private long recoveryStateTtlSeconds = 259200;
+        private int recoveryBatchSize = 100;
+        private boolean recoveryHealthCheckRequired = true;
+        private String recoveryHealthCheckEndpoint;
+        private int recoveryHealthCheckTimeoutMillis = 3000;
+        private long recoveryConfirmationTimeoutSeconds = 86400;
         private long p0EscalationCount = 2;
         private long p1EscalationCount = 3;
 
@@ -590,12 +611,108 @@ public class KubeOnCallProperties {
             this.escalationTtlSeconds = escalationTtlSeconds;
         }
 
+        public long getAcknowledgementTtlSeconds() {
+            return acknowledgementTtlSeconds;
+        }
+
+        public void setAcknowledgementTtlSeconds(long acknowledgementTtlSeconds) {
+            this.acknowledgementTtlSeconds = acknowledgementTtlSeconds;
+        }
+
         public long getSilenceApprovalTtlSeconds() {
             return silenceApprovalTtlSeconds;
         }
 
         public void setSilenceApprovalTtlSeconds(long silenceApprovalTtlSeconds) {
             this.silenceApprovalTtlSeconds = silenceApprovalTtlSeconds;
+        }
+
+        public long getP0RecoveryWindowSeconds() {
+            return p0RecoveryWindowSeconds;
+        }
+
+        public void setP0RecoveryWindowSeconds(long p0RecoveryWindowSeconds) {
+            this.p0RecoveryWindowSeconds = p0RecoveryWindowSeconds;
+        }
+
+        public long getP1RecoveryWindowSeconds() {
+            return p1RecoveryWindowSeconds;
+        }
+
+        public void setP1RecoveryWindowSeconds(long p1RecoveryWindowSeconds) {
+            this.p1RecoveryWindowSeconds = p1RecoveryWindowSeconds;
+        }
+
+        public long getP2RecoveryWindowSeconds() {
+            return p2RecoveryWindowSeconds;
+        }
+
+        public void setP2RecoveryWindowSeconds(long p2RecoveryWindowSeconds) {
+            this.p2RecoveryWindowSeconds = p2RecoveryWindowSeconds;
+        }
+
+        public long getP3RecoveryWindowSeconds() {
+            return p3RecoveryWindowSeconds;
+        }
+
+        public void setP3RecoveryWindowSeconds(long p3RecoveryWindowSeconds) {
+            this.p3RecoveryWindowSeconds = p3RecoveryWindowSeconds;
+        }
+
+        public long getInfoRecoveryWindowSeconds() {
+            return infoRecoveryWindowSeconds;
+        }
+
+        public void setInfoRecoveryWindowSeconds(long infoRecoveryWindowSeconds) {
+            this.infoRecoveryWindowSeconds = infoRecoveryWindowSeconds;
+        }
+
+        public long getRecoveryStateTtlSeconds() {
+            return recoveryStateTtlSeconds;
+        }
+
+        public void setRecoveryStateTtlSeconds(long recoveryStateTtlSeconds) {
+            this.recoveryStateTtlSeconds = recoveryStateTtlSeconds;
+        }
+
+        public int getRecoveryBatchSize() {
+            return recoveryBatchSize;
+        }
+
+        public void setRecoveryBatchSize(int recoveryBatchSize) {
+            this.recoveryBatchSize = recoveryBatchSize;
+        }
+
+        public boolean isRecoveryHealthCheckRequired() {
+            return recoveryHealthCheckRequired;
+        }
+
+        public void setRecoveryHealthCheckRequired(boolean recoveryHealthCheckRequired) {
+            this.recoveryHealthCheckRequired = recoveryHealthCheckRequired;
+        }
+
+        public String getRecoveryHealthCheckEndpoint() {
+            return recoveryHealthCheckEndpoint;
+        }
+
+        public void setRecoveryHealthCheckEndpoint(String recoveryHealthCheckEndpoint) {
+            this.recoveryHealthCheckEndpoint = recoveryHealthCheckEndpoint;
+        }
+
+        public int getRecoveryHealthCheckTimeoutMillis() {
+            return recoveryHealthCheckTimeoutMillis;
+        }
+
+        public void setRecoveryHealthCheckTimeoutMillis(int recoveryHealthCheckTimeoutMillis) {
+            this.recoveryHealthCheckTimeoutMillis = recoveryHealthCheckTimeoutMillis;
+        }
+
+        public long getRecoveryConfirmationTimeoutSeconds() {
+            return recoveryConfirmationTimeoutSeconds;
+        }
+
+        public void setRecoveryConfirmationTimeoutSeconds(long recoveryConfirmationTimeoutSeconds) {
+            this.recoveryConfirmationTimeoutSeconds = recoveryConfirmationTimeoutSeconds;
         }
 
         public long getP0EscalationCount() {
@@ -621,6 +738,7 @@ public class KubeOnCallProperties {
         private int maxSessionTurns = 12;
         private int sessionRecentTurns = 6;
         private int sessionTokenBudget = 1200;
+        private int sessionAppendMaxRetries = 5;
         private int sessionSummaryTokenBudget = 600;
         private int contextTokenBudget = 2400;
         private int observationTokenBudget = 800;
@@ -634,6 +752,7 @@ public class KubeOnCallProperties {
         private int consolidationScanLimit = 500;
         private long consolidationLockTtlSeconds = 1800;
         private double duplicateSimilarityThreshold = 0.92d;
+        private int extractionMaxAttempts = 3;
 
         public boolean isEnabled() {
             return enabled;
@@ -673,6 +792,14 @@ public class KubeOnCallProperties {
 
         public void setSessionTokenBudget(int sessionTokenBudget) {
             this.sessionTokenBudget = sessionTokenBudget;
+        }
+
+        public int getSessionAppendMaxRetries() {
+            return sessionAppendMaxRetries;
+        }
+
+        public void setSessionAppendMaxRetries(int sessionAppendMaxRetries) {
+            this.sessionAppendMaxRetries = sessionAppendMaxRetries;
         }
 
         public int getSessionSummaryTokenBudget() {
@@ -778,11 +905,20 @@ public class KubeOnCallProperties {
         public void setDuplicateSimilarityThreshold(double duplicateSimilarityThreshold) {
             this.duplicateSimilarityThreshold = duplicateSimilarityThreshold;
         }
+
+        public int getExtractionMaxAttempts() {
+            return extractionMaxAttempts;
+        }
+
+        public void setExtractionMaxAttempts(int extractionMaxAttempts) {
+            this.extractionMaxAttempts = extractionMaxAttempts;
+        }
     }
 
     public static class Skill {
         private boolean enabled = true;
-        private String location = "classpath*:skills/*.md";
+        private String location = "classpath*:skills/**/*.md";
+        private String projectLocation = "file:./skills/**/SKILL.md";
         private int maxActiveSkills = 3;
         private int activationThreshold = 3;
         private int promptMaxChars = 4000;
@@ -801,6 +937,14 @@ public class KubeOnCallProperties {
 
         public void setLocation(String location) {
             this.location = location;
+        }
+
+        public String getProjectLocation() {
+            return projectLocation;
+        }
+
+        public void setProjectLocation(String projectLocation) {
+            this.projectLocation = projectLocation;
         }
 
         public int getMaxActiveSkills() {
@@ -832,6 +976,7 @@ public class KubeOnCallProperties {
         private final Endpoint kubernetes = new Endpoint();
         private final Endpoint prometheus = new Endpoint();
         private final Endpoint alertmanager = new Endpoint();
+        private final Endpoint incident = new Endpoint();
         private final Endpoint device = new Endpoint();
         private final Endpoint database = new Endpoint();
 
@@ -845,6 +990,10 @@ public class KubeOnCallProperties {
 
         public Endpoint getAlertmanager() {
             return alertmanager;
+        }
+
+        public Endpoint getIncident() {
+            return incident;
         }
 
         public Endpoint getDevice() {

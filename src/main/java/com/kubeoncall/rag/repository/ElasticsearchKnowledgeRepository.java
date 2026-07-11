@@ -5,6 +5,7 @@ import co.elastic.clients.elasticsearch._types.query_dsl.Query;
 import com.kubeoncall.common.config.KubeOnCallProperties;
 import com.kubeoncall.domain.rag.KnowledgeDocument;
 import com.kubeoncall.domain.rag.RetrievalRequest;
+import com.kubeoncall.domain.rag.RetrievalHit;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Primary;
 import org.springframework.data.elasticsearch.client.elc.ElasticsearchTemplate;
@@ -60,13 +61,18 @@ public class ElasticsearchKnowledgeRepository implements KnowledgeRepository {
 
     @Override
     public List<KnowledgeDocument> searchLexical(RetrievalRequest request, int candidateSize) {
+        return searchLexicalHits(request, candidateSize).stream().map(RetrievalHit::document).toList();
+    }
+
+    @Override
+    public List<RetrievalHit> searchLexicalHits(RetrievalRequest request, int candidateSize) {
         if (indexAdmin != null && !indexAdmin.indexExists()) {
             return List.of();
         }
         Criteria criteria = buildLexicalCriteria(request);
         CriteriaQuery query = new CriteriaQuery(criteria);
         query.setMaxResults(Math.max(1, candidateSize));
-        return searchByQuery(query);
+        return searchHitsByQuery(query, "LEXICAL");
     }
 
     @Override
@@ -78,6 +84,13 @@ public class ElasticsearchKnowledgeRepository implements KnowledgeRepository {
     public List<KnowledgeDocument> searchVector(RetrievalRequest request,
                                                 int candidateSize,
                                                 List<Double> queryVector) {
+        return searchVectorHits(request, candidateSize, queryVector).stream().map(RetrievalHit::document).toList();
+    }
+
+    @Override
+    public List<RetrievalHit> searchVectorHits(RetrievalRequest request,
+                                               int candidateSize,
+                                               List<Double> queryVector) {
         if (queryVector == null || queryVector.isEmpty()) {
             return List.of();
         }
@@ -97,7 +110,7 @@ public class ElasticsearchKnowledgeRepository implements KnowledgeRepository {
                 .withKnnQuery(knnBuilder.build())
                 .withMaxResults(Math.max(1, candidateSize))
                 .build();
-        return searchByQuery(query);
+        return searchHitsByQuery(query, "VECTOR");
     }
 
     @Override
@@ -203,6 +216,16 @@ public class ElasticsearchKnowledgeRepository implements KnowledgeRepository {
                 .toList();
     }
 
+    private List<RetrievalHit> searchHitsByQuery(org.springframework.data.elasticsearch.core.query.Query query,
+                                                 String channel) {
+        SearchHits<EsKnowledgeDocumentEntity> hits = elasticsearchTemplate.search(
+                query, EsKnowledgeDocumentEntity.class, index());
+        java.util.concurrent.atomic.AtomicInteger rank = new java.util.concurrent.atomic.AtomicInteger(1);
+        return hits.stream()
+                .map(hit -> new RetrievalHit(toDomain(hit.getContent()), (double) hit.getScore(), rank.getAndIncrement(), channel))
+                .toList();
+    }
+
     private EsKnowledgeDocumentEntity toEntity(KnowledgeDocument document) {
         Map<String, String> metadata = document.metadata() == null ? Map.of() : document.metadata();
         Instant createdAt = document.createdAt() == null ? Instant.now() : document.createdAt();
@@ -233,6 +256,9 @@ public class ElasticsearchKnowledgeRepository implements KnowledgeRepository {
     }
 
     private IndexCoordinates index() {
-        return IndexCoordinates.of(properties.getRag().getKnowledgeIndex());
+        String alias = properties.getRag().getKnowledgeIndexAlias();
+        return IndexCoordinates.of(alias == null || alias.isBlank()
+                ? properties.getRag().getKnowledgeIndex()
+                : alias.trim());
     }
 }

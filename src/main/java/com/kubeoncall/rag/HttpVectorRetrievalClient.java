@@ -3,6 +3,7 @@ package com.kubeoncall.rag;
 import com.kubeoncall.common.config.KubeOnCallProperties;
 import com.kubeoncall.domain.rag.KnowledgeDocument;
 import com.kubeoncall.domain.rag.RetrievalRequest;
+import com.kubeoncall.domain.rag.RetrievalHit;
 import com.kubeoncall.tool.http.ToolHttpClient;
 import org.springframework.stereotype.Component;
 
@@ -32,6 +33,11 @@ public class HttpVectorRetrievalClient implements VectorRetrievalClient {
 
     @Override
     public List<KnowledgeDocument> search(RetrievalRequest request, int candidateSize) {
+        return retrieveHits(request, candidateSize).stream().map(RetrievalHit::document).toList();
+    }
+
+    @Override
+    public List<RetrievalHit> retrieveHits(RetrievalRequest request, int candidateSize) {
         if (!available()) {
             return List.of();
         }
@@ -52,11 +58,23 @@ public class HttpVectorRetrievalClient implements VectorRetrievalClient {
         if (!(body instanceof Map<?, ?> bodyMap) || !(bodyMap.get("documents") instanceof List<?> docs)) {
             return List.of();
         }
-        return docs.stream()
-                .filter(Map.class::isInstance)
-                .map(Map.class::cast)
-                .map(this::toDocument)
-                .toList();
+        List<RetrievalHit> hits = new java.util.ArrayList<>();
+        int position = 1;
+        for (Object item : docs) {
+            if (!(item instanceof Map<?, ?> raw)) {
+                continue;
+            }
+            int rank = raw.get("rank") instanceof Number number ? number.intValue() : position;
+            Double score = score(raw);
+            hits.add(new RetrievalHit(toDocument(raw), score, rank, "EXTERNAL_VECTOR"));
+            position++;
+        }
+        return hits;
+    }
+
+    private Double score(Map<?, ?> raw) {
+        Object value = raw.containsKey("score") ? raw.get("score") : raw.get("_score");
+        return value instanceof Number number ? number.doubleValue() : null;
     }
 
     private KnowledgeDocument toDocument(Map<?, ?> raw) {

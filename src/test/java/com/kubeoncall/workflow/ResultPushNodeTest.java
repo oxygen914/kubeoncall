@@ -133,16 +133,25 @@ class ResultPushNodeTest {
     }
 
     @Test
-    void ticketNodeShouldPrepareTicketPayload() {
-        TicketNode node = new TicketNode();
+    void ticketNodeShouldCreateHighPriorityIncident() {
+        ToolExecutor incident = mock(ToolExecutor.class);
+        when(incident.getExecutorKind()).thenReturn("incident");
+        when(incident.execute(eq("createOrUpdateIncident"), any())).thenReturn(Map.of(
+                "status", "success",
+                "httpStatus", 201,
+                "incidentId", "INC-1001"
+        ));
+        TicketNode node = new TicketNode(List.of(incident));
         AlertWorkflowContext context = contextWithPolicy(AlarmSeverity.P1, false);
         context.putAttribute("resultSummary", Map.of("fingerprint", "fp-cpu"));
 
         NodeResult result = node.execute(context);
 
         assertEquals(NodeStatus.SUCCESS, result.status());
-        assertEquals("prepared", result.payload().get("status"));
+        assertEquals("created", result.payload().get("status"));
+        assertEquals("createOrUpdateIncident", result.payload().get("action"));
         assertEquals(result.payload(), context.getAttribute("ticket"));
+        verify(incident).execute(eq("createOrUpdateIncident"), any());
     }
 
     private AlertWorkflowContext contextWithPolicy(AlarmSeverity severity, boolean autoSilence) {

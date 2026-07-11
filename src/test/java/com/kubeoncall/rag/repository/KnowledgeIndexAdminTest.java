@@ -6,8 +6,10 @@ import org.mockito.ArgumentCaptor;
 import org.springframework.data.elasticsearch.client.elc.ElasticsearchTemplate;
 import org.springframework.data.elasticsearch.core.IndexOperations;
 import org.springframework.data.elasticsearch.core.document.Document;
+import org.springframework.data.elasticsearch.core.index.AliasData;
 
 import java.util.Map;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -117,5 +119,44 @@ class KnowledgeIndexAdminTest {
 
         assertTrue(error.getMessage().contains("use a new index and reimport"));
         verify(operations, never()).putMapping(any(Document.class));
+    }
+
+    @Test
+    void shouldNormalizeGovernanceVersionsAndRequireConfiguredAlias() {
+        KubeOnCallProperties properties = new KubeOnCallProperties();
+        properties.getRag().setKnowledgeIndex("knowledge");
+        KnowledgeIndexAdmin admin = new KnowledgeIndexAdmin(null, properties);
+
+        assertEquals("v2026.07", admin.normalizeVersion("2026.07"));
+        assertEquals("knowledge-v2026.07", admin.versionedIndex("2026.07"));
+        assertThrows(IllegalStateException.class, () -> admin.prepareVersion("v2", false));
+    }
+
+    @Test
+    void shouldRejectUnsafeGovernanceVersion() {
+        KnowledgeIndexAdmin admin = new KnowledgeIndexAdmin(null, new KubeOnCallProperties());
+
+        assertThrows(IllegalArgumentException.class, () -> admin.normalizeVersion("../../delete"));
+    }
+
+    @Test
+    void shouldIssueAtomicAliasActionsWhenActivatingVersion() {
+        ElasticsearchTemplate template = mock(ElasticsearchTemplate.class);
+        IndexOperations operations = mock(IndexOperations.class);
+        KubeOnCallProperties properties = new KubeOnCallProperties();
+        properties.getRag().setKnowledgeIndex("knowledge");
+        properties.getRag().setKnowledgeIndexAlias("knowledge-active");
+        when(template.indexOps(any(org.springframework.data.elasticsearch.core.mapping.IndexCoordinates.class)))
+                .thenReturn(operations);
+        when(operations.exists()).thenReturn(true);
+        when(operations.getAliases("knowledge-active"))
+                .thenReturn(Map.of("knowledge-v1", Set.<AliasData>of()));
+        when(operations.alias(any())).thenReturn(true);
+        KnowledgeIndexAdmin admin = new KnowledgeIndexAdmin(template, properties);
+
+        KnowledgeIndexAdmin.AliasStatus status = admin.activateVersion("v2");
+
+        assertEquals("knowledge-active", status.alias());
+        verify(operations).alias(any());
     }
 }

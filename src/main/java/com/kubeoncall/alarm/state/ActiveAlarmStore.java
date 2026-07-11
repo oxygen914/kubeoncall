@@ -14,6 +14,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Optional;
 
 @Service
 public class ActiveAlarmStore {
@@ -39,11 +40,16 @@ public class ActiveAlarmStore {
                                    String fingerprint) {
         Instant now = Instant.now();
         Instant eventTime = event.occurredAt() == null ? now : event.occurredAt();
-        ActiveAlarmState previous = read(fingerprint);
+        ActiveAlarmState previous = find(fingerprint).orElse(null);
         AlarmStatus status = event.status() == null ? AlarmStatus.FIRING : event.status();
-        AlarmSeverity severity = evaluation != null && evaluation.finalSeverity() != null
-                ? evaluation.finalSeverity()
-                : event.severity();
+        AlarmSeverity severity = status == AlarmStatus.RESOLVED && previous != null
+                ? previous.severity()
+                : evaluation != null && evaluation.finalSeverity() != null
+                    ? evaluation.finalSeverity()
+                    : event.severity();
+        String policyId = status == AlarmStatus.RESOLVED && previous != null
+                ? previous.policyId()
+                : evaluation == null ? null : evaluation.policyId();
 
         ActiveAlarmState next = new ActiveAlarmState(
                 fingerprint,
@@ -55,10 +61,10 @@ public class ActiveAlarmStore {
                 event.resourceName(),
                 severity,
                 status,
-                evaluation == null ? null : evaluation.policyId(),
+                policyId,
                 previous == null ? eventTime : previous.firstSeen(),
                 eventTime,
-                previous == null ? 1 : previous.count() + 1
+                previous == null ? 1 : status == AlarmStatus.RESOLVED ? previous.count() : previous.count() + 1
         );
         write(next, status);
         return next;
@@ -68,14 +74,17 @@ public class ActiveAlarmStore {
         return KEY_PREFIX + fingerprint;
     }
 
-    private ActiveAlarmState read(String fingerprint) {
+    public Optional<ActiveAlarmState> find(String fingerprint) {
+        if (fingerprint == null || fingerprint.isBlank()) {
+            return Optional.empty();
+        }
         String raw = redisTemplate.opsForValue().get(keyFor(fingerprint));
         if (raw == null || raw.isBlank()) {
-            return null;
+            return Optional.empty();
         }
         try {
             Map<String, Object> map = objectMapper.readValue(raw, MAP_TYPE);
-            return new ActiveAlarmState(
+            return Optional.of(new ActiveAlarmState(
                     string(map.get("fingerprint")),
                     string(map.get("alarmId")),
                     string(map.get("alertName")),
@@ -89,9 +98,9 @@ public class ActiveAlarmStore {
                     instant(map.get("firstSeen")),
                     instant(map.get("lastSeen")),
                     number(map.get("count"))
-            );
+            ));
         } catch (Exception ignored) {
-            return null;
+            return Optional.empty();
         }
     }
 

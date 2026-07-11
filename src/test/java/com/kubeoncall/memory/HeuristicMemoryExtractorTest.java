@@ -26,8 +26,8 @@ class HeuristicMemoryExtractorTest {
 
     @Test
     void shouldExtractKnownPitfallFromAskAnswer() {
-        MemoryService memoryService = mock(MemoryService.class);
-        HeuristicMemoryExtractor extractor = new HeuristicMemoryExtractor(memoryService, new KubeOnCallProperties());
+        MemoryExtractionQueue queue = mock(MemoryExtractionQueue.class);
+        HeuristicMemoryExtractor extractor = new HeuristicMemoryExtractor(queue, new KubeOnCallProperties());
         GraphState state = new GraphState();
         state.setExecutionId("exec-1");
         state.setCurrentTask(new Task(
@@ -42,26 +42,26 @@ class HeuristicMemoryExtractorTest {
 
         extractor.extractFromAsk(state, "Known pitfall: avoid restarting payment-service before checking queue lag.");
 
-        ArgumentCaptor<MemoryEntry> entryCaptor = ArgumentCaptor.forClass(MemoryEntry.class);
-        verify(memoryService).remember(entryCaptor.capture());
-        assertEquals(MemoryType.KNOWN_PITFALL, entryCaptor.getValue().type());
-        assertEquals("payment-service", entryCaptor.getValue().service());
+        ArgumentCaptor<MemoryExtractionTask> taskCaptor = ArgumentCaptor.forClass(MemoryExtractionTask.class);
+        verify(queue).enqueue(taskCaptor.capture());
+        assertEquals(MemoryType.KNOWN_PITFALL, taskCaptor.getValue().memoryType());
+        assertEquals("payment-service", taskCaptor.getValue().service());
     }
 
     @Test
     void shouldSkipKubectlAndRealtimeContent() {
-        MemoryService memoryService = mock(MemoryService.class);
-        HeuristicMemoryExtractor extractor = new HeuristicMemoryExtractor(memoryService, new KubeOnCallProperties());
+        MemoryExtractionQueue queue = mock(MemoryExtractionQueue.class);
+        HeuristicMemoryExtractor extractor = new HeuristicMemoryExtractor(queue, new KubeOnCallProperties());
 
         extractor.extractFromAsk(new GraphState(), "kubectl get pods -n prod shows current value 3");
 
-        verify(memoryService, never()).remember(org.mockito.ArgumentMatchers.any());
+        verify(queue, never()).enqueue(org.mockito.ArgumentMatchers.any());
     }
 
     @Test
     void shouldStripVolatileAlarmSummaryBeforeRemembering() {
-        MemoryService memoryService = mock(MemoryService.class);
-        HeuristicMemoryExtractor extractor = new HeuristicMemoryExtractor(memoryService, new KubeOnCallProperties());
+        MemoryExtractionQueue queue = mock(MemoryExtractionQueue.class);
+        HeuristicMemoryExtractor extractor = new HeuristicMemoryExtractor(queue, new KubeOnCallProperties());
         NormalizedAlarmEvent event = new NormalizedAlarmEvent(
                 "alarm-1",
                 "fp-1",
@@ -93,9 +93,9 @@ class HeuristicMemoryExtractorTest {
                 "alert=PodOOMKilled; fingerprint=fp-1; latestMessage=kubectl get pod payment-pod; metric=当前值 2GiB; outcome=SUCCESS"
         );
 
-        ArgumentCaptor<MemoryEntry> entryCaptor = ArgumentCaptor.forClass(MemoryEntry.class);
-        verify(memoryService).remember(entryCaptor.capture());
-        String content = entryCaptor.getValue().content();
+        ArgumentCaptor<MemoryExtractionTask> taskCaptor = ArgumentCaptor.forClass(MemoryExtractionTask.class);
+        verify(queue).enqueue(taskCaptor.capture());
+        String content = taskCaptor.getValue().content();
         assertTrue(content.contains("fingerprint=fp-1"));
         assertTrue(content.contains("outcome=SUCCESS"));
         assertFalse(content.contains("kubectl"));

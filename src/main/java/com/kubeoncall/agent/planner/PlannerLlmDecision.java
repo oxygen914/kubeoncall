@@ -15,6 +15,12 @@ public record PlannerLlmDecision(
         RiskLevel riskLevel,
         Map<String, Object> parameters,
         List<String> missingSignals,
+        List<String> requestedSkills,
         String summary
 ) {
+    public PlannerLlmDecision withRequestedSkills(List<String> skillIds) {
+        return new PlannerLlmDecision(
+                intent, confidence, target, targetSource, taskType, riskLevel,
+                parameters, missingSignals, skillIds == null ? List.of() : List.copyOf(skillIds), summary);
+    }
 }

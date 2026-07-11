@@ -1,0 +1,60 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "kubeoncall.fullname" . }}
+  labels:
+    {{- include "kubeoncall.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "kubeoncall.labels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "kubeoncall.labels" . | nindent 8 }}
+    spec:
+      containers:
+        - name: kubeoncall
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 8080
+          env:
+            - name: SPRING_PROFILES_ACTIVE
+              value: docker
+            - name: SPRING_DATA_REDIS_HOST
+              value: {{ .Values.config.redisHost | quote }}
+            - name: SPRING_ELASTICSEARCH_URIS
+              value: {{ .Values.config.elasticsearchUri | quote }}
+            - name: KUBEONCALL_STORAGE_MINIO_ENDPOINT
+              value: {{ .Values.config.minioEndpoint | quote }}
+            - name: RAG_EMBEDDING_ENDPOINT
+              value: {{ .Values.config.embeddingEndpoint | quote }}
+            - name: RAG_RERANK_ENDPOINT
+              value: {{ .Values.config.rerankEndpoint | quote }}
+            - name: ALERTMANAGER_TOOL_ENDPOINT
+              value: {{ .Values.config.alertmanagerToolEndpoint | quote }}
+            - name: INCIDENT_TOOL_ENDPOINT
+              value: {{ .Values.config.incidentToolEndpoint | quote }}
+            - name: MINIO_ROOT_USER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secrets.existingSecret }}
+                  key: {{ .Values.secrets.minioAccessKeyKey }}
+            - name: MINIO_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secrets.existingSecret }}
+                  key: {{ .Values.secrets.minioSecretKeyKey }}
+          readinessProbe:
+            httpGet: {path: /actuator/health/readiness, port: http}
+            initialDelaySeconds: 20
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: {path: /actuator/health/liveness, port: http}
+            initialDelaySeconds: 30
+            periodSeconds: 20
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}

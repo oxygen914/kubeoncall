@@ -10,6 +10,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.LinkedHashMap;
 
 @Service
 public class SkillActivationService {
@@ -35,11 +36,28 @@ public class SkillActivationService {
     }
 
     public SkillActivation activate(String request, Map<String, Object> context) {
+        return activate(request, context, List.of());
+    }
+
+    public SkillActivation activate(String request,
+                                    Map<String, Object> context,
+                                    List<String> requestedSkillIds) {
         if (!properties.getSkill().isEnabled()) {
             recordActivation(false, 0);
             return SkillActivation.empty();
         }
-        List<Skill> matched = matcher.match(request, context, registry.all());
+        Map<String, Skill> selected = new LinkedHashMap<>();
+        matcher.match(request, context, registry.all()).forEach(skill -> selected.put(skill.id(), skill));
+        if (requestedSkillIds != null) {
+            requestedSkillIds.stream()
+                    .filter(id -> id != null && !id.isBlank())
+                    .map(registry::findById)
+                    .flatMap(java.util.Optional::stream)
+                    .forEach(skill -> selected.putIfAbsent(skill.id(), skill));
+        }
+        List<Skill> matched = selected.values().stream()
+                .limit(Math.max(1, properties.getSkill().getMaxActiveSkills()))
+                .toList();
         if (matched.isEmpty()) {
             recordActivation(false, 0);
             return SkillActivation.empty();

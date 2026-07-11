@@ -36,6 +36,143 @@ policies:
       notify: oncall
       autoSilence: false
 
+  # ==================== Network ====================
+  - id: host-conntrack-pressure-p1
+    name: HostConntrackPressureP1
+    category: network
+    metricName: host.network.conntrack_usage_percent
+    resourceType: node
+    severity: P1
+    operator: ">"
+    threshold: 85
+    for: 5m
+    promql: |
+      100 * node_nf_conntrack_entries / node_nf_conntrack_entries_limit > 85
+    window: 15m
+    recover: conntrack_usage_percent < 75 for 10m
+    runbookId: runbook-network-conntrack
+    owner: infra
+    ragFilters: {document_type: runbook, category: network}
+    labels: {team: infra}
+    actions:
+      workflowTemplate: host-resource
+      notify: oncall
+      autoSilence: false
+
+  # ==================== Kubernetes control plane ====================
+  - id: kube-apiserver-down-p0
+    name: KubeApiServerDownP0
+    category: control-plane
+    metricName: kube.controlplane.apiserver_up
+    resourceType: cluster
+    severity: P0
+    promql: |
+      up{job="apiserver"} == 0
+    window: 5m
+    recover: apiserver_up == 1 for 10m
+    runbookId: runbook-control-plane-apiserver
+    owner: platform
+    ragFilters: {document_type: runbook, category: control-plane}
+    labels: {team: platform}
+    actions:
+      workflowTemplate: control-plane
+      notify: oncall-phone
+      approvalRequiredForActions: true
+      autoSilence: false
+
+  # ==================== Certificates ====================
+  - id: certificate-expiring-p1
+    name: CertificateExpiringP1
+    category: certificate
+    metricName: certificate.expiry_days
+    resourceType: service
+    severity: P1
+    operator: "<"
+    threshold: 14
+    for: 5m
+    promql: |
+      (probe_ssl_earliest_cert_expiry - time()) / 86400 < 14
+    window: 30m
+    recover: certificate_expiry_days > 30 for 10m
+    runbookId: runbook-certificate-expiry
+    owner: security
+    ragFilters: {document_type: runbook, category: certificate}
+    labels: {team: security}
+    actions:
+      workflowTemplate: workload
+      notify: oncall
+      approvalRequiredForActions: true
+      autoSilence: false
+
+  # ==================== Service SLO ====================
+  - id: service-error-rate-p1
+    name: ServiceErrorRateP1
+    category: slo
+    metricName: service.http.error_rate_percent
+    resourceType: service
+    severity: P1
+    operator: ">"
+    threshold: 5
+    for: 5m
+    promql: |
+      100 * sum(rate(http_requests_total{status=~"5.."}[5m])) by (service) / sum(rate(http_requests_total[5m])) by (service) > 5
+    window: 30m
+    recover: error_rate_percent < 2 for 10m
+    runbookId: runbook-service-slo
+    owner: app
+    ragFilters: {document_type: runbook, category: slo}
+    labels: {team: app}
+    actions:
+      workflowTemplate: workload
+      notify: oncall
+      autoSilence: false
+
+  # ==================== Cluster capacity ====================
+  - id: cluster-pending-pods-p1
+    name: ClusterPendingPodsP1
+    category: capacity
+    metricName: kube.cluster.pending_pods
+    resourceType: cluster
+    severity: P1
+    operator: ">"
+    threshold: 10
+    for: 10m
+    promql: |
+      sum(kube_pod_status_phase{phase="Pending"}) > 10
+    window: 30m
+    recover: pending_pods < 3 for 10m
+    runbookId: runbook-cluster-capacity
+    owner: platform
+    ragFilters: {document_type: runbook, category: capacity}
+    labels: {team: platform}
+    actions:
+      workflowTemplate: control-plane
+      notify: oncall
+      autoSilence: false
+
+  # ==================== Time synchronization ====================
+  - id: host-clock-offset-p1
+    name: HostClockOffsetP1
+    category: time-sync
+    metricName: host.time.clock_offset_seconds
+    resourceType: node
+    severity: P1
+    operator: ">"
+    threshold: 1
+    for: 5m
+    promql: |
+      abs(node_timex_offset_seconds) > 1
+    window: 15m
+    recover: clock_offset_seconds < 0.1 for 10m
+    runbookId: runbook-time-sync
+    owner: infra
+    ragFilters: {document_type: runbook, category: time-sync}
+    labels: {team: infra}
+    actions:
+      workflowTemplate: host-resource
+      notify: oncall
+      autoSilence: false
+
   - id: host-high-cpu-p0
     name: HostHighCpuUsageP0
     category: host

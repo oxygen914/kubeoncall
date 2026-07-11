@@ -2,6 +2,7 @@ package com.kubeoncall.rag;
 
 import com.kubeoncall.common.config.KubeOnCallProperties;
 import com.kubeoncall.domain.rag.KnowledgeDocument;
+import com.kubeoncall.service.KubeOnCallMetricsService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
@@ -20,11 +21,19 @@ public class RerankService {
 
     private final KubeOnCallProperties properties;
     private final List<CrossEncoderReranker> crossEncoderRerankers;
+    private final KubeOnCallMetricsService metricsService;
+
+    public RerankService(KubeOnCallProperties properties, List<CrossEncoderReranker> crossEncoderRerankers) {
+        this(properties, crossEncoderRerankers, null);
+    }
 
     @Autowired
-    public RerankService(KubeOnCallProperties properties, List<CrossEncoderReranker> crossEncoderRerankers) {
+    public RerankService(KubeOnCallProperties properties,
+                         List<CrossEncoderReranker> crossEncoderRerankers,
+                         KubeOnCallMetricsService metricsService) {
         this.properties = properties;
         this.crossEncoderRerankers = crossEncoderRerankers == null ? List.of() : crossEncoderRerankers;
+        this.metricsService = metricsService;
     }
 
     public RerankService(KubeOnCallProperties properties) {
@@ -84,6 +93,10 @@ public class RerankService {
                 : (crossEncoderEnabled ? "retrieval_order_fallback" : "rule_overlap"));
         diagnostics.put("rankTrace", rankTrace(ranked, scoreMap, crossEncoderScores));
         diagnostics.put("rerankTopN", rerankTopN);
+        if (metricsService != null) {
+            metricsService.recordRagRerank(
+                    crossEncoderEnabled, crossEncoderApplied, crossEncoderEnabled && !crossEncoderApplied);
+        }
         return new RerankTrace(ranked, diagnostics);
     }
 

@@ -96,4 +96,39 @@ class ExecutionAuditServiceTest {
         assertEquals("restore", recordCaptor.getValue().metadata().get("memoryOperation"));
         assertEquals("memory-1", recordCaptor.getValue().metadata().get("memoryId"));
     }
+
+    @Test
+    void shouldPersistKnowledgeOperationAudit() {
+        ExecutionAuditRepository repository = mock(ExecutionAuditRepository.class);
+        ExecutionAuditService auditService = new ExecutionAuditService(
+                repository, mock(KubeOnCallMetricsService.class));
+
+        auditService.recordKnowledgeOperation(
+                "query", "success", "retrieved knowledge", Instant.now(),
+                Map.of("resultCount", 2));
+
+        org.mockito.ArgumentCaptor<ExecutionAuditRecord> recordCaptor =
+                org.mockito.ArgumentCaptor.forClass(ExecutionAuditRecord.class);
+        verify(repository).save(recordCaptor.capture());
+        assertEquals(ExecutionRequestType.KNOWLEDGE, recordCaptor.getValue().requestType());
+        assertEquals("query", recordCaptor.getValue().metadata().get("knowledgeOperation"));
+        assertEquals(2, recordCaptor.getValue().metadata().get("resultCount"));
+    }
+
+    @Test
+    void shouldPersistSkillOperationAudit() {
+        ExecutionAuditRepository repository = mock(ExecutionAuditRepository.class);
+        ExecutionAuditService auditService = new ExecutionAuditService(
+                repository, mock(KubeOnCallMetricsService.class));
+
+        auditService.recordSkillOperation(
+                "reload", "success", "skills reloaded", Instant.now(), Map.of("loaded", 4));
+
+        org.mockito.ArgumentCaptor<ExecutionAuditRecord> recordCaptor =
+                org.mockito.ArgumentCaptor.forClass(ExecutionAuditRecord.class);
+        verify(repository).save(recordCaptor.capture());
+        assertEquals(ExecutionRequestType.SKILL, recordCaptor.getValue().requestType());
+        assertEquals("reload", recordCaptor.getValue().metadata().get("skillOperation"));
+        assertEquals(4, recordCaptor.getValue().metadata().get("loaded"));
+    }
 }

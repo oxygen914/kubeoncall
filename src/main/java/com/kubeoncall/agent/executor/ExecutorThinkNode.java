@@ -21,6 +21,7 @@ public class ExecutorThinkNode extends ThinkNode {
 
     private static final String RETRY_REASON_MISSING_PARAMETERS = "MISSING_PARAMETERS";
     private static final String RETRY_STRATEGY_QUERY_ADDITIONAL_CONTEXT = "QUERY_ADDITIONAL_CONTEXT";
+    private static final String FAILURE_REASON_SKILL_TOOL_NOT_ALLOWED = "SKILL_TOOL_NOT_ALLOWED";
 
     private final AgentToolCatalog agentToolCatalog;
 
@@ -48,10 +49,19 @@ public class ExecutorThinkNode extends ThinkNode {
                 : agentToolCatalog.findExecutorTool(executorKind, action, toolWhitelist);
         if (toolDefinition == null && !toolWhitelist.isEmpty()) {
             String toolName = executorKind + "." + action;
-            String warning = "Activated skill tool whitelist does not include planned tool " + toolName + "; falling back to catalog";
-            state.getContext().put("skillToolWhitelistWarning", warning);
-            state.addObservation("Executor: " + warning);
-            toolDefinition = agentToolCatalog.findExecutorTool(executorKind, action);
+            Map<String, Object> violation = Map.of(
+                    "reason", FAILURE_REASON_SKILL_TOOL_NOT_ALLOWED,
+                    "plannedTool", toolName,
+                    "allowedTools", toolWhitelist
+            );
+            state.getContext().put("skillToolWhitelistViolation", violation);
+            state.addObservation("Executor: blocked tool " + toolName + " because it is not allowed by the activated skill");
+            return new NodeResult(
+                    getName(),
+                    NodeStatus.FAILURE,
+                    "Activated skill does not allow executor tool " + toolName,
+                    violation
+            );
         }
         if (toolDefinition == null) {
             return new NodeResult(getName(), NodeStatus.FAILURE, "No executor tool registered for " + executorKind + "." + action, Map.of());

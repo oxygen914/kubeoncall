@@ -11,6 +11,12 @@ import com.kubeoncall.alarm.policy.AlarmPolicyRepository;
 import com.kubeoncall.alarm.state.ActiveAlarmState;
 import com.kubeoncall.alarm.state.ActiveAlarmStore;
 import com.kubeoncall.alarm.state.AlarmSilenceApprovalStore;
+import com.kubeoncall.alarm.recovery.AlarmRecoveryService;
+import com.kubeoncall.alarm.recovery.AlarmRecoveryState;
+import com.kubeoncall.alarm.escalation.AlarmEscalationService;
+import com.kubeoncall.alarm.maintenance.AlarmMaintenanceWindow;
+import com.kubeoncall.alarm.maintenance.AlarmMaintenanceWindowService;
+import com.kubeoncall.alarm.suppression.AlarmSuppressionService;
 import com.kubeoncall.common.config.KubeOnCallProperties;
 import com.kubeoncall.domain.alarm.AlarmEvent;
 import com.kubeoncall.domain.graph.NodeResult;
@@ -353,6 +359,77 @@ class AlertWorkflowServiceTest {
     }
 
     @Test
+    void shouldSuppressAlarmInsideApprovedMaintenanceWindow() {
+        StringRedisTemplate redisTemplate = mock(StringRedisTemplate.class);
+        KubeOnCallProperties properties = new KubeOnCallProperties();
+        ExecutionAuditService auditService = mock(ExecutionAuditService.class);
+        AlarmPolicyEngine engine = new AlarmPolicyEngine(emptyRepository());
+        ActiveAlarmStore activeAlarmStore = mock(ActiveAlarmStore.class);
+        when(activeAlarmStore.record(any(), any(), eq("fp-maintenance"))).thenReturn(null);
+        AlarmMaintenanceWindowService maintenanceService = mock(AlarmMaintenanceWindowService.class);
+        Instant now = Instant.now();
+        AlarmMaintenanceWindow window = new AlarmMaintenanceWindow(
+                "mw-1", now.minusSeconds(60), now.plusSeconds(600), Map.of("service", "payment-*"),
+                "payment release", "operator-a", "approver-b", "change-123", now.minusSeconds(120));
+        when(maintenanceService.matchingWindow(any(NormalizedAlarmEvent.class), any(Instant.class)))
+                .thenReturn(Optional.of(window));
+        AlertWorkflowFactory factory = mock(AlertWorkflowFactory.class);
+        AlertWorkflowService service = new AlertWorkflowService(
+                redisTemplate, properties, factory, new WorkflowNodeExecutor(), auditService, engine,
+                activeAlarmStore, null, MemoryExtractor.noop(), null, null, null, maintenanceService);
+
+        List<NodeResult> results = service.process(new NormalizedAlarmEvent(
+                "alarm-maintenance", "fp-maintenance", "PodCrashLoop", "prometheus", "warning", AlarmSeverity.P1,
+                com.kubeoncall.alarm.domain.AlarmResourceType.POD, "payment-pod", "cluster-a", "prod", "payment-api",
+                "restart_count", 5.0, 3.0, "count", "5m", Map.of("node", "node-a"), Map.of(),
+                "runbook-pod", AlarmStatus.FIRING, now, "pod crash", Map.of()));
+
+        assertEquals(1, results.size());
+        assertEquals("alarmMaintenanceSuppressed", results.get(0).nodeName());
+        assertEquals("mw-1", results.get(0).payload().get("maintenanceWindowId"));
+        verify(factory, never()).buildWorkflow();
+        @SuppressWarnings("unchecked")
+        org.mockito.ArgumentCaptor<Map<String, Object>> metadataCaptor = org.mockito.ArgumentCaptor.forClass(Map.class);
+        verify(auditService).recordAlarmExecution(anyString(), eq("SUPPRESSED"), eq(true), eq(true),
+                anyString(), any(), any(), any(), metadataCaptor.capture());
+        assertEquals("maintenance_window", metadataCaptor.getValue().get("suppressedBy"));
+        assertEquals("mw-1", metadataCaptor.getValue().get("maintenanceWindowId"));
+    }
+
+    @Test
+    void shouldUseConfiguredSuppressionRuleAndExposeRootCause() {
+        StringRedisTemplate redisTemplate = mock(StringRedisTemplate.class);
+        KubeOnCallProperties properties = new KubeOnCallProperties();
+        ExecutionAuditService auditService = mock(ExecutionAuditService.class);
+        AlarmPolicyEngine engine = new AlarmPolicyEngine(emptyRepository());
+        ActiveAlarmStore activeAlarmStore = mock(ActiveAlarmStore.class);
+        when(activeAlarmStore.record(any(), any(), eq("fp-derived"))).thenReturn(null);
+        AlarmSuppressionService suppressionService = mock(AlarmSuppressionService.class);
+        when(suppressionService.evaluate(any())).thenReturn(new AlarmSuppressionService.SuppressionDecision(
+                true, "node-not-ready-suppresses-pod", "v1",
+                "alarm-suppression:rule:node-not-ready-suppresses-pod:cluster-a:node-a",
+                "fp-node-root", "root cause active"));
+        AlertWorkflowFactory factory = mock(AlertWorkflowFactory.class);
+        AlertWorkflowService service = new AlertWorkflowService(
+                redisTemplate, properties, factory, new WorkflowNodeExecutor(), auditService, engine,
+                activeAlarmStore, null, MemoryExtractor.noop(), null, null, null, null, suppressionService);
+        Instant now = Instant.now();
+
+        List<NodeResult> results = service.process(new NormalizedAlarmEvent(
+                "alarm-derived", "fp-derived", "PodCrashLoop", "prometheus", "warning", AlarmSeverity.P1,
+                com.kubeoncall.alarm.domain.AlarmResourceType.POD, "payment-pod", "cluster-a", "prod", "payment-api",
+                "restart_count", 5.0, 3.0, "count", "5m", Map.of("node", "node-a"), Map.of(),
+                "runbook-pod", AlarmStatus.FIRING, now, "pod crash", Map.of()));
+
+        verify(suppressionService).recordSources(any());
+        assertEquals(1, results.size());
+        assertEquals("alarmSuppressed", results.get(0).nodeName());
+        assertEquals("node-not-ready-suppresses-pod", results.get(0).payload().get("ruleId"));
+        assertEquals("fp-node-root", results.get(0).payload().get("sourceFingerprint"));
+        verify(factory, never()).buildWorkflow();
+    }
+
+    @Test
     void shouldEscalateUnacknowledgedP0AlarmAfterConfiguredRepeatCount() {
         StringRedisTemplate redisTemplate = mock(StringRedisTemplate.class);
         ValueOperations<String, String> valueOperations = mock(ValueOperations.class);
@@ -372,6 +449,9 @@ class AlertWorkflowServiceTest {
                         Instant.now().minusSeconds(600), Instant.now(), 2));
         AlertWorkflowFactory factory = mock(AlertWorkflowFactory.class);
         when(factory.buildWorkflow("host-resource")).thenReturn(List.of());
+        AlarmEscalationService escalationService = mock(AlarmEscalationService.class);
+        when(escalationService.escalate(any(NormalizedAlarmEvent.class), any(AlarmEvaluationResult.class), eq(2L), eq(2L)))
+                .thenReturn(new NodeResult("alarmEscalation", NodeStatus.SUCCESS, "delivered", Map.of("deliveryStatus", "delivered")));
         AlertWorkflowService service = new AlertWorkflowService(
                 redisTemplate,
                 properties,
@@ -381,7 +461,10 @@ class AlertWorkflowServiceTest {
                 engine,
                 activeAlarmStore,
                 null,
-                MemoryExtractor.noop()
+                MemoryExtractor.noop(),
+                null,
+                null,
+                escalationService
         );
 
         List<NodeResult> results = service.process(new NormalizedAlarmEvent(
@@ -392,10 +475,11 @@ class AlertWorkflowServiceTest {
 
         assertTrue(results.stream().anyMatch(result -> "alarmEscalation".equals(result.nodeName())));
         verify(valueOperations).setIfAbsent(eq("alarm-escalation:fp-p0"), eq("P0"), any());
+        verify(escalationService).escalate(any(NormalizedAlarmEvent.class), any(AlarmEvaluationResult.class), eq(2L), eq(2L));
     }
 
     @Test
-    void shouldConfirmRecoveryWithoutRunningWorkflowOrDedup() {
+    void shouldFailClosedWhenRecoveryServiceIsUnavailable() {
         StringRedisTemplate redisTemplate = mock(StringRedisTemplate.class);
         ValueOperations<String, String> valueOperations = mock(ValueOperations.class);
         when(redisTemplate.opsForValue()).thenReturn(valueOperations);
@@ -414,12 +498,53 @@ class AlertWorkflowServiceTest {
                 Instant.now(), "cpu recovered", Map.of()));
 
         assertEquals(1, results.size());
-        assertEquals("alarmRecovery", results.get(0).nodeName());
-        assertEquals(NodeStatus.SUCCESS, results.get(0).status());
+        assertEquals("alarmRecoveryUnavailable", results.get(0).nodeName());
+        assertEquals(NodeStatus.FAILURE, results.get(0).status());
+        assertEquals("RECOVERY_SERVICE_UNAVAILABLE", results.get(0).payload().get("reason"));
         verify(valueOperations, never()).setIfAbsent(anyString(), anyString(), any());
         verify(factory, never()).buildWorkflow();
         verify(factory, never()).buildWorkflow(anyString());
-        verify(auditService).recordAlarmExecution(anyString(), org.mockito.ArgumentMatchers.eq("RECOVERED"), anyBoolean(), anyBoolean(), anyString(), any(), any(), any(), org.mockito.ArgumentMatchers.anyMap());
+        verify(auditService).recordAlarmExecution(anyString(), org.mockito.ArgumentMatchers.eq("DEGRADED"), anyBoolean(), anyBoolean(), anyString(), eq("RECOVERY_SERVICE_UNAVAILABLE"), any(), any(), org.mockito.ArgumentMatchers.anyMap());
+    }
+
+    @Test
+    void shouldCreateRecoveryCandidateInsteadOfImmediatelyConfirmingResolvedAlarm() {
+        StringRedisTemplate redisTemplate = mock(StringRedisTemplate.class);
+        KubeOnCallProperties properties = new KubeOnCallProperties();
+        ExecutionAuditService auditService = mock(ExecutionAuditService.class);
+        AlarmPolicyEngine engine = new AlarmPolicyEngine(emptyRepository());
+        ActiveAlarmStore activeAlarmStore = mock(ActiveAlarmStore.class);
+        ActiveAlarmState activeState = new ActiveAlarmState(
+                "fp-pending", "alarm-pending", "HostHighCpuUsageP1", "cluster-a", "prod", "infra", "node-a",
+                AlarmSeverity.P1, AlarmStatus.RESOLVED, "host-high-cpu-p1",
+                Instant.now().minusSeconds(900), Instant.now().minusSeconds(1), 3);
+        when(activeAlarmStore.record(any(NormalizedAlarmEvent.class), any(AlarmEvaluationResult.class), eq("fp-pending")))
+                .thenReturn(activeState);
+        AlarmRecoveryService recoveryService = mock(AlarmRecoveryService.class);
+        Instant candidateAt = Instant.now();
+        AlarmRecoveryState recoveryState = new AlarmRecoveryState(
+                "fp-pending", "alarm-pending", AlarmSeverity.P1, "host-high-cpu-p1", "cpu < 65 for 10m",
+                candidateAt, candidateAt.plusSeconds(600), true, AlarmRecoveryState.PENDING,
+                null, false, null, null);
+        when(recoveryService.begin(any(NormalizedAlarmEvent.class), any(), eq(activeState))).thenReturn(recoveryState);
+        AlertWorkflowFactory factory = mock(AlertWorkflowFactory.class);
+        AlertWorkflowService service = new AlertWorkflowService(
+                redisTemplate, properties, factory, new WorkflowNodeExecutor(), auditService, engine,
+                activeAlarmStore, null, MemoryExtractor.noop(), null, recoveryService);
+
+        List<NodeResult> results = service.process(new NormalizedAlarmEvent(
+                "alarm-pending", "fp-pending", "HostHighCpuUsageP1", "prometheus", "resolved", AlarmSeverity.INFO,
+                com.kubeoncall.alarm.domain.AlarmResourceType.NODE, "node-a", "cluster-a", "prod", "infra",
+                "host.cpu.usage_percent", 30.0, 70.0, "%", "10m", Map.of(), Map.of(),
+                "runbook-host-cpu-high", AlarmStatus.RESOLVED, Instant.now(), "recovered", Map.of()));
+
+        assertEquals(1, results.size());
+        assertEquals("alarmRecoveryPending", results.get(0).nodeName());
+        assertEquals(true, results.get(0).payload().get("manualConfirmationRequired"));
+        assertEquals("P1", results.get(0).payload().get("severity"));
+        verify(factory, never()).buildWorkflow();
+        verify(auditService).recordAlarmExecution(
+                anyString(), eq("RECOVERY_PENDING"), eq(false), eq(true), anyString(), any(), any(), any(), any());
     }
 
     private static NormalizedAlarmEvent cpuEvent(double currentValue) {

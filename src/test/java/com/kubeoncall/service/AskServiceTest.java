@@ -95,6 +95,15 @@ class AskServiceTest {
         AskService.AskExecutionResult result = service.handle("请重启 payment-service");
 
         assertEquals("SUCCESS", result.status());
+        assertEquals("exec-handle", result.executionId());
+        assertEquals("exec-handle", ((TaskPlan) result.details().get("plan")).executionId());
+        assertEquals("task-1", ((Task) result.details().get("currentTask")).taskId());
+        assertEquals("SUCCESS", ((Map<?, ?>) result.details().get("audit")).get("status"));
+        assertTrue(result.details().containsKey("planner"));
+        assertTrue(result.details().containsKey("verifier"));
+        assertTrue(result.details().containsKey("executor"));
+        assertTrue(result.details().containsKey("approval"));
+        assertTrue(result.details().containsKey("nodeResults"));
         verify(executorAgent).plan(any());
         verify(verifierAgent).run(any());
         verify(executorAgent).executePrepared(any());

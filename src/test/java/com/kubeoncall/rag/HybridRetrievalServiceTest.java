@@ -4,6 +4,7 @@ import com.kubeoncall.common.config.KubeOnCallProperties;
 import com.kubeoncall.domain.rag.KnowledgeDocument;
 import com.kubeoncall.domain.rag.RetrieveMethod;
 import com.kubeoncall.domain.rag.RetrievalRequest;
+import com.kubeoncall.domain.rag.RetrievalHit;
 import com.kubeoncall.rag.repository.KnowledgeRepository;
 import com.kubeoncall.service.KubeOnCallMetricsService;
 import org.junit.jupiter.api.Test;
@@ -33,13 +34,13 @@ class HybridRetrievalServiceTest {
 
         KnowledgeDocument lexical = new KnowledgeDocument("doc-1", "t", "c", "manual", Map.of(), Instant.now());
         KnowledgeDocument vector = new KnowledgeDocument("doc-2", "vt", "vc", "manual", Map.of(), Instant.now());
-        when(repository.searchLexical(request, 50)).thenReturn(List.of(lexical));
+        when(repository.searchLexicalHits(request, 50)).thenReturn(List.of(new RetrievalHit(lexical, 4.2, 1, "LEXICAL")));
         VectorRetriever vectorRetriever = vectorRetriever(List.of(vector));
         HybridRetrievalService service = new HybridRetrievalService(repository, properties, List.of(vectorRetriever));
 
         HybridRetrievalService.RetrievalTrace trace = service.retrieveWithTrace(request);
 
-        verify(repository).searchLexical(request, 50);
+        verify(repository).searchLexicalHits(request, 50);
         assertEquals(2, trace.documents().size());
         assertTrue(trace.reasons().stream().anyMatch(reason -> reason.contains("metadata filters")));
         assertTrue(trace.reasons().stream().anyMatch(reason -> reason.contains("reciprocal rank fusion")));
@@ -50,6 +51,13 @@ class HybridRetrievalServiceTest {
         assertEquals(false, trace.diagnostics().get("vectorFallback"));
         assertEquals("reciprocal_rank_fusion", trace.diagnostics().get("rankingSource"));
         assertEquals("test_vector", trace.diagnostics().get("vectorSource"));
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> lexicalHits = (List<Map<String, Object>>) trace.diagnostics().get("lexicalHits");
+        assertEquals(4.2, lexicalHits.get(0).get("rawScore"));
+        assertEquals("LEXICAL", lexicalHits.get(0).get("channel"));
+        assertTrue(trace.diagnostics().containsKey("lexicalLatencyMs"));
+        assertTrue(trace.diagnostics().containsKey("vectorLatencyMs"));
+        assertTrue(trace.diagnostics().containsKey("fusionLatencyMs"));
     }
 
     @Test
@@ -62,11 +70,11 @@ class HybridRetrievalServiceTest {
         RetrievalRequest request = new RetrievalRequest("payment timeout", Map.of(), 2);
 
         KnowledgeDocument lexical = new KnowledgeDocument("doc-1", "t", "c", "manual", Map.of(), Instant.now());
-        when(repository.searchLexical(request, 50)).thenReturn(List.of(lexical));
+        when(repository.searchLexicalHits(request, 50)).thenReturn(List.of(new RetrievalHit(lexical, 2.0, 1, "LEXICAL")));
 
         HybridRetrievalService.RetrievalTrace trace = service.retrieveWithTrace(request);
 
-        verify(repository).searchLexical(request, 50);
+        verify(repository).searchLexicalHits(request, 50);
         assertEquals(List.of("doc-1"), trace.documents().stream().map(KnowledgeDocument::id).toList());
         assertEquals(true, trace.reasons().stream().anyMatch(reason -> reason.contains("disabled")));
         assertEquals(true, trace.diagnostics().get("vectorEnabled").equals(false));
@@ -83,11 +91,11 @@ class HybridRetrievalServiceTest {
         RetrievalRequest request = new RetrievalRequest("payment timeout", Map.of(), 2, RetrieveMethod.KEYWORD, true);
 
         KnowledgeDocument lexical = new KnowledgeDocument("doc-1", "t", "c", "manual", Map.of(), Instant.now());
-        when(repository.searchLexical(request, 50)).thenReturn(List.of(lexical));
+        when(repository.searchLexicalHits(request, 50)).thenReturn(List.of(new RetrievalHit(lexical, 2.0, 1, "LEXICAL")));
 
         HybridRetrievalService.RetrievalTrace trace = service.retrieveWithTrace(request);
 
-        verify(repository).searchLexical(request, 50);
+        verify(repository).searchLexicalHits(request, 50);
         verify(repository, never()).searchVector(request, 50);
         assertEquals(List.of("doc-1"), trace.documents().stream().map(KnowledgeDocument::id).toList());
         assertEquals("KEYWORD", trace.diagnostics().get("retrieveMethod"));
@@ -122,7 +130,7 @@ class HybridRetrievalServiceTest {
         RetrievalRequest request = new RetrievalRequest("payment timeout", Map.of(), 2);
 
         KnowledgeDocument lexical = new KnowledgeDocument("doc-1", "t", "c", "manual", Map.of(), Instant.now());
-        when(repository.searchLexical(request, 50)).thenReturn(List.of(lexical));
+        when(repository.searchLexicalHits(request, 50)).thenReturn(List.of(new RetrievalHit(lexical, 2.0, 1, "LEXICAL")));
 
         HybridRetrievalService.RetrievalTrace trace = service.retrieveWithTrace(request);
 

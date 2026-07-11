@@ -4,5 +4,7 @@ public enum ExecutionRequestType {
     ASK,
     ALARM,
     APPROVAL_RESUME,
-    MEMORY
+    MEMORY,
+    KNOWLEDGE,
+    SKILL
 }

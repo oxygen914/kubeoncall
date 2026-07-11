@@ -61,6 +61,33 @@ class MemoryServiceTest {
     }
 
     @Test
+    void shouldAuditRememberAndSearchOperations() {
+        KnowledgeRepository repository = mock(KnowledgeRepository.class);
+        ExecutionAuditService auditService = mock(ExecutionAuditService.class);
+        MemoryService service = new MemoryService(
+                repository, new KubeOnCallProperties(), mock(KubeOnCallMetricsService.class),
+                null, auditService);
+        Instant now = Instant.now();
+        MemoryEntry entry = new MemoryEntry(
+                "memory-audit", MemoryType.SERVICE_FACT, MemoryScope.SERVICE,
+                "payment owner", "team-payments", "payment-service", null, null,
+                now, now, Map.of());
+        KnowledgeDocument document = new KnowledgeDocument(
+                "memory-audit", "payment owner", "team-payments", "memory",
+                Map.of("source_type", "memory", "memory_type", "SERVICE_FACT",
+                        "memory_scope", "SERVICE", "memory_enabled", "true"), now);
+        when(repository.searchLexical(any(RetrievalRequest.class), eq(3))).thenReturn(List.of(document));
+
+        service.remember(entry);
+        service.searchWithTrace("payment owner", Map.of("service", "payment-service"), 1);
+
+        verify(auditService).recordMemoryOperation(
+                eq("remember"), eq("success"), any(), any(Instant.class), any(Map.class));
+        verify(auditService).recordMemoryOperation(
+                eq("search"), eq("success"), any(), any(Instant.class), any(Map.class));
+    }
+
+    @Test
     void shouldNormalizeRelativeDateOnEveryMemoryWritePath() {
         KnowledgeRepository repository = mock(KnowledgeRepository.class);
         KubeOnCallProperties properties = new KubeOnCallProperties();

@@ -9,6 +9,9 @@ import java.util.Map;
 public record Skill(
         String id,
         String name,
+        String version,
+        SkillSource source,
+        String skillPath,
         String description,
         List<String> triggers,
         List<String> services,
@@ -23,6 +26,9 @@ public record Skill(
         Map<String, Object> summary = new LinkedHashMap<>();
         summary.put("id", id);
         summary.put("name", name);
+        summary.put("version", version);
+        summary.put("source", source == null ? null : source.name());
+        summary.put("skillPath", skillPath);
         summary.put("description", description);
         summary.put("triggers", triggers);
         summary.put("services", services);

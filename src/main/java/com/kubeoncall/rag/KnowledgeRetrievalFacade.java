@@ -13,6 +13,8 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.time.Duration;
+import java.time.Instant;
 
 @Service
 public class KnowledgeRetrievalFacade {
@@ -58,12 +60,16 @@ public class KnowledgeRetrievalFacade {
                 includeTrace);
         HybridRetrievalService.RetrievalTrace retrievalTrace = hybridRetrievalService.retrieveWithTrace(request);
         MemoryFilterResult memoryFilter = filterMemoryDocuments(retrievalTrace.documents(), filters);
+        Instant rerankStartedAt = Instant.now();
         RerankService.RerankTrace rerankTrace = rerankService.rerank(rewritten, memoryFilter.documents());
+        long rerankLatencyMs = Duration.between(rerankStartedAt, Instant.now()).toMillis();
 
         List<KnowledgeDocument> finalCandidates = rerankTrace.documents().stream()
                 .limit(effectiveTopK)
                 .toList();
+        Instant parentAggregationStartedAt = Instant.now();
         ParentAggregation parentAggregation = aggregateParents(finalCandidates);
+        long parentAggregationLatencyMs = Duration.between(parentAggregationStartedAt, Instant.now()).toMillis();
         List<KnowledgeDocument> documents = parentAggregation.documents();
 
         List<String> reasons = new ArrayList<>(retrievalTrace.reasons());
@@ -75,6 +81,31 @@ public class KnowledgeRetrievalFacade {
             reasons.add("Aggregated parent documents from child chunks");
         }
 
+        Map<String, Object> diagnostics = includeTrace
+                ? buildDiagnostics(
+                        question, rewritten, filters, route, effectiveTopK, documents,
+                        retrievalTrace, rerankTrace, parentAggregation, memoryFilter,
+                        rerankLatencyMs, parentAggregationLatencyMs)
+                : Map.of();
+
+        String summary = documents.isEmpty()
+                ? "No matching knowledge found"
+                : "Retrieved " + documents.size() + " documents via " + route;
+        return new RetrievalResult(rewritten, documents, route, summary, reasons, diagnostics);
+    }
+
+    private Map<String, Object> buildDiagnostics(String question,
+                                                 String rewritten,
+                                                 Map<String, String> filters,
+                                                 String route,
+                                                 int effectiveTopK,
+                                                 List<KnowledgeDocument> documents,
+                                                 HybridRetrievalService.RetrievalTrace retrievalTrace,
+                                                 RerankService.RerankTrace rerankTrace,
+                                                 ParentAggregation parentAggregation,
+                                                 MemoryFilterResult memoryFilter,
+                                                 long rerankLatencyMs,
+                                                 long parentAggregationLatencyMs) {
         Map<String, Object> diagnostics = new LinkedHashMap<>(retrievalTrace.diagnostics());
         diagnostics.putAll(rerankTrace.diagnostics());
         diagnostics.put("rawQuery", question == null ? "" : question);
@@ -88,11 +119,9 @@ public class KnowledgeRetrievalFacade {
         diagnostics.put("childChunkCount", parentAggregation.childChunkCount());
         diagnostics.put("memorySearchExplicit", memoryFilter.memorySearchExplicit());
         diagnostics.put("memoryDocumentsExcluded", memoryFilter.excludedCount());
-
-        String summary = documents.isEmpty()
-                ? "No matching knowledge found"
-                : "Retrieved " + documents.size() + " documents via " + route;
-        return new RetrievalResult(rewritten, documents, route, summary, reasons, diagnostics);
+        diagnostics.put("rerankLatencyMs", rerankLatencyMs);
+        diagnostics.put("parentAggregationLatencyMs", parentAggregationLatencyMs);
+        return diagnostics;
     }
 
     private MemoryFilterResult filterMemoryDocuments(List<KnowledgeDocument> documents, Map<String, String> filters) {

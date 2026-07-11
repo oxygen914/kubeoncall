@@ -14,6 +14,10 @@ import com.kubeoncall.memory.MemoryScope;
 import com.kubeoncall.memory.MemoryType;
 import com.kubeoncall.memory.TokenBudget;
 import com.kubeoncall.workflow.node.IntelligentDiagnosisNode;
+import com.kubeoncall.skill.Skill;
+import com.kubeoncall.skill.SkillSource;
+import com.kubeoncall.skill.SkillActivation;
+import com.kubeoncall.skill.SkillActivationService;
 import org.junit.jupiter.api.Test;
 
 import java.time.Instant;
@@ -24,6 +28,9 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 class IntelligentDiagnosisNodeTest {
 
@@ -78,6 +85,28 @@ class IntelligentDiagnosisNodeTest {
         assertEquals(false, result.payload().get("requiresLiveValidation"));
         assertFalse((Boolean) result.payload().get("repeatedIncident"));
         assertEquals(List.of("metrics"), result.payload().get("currentEvidenceSources"));
+    }
+
+    @Test
+    void shouldActivateSkillForAlarmDiagnosis() {
+        SkillActivationService activationService = mock(SkillActivationService.class);
+        Skill skill = new Skill(
+                "payment-oom-triage", "Payment OOM triage", "v1", SkillSource.BUILTIN,
+                "skills/payment-oom-triage/SKILL.md", "Payment OOM triage", List.of("oom"),
+                List.of("payment-service"), List.of("POD"), com.kubeoncall.domain.task.RiskLevel.MEDIUM,
+                List.of("kubernetes.describeResource"), "verify OOM evidence", Map.of());
+        when(activationService.activate(any(String.class), any(Map.class))).thenReturn(new SkillActivation(
+                List.of(skill), List.of(Map.of("id", "payment-oom-triage")),
+                List.of("payment-oom-triage"), List.of("kubernetes.describeResource"),
+                com.kubeoncall.domain.task.RiskLevel.MEDIUM, "verify OOM evidence"));
+        IntelligentDiagnosisNode node = new IntelligentDiagnosisNode(
+                new KubeOnCallProperties(), new TokenBudget(), activationService);
+        AlertWorkflowContext context = context();
+
+        NodeResult result = node.execute(context);
+
+        assertEquals(List.of("payment-oom-triage"), result.payload().get("activatedSkillIds"));
+        assertEquals(List.of("payment-oom-triage"), context.getAttribute("activatedSkillIds"));
     }
 
     private static AlertWorkflowContext context() {

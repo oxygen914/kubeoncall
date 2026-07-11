@@ -77,6 +77,31 @@ class ActiveAlarmStoreTest {
         assertEquals(AlarmSeverity.P0, state.severity());
     }
 
+    @Test
+    void shouldPreserveOriginalSeverityPolicyAndCountWhenResolved() throws Exception {
+        StringRedisTemplate redisTemplate = mock(StringRedisTemplate.class);
+        ValueOperations<String, String> valueOperations = mock(ValueOperations.class);
+        when(redisTemplate.opsForValue()).thenReturn(valueOperations);
+        ObjectMapper objectMapper = new ObjectMapper();
+        Map<String, Object> existing = new LinkedHashMap<>();
+        existing.put("fingerprint", "fp-3");
+        existing.put("severity", "P0");
+        existing.put("status", "FIRING");
+        existing.put("policyId", "host-high-cpu-p0");
+        existing.put("firstSeen", "2026-07-08T01:00:00Z");
+        existing.put("lastSeen", "2026-07-08T01:05:00Z");
+        existing.put("count", 4);
+        when(valueOperations.get("alarm-active:fp-3")).thenReturn(objectMapper.writeValueAsString(existing));
+        ActiveAlarmStore store = new ActiveAlarmStore(redisTemplate, objectMapper, new KubeOnCallProperties());
+
+        ActiveAlarmState state = store.record(event("fp-3", AlarmStatus.RESOLVED), evaluation(AlarmSeverity.INFO), "fp-3");
+
+        assertEquals(AlarmSeverity.P0, state.severity());
+        assertEquals("host-high-cpu-p0", state.policyId());
+        assertEquals(4, state.count());
+        assertEquals(AlarmStatus.RESOLVED, state.status());
+    }
+
     private static NormalizedAlarmEvent event(String fingerprint, AlarmStatus status) {
         return new NormalizedAlarmEvent(
                 "alarm-1", fingerprint, "HostHighCpuUsageP1", "prometheus", "warning", AlarmSeverity.P2,

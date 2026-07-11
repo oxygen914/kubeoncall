@@ -1,13 +1,21 @@
 package com.kubeoncall.web;
 
 import com.kubeoncall.alarm.state.AlarmSilenceApprovalStore;
+import com.kubeoncall.alarm.state.AlarmAcknowledgementStore;
+import com.kubeoncall.alarm.recovery.AlarmRecoveryService;
+import com.kubeoncall.alarm.recovery.AlarmRecoveryState;
 import com.kubeoncall.common.config.KubeOnCallProperties;
 import com.kubeoncall.alarm.domain.NormalizedAlarmEvent;
 import com.kubeoncall.alarm.ingest.AlarmNormalizer;
 import com.kubeoncall.domain.graph.NodeResult;
 import com.kubeoncall.service.KubeOnCallMetricsService;
+import com.kubeoncall.service.ExecutionAuditService;
 import com.kubeoncall.workflow.AlertWorkflowService;
 import com.kubeoncall.web.dto.AlarmRequest;
+import com.kubeoncall.web.dto.AlarmAcknowledgementRequest;
+import com.kubeoncall.web.dto.AlarmAcknowledgementResponse;
+import com.kubeoncall.web.dto.AlarmRecoveryConfirmationRequest;
+import com.kubeoncall.web.dto.AlarmRecoveryConfirmationResponse;
 import com.kubeoncall.web.dto.AlarmSilenceApprovalRequest;
 import com.kubeoncall.web.dto.AlarmSilenceApprovalResponse;
 import org.springframework.http.HttpStatus;
@@ -18,6 +26,8 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.time.Duration;
+import java.time.Instant;
+import java.util.Map;
 import java.util.List;
 
 @RestController
@@ -27,19 +37,28 @@ public class AlarmController {
     private final AlarmNormalizer alarmNormalizer;
     private final AlertWorkflowService alertWorkflowService;
     private final AlarmSilenceApprovalStore silenceApprovalStore;
+    private final AlarmAcknowledgementStore acknowledgementStore;
     private final KubeOnCallProperties properties;
     private final KubeOnCallMetricsService metricsService;
+    private final ExecutionAuditService executionAuditService;
+    private final AlarmRecoveryService alarmRecoveryService;
 
     public AlarmController(AlarmNormalizer alarmNormalizer,
                            AlertWorkflowService alertWorkflowService,
                            AlarmSilenceApprovalStore silenceApprovalStore,
+                           AlarmAcknowledgementStore acknowledgementStore,
                            KubeOnCallProperties properties,
-                           KubeOnCallMetricsService metricsService) {
+                           KubeOnCallMetricsService metricsService,
+                           ExecutionAuditService executionAuditService,
+                           AlarmRecoveryService alarmRecoveryService) {
         this.alarmNormalizer = alarmNormalizer;
         this.alertWorkflowService = alertWorkflowService;
         this.silenceApprovalStore = silenceApprovalStore;
+        this.acknowledgementStore = acknowledgementStore;
         this.properties = properties;
         this.metricsService = metricsService;
+        this.executionAuditService = executionAuditService;
+        this.alarmRecoveryService = alarmRecoveryService;
     }
 
     @PostMapping
@@ -48,6 +67,94 @@ public class AlarmController {
         // the governed pipeline (policy engine + fingerprint dedup + workflow).
         NormalizedAlarmEvent event = alarmNormalizer.normalize(request);
         return alertWorkflowService.process(event);
+    }
+
+    @PostMapping("/acknowledgements")
+    public AlarmAcknowledgementResponse acknowledge(@RequestBody AlarmAcknowledgementRequest request) {
+        Instant startedAt = Instant.now();
+        if (request == null || isBlank(request.fingerprint())) {
+            metricsService.recordAlarmAcknowledgement("invalid");
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "fingerprint is required");
+        }
+        if (isBlank(request.acknowledgedBy())) {
+            metricsService.recordAlarmAcknowledgement("invalid");
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "acknowledgedBy is required");
+        }
+        long ttlSeconds = request.ttlSeconds() == null || request.ttlSeconds() <= 0
+                ? properties.getAlarm().getAcknowledgementTtlSeconds()
+                : request.ttlSeconds();
+        try {
+            AlarmAcknowledgementStore.AlarmAcknowledgement acknowledgement = acknowledgementStore.acknowledge(
+                    request.fingerprint(),
+                    request.acknowledgedBy(),
+                    request.reason(),
+                    Duration.ofSeconds(Math.max(60, ttlSeconds))
+            );
+            metricsService.recordAlarmAcknowledgement("acknowledged");
+            executionAuditService.recordAlarmExecution(
+                    "alarm-ack-" + acknowledgement.fingerprint(),
+                    "ACKNOWLEDGED",
+                    true,
+                    false,
+                    "Alarm acknowledged by " + acknowledgement.acknowledgedBy(),
+                    null,
+                    List.of("alarm.acknowledge"),
+                    startedAt,
+                    Map.of(
+                            "fingerprint", acknowledgement.fingerprint(),
+                            "acknowledgedBy", acknowledgement.acknowledgedBy(),
+                            "acknowledgedAt", acknowledgement.acknowledgedAt().toString(),
+                            "expiresAt", acknowledgement.expiresAt().toString(),
+                            "acknowledgementKey", acknowledgementStore.keyFor(acknowledgement.fingerprint())
+                    )
+            );
+            return new AlarmAcknowledgementResponse(
+                    acknowledgement.fingerprint(),
+                    true,
+                    acknowledgement.acknowledgedBy(),
+                    acknowledgement.reason(),
+                    acknowledgement.acknowledgedAt(),
+                    acknowledgement.expiresAt(),
+                    acknowledgementStore.keyFor(acknowledgement.fingerprint())
+            );
+        } catch (RuntimeException ex) {
+            metricsService.recordAlarmAcknowledgement("failed");
+            throw ex;
+        }
+    }
+
+    @PostMapping("/recovery-confirmations")
+    public AlarmRecoveryConfirmationResponse confirmRecovery(@RequestBody AlarmRecoveryConfirmationRequest request) {
+        if (request == null || isBlank(request.fingerprint())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "fingerprint is required");
+        }
+        if (isBlank(request.confirmedBy())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "confirmedBy is required");
+        }
+        try {
+            AlarmRecoveryState state = alarmRecoveryService.confirmManual(
+                    request.fingerprint(),
+                    request.confirmedBy(),
+                    Boolean.TRUE.equals(request.healthCheckPassed()),
+                    request.note()
+            );
+            return new AlarmRecoveryConfirmationResponse(
+                    state.fingerprint(),
+                    state.status(),
+                    state.severity() == null ? null : state.severity().name(),
+                    state.policyId(),
+                    state.candidateAt(),
+                    state.confirmAfter(),
+                    state.manualConfirmationRequired(),
+                    state.confirmedBy(),
+                    state.healthCheckPassed(),
+                    state.confirmedAt()
+            );
+        } catch (IllegalArgumentException ex) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, ex.getMessage(), ex);
+        } catch (IllegalStateException ex) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, ex.getMessage(), ex);
+        }
     }
 
     @PostMapping("/silence-approvals")

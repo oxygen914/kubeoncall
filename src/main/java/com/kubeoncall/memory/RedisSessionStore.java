@@ -5,6 +5,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.kubeoncall.common.config.KubeOnCallProperties;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.data.redis.core.SessionCallback;
+import org.springframework.data.redis.core.RedisOperations;
 import org.springframework.stereotype.Component;
 
 import java.time.Duration;
@@ -61,14 +63,42 @@ public class RedisSessionStore implements SessionStore {
         if (normalized == null || turn == null) {
             return;
         }
-        SessionSnapshot current = find(normalized)
-                .orElseGet(() -> new SessionSnapshot(normalized, java.util.List.of(), null, null));
-        SessionSnapshot next = historyCompactor.append(current, turn);
-        try {
-            redisTemplate.opsForValue().set(key(normalized), objectMapper.writeValueAsString(next), ttl());
-        } catch (JsonProcessingException e) {
-            throw new IllegalStateException("Failed to serialize ask session", e);
+        String sessionKey = key(normalized);
+        int maxAttempts = Math.max(1, properties.getMemory().getSessionAppendMaxRetries());
+        for (int attempt = 1; attempt <= maxAttempts; attempt++) {
+            Boolean committed = redisTemplate.execute(new SessionCallback<>() {
+                @Override
+                public Boolean execute(RedisOperations operations) {
+                    operations.watch(sessionKey);
+                    try {
+                        Object rawValue = operations.opsForValue().get(sessionKey);
+                        SessionSnapshot current = deserializeSnapshot(normalized, rawValue);
+                        SessionSnapshot next = historyCompactor.append(current, turn);
+                        String serialized = objectMapper.writeValueAsString(next);
+                        operations.multi();
+                        operations.opsForValue().set(sessionKey, serialized, ttl());
+                        return operations.exec() != null;
+                    } catch (JsonProcessingException ex) {
+                        operations.unwatch();
+                        throw new IllegalStateException("Failed to update ask session", ex);
+                    } catch (RuntimeException ex) {
+                        operations.unwatch();
+                        throw ex;
+                    }
+                }
+            });
+            if (Boolean.TRUE.equals(committed)) {
+                return;
+            }
         }
+        throw new IllegalStateException("Concurrent ask session update exceeded retry limit for " + normalized);
+    }
+
+    private SessionSnapshot deserializeSnapshot(String sessionId, Object rawValue) throws JsonProcessingException {
+        if (rawValue == null || String.valueOf(rawValue).isBlank()) {
+            return new SessionSnapshot(sessionId, java.util.List.of(), null, null);
+        }
+        return objectMapper.readValue(String.valueOf(rawValue), SessionSnapshot.class);
     }
 
     private Duration ttl() {

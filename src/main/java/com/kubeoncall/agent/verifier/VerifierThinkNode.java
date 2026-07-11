@@ -172,7 +172,7 @@ public class VerifierThinkNode extends ThinkNode {
             putIfPresent(details, context, "activatedSkillIds");
             putIfPresent(details, context, "activatedSkillMaxRisk");
             putIfPresent(details, context, "activatedSkillToolWhitelist");
-            putIfPresent(details, context, "skillToolWhitelistWarning");
+            putIfPresent(details, context, "skillToolWhitelistViolation");
         }
         return details;
     }

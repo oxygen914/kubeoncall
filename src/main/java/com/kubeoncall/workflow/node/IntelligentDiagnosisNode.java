@@ -9,6 +9,9 @@ import com.kubeoncall.memory.MemoryType;
 import com.kubeoncall.memory.TokenBudget;
 import com.kubeoncall.workflow.AlertWorkflowContext;
 import com.kubeoncall.workflow.AlertWorkflowNode;
+import com.kubeoncall.skill.SkillActivationService;
+import com.kubeoncall.skill.SkillActivation;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import java.time.Duration;
@@ -35,10 +38,19 @@ public class IntelligentDiagnosisNode implements AlertWorkflowNode {
 
     private final KubeOnCallProperties properties;
     private final TokenBudget tokenBudget;
+    private final SkillActivationService skillActivationService;
 
     public IntelligentDiagnosisNode(KubeOnCallProperties properties, TokenBudget tokenBudget) {
+        this(properties, tokenBudget, null);
+    }
+
+    @Autowired
+    public IntelligentDiagnosisNode(KubeOnCallProperties properties,
+                                    TokenBudget tokenBudget,
+                                    SkillActivationService skillActivationService) {
         this.properties = properties;
         this.tokenBudget = tokenBudget;
+        this.skillActivationService = skillActivationService;
     }
 
     @Override
@@ -62,6 +74,7 @@ public class IntelligentDiagnosisNode implements AlertWorkflowNode {
         long priorIncidentCount = selectedMemories.stream().filter(this::isPriorIncident).count();
         boolean repeatedIncident = activeCount > 1 || priorIncidentCount > 0;
         boolean memoryConsumed = !previousHandling.isEmpty();
+        SkillActivation skillActivation = activateSkills(context);
 
         Map<String, Object> diagnosis = new LinkedHashMap<>();
         diagnosis.put("strategy", strategy(memoryConsumed, evidenceSources));
@@ -75,11 +88,23 @@ public class IntelligentDiagnosisNode implements AlertWorkflowNode {
         diagnosis.put("previousHandlingCandidates", previousHandling);
         diagnosis.put("requiresLiveValidation", memoryConsumed);
         diagnosis.put("guardrails", memoryConsumed ? MEMORY_GUARDRAILS : List.of());
+        diagnosis.put("activatedSkillIds", skillActivation.skillIds());
+        diagnosis.put("activatedSkills", skillActivation.skillSummaries());
+        diagnosis.put("skillPrompt", skillActivation.active()
+                ? tokenBudget.compactText(skillActivation.prompt(), Math.max(128, memoryBudget))
+                : "");
 
         context.putAttribute("diagnosis", diagnosis);
         context.putAttribute("alertMemoryConsumed", previousHandling.size());
         context.putAttribute("alertMemoryConsumedIds", memoryIds);
         context.putAttribute("repeatIncident", repeatedIncident);
+        if (skillActivation.active()) {
+            context.putAttribute("activatedSkillIds", skillActivation.skillIds());
+            context.putAttribute("activatedSkills", skillActivation.skillSummaries());
+            context.putAttribute("activatedSkillToolWhitelist", skillActivation.toolWhitelist());
+            context.putAttribute("activatedSkillMaxRisk", skillActivation.maxRisk() == null ? null : skillActivation.maxRisk().name());
+            context.putAttribute("skillPrompt", skillActivation.prompt());
+        }
 
         return new NodeResult(
                 "intelligentDiagnosisNode",
@@ -89,6 +114,30 @@ public class IntelligentDiagnosisNode implements AlertWorkflowNode {
                         : "Synthesized diagnosis from current evidence",
                 diagnosis
         );
+    }
+
+    private SkillActivation activateSkills(AlertWorkflowContext context) {
+        if (skillActivationService == null || context.getNormalizedAlarm() == null) {
+            return SkillActivation.empty();
+        }
+        var event = context.getNormalizedAlarm();
+        String request = String.join(" ",
+                safe(event.alertName()), safe(event.summary()), safe(event.service()),
+                safe(event.resourceName()), event.resourceType() == null ? "" : event.resourceType().name());
+        try {
+            return skillActivationService.activate(request, Map.of(
+                    "service", safe(event.service()),
+                    "resourceType", event.resourceType() == null ? "" : event.resourceType().name(),
+                    "severity", event.severity() == null ? "" : event.severity().name()
+            ));
+        } catch (RuntimeException ex) {
+            context.putAttribute("skillWarning", "alarm skill activation failed: " + ex.getMessage());
+            return SkillActivation.empty();
+        }
+    }
+
+    private String safe(String value) {
+        return value == null ? "" : value;
     }
 
     private List<MemoryEntry> supportedMemories(AlertWorkflowContext context) {

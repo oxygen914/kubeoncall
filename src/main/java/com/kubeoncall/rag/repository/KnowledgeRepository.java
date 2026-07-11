@@ -2,6 +2,7 @@ package com.kubeoncall.rag.repository;
 
 import com.kubeoncall.domain.rag.KnowledgeDocument;
 import com.kubeoncall.domain.rag.RetrievalRequest;
+import com.kubeoncall.domain.rag.RetrievalHit;
 
 import java.util.List;
 import java.util.Map;
@@ -14,6 +15,16 @@ public interface KnowledgeRepository {
     List<KnowledgeDocument> searchLexical(RetrievalRequest request, int candidateSize);
 
     List<KnowledgeDocument> searchVector(RetrievalRequest request, int candidateSize);
+
+    default List<RetrievalHit> searchLexicalHits(RetrievalRequest request, int candidateSize) {
+        return toHits(searchLexical(request, candidateSize), "LEXICAL");
+    }
+
+    default List<RetrievalHit> searchVectorHits(RetrievalRequest request,
+                                                int candidateSize,
+                                                List<Double> queryVector) {
+        return toHits(searchVector(request, candidateSize, queryVector), "VECTOR");
+    }
 
     default List<KnowledgeDocument> searchVector(RetrievalRequest request,
                                                  int candidateSize,
@@ -32,5 +43,15 @@ public interface KnowledgeRepository {
 
     default List<KnowledgeDocument> search(RetrievalRequest request) {
         return searchLexical(request, Math.max(1, request.topK()));
+    }
+
+    private static List<RetrievalHit> toHits(List<KnowledgeDocument> documents, String channel) {
+        if (documents == null) {
+            return List.of();
+        }
+        java.util.concurrent.atomic.AtomicInteger rank = new java.util.concurrent.atomic.AtomicInteger(1);
+        return documents.stream()
+                .map(document -> new RetrievalHit(document, null, rank.getAndIncrement(), channel))
+                .toList();
     }
 }

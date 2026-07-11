@@ -71,6 +71,8 @@ class AlarmPolicyEngineTest {
         assertTrue(result.promql().contains("node_cpu_seconds_total"));
         assertEquals("host-resource", result.workflowTemplate());
         assertEquals("runbook-host-cpu-high", result.runbookId());
+        assertEquals("2026-07-08", result.matchedPolicy().version());
+        assertEquals("2026-07-08", repository.activeVersion());
     }
 
     @Test

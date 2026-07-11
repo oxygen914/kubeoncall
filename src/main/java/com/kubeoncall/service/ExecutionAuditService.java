@@ -140,6 +140,80 @@ public class ExecutionAuditService {
         record(record);
     }
 
+    public void recordKnowledgeOperation(String operation,
+                                         String status,
+                                         String summary,
+                                         Instant startedAt,
+                                         Map<String, Object> metadata) {
+        String normalizedOperation = operation == null || operation.isBlank() ? "unknown" : operation.trim();
+        String normalizedStatus = status == null || status.isBlank()
+                ? "UNKNOWN"
+                : status.trim().toUpperCase(Locale.ROOT);
+        boolean failed = "FAILED".equals(normalizedStatus);
+        LinkedHashMap<String, Object> auditMetadata = new LinkedHashMap<>();
+        auditMetadata.put("knowledgeOperation", normalizedOperation);
+        if (metadata != null) {
+            auditMetadata.putAll(metadata);
+        }
+        ExecutionAuditRecord record = new ExecutionAuditRecord(
+                "knowledge-" + normalizedOperation + "-" + UUID.randomUUID(),
+                ExecutionRequestType.KNOWLEDGE,
+                normalizedStatus,
+                false,
+                true,
+                durationMs(startedAt, Instant.now()),
+                summary,
+                failed ? summary : null,
+                List.of("knowledge." + normalizedOperation),
+                Instant.now(),
+                0,
+                false,
+                failed,
+                0,
+                failed ? 0 : 1,
+                failed ? 1 : 0,
+                auditMetadata
+        );
+        record(record);
+    }
+
+    public void recordSkillOperation(String operation,
+                                     String status,
+                                     String summary,
+                                     Instant startedAt,
+                                     Map<String, Object> metadata) {
+        String normalizedOperation = operation == null || operation.isBlank() ? "unknown" : operation.trim();
+        String normalizedStatus = status == null || status.isBlank()
+                ? "UNKNOWN"
+                : status.trim().toUpperCase(Locale.ROOT);
+        boolean failed = "FAILED".equals(normalizedStatus);
+        LinkedHashMap<String, Object> auditMetadata = new LinkedHashMap<>();
+        auditMetadata.put("skillOperation", normalizedOperation);
+        if (metadata != null) {
+            auditMetadata.putAll(metadata);
+        }
+        ExecutionAuditRecord record = new ExecutionAuditRecord(
+                "skill-" + normalizedOperation + "-" + UUID.randomUUID(),
+                ExecutionRequestType.SKILL,
+                normalizedStatus,
+                false,
+                true,
+                durationMs(startedAt, Instant.now()),
+                summary,
+                failed ? summary : null,
+                List.of("skill." + normalizedOperation),
+                Instant.now(),
+                0,
+                false,
+                failed,
+                0,
+                failed ? 0 : 1,
+                failed ? 1 : 0,
+                auditMetadata
+        );
+        record(record);
+    }
+
     public ExecutionStats stats() {
         List<ExecutionAuditRecord> records = repository.findAll();
         long total = records.size();
@@ -258,7 +332,7 @@ public class ExecutionAuditService {
         putIfPresent(metadata, "activatedSkillIds", context.get("activatedSkillIds"));
         putIfPresent(metadata, "activatedSkillMaxRisk", context.get("activatedSkillMaxRisk"));
         putIfPresent(metadata, "activatedSkillToolWhitelist", context.get("activatedSkillToolWhitelist"));
-        putIfPresent(metadata, "skillToolWhitelistWarning", context.get("skillToolWhitelistWarning"));
+        putIfPresent(metadata, "skillToolWhitelistViolation", context.get("skillToolWhitelistViolation"));
         putIfPresent(metadata, "injectedMemoryCount", context.get("injectedMemoryCount"));
         putIfPresent(metadata, "memoryWarning", context.get("memoryWarning"));
         putIfPresent(metadata, "memoryExtractionWarning", context.get("memoryExtractionWarning"));

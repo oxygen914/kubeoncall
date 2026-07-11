@@ -3,7 +3,6 @@ package com.kubeoncall.memory;
 import com.kubeoncall.alarm.domain.NormalizedAlarmEvent;
 import com.kubeoncall.common.config.KubeOnCallProperties;
 import com.kubeoncall.domain.graph.GraphState;
-import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
 import java.time.Instant;
@@ -12,17 +11,16 @@ import java.util.Map;
 @Service
 public class HeuristicMemoryExtractor implements MemoryExtractor {
 
-    private final MemoryService memoryService;
+    private final MemoryExtractionQueue extractionQueue;
     private final KubeOnCallProperties properties;
 
-    public HeuristicMemoryExtractor(MemoryService memoryService,
+    public HeuristicMemoryExtractor(MemoryExtractionQueue extractionQueue,
                                     KubeOnCallProperties properties) {
-        this.memoryService = memoryService;
+        this.extractionQueue = extractionQueue;
         this.properties = properties;
     }
 
     @Override
-    @Async
     public void extractFromAsk(GraphState state, String answer) {
         if (!properties.getMemory().isEnabled() || shouldSkip(answer)) {
             return;
@@ -33,8 +31,7 @@ public class HeuristicMemoryExtractor implements MemoryExtractor {
         }
         String service = state.getCurrentTask() == null ? null : state.getCurrentTask().target();
         MemoryScope scope = service == null || service.isBlank() ? MemoryScope.GLOBAL : MemoryScope.SERVICE;
-        memoryService.remember(new MemoryEntry(
-                null,
+        extractionQueue.enqueue(MemoryExtractionTask.create(
                 type,
                 scope,
                 buildSubject(type, service),
@@ -42,21 +39,17 @@ public class HeuristicMemoryExtractor implements MemoryExtractor {
                 service,
                 null,
                 null,
-                Instant.now(),
-                Instant.now(),
                 Map.of("source", "ask", "execution_id", safe(state.getExecutionId()))
         ));
     }
 
     @Override
-    @Async
     public void extractFromAlarm(NormalizedAlarmEvent event, String summary) {
         String sanitizedSummary = sanitizeAlarmSummary(summary);
         if (!properties.getMemory().isEnabled() || event == null || shouldSkip(sanitizedSummary)) {
             return;
         }
-        memoryService.remember(new MemoryEntry(
-                null,
+        extractionQueue.enqueue(MemoryExtractionTask.create(
                 MemoryType.INCIDENT_SUMMARY,
                 event.fingerprint() == null || event.fingerprint().isBlank() ? MemoryScope.SERVICE : MemoryScope.FINGERPRINT,
                 safe(event.alertName()),
@@ -64,8 +57,6 @@ public class HeuristicMemoryExtractor implements MemoryExtractor {
                 event.service(),
                 event.resourceName(),
                 event.fingerprint(),
-                Instant.now(),
-                Instant.now(),
                 Map.of("source", "alarm", "alert_name", safe(event.alertName()))
         ));
     }

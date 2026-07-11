@@ -70,17 +70,32 @@ public class MemoryService {
     }
 
     public MemoryEntry remember(MemoryEntry entry) {
+        Instant startedAt = Instant.now();
         if (entry == null) {
             throw new IllegalArgumentException("memory entry must not be null");
         }
         if (!properties.getMemory().isEnabled() || !properties.getMemory().isLongTermEnabled()) {
             recordMetric("remember", "disabled", 0);
+            audit("remember", "disabled", "memory remember disabled", startedAt,
+                    Map.of("memoryId", entry.id() == null ? "" : entry.id()));
             return entry;
         }
-        MemoryEntry normalized = normalizeTemporal(entry);
-        knowledgeRepository.save(toKnowledgeDocument(normalized));
-        recordMetric("remember", "success", 1);
-        return normalized;
+        try {
+            MemoryEntry normalized = normalizeTemporal(entry);
+            knowledgeRepository.save(toKnowledgeDocument(normalized));
+            recordMetric("remember", "success", 1);
+            audit("remember", "success", "memory remembered", startedAt, Map.of(
+                    "memoryId", normalized.id() == null ? "" : normalized.id(),
+                    "memoryType", normalized.type() == null ? "" : normalized.type().name(),
+                    "memoryScope", normalized.scope() == null ? "" : normalized.scope().name()));
+            return normalized;
+        } catch (RuntimeException ex) {
+            recordMetric("remember", "failed", 0);
+            audit("remember", "failed", "memory remember failed", startedAt,
+                    Map.of("memoryId", entry.id() == null ? "" : entry.id(),
+                            "errorType", ex.getClass().getSimpleName()));
+            throw ex;
+        }
     }
 
     private MemoryEntry normalizeTemporal(MemoryEntry entry) {
@@ -104,11 +119,15 @@ public class MemoryService {
     }
 
     public MemorySearchResult searchWithTrace(String query, Map<String, String> filters, int topK) {
+        Instant startedAt = Instant.now();
         if (!properties.getMemory().isEnabled()) {
             recordMetric("search", "disabled", 0);
-            return new MemorySearchResult(List.of(), Map.of(
+            MemorySearchResult result = new MemorySearchResult(List.of(), Map.of(
                     "memorySearch", true,
                     "status", "disabled"));
+            audit("search", "disabled", "memory search disabled", startedAt,
+                    Map.of("topK", Math.max(1, topK)));
+            return result;
         }
         Map<String, String> effectiveFilters = new LinkedHashMap<>();
         if (filters != null) {
@@ -119,31 +138,42 @@ public class MemoryService {
         int candidateSize = resultLimit * 3;
         List<KnowledgeDocument> documents;
         Map<String, Object> diagnostics = new LinkedHashMap<>();
-        if (retrievalFacade == null) {
-            RetrievalRequest request = new RetrievalRequest(query, effectiveFilters, resultLimit);
-            documents = knowledgeRepository.searchLexical(request, candidateSize);
-            diagnostics.put("rankingSource", "lexical_repository_compat");
-            diagnostics.put("retrieveMethod", RetrieveMethod.KEYWORD.name());
-        } else {
-            RetrievalResult result = retrievalFacade.retrieve(
-                    query, effectiveFilters, candidateSize, RetrieveMethod.HYBRID, true);
-            documents = result.documents();
-            if (result.diagnostics() != null) {
-                diagnostics.putAll(result.diagnostics());
+        try {
+            if (retrievalFacade == null) {
+                RetrievalRequest request = new RetrievalRequest(query, effectiveFilters, resultLimit);
+                documents = knowledgeRepository.searchLexical(request, candidateSize);
+                diagnostics.put("rankingSource", "lexical_repository_compat");
+                diagnostics.put("retrieveMethod", RetrieveMethod.KEYWORD.name());
+            } else {
+                RetrievalResult result = retrievalFacade.retrieve(
+                        query, effectiveFilters, candidateSize, RetrieveMethod.HYBRID, true);
+                documents = result.documents();
+                if (result.diagnostics() != null) {
+                    diagnostics.putAll(result.diagnostics());
+                }
+                diagnostics.put("retrieveMethod", RetrieveMethod.HYBRID.name());
             }
-            diagnostics.put("retrieveMethod", RetrieveMethod.HYBRID.name());
+            List<MemoryEntry> entries = documents.stream()
+                    .filter(this::isMemoryDocument)
+                    .filter(this::isEnabledMemoryDocument)
+                    .map(this::toMemoryEntry)
+                    .limit(resultLimit)
+                    .toList();
+            diagnostics.put("memorySearch", true);
+            diagnostics.put("memoryIsolationFilter", "source_type=memory");
+            diagnostics.put("memoryResultCount", entries.size());
+            recordMetric("search", "success", entries.size());
+            audit("search", "success", "memory search completed", startedAt, Map.of(
+                    "resultCount", entries.size(), "topK", resultLimit,
+                    "filterCount", effectiveFilters.size()));
+            return new MemorySearchResult(entries, diagnostics);
+        } catch (RuntimeException ex) {
+            recordMetric("search", "failed", 0);
+            audit("search", "failed", "memory search failed", startedAt, Map.of(
+                    "topK", resultLimit, "filterCount", effectiveFilters.size(),
+                    "errorType", ex.getClass().getSimpleName()));
+            throw ex;
         }
-        List<MemoryEntry> entries = documents.stream()
-                .filter(this::isMemoryDocument)
-                .filter(this::isEnabledMemoryDocument)
-                .map(this::toMemoryEntry)
-                .limit(resultLimit)
-                .toList();
-        diagnostics.put("memorySearch", true);
-        diagnostics.put("memoryIsolationFilter", "source_type=memory");
-        diagnostics.put("memoryResultCount", entries.size());
-        recordMetric("search", "success", entries.size());
-        return new MemorySearchResult(entries, diagnostics);
     }
 
     public MemoryCleanupResult cleanupStale(Instant now, int scanLimit) {

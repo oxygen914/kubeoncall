@@ -7,6 +7,7 @@ import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.ValueOperations;
+import org.springframework.data.redis.core.SessionCallback;
 
 import java.time.Duration;
 import java.time.Instant;
@@ -15,7 +16,9 @@ import java.util.Optional;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -27,6 +30,8 @@ class RedisSessionStoreTest {
         ValueOperations<String, String> valueOperations = mock(ValueOperations.class);
         when(redisTemplate.opsForValue()).thenReturn(valueOperations);
         when(valueOperations.get("ask-session:session-1")).thenReturn(null);
+        executeCallbacks(redisTemplate);
+        when(redisTemplate.exec()).thenReturn(java.util.List.of(true));
 
         ObjectMapper objectMapper = new ObjectMapper();
         objectMapper.registerModule(new JavaTimeModule());
@@ -43,6 +48,9 @@ class RedisSessionStoreTest {
         assertEquals("session-1", stored.sessionId());
         assertEquals(1, stored.turns().size());
         assertEquals("q1", stored.turns().get(0).question());
+        verify(redisTemplate).watch("ask-session:session-1");
+        verify(redisTemplate).multi();
+        verify(redisTemplate).exec();
     }
 
     @Test
@@ -66,5 +74,32 @@ class RedisSessionStoreTest {
 
         assertTrue(loaded.isPresent());
         assertEquals("exec-2", loaded.get().turns().get(0).executionId());
+    }
+
+    @Test
+    void shouldRetryWhenConcurrentTransactionAborts() {
+        StringRedisTemplate redisTemplate = mock(StringRedisTemplate.class);
+        ValueOperations<String, String> valueOperations = mock(ValueOperations.class);
+        when(redisTemplate.opsForValue()).thenReturn(valueOperations);
+        when(valueOperations.get("ask-session:session-race")).thenReturn(null);
+        executeCallbacks(redisTemplate);
+        when(redisTemplate.exec()).thenReturn(null, java.util.List.of(true));
+        ObjectMapper objectMapper = new ObjectMapper().registerModule(new JavaTimeModule());
+        KubeOnCallProperties properties = new KubeOnCallProperties();
+        properties.getMemory().setSessionAppendMaxRetries(3);
+        RedisSessionStore store = new RedisSessionStore(redisTemplate, objectMapper, properties);
+
+        store.append("session-race", new SessionTurn("exec-race", "q", "a", "SUCCESS", Instant.now()));
+
+        verify(redisTemplate, times(2)).watch("ask-session:session-race");
+        verify(redisTemplate, times(2)).exec();
+    }
+
+    @SuppressWarnings({"rawtypes", "unchecked"})
+    private static void executeCallbacks(StringRedisTemplate redisTemplate) {
+        when(redisTemplate.execute(any(SessionCallback.class))).thenAnswer(invocation -> {
+            SessionCallback callback = invocation.getArgument(0);
+            return callback.execute(redisTemplate);
+        });
     }
 }

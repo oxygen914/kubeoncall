@@ -41,9 +41,10 @@ public class YamlAlarmPolicyRepository implements AlarmPolicyRepository {
     private final String policyLocation;
     private final boolean enabled;
     private final AlarmSeverity defaultSeverity;
-    private final List<AlarmPolicy> policies = new ArrayList<>();
-    private final Map<String, AlarmPolicy> byId = new ConcurrentHashMap<>();
-    private final Map<String, AlarmPolicy> byName = new ConcurrentHashMap<>();
+    private volatile List<AlarmPolicy> policies = List.of();
+    private volatile Map<String, AlarmPolicy> byId = Map.of();
+    private volatile Map<String, AlarmPolicy> byName = Map.of();
+    private volatile String activeVersion = "unversioned";
 
     @Autowired
     public YamlAlarmPolicyRepository(KubeOnCallProperties properties) {
@@ -62,17 +63,20 @@ public class YamlAlarmPolicyRepository implements AlarmPolicyRepository {
     }
 
     @PostConstruct
-    public void load() {
-        policies.clear();
-        byId.clear();
-        byName.clear();
+    public synchronized void load() {
         if (!enabled) {
             log.info("Alarm policy engine is disabled (kubeoncall.alarm.enabled=false); no policies loaded");
+            policies = List.of();
+            byId = Map.of();
+            byName = Map.of();
             return;
         }
         Resource resource = resolveResource(policyLocation);
         if (!resource.exists()) {
             log.warn("Alarm policy file not found at {}; alarm policy engine will run with no policies", policyLocation);
+            policies = List.of();
+            byId = Map.of();
+            byName = Map.of();
             return;
         }
         PolicyFile file;
@@ -88,15 +92,20 @@ public class YamlAlarmPolicyRepository implements AlarmPolicyRepository {
         }
         List<AlarmPolicy> loaded = new ArrayList<>();
         for (PolicyDto dto : file.policies()) {
-            AlarmPolicy policy = toPolicy(dto);
+            AlarmPolicy policy = toPolicy(dto, file.version());
             validate(policy, loaded);
             loaded.add(policy);
         }
-        for (AlarmPolicy p : loaded) {
-            this.policies.add(p);
-            byId.put(p.id(), p);
-            byName.put(p.name(), p);
-        }
+        Map<String, AlarmPolicy> nextById = new ConcurrentHashMap<>();
+        Map<String, AlarmPolicy> nextByName = new ConcurrentHashMap<>();
+        loaded.forEach(policy -> {
+            nextById.put(policy.id(), policy);
+            nextByName.put(policy.name(), policy);
+        });
+        this.policies = List.copyOf(loaded);
+        this.byId = Map.copyOf(nextById);
+        this.byName = Map.copyOf(nextByName);
+        this.activeVersion = file.version() == null || file.version().isBlank() ? "unversioned" : file.version();
         log.info("Loaded {} alarm policies from {}", loaded.size(), policyLocation);
     }
 
@@ -119,7 +128,17 @@ public class YamlAlarmPolicyRepository implements AlarmPolicyRepository {
         return Optional.ofNullable(byName.get(name));
     }
 
-    private AlarmPolicy toPolicy(PolicyDto dto) {
+    public ReloadResult reload() {
+        String previousVersion = activeVersion;
+        load();
+        return new ReloadResult(previousVersion, activeVersion, policies.size());
+    }
+
+    public String activeVersion() {
+        return activeVersion;
+    }
+
+    private AlarmPolicy toPolicy(PolicyDto dto, String version) {
         AlarmResourceType resourceType = dto.resourceType() == null ? null : AlarmResourceType.fromRaw(dto.resourceType());
         AlarmSeverity severity = null;
         if (dto.severity() != null && !dto.severity().isBlank()) {
@@ -162,7 +181,8 @@ public class YamlAlarmPolicyRepository implements AlarmPolicyRepository {
                 dto.owner(),
                 actions,
                 dto.labels() == null ? Map.of() : dto.labels(),
-                dto.ragFilters() == null ? Map.of() : dto.ragFilters());
+                dto.ragFilters() == null ? Map.of() : dto.ragFilters(),
+                version);
     }
 
     private void validate(AlarmPolicy policy, List<AlarmPolicy> alreadyLoaded) {
@@ -247,6 +267,9 @@ public class YamlAlarmPolicyRepository implements AlarmPolicyRepository {
                 allowedTools = List.of();
             }
         }
+    }
+
+    public record ReloadResult(String previousVersion, String activeVersion, int policyCount) {
     }
 
     /** Allows the caller to load an arbitrary classpath resource directly (for tests). */

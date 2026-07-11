@@ -177,7 +177,8 @@ public class AskService {
             state.addApprovalAudit("Execution terminated after rejection");
             compressRuntime(state);
             String message = responseComposer.compose(state);
-            AskExecutionResult result = new AskExecutionResult(state.getExecutionId(), state.getStatus().name(), message, sessionId);
+            AskExecutionResult result = new AskExecutionResult(
+                    state.getExecutionId(), state.getStatus().name(), message, sessionId, structuredDetails(state));
             appendSessionTurn(sessionId, state, message);
             extractMemory(state, message);
             executionAuditService.recordGraphExecution(ExecutionRequestType.APPROVAL_RESUME, state, startedAt);
@@ -201,7 +202,8 @@ public class AskService {
         }
         compressRuntime(state);
         String message = responseComposer.compose(state);
-        AskExecutionResult result = new AskExecutionResult(state.getExecutionId(), state.getStatus().name(), message, sessionId);
+        AskExecutionResult result = new AskExecutionResult(
+                state.getExecutionId(), state.getStatus().name(), message, sessionId, structuredDetails(state));
         appendSessionTurn(sessionId, state, message);
         extractMemory(state, message);
         executionAuditService.recordGraphExecution(ExecutionRequestType.APPROVAL_RESUME, state, startedAt);
@@ -214,7 +216,8 @@ public class AskService {
     public ApprovalExecutionResult decideAndResume(String executionId, ApprovalDecision decision, String comment, String decidedBy) {
         approvalService.decide(executionId, decision, comment, decidedBy);
         AskExecutionResult result = resumeAfterApproval(executionId);
-        return new ApprovalExecutionResult(result.executionId(), result.status(), result.message(), result.sessionId());
+        return new ApprovalExecutionResult(
+                result.executionId(), result.status(), result.message(), result.sessionId(), result.details());
     }
 
     public ApprovalDetailResult getApprovalDetail(String executionId) {
@@ -223,15 +226,23 @@ public class AskService {
         return new ApprovalDetailResult(request, state);
     }
 
-    public record AskExecutionResult(String executionId, String status, String message, String sessionId) {
+    public record AskExecutionResult(String executionId,
+                                     String status,
+                                     String message,
+                                     String sessionId,
+                                     Map<String, Object> details) {
         public AskExecutionResult(String executionId, String status, String message) {
-            this(executionId, status, message, null);
+            this(executionId, status, message, null, Map.of());
         }
     }
 
-    public record ApprovalExecutionResult(String executionId, String status, String message, String sessionId) {
+    public record ApprovalExecutionResult(String executionId,
+                                          String status,
+                                          String message,
+                                          String sessionId,
+                                          Map<String, Object> details) {
         public ApprovalExecutionResult(String executionId, String status, String message) {
-            this(executionId, status, message, null);
+            this(executionId, status, message, null, Map.of());
         }
     }
 
@@ -293,7 +304,42 @@ public class AskService {
         appendSessionTurn(sessionId, state, message);
         extractMemory(state, message);
         executionAuditService.recordGraphExecution(ExecutionRequestType.ASK, state, startedAt);
-        return new AskExecutionResult(state.getExecutionId(), state.getStatus().name(), message, sessionId);
+        return new AskExecutionResult(
+                state.getExecutionId(), state.getStatus().name(), message, sessionId, structuredDetails(state));
+    }
+
+    private Map<String, Object> structuredDetails(GraphState state) {
+        Map<String, Object> details = new LinkedHashMap<>();
+        details.put("plan", state.getTaskPlan());
+        details.put("currentTask", state.getCurrentTask());
+        details.put("planner", selectedContext(state, List.of(
+                "plannerSource", "plannerIntent", "plannerConfidence", "plannerKnowledge", "activatedSkillIds")));
+        details.put("verifier", selectedContext(state, List.of(
+                "verifierDecision", "verifierRiskReasons", "verifierTool")));
+        details.put("executor", selectedContext(state, List.of(
+                "executionPlan", "executorPayload", "executorToolDefinition", "toolExecutionResult")));
+        Map<String, Object> approval = new LinkedHashMap<>();
+        approval.put("pause", state.getPauseMetadata());
+        approval.put("decision", state.getFinalApprovalDecision() == null ? null : state.getFinalApprovalDecision().name());
+        approval.put("auditTrail", List.copyOf(state.getApprovalAuditTrail()));
+        details.put("approval", approval);
+        details.put("nodeResults", List.copyOf(state.getNodeResults()));
+        details.put("audit", Map.of(
+                "executionId", state.getExecutionId() == null ? "" : state.getExecutionId(),
+                "status", state.getStatus().name(),
+                "updatedAt", state.getUpdatedAt().toString()
+        ));
+        return details;
+    }
+
+    private Map<String, Object> selectedContext(GraphState state, List<String> keys) {
+        Map<String, Object> selected = new LinkedHashMap<>();
+        for (String key : keys) {
+            if (state.getContext().containsKey(key)) {
+                selected.put(key, state.getContext().get(key));
+            }
+        }
+        return selected;
     }
 
     private void attachSessionContext(GraphState state, String sessionId) {
