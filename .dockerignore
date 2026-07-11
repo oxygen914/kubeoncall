@@ -1,4 +1,6 @@
-target
+target/*
+!target/kubeoncall-*.jar
+target/*.jar.original
 .git
 .idea
 .vscode
