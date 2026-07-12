@@ -28,13 +28,19 @@ public class HttpEmbeddingClient implements EmbeddingClient {
 
     @Override
     public List<Double> embed(String text) {
+        Map<String, String> headers = properties.getRag().getEmbeddingApiKey() == null
+                || properties.getRag().getEmbeddingApiKey().isBlank()
+                ? Map.of()
+                : Map.of("Authorization", "Bearer " + properties.getRag().getEmbeddingApiKey());
         Map<String, Object> response = toolHttpClient.post(
                 properties.getRag().getEmbeddingEndpoint(),
                 Map.of(
                         "model", properties.getRag().getEmbeddingModel(),
-                        "input", text == null ? "" : text
+                        "input", text == null ? "" : text,
+                        "dimensions", properties.getRag().getEmbeddingDimensions()
                 ),
                 properties.getRag().getEmbeddingTimeoutMillis(),
+                headers,
                 Map.of("targetSystem", "embedding", "tool", "embedding.embed")
         );
         if (!"success".equalsIgnoreCase(String.valueOf(response.get("status")))) {

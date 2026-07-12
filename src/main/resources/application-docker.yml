@@ -15,6 +15,7 @@ kubeoncall:
     embedding-enabled: true
     mock-embedding-enabled: false
     embedding-endpoint: ${RAG_EMBEDDING_ENDPOINT:http://host.docker.internal:18086/v1/embeddings}
+    embedding-api-key: ${RAG_EMBEDDING_API_KEY:}
     embedding-model: ${RAG_EMBEDDING_MODEL:text-embedding-3-small}
     embedding-version: ${RAG_EMBEDDING_VERSION:v1}
     embedding-dimensions: ${RAG_EMBEDDING_DIMENSIONS:1536}

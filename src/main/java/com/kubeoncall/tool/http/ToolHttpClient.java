@@ -33,6 +33,14 @@ public class ToolHttpClient {
                                     Map<String, Object> body,
                                     int timeoutMillis,
                                     Map<String, Object> metadata) {
+        return post(endpoint, body, timeoutMillis, Map.of(), metadata);
+    }
+
+    public Map<String, Object> post(String endpoint,
+                                    Map<String, Object> body,
+                                    int timeoutMillis,
+                                    Map<String, String> headers,
+                                    Map<String, Object> metadata) {
         LinkedHashMap<String, Object> result = new LinkedHashMap<>();
         if (metadata != null) {
             result.putAll(metadata);
@@ -49,11 +57,18 @@ public class ToolHttpClient {
         long startedAt = System.currentTimeMillis();
         try {
             String jsonBody = objectMapper.writeValueAsString(body == null ? Map.of() : body);
-            HttpRequest request = HttpRequest.newBuilder(URI.create(endpoint))
+            HttpRequest.Builder requestBuilder = HttpRequest.newBuilder(URI.create(endpoint))
                     .timeout(Duration.ofMillis(Math.max(500, timeoutMillis)))
                     .header("Content-Type", "application/json")
-                    .POST(HttpRequest.BodyPublishers.ofString(jsonBody, StandardCharsets.UTF_8))
-                    .build();
+                    .POST(HttpRequest.BodyPublishers.ofString(jsonBody, StandardCharsets.UTF_8));
+            if (headers != null) {
+                headers.forEach((name, value) -> {
+                    if (name != null && !name.isBlank() && value != null && !value.isBlank()) {
+                        requestBuilder.header(name, value);
+                    }
+                });
+            }
+            HttpRequest request = requestBuilder.build();
 
             HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
             int statusCode = response.statusCode();

@@ -46,6 +46,7 @@ kubeoncall:
     embedding-enabled: false
     mock-embedding-enabled: false
     embedding-endpoint: http://localhost:18086/api/embedding
+    embedding-api-key: ${RAG_EMBEDDING_API_KEY:}
     embedding-model: text-embedding-3-small
     embedding-version: v1
     embedding-timeout-millis: 3000

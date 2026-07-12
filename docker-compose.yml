@@ -5,8 +5,12 @@ services:
       dockerfile: Dockerfile
     environment:
       SPRING_PROFILES_ACTIVE: docker
-      RAG_EMBEDDING_ENDPOINT: ${RAG_EMBEDDING_ENDPOINT:-http://host.docker.internal:18086/v1/embeddings}
-      RAG_EMBEDDING_MODEL: ${RAG_EMBEDDING_MODEL:-text-embedding-3-small}
+      SPRING_AI_OPENAI_API_KEY: ${ALIYUN_API_KEY:-}
+      SPRING_AI_OPENAI_BASE_URL: ${SPRING_AI_OPENAI_BASE_URL:-https://dashscope.aliyuncs.com/compatible-mode}
+      SPRING_AI_OPENAI_CHAT_OPTIONS_MODEL: ${SPRING_AI_OPENAI_CHAT_OPTIONS_MODEL:-qwen-plus}
+      RAG_EMBEDDING_API_KEY: ${ALIYUN_API_KEY:-}
+      RAG_EMBEDDING_ENDPOINT: ${RAG_EMBEDDING_ENDPOINT:-https://dashscope.aliyuncs.com/compatible-mode/v1/embeddings}
+      RAG_EMBEDDING_MODEL: ${RAG_EMBEDDING_MODEL:-text-embedding-v4}
       RAG_EMBEDDING_VERSION: ${RAG_EMBEDDING_VERSION:-v1}
       RAG_EMBEDDING_DIMENSIONS: ${RAG_EMBEDDING_DIMENSIONS:-1536}
       RAG_RERANK_ENDPOINT: ${RAG_RERANK_ENDPOINT:-http://host.docker.internal:18086/v1/rerank}

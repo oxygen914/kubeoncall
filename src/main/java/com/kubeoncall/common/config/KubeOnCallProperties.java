@@ -121,6 +121,7 @@ public class KubeOnCallProperties {
         private boolean embeddingEnabled = false;
         private boolean mockEmbeddingEnabled = false;
         private String embeddingEndpoint;
+        private String embeddingApiKey;
         private String embeddingModel = "text-embedding-3-small";
         private String embeddingVersion = "v1";
         private int embeddingTimeoutMillis = 3000;
@@ -267,6 +268,14 @@ public class KubeOnCallProperties {
 
         public void setEmbeddingEndpoint(String embeddingEndpoint) {
             this.embeddingEndpoint = embeddingEndpoint;
+        }
+
+        public String getEmbeddingApiKey() {
+            return embeddingApiKey;
+        }
+
+        public void setEmbeddingApiKey(String embeddingApiKey) {
+            this.embeddingApiKey = embeddingApiKey;
         }
 
         public String getEmbeddingModel() {

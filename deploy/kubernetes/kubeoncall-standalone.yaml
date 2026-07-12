@@ -1,9 +1,9 @@
 # KubeOnCall single-file deployment for local Kubernetes/Minikube.
 #
-# This manifest is intentionally self-contained and uses deterministic mock
-# embeddings with the LLM planner disabled. It is suitable for framework and
-# keyword/vector-path smoke tests, not production. Replace credentials and
-# configure real LLM/embedding/tool endpoints before a production rollout.
+# The application uses Alibaba Cloud Model Studio's OpenAI-compatible endpoint
+# for qwen-plus and text-embedding-v4. Create kubeoncall-model-secrets before
+# applying this manifest; model credentials are intentionally not stored here.
+# MCP, cross-encoder, and external tool adapters remain disabled for local use.
 apiVersion: v1
 kind: Namespace
 metadata:
@@ -372,7 +372,7 @@ spec:
               until mc stat local/kubeoncall-docs >/dev/null 2>&1; do sleep 2; done
       containers:
         - name: kubeoncall
-          image: kubeoncall:standalone
+          image: kubeoncall:aliyun2
           imagePullPolicy: IfNotPresent
           env:
             - name: SPRING_PROFILES_ACTIVE
@@ -393,19 +393,37 @@ spec:
                 secretKeyRef:
                   name: kubeoncall-secrets
                   key: minio-secret-key
-            # Standalone defaults: no external model or tool adapters required.
+            # Model credentials are created separately as kubeoncall-model-secrets.
             - name: SPRING_AI_OPENAI_API_KEY
-              value: disabled-in-standalone
+              valueFrom:
+                secretKeyRef:
+                  name: kubeoncall-model-secrets
+                  key: aliyun-api-key
+            - name: SPRING_AI_OPENAI_BASE_URL
+              value: https://dashscope.aliyuncs.com/compatible-mode
+            - name: SPRING_AI_OPENAI_CHAT_OPTIONS_MODEL
+              value: qwen-plus
             - name: KUBEONCALL_AGENT_PLANNER_LLM_ENABLED
-              value: "false"
+              value: "true"
             - name: KUBEONCALL_RAG_VECTOR_ENABLED
               value: "true"
             - name: KUBEONCALL_RAG_ES_KNN_ENABLED
               value: "true"
             - name: KUBEONCALL_RAG_EMBEDDING_ENABLED
-              value: "false"
-            - name: KUBEONCALL_RAG_MOCK_EMBEDDING_ENABLED
               value: "true"
+            - name: KUBEONCALL_RAG_MOCK_EMBEDDING_ENABLED
+              value: "false"
+            - name: RAG_EMBEDDING_ENDPOINT
+              value: https://dashscope.aliyuncs.com/compatible-mode/v1/embeddings
+            - name: RAG_EMBEDDING_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: kubeoncall-model-secrets
+                  key: aliyun-api-key
+            - name: RAG_EMBEDDING_MODEL
+              value: text-embedding-v4
+            - name: RAG_EMBEDDING_DIMENSIONS
+              value: "1536"
             - name: KUBEONCALL_RAG_CROSS_ENCODER_ENABLED
               value: "false"
             - name: KUBEONCALL_RAG_RUNBOOK_BOOTSTRAP_ENABLED
