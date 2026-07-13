@@ -1,26 +1,27 @@
 package com.kubeoncall.alarm.suppression;
 
-import org.junit.jupiter.api.Test;
-import org.springframework.core.io.ByteArrayResource;
-import org.springframework.core.io.ClassPathResource;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import java.nio.charset.StandardCharsets;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertThrows;
+import org.junit.jupiter.api.Test;
+import org.springframework.core.io.ByteArrayResource;
+import org.springframework.core.io.ClassPathResource;
 
 class AlarmSuppressionRuleRepositoryTest {
 
     @Test
     void shouldLoadVersionedProductionRules() {
-        AlarmSuppressionRuleRepository repository = new AlarmSuppressionRuleRepository(
-                new ClassPathResource("alarm-suppression-rules.yml"));
+        AlarmSuppressionRuleRepository repository =
+                new AlarmSuppressionRuleRepository(new ClassPathResource("alarm-suppression-rules.yml"));
 
         AlarmSuppressionRuleRepository.ReloadResult result = repository.reload();
 
         assertEquals("2026-07-11", result.activeVersion());
         assertEquals(2, result.ruleCount());
-        assertEquals("node-not-ready-suppresses-pod", repository.findAll().get(0).id());
+        assertEquals(
+                "node-not-ready-suppresses-pod", repository.findAll().get(0).id());
     }
 
     @Test
@@ -39,8 +40,8 @@ class AlarmSuppressionRuleRepositoryTest {
                     correlateBy: [cluster, node]
                     ttlSeconds: 60
                 """;
-        AlarmSuppressionRuleRepository repository = new AlarmSuppressionRuleRepository(
-                new ByteArrayResource(yaml.getBytes(StandardCharsets.UTF_8)));
+        AlarmSuppressionRuleRepository repository =
+                new AlarmSuppressionRuleRepository(new ByteArrayResource(yaml.getBytes(StandardCharsets.UTF_8)));
 
         assertThrows(IllegalArgumentException.class, repository::reload);
         assertEquals("unloaded", repository.activeVersion());

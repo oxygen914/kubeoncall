@@ -1,15 +1,17 @@
 package com.kubeoncall.alarm.suppression;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
+import java.io.IOException;
+import java.io.InputStream;
+import java.util.List;
+
 import jakarta.annotation.PostConstruct;
+
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.Resource;
 import org.springframework.stereotype.Component;
 
-import java.io.IOException;
-import java.io.InputStream;
-import java.util.List;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
 
 @Component
 public class AlarmSuppressionRuleRepository {
@@ -21,7 +23,7 @@ public class AlarmSuppressionRuleRepository {
 
     public AlarmSuppressionRuleRepository(
             @Value("${kubeoncall.alarm.suppression-rules-location:classpath:alarm-suppression-rules.yml}")
-            Resource resource) {
+                    Resource resource) {
         this.resource = resource;
     }
 
@@ -83,9 +85,7 @@ public class AlarmSuppressionRuleRepository {
         }
     }
 
-    record RuleFile(String version, List<AlarmSuppressionRule> rules) {
-    }
+    record RuleFile(String version, List<AlarmSuppressionRule> rules) {}
 
-    public record ReloadResult(String previousVersion, String activeVersion, int ruleCount) {
-    }
+    public record ReloadResult(String previousVersion, String activeVersion, int ruleCount) {}
 }

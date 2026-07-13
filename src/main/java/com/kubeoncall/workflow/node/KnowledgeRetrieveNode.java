@@ -1,5 +1,15 @@
 package com.kubeoncall.workflow.node;
 
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.function.Function;
+import java.util.stream.Collectors;
+
+import org.springframework.stereotype.Component;
+
 import com.kubeoncall.alarm.domain.AlarmEvaluationResult;
 import com.kubeoncall.alarm.domain.NormalizedAlarmEvent;
 import com.kubeoncall.common.config.KubeOnCallProperties;
@@ -10,15 +20,6 @@ import com.kubeoncall.rag.KnowledgeIngestService;
 import com.kubeoncall.tool.ToolExecutor;
 import com.kubeoncall.workflow.AlertWorkflowContext;
 import com.kubeoncall.workflow.AlertWorkflowNode;
-import org.springframework.stereotype.Component;
-
-import java.util.ArrayList;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Locale;
-import java.util.Map;
-import java.util.function.Function;
-import java.util.stream.Collectors;
 
 @Component
 public class KnowledgeRetrieveNode implements AlertWorkflowNode {
@@ -27,12 +28,14 @@ public class KnowledgeRetrieveNode implements AlertWorkflowNode {
     private final Map<String, ToolExecutor> executorsByKind;
     private final KubeOnCallProperties properties;
 
-    public KnowledgeRetrieveNode(KnowledgeIngestService knowledgeIngestService,
-                                 List<ToolExecutor> toolExecutors,
-                                 KubeOnCallProperties properties) {
+    public KnowledgeRetrieveNode(
+            KnowledgeIngestService knowledgeIngestService,
+            List<ToolExecutor> toolExecutors,
+            KubeOnCallProperties properties) {
         this.knowledgeIngestService = knowledgeIngestService;
         this.executorsByKind = toolExecutors.stream()
-                .collect(Collectors.toMap(ToolExecutor::getExecutorKind, Function.identity(), (left, right) -> left, LinkedHashMap::new));
+                .collect(Collectors.toMap(
+                        ToolExecutor::getExecutorKind, Function.identity(), (left, right) -> left, LinkedHashMap::new));
         this.properties = properties;
     }
 
@@ -58,9 +61,7 @@ public class KnowledgeRetrieveNode implements AlertWorkflowNode {
                 if (!runbookFilters.isEmpty() && !runbookFilters.equals(strictFilters)) {
                     retrieval = retrieve(ragQuery, runbookFilters, "runbook_binding", attempts);
                     effectiveFilters = runbookFilters;
-                    fallback = retrieval.documents().isEmpty()
-                            ? "runbook_binding_empty"
-                            : "runbook_binding";
+                    fallback = retrieval.documents().isEmpty() ? "runbook_binding_empty" : "runbook_binding";
                 }
             }
             hints.put("ragFilters", effectiveFilters);
@@ -68,16 +69,20 @@ public class KnowledgeRetrieveNode implements AlertWorkflowNode {
             hints.put("ragRetrievalAttempts", attempts);
             hints.put("retrievalSummary", retrieval.summary());
             hints.put("retrievalReasons", retrieval.retrievalReasons());
-            hints.put("documents", retrieval.documents().stream().map(doc -> {
-                Map<String, Object> item = new LinkedHashMap<>();
-                item.put("id", doc.id());
-                item.put("title", doc.title());
-                item.put("source", doc.source());
-                item.put("runbookId", metadata(doc.metadata(), "runbookId"));
-                item.put("documentType", metadata(doc.metadata(), "document_type"));
-                item.put("category", metadata(doc.metadata(), "category"));
-                return item;
-            }).toList());
+            hints.put(
+                    "documents",
+                    retrieval.documents().stream()
+                            .map(doc -> {
+                                Map<String, Object> item = new LinkedHashMap<>();
+                                item.put("id", doc.id());
+                                item.put("title", doc.title());
+                                item.put("source", doc.source());
+                                item.put("runbookId", metadata(doc.metadata(), "runbookId"));
+                                item.put("documentType", metadata(doc.metadata(), "document_type"));
+                                item.put("category", metadata(doc.metadata(), "category"));
+                                return item;
+                            })
+                            .toList());
             hints.put("diagnostics", retrieval.diagnostics());
         } catch (RuntimeException ex) {
             Map<String, Object> failure = new LinkedHashMap<>();
@@ -87,11 +92,7 @@ public class KnowledgeRetrieveNode implements AlertWorkflowNode {
             failure.put("errorType", ex.getClass().getSimpleName());
             failure.put("errorMessage", ex.getMessage() == null ? "" : ex.getMessage());
             return new NodeResult(
-                    "knowledgeRetrieveNode",
-                    NodeStatus.FAILURE,
-                    "Failed to retrieve SOP knowledge",
-                    failure
-            );
+                    "knowledgeRetrieveNode", NodeStatus.FAILURE, "Failed to retrieve SOP knowledge", failure);
         }
 
         ToolExecutor prometheus = executorsByKind.get("prometheus");
@@ -106,12 +107,7 @@ public class KnowledgeRetrieveNode implements AlertWorkflowNode {
         }
 
         context.putAttribute("knowledgeHints", hints);
-        return new NodeResult(
-                "knowledgeRetrieveNode",
-                NodeStatus.SUCCESS,
-                "Retrieved related SOP knowledge",
-                hints
-        );
+        return new NodeResult("knowledgeRetrieveNode", NodeStatus.SUCCESS, "Retrieved related SOP knowledge", hints);
     }
 
     private int readHttpStatus(Map<String, Object> toolResult) {
@@ -122,15 +118,16 @@ public class KnowledgeRetrieveNode implements AlertWorkflowNode {
         return properties.getIntegrations().getPrometheus().getTimeoutMillis() > 0 ? 200 : 500;
     }
 
-    private RetrievalResult retrieve(String query,
-                                     Map<String, String> filters,
-                                     String strategy,
-                                     List<Map<String, Object>> attempts) {
+    private RetrievalResult retrieve(
+            String query, Map<String, String> filters, String strategy, List<Map<String, Object>> attempts) {
         RetrievalResult result = knowledgeIngestService.retrieve(query, filters);
         attempts.add(Map.of(
-                "strategy", strategy,
-                "filters", Map.copyOf(filters),
-                "resultCount", result.documents() == null ? 0 : result.documents().size()));
+                "strategy",
+                strategy,
+                "filters",
+                Map.copyOf(filters),
+                "resultCount",
+                result.documents() == null ? 0 : result.documents().size()));
         return result;
     }
 
@@ -139,16 +136,18 @@ public class KnowledgeRetrieveNode implements AlertWorkflowNode {
         return evaluation == null ? Map.of() : evaluation.ragFilters();
     }
 
-    private Map<String, String> strictFilters(AlertWorkflowContext context,
-                                              Map<String, String> policyFilters) {
+    private Map<String, String> strictFilters(AlertWorkflowContext context, Map<String, String> policyFilters) {
         Map<String, String> filters = new LinkedHashMap<>();
         putAllNonBlank(filters, policyFilters);
         NormalizedAlarmEvent event = context.getNormalizedAlarm();
         if (event != null) {
             put(filters, "alertName", event.alertName());
-            put(filters, "resourceType", event.resourceType() == null
-                    ? null
-                    : event.resourceType().name().toLowerCase(Locale.ROOT));
+            put(
+                    filters,
+                    "resourceType",
+                    event.resourceType() == null
+                            ? null
+                            : event.resourceType().name().toLowerCase(Locale.ROOT));
             put(filters, "service", event.service());
         }
         put(filters, "runbookId", runbookId(context));
@@ -157,8 +156,7 @@ public class KnowledgeRetrieveNode implements AlertWorkflowNode {
         return Map.copyOf(filters);
     }
 
-    private Map<String, String> runbookBindingFilters(AlertWorkflowContext context,
-                                                      Map<String, String> policyFilters) {
+    private Map<String, String> runbookBindingFilters(AlertWorkflowContext context, Map<String, String> policyFilters) {
         Map<String, String> filters = new LinkedHashMap<>();
         putAllNonBlank(filters, policyFilters);
         put(filters, "runbookId", runbookId(context));
@@ -171,7 +169,9 @@ public class KnowledgeRetrieveNode implements AlertWorkflowNode {
         NormalizedAlarmEvent event = context.getNormalizedAlarm();
         if (event != null) {
             append(query, event.alertName());
-            append(query, event.resourceType() == null ? null : event.resourceType().name());
+            append(
+                    query,
+                    event.resourceType() == null ? null : event.resourceType().name());
             append(query, event.service());
         }
         append(query, runbookId(context));
@@ -180,7 +180,9 @@ public class KnowledgeRetrieveNode implements AlertWorkflowNode {
 
     private String runbookId(AlertWorkflowContext context) {
         AlarmEvaluationResult evaluation = context.getEvaluationResult();
-        if (evaluation != null && evaluation.runbookId() != null && !evaluation.runbookId().isBlank()) {
+        if (evaluation != null
+                && evaluation.runbookId() != null
+                && !evaluation.runbookId().isBlank()) {
             return evaluation.runbookId();
         }
         NormalizedAlarmEvent event = context.getNormalizedAlarm();

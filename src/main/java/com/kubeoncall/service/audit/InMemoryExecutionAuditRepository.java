@@ -1,14 +1,15 @@
 package com.kubeoncall.service.audit;
 
-import com.kubeoncall.domain.audit.ExecutionAuditRecord;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
-import org.springframework.stereotype.Repository;
-
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
+
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.stereotype.Repository;
+
+import com.kubeoncall.domain.audit.ExecutionAuditRecord;
 
 @Repository
 @ConditionalOnProperty(prefix = "kubeoncall.audit", name = "repository", havingValue = "memory")

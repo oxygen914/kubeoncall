@@ -1,16 +1,17 @@
 package com.kubeoncall.alarm.maintenance;
 
-import com.kubeoncall.alarm.domain.NormalizedAlarmEvent;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.springframework.stereotype.Service;
-
 import java.time.Instant;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.regex.Pattern;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.stereotype.Service;
+
+import com.kubeoncall.alarm.domain.NormalizedAlarmEvent;
 
 @Service
 public class AlarmMaintenanceWindowService {
@@ -23,13 +24,14 @@ public class AlarmMaintenanceWindowService {
         this.store = store;
     }
 
-    public AlarmMaintenanceWindow create(Instant startsAt,
-                                         Instant endsAt,
-                                         Map<String, String> matchers,
-                                         String reason,
-                                         String createdBy,
-                                         String approvedBy,
-                                         String approvalReference) {
+    public AlarmMaintenanceWindow create(
+            Instant startsAt,
+            Instant endsAt,
+            Map<String, String> matchers,
+            String reason,
+            String createdBy,
+            String approvedBy,
+            String approvalReference) {
         Instant now = Instant.now();
         if (startsAt == null || endsAt == null || !endsAt.isAfter(startsAt)) {
             throw new IllegalArgumentException("endsAt must be after startsAt");
@@ -51,13 +53,21 @@ public class AlarmMaintenanceWindowService {
                 .filter(entry -> entry.getKey() != null && !entry.getKey().isBlank())
                 .filter(entry -> entry.getValue() != null && !entry.getValue().isBlank())
                 .collect(java.util.stream.Collectors.toUnmodifiableMap(
-                        entry -> entry.getKey().trim(), entry -> entry.getValue().trim()));
+                        entry -> entry.getKey().trim(),
+                        entry -> entry.getValue().trim()));
         if (normalizedMatchers.isEmpty()) {
             throw new IllegalArgumentException("at least one non-blank matcher is required");
         }
         AlarmMaintenanceWindow window = new AlarmMaintenanceWindow(
-                UUID.randomUUID().toString(), startsAt, endsAt, normalizedMatchers, reason.trim(),
-                createdBy.trim(), approvedBy.trim(), approvalReference.trim(), now);
+                UUID.randomUUID().toString(),
+                startsAt,
+                endsAt,
+                normalizedMatchers,
+                reason.trim(),
+                createdBy.trim(),
+                approvedBy.trim(),
+                approvalReference.trim(),
+                now);
         store.save(window);
         return window;
     }
@@ -67,7 +77,9 @@ public class AlarmMaintenanceWindowService {
             return Optional.empty();
         }
         try {
-            return store.activeAt(now).stream().filter(window -> matches(window, event)).findFirst();
+            return store.activeAt(now).stream()
+                    .filter(window -> matches(window, event))
+                    .findFirst();
         } catch (RuntimeException ex) {
             log.warn("Maintenance window lookup failed; alarm processing continues: {}", ex.getMessage());
             return Optional.empty();
@@ -79,8 +91,8 @@ public class AlarmMaintenanceWindowService {
     }
 
     boolean matches(AlarmMaintenanceWindow window, NormalizedAlarmEvent event) {
-        return window.matchers().entrySet().stream().allMatch(entry ->
-                wildcardMatches(actualValue(entry.getKey(), event), entry.getValue()));
+        return window.matchers().entrySet().stream()
+                .allMatch(entry -> wildcardMatches(actualValue(entry.getKey(), event), entry.getValue()));
     }
 
     private String actualValue(String key, NormalizedAlarmEvent event) {
@@ -88,12 +100,14 @@ public class AlarmMaintenanceWindowService {
             case "cluster" -> event.cluster();
             case "namespace" -> event.namespace();
             case "service" -> event.service();
-            case "resourcetype" -> event.resourceType() == null ? null : event.resourceType().name();
+            case "resourcetype" ->
+                event.resourceType() == null ? null : event.resourceType().name();
             case "resourcename" -> event.resourceName();
             case "alertname" -> event.alertName();
-            default -> key.regionMatches(true, 0, "label.", 0, "label.".length())
-                    ? event.labels().get(key.substring("label.".length()))
-                    : null;
+            default ->
+                key.regionMatches(true, 0, "label.", 0, "label.".length())
+                        ? event.labels().get(key.substring("label.".length()))
+                        : null;
         };
     }
 

@@ -1,22 +1,25 @@
 package com.kubeoncall.alarm;
 
-import com.kubeoncall.alarm.domain.AlarmSeverity;
-import com.kubeoncall.alarm.policy.YamlAlarmPolicyRepository;
-import org.junit.jupiter.api.Test;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import org.junit.jupiter.api.Test;
+
+import com.kubeoncall.alarm.domain.AlarmSeverity;
+import com.kubeoncall.alarm.policy.YamlAlarmPolicyRepository;
+import com.kubeoncall.common.config.KubeOnCallProperties;
 
 class YamlAlarmPolicyRepositoryTest {
 
     @Test
     void shouldLoadDefaultClasspathPolicies() {
-        YamlAlarmPolicyRepository repo = YamlAlarmPolicyRepository.loadFromClasspath("alarm-policies.yml", AlarmSeverity.P3);
+        YamlAlarmPolicyRepository repo =
+                YamlAlarmPolicyRepository.loadFromClasspath("alarm-policies.yml", AlarmSeverity.P3);
         assertTrue(repo.findAll().size() >= 11, "default policies should cover the first batch");
         assertTrue(repo.findByName("HostHighCpuUsageP1").isPresent());
         assertTrue(repo.findByName("HostHighCpuUsageP0").isPresent());
@@ -47,8 +50,9 @@ class YamlAlarmPolicyRepositoryTest {
                     severity: P1
                     runbookId: rb-b
                 """);
-        IllegalStateException ex = assertThrows(IllegalStateException.class,
-                () -> new YamlAlarmPolicyRepository(tmp.toString(), true, AlarmSeverity.P3).load());
+        IllegalStateException ex =
+                assertThrows(IllegalStateException.class, () -> repository(tmp.toString(), true, AlarmSeverity.P3)
+                        .load());
         assertTrue(ex.getMessage().contains("Duplicate alarm policy id"));
     }
 
@@ -62,8 +66,9 @@ class YamlAlarmPolicyRepositoryTest {
                     name: NoRunbook
                     severity: P1
                 """);
-        IllegalStateException ex = assertThrows(IllegalStateException.class,
-                () -> new YamlAlarmPolicyRepository(tmp.toString(), true, AlarmSeverity.P3).load());
+        IllegalStateException ex =
+                assertThrows(IllegalStateException.class, () -> repository(tmp.toString(), true, AlarmSeverity.P3)
+                        .load());
         assertTrue(ex.getMessage().contains("runbookId"));
     }
 
@@ -78,15 +83,25 @@ class YamlAlarmPolicyRepositoryTest {
                     severity: PX
                     runbookId: rb
                 """);
-        IllegalStateException ex = assertThrows(IllegalStateException.class,
-                () -> new YamlAlarmPolicyRepository(tmp.toString(), true, AlarmSeverity.P3).load());
+        IllegalStateException ex =
+                assertThrows(IllegalStateException.class, () -> repository(tmp.toString(), true, AlarmSeverity.P3)
+                        .load());
         assertTrue(ex.getMessage().contains("invalid severity"));
     }
 
     @Test
     void disabledRepositoryShouldLoadNoPolicies() {
-        YamlAlarmPolicyRepository repo = new YamlAlarmPolicyRepository("classpath:alarm-policies.yml", false, AlarmSeverity.P3);
+        YamlAlarmPolicyRepository repo = repository("classpath:alarm-policies.yml", false, AlarmSeverity.P3);
         repo.load();
         assertEquals(0, repo.findAll().size());
+    }
+
+    private static YamlAlarmPolicyRepository repository(
+            String policyLocation, boolean enabled, AlarmSeverity defaultSeverity) {
+        KubeOnCallProperties properties = new KubeOnCallProperties();
+        properties.getAlarm().setPolicyLocation(policyLocation);
+        properties.getAlarm().setEnabled(enabled);
+        properties.getAlarm().setDefaultSeverity(defaultSeverity.name());
+        return new YamlAlarmPolicyRepository(properties);
     }
 }

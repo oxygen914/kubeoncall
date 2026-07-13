@@ -1,16 +1,17 @@
 package com.kubeoncall.approval;
 
+import java.time.Duration;
+import java.time.Instant;
+import java.util.List;
+
+import org.springframework.stereotype.Service;
+
 import com.kubeoncall.common.config.KubeOnCallProperties;
 import com.kubeoncall.domain.approval.ApprovalDecision;
 import com.kubeoncall.domain.approval.ApprovalRequest;
 import com.kubeoncall.domain.graph.GraphState;
 import com.kubeoncall.domain.graph.GraphStatus;
 import com.kubeoncall.state.GraphStateStore;
-import org.springframework.stereotype.Service;
-
-import java.time.Duration;
-import java.time.Instant;
-import java.util.List;
 
 @Service
 public class ApprovalService {
@@ -19,23 +20,24 @@ public class ApprovalService {
     private final GraphStateStore graphStateStore;
     private final KubeOnCallProperties properties;
 
-    public ApprovalService(ApprovalRepository approvalRepository,
-                           GraphStateStore graphStateStore,
-                           KubeOnCallProperties properties) {
+    public ApprovalService(
+            ApprovalRepository approvalRepository, GraphStateStore graphStateStore, KubeOnCallProperties properties) {
         this.approvalRepository = approvalRepository;
         this.graphStateStore = graphStateStore;
         this.properties = properties;
     }
 
     public ApprovalRequest createPending(GraphState state, String requestedBy, String comment) {
-        ApprovalRequest existing = approvalRepository.findByExecutionId(state.getExecutionId()).orElse(null);
+        ApprovalRequest existing =
+                approvalRepository.findByExecutionId(state.getExecutionId()).orElse(null);
         if (existing != null && !existing.processed()) {
             return existing;
         }
 
-        List<String> riskReasons = state.getPauseMetadata() == null || state.getPauseMetadata().riskReasons() == null
-                ? List.of()
-                : List.copyOf(state.getPauseMetadata().riskReasons());
+        List<String> riskReasons =
+                state.getPauseMetadata() == null || state.getPauseMetadata().riskReasons() == null
+                        ? List.of()
+                        : List.copyOf(state.getPauseMetadata().riskReasons());
         ApprovalRequest request = new ApprovalRequest(
                 state.getExecutionId(),
                 state.getTaskPlan(),
@@ -47,8 +49,7 @@ public class ApprovalService {
                 comment,
                 null,
                 false,
-                riskReasons
-        );
+                riskReasons);
         state.addApprovalAudit("Approval requested by=" + requestedBy + ", taskId=" + request.taskId());
         state.setApprovalRequestedAt(request.requestedAt());
         state.setFinalApprovalDecision(ApprovalDecision.PENDING);
@@ -58,13 +59,15 @@ public class ApprovalService {
     }
 
     public ApprovalRequest decide(String executionId, ApprovalDecision decision, String comment, String decidedBy) {
-        ApprovalRequest existing = approvalRepository.findByExecutionId(executionId)
+        ApprovalRequest existing = approvalRepository
+                .findByExecutionId(executionId)
                 .orElseThrow(() -> new IllegalArgumentException("Approval request not found: " + executionId));
         if (existing.processed()) {
             throw new IllegalStateException("Approval request already processed: " + executionId);
         }
 
-        GraphState state = graphStateStore.find(executionId)
+        GraphState state = graphStateStore
+                .find(executionId)
                 .orElseThrow(() -> new IllegalArgumentException("Graph state not found: " + executionId));
         if (state.getStatus() != GraphStatus.PAUSED) {
             throw new IllegalStateException("Execution is not awaiting approval: " + executionId);
@@ -81,8 +84,7 @@ public class ApprovalService {
                 comment,
                 decidedBy,
                 true,
-                existing.riskReasons()
-        );
+                existing.riskReasons());
         approvalRepository.save(updated);
 
         String auditSuffix = (comment == null || comment.isBlank() ? "" : ", comment=" + comment)
@@ -103,12 +105,14 @@ public class ApprovalService {
     }
 
     public ApprovalRequest getApproval(String executionId) {
-        return approvalRepository.findByExecutionId(executionId)
+        return approvalRepository
+                .findByExecutionId(executionId)
                 .orElseThrow(() -> new IllegalArgumentException("Approval request not found: " + executionId));
     }
 
     public GraphState loadState(String executionId) {
-        return graphStateStore.find(executionId)
+        return graphStateStore
+                .find(executionId)
                 .orElseThrow(() -> new IllegalArgumentException("Graph state not found: " + executionId));
     }
 

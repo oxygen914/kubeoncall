@@ -1,15 +1,16 @@
 package com.kubeoncall.approval;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.kubeoncall.common.config.KubeOnCallProperties;
-import com.kubeoncall.domain.approval.ApprovalRequest;
+import java.time.Duration;
+import java.util.Optional;
+
 import org.springframework.context.annotation.Primary;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Repository;
 
-import java.time.Duration;
-import java.util.Optional;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.kubeoncall.common.config.KubeOnCallProperties;
+import com.kubeoncall.domain.approval.ApprovalRequest;
 
 @Repository
 @Primary
@@ -19,9 +20,8 @@ public class RedisApprovalRepository implements ApprovalRepository {
     private final ObjectMapper objectMapper;
     private final KubeOnCallProperties properties;
 
-    public RedisApprovalRepository(StringRedisTemplate redisTemplate,
-                                   ObjectMapper objectMapper,
-                                   KubeOnCallProperties properties) {
+    public RedisApprovalRepository(
+            StringRedisTemplate redisTemplate, ObjectMapper objectMapper, KubeOnCallProperties properties) {
         this.redisTemplate = redisTemplate;
         this.objectMapper = objectMapper;
         this.properties = properties;
@@ -30,7 +30,9 @@ public class RedisApprovalRepository implements ApprovalRepository {
     @Override
     public void save(ApprovalRequest request) {
         try {
-            redisTemplate.opsForValue().set(key(request.executionId()), objectMapper.writeValueAsString(request), ttl());
+            redisTemplate
+                    .opsForValue()
+                    .set(key(request.executionId()), objectMapper.writeValueAsString(request), ttl());
         } catch (JsonProcessingException e) {
             throw new IllegalStateException("Failed to serialize approval request", e);
         }

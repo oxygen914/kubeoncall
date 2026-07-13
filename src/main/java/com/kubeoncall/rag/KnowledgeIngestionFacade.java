@@ -1,13 +1,5 @@
 package com.kubeoncall.rag;
 
-import com.kubeoncall.common.config.KubeOnCallProperties;
-import com.kubeoncall.domain.rag.KnowledgeDocument;
-import com.kubeoncall.rag.repository.KnowledgeRepository;
-import com.kubeoncall.storage.KnowledgeObjectStorageService;
-import com.kubeoncall.storage.StoredDocumentReference;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.stereotype.Service;
-
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.time.Instant;
@@ -16,6 +8,14 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+
+import org.springframework.stereotype.Service;
+
+import com.kubeoncall.common.config.KubeOnCallProperties;
+import com.kubeoncall.domain.rag.KnowledgeDocument;
+import com.kubeoncall.rag.repository.KnowledgeRepository;
+import com.kubeoncall.storage.KnowledgeObjectStorageService;
+import com.kubeoncall.storage.StoredDocumentReference;
 
 @Service
 public class KnowledgeIngestionFacade {
@@ -26,18 +26,12 @@ public class KnowledgeIngestionFacade {
     private final EmbeddingService embeddingService;
     private final KubeOnCallProperties properties;
 
-    public KnowledgeIngestionFacade(KnowledgeRepository knowledgeRepository,
-                                    KnowledgeChunker knowledgeChunker,
-                                    KnowledgeObjectStorageService knowledgeObjectStorageService) {
-        this(knowledgeRepository, knowledgeChunker, knowledgeObjectStorageService, null, new KubeOnCallProperties());
-    }
-
-    @Autowired
-    public KnowledgeIngestionFacade(KnowledgeRepository knowledgeRepository,
-                                    KnowledgeChunker knowledgeChunker,
-                                    KnowledgeObjectStorageService knowledgeObjectStorageService,
-                                    EmbeddingService embeddingService,
-                                    KubeOnCallProperties properties) {
+    public KnowledgeIngestionFacade(
+            KnowledgeRepository knowledgeRepository,
+            KnowledgeChunker knowledgeChunker,
+            KnowledgeObjectStorageService knowledgeObjectStorageService,
+            EmbeddingService embeddingService,
+            KubeOnCallProperties properties) {
         this.knowledgeRepository = knowledgeRepository;
         this.knowledgeChunker = knowledgeChunker;
         this.knowledgeObjectStorageService = knowledgeObjectStorageService;
@@ -67,29 +61,22 @@ public class KnowledgeIngestionFacade {
         mergedMetadata.put("parent_document_id", "");
         mergedMetadata.put("parentDocumentId", "");
         mergedMetadata.put("document_type", mergedMetadata.getOrDefault("document_type", "runbook"));
-        mergedMetadata.put("source_type", mergedMetadata.getOrDefault("source_type", source == null ? "manual" : source));
+        mergedMetadata.put(
+                "source_type", mergedMetadata.getOrDefault("source_type", source == null ? "manual" : source));
         mergedMetadata.put("dataset_version", mergedMetadata.getOrDefault("dataset_version", "v1"));
         mergedMetadata.put("chunk_enable", "false");
         mergedMetadata.put("file_hash", sha256(content));
 
-        KnowledgeDocument document = new KnowledgeDocument(
-                documentId,
-                title,
-                content,
-                source,
-                mergedMetadata,
-                Instant.now()
-        );
+        KnowledgeDocument document =
+                new KnowledgeDocument(documentId, title, content, source, mergedMetadata, Instant.now());
         knowledgeRepository.save(document);
         List<KnowledgeDocument> chunks = knowledgeChunker.chunk(document);
-        chunks.stream()
-                .map(this::withEmbedding)
-                .forEach(knowledgeRepository::save);
+        chunks.stream().map(this::withEmbedding).forEach(knowledgeRepository::save);
         return document;
     }
 
     private KnowledgeDocument withEmbedding(KnowledgeDocument chunk) {
-        if (embeddingService == null || !embeddingConfigured() || !isEnabledChunk(chunk)) {
+        if (!embeddingConfigured() || !isEnabledChunk(chunk)) {
             return chunk;
         }
         Map<String, String> metadata = new LinkedHashMap<>();
@@ -100,9 +87,8 @@ public class KnowledgeIngestionFacade {
             EmbeddingService.EmbeddingResult result = embeddingService.embed(chunk.content());
             int configuredDimensions = Math.max(1, properties.getRag().getEmbeddingDimensions());
             if (result.vector().size() != configuredDimensions) {
-                throw new IllegalStateException(
-                        "Embedding dimensions " + result.vector().size()
-                                + " do not match configured dimensions " + configuredDimensions);
+                throw new IllegalStateException("Embedding dimensions "
+                        + result.vector().size() + " do not match configured dimensions " + configuredDimensions);
             }
             metadata.put("embedding_status", "ready");
             metadata.put("embedding_model", properties.getRag().getEmbeddingModel());
@@ -111,8 +97,14 @@ public class KnowledgeIngestionFacade {
             metadata.put("embedding_dimensions", String.valueOf(result.vector().size()));
             metadata.put("embedding_mock", String.valueOf(result.mock()));
             return new KnowledgeDocument(
-                    chunk.id(), chunk.title(), chunk.content(), chunk.source(), metadata, chunk.createdAt(),
-                    chunk.content(), result.vector());
+                    chunk.id(),
+                    chunk.title(),
+                    chunk.content(),
+                    chunk.source(),
+                    metadata,
+                    chunk.createdAt(),
+                    chunk.content(),
+                    result.vector());
         } catch (RuntimeException ex) {
             metadata.put("embedding_status", "failed");
             metadata.put("embedding_model", properties.getRag().getEmbeddingModel());
@@ -125,7 +117,8 @@ public class KnowledgeIngestionFacade {
 
     private boolean embeddingConfigured() {
         return "es".equalsIgnoreCase(properties.getRag().getVectorBackend())
-                && (properties.getRag().isEmbeddingEnabled() || properties.getRag().isMockEmbeddingEnabled());
+                && (properties.getRag().isEmbeddingEnabled()
+                        || properties.getRag().isMockEmbeddingEnabled());
     }
 
     private boolean isEnabledChunk(KnowledgeDocument chunk) {

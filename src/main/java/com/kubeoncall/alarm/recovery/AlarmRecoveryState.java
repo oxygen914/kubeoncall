@@ -1,9 +1,9 @@
 package com.kubeoncall.alarm.recovery;
 
+import java.time.Instant;
+
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.kubeoncall.alarm.domain.AlarmSeverity;
-
-import java.time.Instant;
 
 public record AlarmRecoveryState(
         String fingerprint,
@@ -18,8 +18,7 @@ public record AlarmRecoveryState(
         String confirmedBy,
         boolean healthCheckPassed,
         String note,
-        Instant confirmedAt
-) {
+        Instant confirmedAt) {
 
     public static final String PENDING = "PENDING";
     public static final String CONFIRMED = "CONFIRMED";
@@ -33,22 +32,52 @@ public record AlarmRecoveryState(
 
     public AlarmRecoveryState confirmed(String actor, boolean healthPassed, String confirmationNote, Instant now) {
         return new AlarmRecoveryState(
-                fingerprint, alarmId, severity, policyId, recoverExpression, candidateAt, confirmAfter,
-                manualConfirmationRequired, CONFIRMED, actor, healthPassed, confirmationNote, now
-        );
+                fingerprint,
+                alarmId,
+                severity,
+                policyId,
+                recoverExpression,
+                candidateAt,
+                confirmAfter,
+                manualConfirmationRequired,
+                CONFIRMED,
+                actor,
+                healthPassed,
+                confirmationNote,
+                now);
     }
 
     public AlarmRecoveryState cancelled(String cancellationNote, Instant now) {
         return new AlarmRecoveryState(
-                fingerprint, alarmId, severity, policyId, recoverExpression, candidateAt, confirmAfter,
-                manualConfirmationRequired, CANCELLED, null, false, cancellationNote, now
-        );
+                fingerprint,
+                alarmId,
+                severity,
+                policyId,
+                recoverExpression,
+                candidateAt,
+                confirmAfter,
+                manualConfirmationRequired,
+                CANCELLED,
+                null,
+                false,
+                cancellationNote,
+                now);
     }
 
     public AlarmRecoveryState timedOut(String timeoutNote, Instant now) {
         return new AlarmRecoveryState(
-                fingerprint, alarmId, severity, policyId, recoverExpression, candidateAt, confirmAfter,
-                manualConfirmationRequired, TIMED_OUT, null, false, timeoutNote, now
-        );
+                fingerprint,
+                alarmId,
+                severity,
+                policyId,
+                recoverExpression,
+                candidateAt,
+                confirmAfter,
+                manualConfirmationRequired,
+                TIMED_OUT,
+                null,
+                false,
+                timeoutNote,
+                now);
     }
 }

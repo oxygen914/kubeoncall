@@ -1,5 +1,17 @@
 package com.kubeoncall.service;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+
+import java.time.Instant;
+import java.util.List;
+import java.util.Map;
+
+import org.junit.jupiter.api.Test;
+
 import com.kubeoncall.domain.audit.ExecutionAuditRecord;
 import com.kubeoncall.domain.audit.ExecutionRequestType;
 import com.kubeoncall.domain.graph.GraphState;
@@ -11,17 +23,9 @@ import com.kubeoncall.domain.task.Task;
 import com.kubeoncall.domain.task.TaskPlan;
 import com.kubeoncall.domain.task.TaskType;
 import com.kubeoncall.service.audit.ExecutionAuditRepository;
-import org.junit.jupiter.api.Test;
-
-import java.time.Instant;
-import java.util.List;
-import java.util.Map;
-
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.verify;
+import com.kubeoncall.service.audit.ExecutionAuditStatistics;
+import com.kubeoncall.service.audit.GraphAuditMetadataFactory;
+import com.kubeoncall.service.audit.OperationAuditRecordFactory;
 
 class ExecutionAuditServiceTest {
 
@@ -29,7 +33,12 @@ class ExecutionAuditServiceTest {
     void shouldPersistGraphExecutionMetadata() {
         ExecutionAuditRepository repository = mock(ExecutionAuditRepository.class);
         KubeOnCallMetricsService metricsService = mock(KubeOnCallMetricsService.class);
-        ExecutionAuditService auditService = new ExecutionAuditService(repository, metricsService);
+        ExecutionAuditService auditService = new ExecutionAuditService(
+                repository,
+                metricsService,
+                new OperationAuditRecordFactory(),
+                new GraphAuditMetadataFactory(),
+                new ExecutionAuditStatistics());
 
         GraphState state = new GraphState();
         state.setExecutionId("exec-1");
@@ -41,30 +50,27 @@ class ExecutionAuditServiceTest {
         state.getContext().put("activatedSkillIds", List.of("payment-oom-triage"));
         state.getContext().put("activatedSkillMaxRisk", "LOW");
         state.getContext().put("injectedMemoryCount", 2);
-        state.getContext().put("executorPayload", Map.of(
-                "executorKind", "kubernetes",
-                "action", "describeResource",
-                "toolName", "kubernetes.describeResource",
-                "dryRun", true
-        ));
+        state.getContext()
+                .put(
+                        "executorPayload",
+                        Map.of(
+                                "executorKind", "kubernetes",
+                                "action", "describeResource",
+                                "toolName", "kubernetes.describeResource",
+                                "dryRun", true));
         state.getContext().put("executorResult", Map.of("status", "success", "message", "described"));
 
         Task task = new Task(
-                "task-1",
-                "describe pod",
-                TaskType.QUERY_METRICS,
-                RiskLevel.LOW,
-                "payment-service",
-                Map.of(),
-                null
-        );
+                "task-1", "describe pod", TaskType.QUERY_METRICS, RiskLevel.LOW, "payment-service", Map.of(), null);
         state.setTaskPlan(new TaskPlan("exec-1", "describe payment pod", List.of(task), Instant.now(), false));
         state.setCurrentTask(task);
         state.addNodeResult(new NodeResult("executorExecuteNode", NodeStatus.SUCCESS, "ok", Map.of()));
 
-        auditService.recordGraphExecution(ExecutionRequestType.ASK, state, Instant.now().minusMillis(10));
+        auditService.recordGraphExecution(
+                ExecutionRequestType.ASK, state, Instant.now().minusMillis(10));
 
-        org.mockito.ArgumentCaptor<ExecutionAuditRecord> recordCaptor = org.mockito.ArgumentCaptor.forClass(ExecutionAuditRecord.class);
+        org.mockito.ArgumentCaptor<ExecutionAuditRecord> recordCaptor =
+                org.mockito.ArgumentCaptor.forClass(ExecutionAuditRecord.class);
         verify(repository).save(recordCaptor.capture());
         Map<String, Object> metadata = recordCaptor.getValue().metadata();
         assertEquals("session-1", metadata.get("sessionId"));
@@ -83,11 +89,14 @@ class ExecutionAuditServiceTest {
     void shouldPersistMemoryOperationAudit() {
         ExecutionAuditRepository repository = mock(ExecutionAuditRepository.class);
         ExecutionAuditService auditService = new ExecutionAuditService(
-                repository, mock(KubeOnCallMetricsService.class));
+                repository,
+                mock(KubeOnCallMetricsService.class),
+                new OperationAuditRecordFactory(),
+                new GraphAuditMetadataFactory(),
+                new ExecutionAuditStatistics());
 
         auditService.recordMemoryOperation(
-                "restore", "success", "restored memory-1", Instant.now(),
-                Map.of("memoryId", "memory-1"));
+                "restore", "success", "restored memory-1", Instant.now(), Map.of("memoryId", "memory-1"));
 
         org.mockito.ArgumentCaptor<ExecutionAuditRecord> recordCaptor =
                 org.mockito.ArgumentCaptor.forClass(ExecutionAuditRecord.class);
@@ -101,11 +110,14 @@ class ExecutionAuditServiceTest {
     void shouldPersistKnowledgeOperationAudit() {
         ExecutionAuditRepository repository = mock(ExecutionAuditRepository.class);
         ExecutionAuditService auditService = new ExecutionAuditService(
-                repository, mock(KubeOnCallMetricsService.class));
+                repository,
+                mock(KubeOnCallMetricsService.class),
+                new OperationAuditRecordFactory(),
+                new GraphAuditMetadataFactory(),
+                new ExecutionAuditStatistics());
 
         auditService.recordKnowledgeOperation(
-                "query", "success", "retrieved knowledge", Instant.now(),
-                Map.of("resultCount", 2));
+                "query", "success", "retrieved knowledge", Instant.now(), Map.of("resultCount", 2));
 
         org.mockito.ArgumentCaptor<ExecutionAuditRecord> recordCaptor =
                 org.mockito.ArgumentCaptor.forClass(ExecutionAuditRecord.class);
@@ -119,10 +131,13 @@ class ExecutionAuditServiceTest {
     void shouldPersistSkillOperationAudit() {
         ExecutionAuditRepository repository = mock(ExecutionAuditRepository.class);
         ExecutionAuditService auditService = new ExecutionAuditService(
-                repository, mock(KubeOnCallMetricsService.class));
+                repository,
+                mock(KubeOnCallMetricsService.class),
+                new OperationAuditRecordFactory(),
+                new GraphAuditMetadataFactory(),
+                new ExecutionAuditStatistics());
 
-        auditService.recordSkillOperation(
-                "reload", "success", "skills reloaded", Instant.now(), Map.of("loaded", 4));
+        auditService.recordSkillOperation("reload", "success", "skills reloaded", Instant.now(), Map.of("loaded", 4));
 
         org.mockito.ArgumentCaptor<ExecutionAuditRecord> recordCaptor =
                 org.mockito.ArgumentCaptor.forClass(ExecutionAuditRecord.class);

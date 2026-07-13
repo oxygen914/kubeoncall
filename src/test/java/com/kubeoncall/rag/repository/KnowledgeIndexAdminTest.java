@@ -1,16 +1,5 @@
 package com.kubeoncall.rag.repository;
 
-import com.kubeoncall.common.config.KubeOnCallProperties;
-import org.junit.jupiter.api.Test;
-import org.mockito.ArgumentCaptor;
-import org.springframework.data.elasticsearch.client.elc.ElasticsearchTemplate;
-import org.springframework.data.elasticsearch.core.IndexOperations;
-import org.springframework.data.elasticsearch.core.document.Document;
-import org.springframework.data.elasticsearch.core.index.AliasData;
-
-import java.util.Map;
-import java.util.Set;
-
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -20,6 +9,18 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+
+import java.util.Map;
+import java.util.Set;
+
+import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
+import org.springframework.data.elasticsearch.client.elc.ElasticsearchTemplate;
+import org.springframework.data.elasticsearch.core.IndexOperations;
+import org.springframework.data.elasticsearch.core.document.Document;
+import org.springframework.data.elasticsearch.core.index.AliasData;
+
+import com.kubeoncall.common.config.KubeOnCallProperties;
 
 class KnowledgeIndexAdminTest {
 
@@ -57,7 +58,8 @@ class KnowledgeIndexAdminTest {
 
         assertThrows(IllegalArgumentException.class, () -> admin.ensureVectorMapping(8));
 
-        verify(template, never()).indexOps(any(org.springframework.data.elasticsearch.core.mapping.IndexCoordinates.class));
+        verify(template, never())
+                .indexOps(any(org.springframework.data.elasticsearch.core.mapping.IndexCoordinates.class));
     }
 
     @Test
@@ -69,8 +71,8 @@ class KnowledgeIndexAdminTest {
         when(template.indexOps(any(org.springframework.data.elasticsearch.core.mapping.IndexCoordinates.class)))
                 .thenReturn(operations);
         when(operations.exists()).thenReturn(true);
-        when(operations.getMapping()).thenReturn(Map.of(
-                "properties", Map.of("embedding", Map.of("type", "dense_vector", "dims", 8))));
+        when(operations.getMapping())
+                .thenReturn(Map.of("properties", Map.of("embedding", Map.of("type", "dense_vector", "dims", 8))));
         KnowledgeIndexAdmin admin = new KnowledgeIndexAdmin(template, properties);
 
         assertThrows(IllegalStateException.class, () -> admin.ensureVectorMapping(384));
@@ -109,13 +111,15 @@ class KnowledgeIndexAdminTest {
         when(template.indexOps(any(org.springframework.data.elasticsearch.core.mapping.IndexCoordinates.class)))
                 .thenReturn(operations);
         when(operations.exists()).thenReturn(true);
-        when(operations.getMapping()).thenReturn(Map.of("properties", Map.of(
-                "embedding", Map.of("type", "dense_vector", "dims", 32),
-                "metadata", Map.of("type", "object"))));
+        when(operations.getMapping())
+                .thenReturn(Map.of(
+                        "properties",
+                        Map.of(
+                                "embedding", Map.of("type", "dense_vector", "dims", 32),
+                                "metadata", Map.of("type", "object"))));
         KnowledgeIndexAdmin admin = new KnowledgeIndexAdmin(template, properties);
 
-        IllegalStateException error = assertThrows(
-                IllegalStateException.class, () -> admin.ensureVectorMapping(32));
+        IllegalStateException error = assertThrows(IllegalStateException.class, () -> admin.ensureVectorMapping(32));
 
         assertTrue(error.getMessage().contains("use a new index and reimport"));
         verify(operations, never()).putMapping(any(Document.class));
@@ -149,8 +153,7 @@ class KnowledgeIndexAdminTest {
         when(template.indexOps(any(org.springframework.data.elasticsearch.core.mapping.IndexCoordinates.class)))
                 .thenReturn(operations);
         when(operations.exists()).thenReturn(true);
-        when(operations.getAliases("knowledge-active"))
-                .thenReturn(Map.of("knowledge-v1", Set.<AliasData>of()));
+        when(operations.getAliases("knowledge-active")).thenReturn(Map.of("knowledge-v1", Set.<AliasData>of()));
         when(operations.alias(any())).thenReturn(true);
         KnowledgeIndexAdmin admin = new KnowledgeIndexAdmin(template, properties);
 

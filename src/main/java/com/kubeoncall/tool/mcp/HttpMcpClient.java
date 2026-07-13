@@ -1,13 +1,14 @@
 package com.kubeoncall.tool.mcp;
 
-import com.kubeoncall.common.config.KubeOnCallProperties;
-import com.kubeoncall.tool.http.ToolHttpClient;
+import java.util.LinkedHashMap;
+import java.util.Map;
+
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Primary;
 import org.springframework.stereotype.Component;
 
-import java.util.LinkedHashMap;
-import java.util.Map;
+import com.kubeoncall.common.config.KubeOnCallProperties;
+import com.kubeoncall.tool.http.ToolHttpClient;
 
 @Component
 @Primary
@@ -34,10 +35,6 @@ public class HttpMcpClient implements McpClient {
         metadata.put("tool", toolName);
 
         return toolHttpClient.post(
-                properties.getMcp().getEndpoint(),
-                request,
-                properties.getMcp().getTimeoutMillis(),
-                metadata
-        );
+                properties.getMcp().getEndpoint(), request, properties.getMcp().getTimeoutMillis(), metadata);
     }
 }

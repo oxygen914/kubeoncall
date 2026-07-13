@@ -1,10 +1,11 @@
 package com.kubeoncall.agent.verifier;
 
-import com.kubeoncall.agent.base.PipelineAgent;
-import com.kubeoncall.agent.node.AgentNode;
+import java.util.List;
+
 import org.springframework.stereotype.Component;
 
-import java.util.List;
+import com.kubeoncall.agent.base.PipelineAgent;
+import com.kubeoncall.agent.node.AgentNode;
 
 @Component
 public class VerifierAgent extends PipelineAgent {

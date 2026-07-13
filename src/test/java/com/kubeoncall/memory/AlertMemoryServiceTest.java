@@ -1,16 +1,5 @@
 package com.kubeoncall.memory;
 
-import com.kubeoncall.alarm.domain.AlarmResourceType;
-import com.kubeoncall.alarm.domain.AlarmSeverity;
-import com.kubeoncall.alarm.domain.AlarmStatus;
-import com.kubeoncall.alarm.domain.NormalizedAlarmEvent;
-import com.kubeoncall.common.config.KubeOnCallProperties;
-import org.junit.jupiter.api.Test;
-
-import java.time.Instant;
-import java.util.List;
-import java.util.Map;
-
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -18,6 +7,18 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+
+import java.time.Instant;
+import java.util.List;
+import java.util.Map;
+
+import org.junit.jupiter.api.Test;
+
+import com.kubeoncall.alarm.domain.AlarmResourceType;
+import com.kubeoncall.alarm.domain.AlarmSeverity;
+import com.kubeoncall.alarm.domain.AlarmStatus;
+import com.kubeoncall.alarm.domain.NormalizedAlarmEvent;
+import com.kubeoncall.common.config.KubeOnCallProperties;
 
 class AlertMemoryServiceTest {
 
@@ -46,8 +47,8 @@ class AlertMemoryServiceTest {
 
         service.rememberResolution(event(), "reduced memory limit spike");
 
-        verify(memoryService).remember(org.mockito.ArgumentMatchers.argThat(entry ->
-                entry.type() == MemoryType.INCIDENT_SUMMARY
+        verify(memoryService)
+                .remember(org.mockito.ArgumentMatchers.argThat(entry -> entry.type() == MemoryType.INCIDENT_SUMMARY
                         && "fp-1".equals(entry.fingerprint())
                         && "payment-service".equals(entry.service())));
     }
@@ -64,8 +65,7 @@ class AlertMemoryServiceTest {
                 "fp-1",
                 Instant.now(),
                 Instant.now(),
-                Map.of()
-        );
+                Map.of());
     }
 
     private NormalizedAlarmEvent event() {
@@ -92,7 +92,6 @@ class AlertMemoryServiceTest {
                 AlarmStatus.FIRING,
                 Instant.now(),
                 "oom",
-                Map.of()
-        );
+                Map.of());
     }
 }

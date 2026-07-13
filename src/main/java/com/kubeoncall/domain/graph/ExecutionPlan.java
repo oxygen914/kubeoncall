@@ -11,6 +11,4 @@ public record ExecutionPlan(
         List<String> missingParameters,
         Map<String, String> parameterSources,
         String executionSummary,
-        String retryHint
-) {
-}
+        String retryHint) {}

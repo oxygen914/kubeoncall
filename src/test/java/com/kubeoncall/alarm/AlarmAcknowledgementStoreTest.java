@@ -1,21 +1,22 @@
 package com.kubeoncall.alarm;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.kubeoncall.alarm.state.AlarmAcknowledgementStore;
-import org.junit.jupiter.api.Test;
-import org.mockito.ArgumentCaptor;
-import org.springframework.data.redis.core.StringRedisTemplate;
-import org.springframework.data.redis.core.ValueOperations;
-
-import java.time.Duration;
-import java.util.Optional;
-
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+
+import java.time.Duration;
+import java.util.Optional;
+
+import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
+import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.data.redis.core.ValueOperations;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.kubeoncall.alarm.state.AlarmAcknowledgementStore;
 
 class AlarmAcknowledgementStoreTest {
 
@@ -26,12 +27,8 @@ class AlarmAcknowledgementStoreTest {
         when(redisTemplate.opsForValue()).thenReturn(valueOperations);
         AlarmAcknowledgementStore store = new AlarmAcknowledgementStore(redisTemplate, new ObjectMapper());
 
-        AlarmAcknowledgementStore.AlarmAcknowledgement written = store.acknowledge(
-                "fp-ack",
-                "oncall-user",
-                "investigating",
-                Duration.ofSeconds(900)
-        );
+        AlarmAcknowledgementStore.AlarmAcknowledgement written =
+                store.acknowledge("fp-ack", "oncall-user", "investigating", Duration.ofSeconds(900));
 
         ArgumentCaptor<String> rawCaptor = ArgumentCaptor.forClass(String.class);
         verify(valueOperations).set(eq("alarm-ack:fp-ack"), rawCaptor.capture(), eq(Duration.ofSeconds(900)));

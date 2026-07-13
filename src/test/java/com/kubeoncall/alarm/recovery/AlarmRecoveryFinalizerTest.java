@@ -1,19 +1,20 @@
 package com.kubeoncall.alarm.recovery;
 
-import com.kubeoncall.alarm.domain.AlarmSeverity;
-import com.kubeoncall.tool.ToolExecutor;
-import org.junit.jupiter.api.Test;
-
-import java.time.Instant;
-import java.util.List;
-import java.util.Map;
-
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+
+import java.time.Instant;
+import java.util.List;
+import java.util.Map;
+
+import org.junit.jupiter.api.Test;
+
+import com.kubeoncall.alarm.domain.AlarmSeverity;
+import com.kubeoncall.tool.ToolExecutor;
 
 class AlarmRecoveryFinalizerTest {
 
@@ -26,7 +27,8 @@ class AlarmRecoveryFinalizerTest {
         when(incident.execute(eq("createPostmortem"), any())).thenReturn(ok());
         AlarmRecoveryFinalizer finalizer = new AlarmRecoveryFinalizer(List.of(alertmanager, incident));
 
-        AlarmRecoveryFinalizer.RecoveryActions result = finalizer.finalizeRecovery(state(AlarmSeverity.P1), "oncall", "healthy");
+        AlarmRecoveryFinalizer.RecoveryActions result =
+                finalizer.finalizeRecovery(state(AlarmSeverity.P1), "oncall", "healthy");
 
         assertTrue(result.success());
         assertTrue(result.postmortemRequired());
@@ -48,9 +50,18 @@ class AlarmRecoveryFinalizerTest {
     private static AlarmRecoveryState state(AlarmSeverity severity) {
         Instant now = Instant.now();
         return new AlarmRecoveryState(
-                "fp-finalize", "alarm-finalize", severity, "policy-1", "healthy for 10m",
-                now.minusSeconds(900), now.minusSeconds(300), true, AlarmRecoveryState.CONFIRMED,
-                "oncall", true, "healthy", now
-        );
+                "fp-finalize",
+                "alarm-finalize",
+                severity,
+                "policy-1",
+                "healthy for 10m",
+                now.minusSeconds(900),
+                now.minusSeconds(300),
+                true,
+                AlarmRecoveryState.CONFIRMED,
+                "oncall",
+                true,
+                "healthy",
+                now);
     }
 }

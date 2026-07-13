@@ -1,13 +1,14 @@
 package com.kubeoncall.rag;
 
-import com.kubeoncall.common.config.KubeOnCallProperties;
-import com.kubeoncall.domain.rag.KnowledgeDocument;
-import com.kubeoncall.tool.http.ToolHttpClient;
-import org.springframework.stereotype.Component;
-
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+
+import org.springframework.stereotype.Component;
+
+import com.kubeoncall.common.config.KubeOnCallProperties;
+import com.kubeoncall.domain.rag.KnowledgeDocument;
+import com.kubeoncall.tool.http.ToolHttpClient;
 
 @Component
 public class HttpCrossEncoderReranker implements CrossEncoderReranker {
@@ -41,14 +42,18 @@ public class HttpCrossEncoderReranker implements CrossEncoderReranker {
         Map<String, Object> response = toolHttpClient.post(
                 properties.getRag().getCrossEncoderEndpoint(),
                 Map.of(
-                        "model", properties.getRag().getCrossEncoderModel(),
-                        "query", query == null ? "" : query,
-                        "documents", items,
-                        "top_n", Math.min(documents.size(), Math.max(1, properties.getRag().getRerankTopN()))
-                ),
+                        "model",
+                        properties.getRag().getCrossEncoderModel(),
+                        "query",
+                        query == null ? "" : query,
+                        "documents",
+                        items,
+                        "top_n",
+                        Math.min(
+                                documents.size(),
+                                Math.max(1, properties.getRag().getRerankTopN()))),
                 properties.getRag().getCrossEncoderTimeoutMillis(),
-                Map.of("targetSystem", "cross-encoder", "tool", "crossEncoder.rerank")
-        );
+                Map.of("targetSystem", "cross-encoder", "tool", "crossEncoder.rerank"));
         if (!"success".equalsIgnoreCase(String.valueOf(response.get("status")))) {
             return Map.of();
         }

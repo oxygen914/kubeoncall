@@ -1,14 +1,15 @@
 package com.kubeoncall.alarm.policy;
 
-import com.kubeoncall.alarm.domain.NormalizedAlarmEvent;
-import org.springframework.stereotype.Service;
-
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.HexFormat;
 import java.util.Map;
 import java.util.TreeMap;
+
+import org.springframework.stereotype.Service;
+
+import com.kubeoncall.alarm.domain.NormalizedAlarmEvent;
 
 /**
  * Computes a stable fingerprint for a normalized alarm event.
@@ -28,23 +29,24 @@ import java.util.TreeMap;
 public class AlarmFingerprintService {
 
     /** Labels that participate in fingerprinting; transient/runtime labels are excluded. */
-    private static final java.util.Set<String> STABLE_LABELS = java.util.Set.of(
-            "team", "env", "tier", "instance", "fstype", "mountpoint", "severity_hint");
+    private static final java.util.Set<String> STABLE_LABELS =
+            java.util.Set.of("team", "env", "tier", "instance", "fstype", "mountpoint", "severity_hint");
 
     /**
      * Resolve a fingerprint for the given event fields. If an explicit {@code existing} fingerprint
      * or {@code dedupKey} is present, it is returned unchanged.
      */
-    public String fingerprint(String existingFingerprint,
-                              String dedupKey,
-                              String alertName,
-                              String cluster,
-                              String namespace,
-                              String resourceType,
-                              String resourceName,
-                              String service,
-                              String metricName,
-                              Map<String, String> labels) {
+    public String fingerprint(
+            String existingFingerprint,
+            String dedupKey,
+            String alertName,
+            String cluster,
+            String namespace,
+            String resourceType,
+            String resourceName,
+            String service,
+            String metricName,
+            Map<String, String> labels) {
         if (existingFingerprint != null && !existingFingerprint.isBlank()) {
             return existingFingerprint;
         }
@@ -75,14 +77,15 @@ public class AlarmFingerprintService {
         return raw == null ? null : String.valueOf(raw);
     }
 
-    private static String buildFingerprintSource(String alertName,
-                                                 String cluster,
-                                                 String namespace,
-                                                 String resourceType,
-                                                 String resourceName,
-                                                 String service,
-                                                 String metricName,
-                                                 Map<String, String> labels) {
+    private static String buildFingerprintSource(
+            String alertName,
+            String cluster,
+            String namespace,
+            String resourceType,
+            String resourceName,
+            String service,
+            String metricName,
+            Map<String, String> labels) {
         StringBuilder sb = new StringBuilder();
         append(sb, "alertName", alertName);
         append(sb, "cluster", cluster);

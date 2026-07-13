@@ -1,12 +1,12 @@
 package com.kubeoncall.rag.repository;
 
-import com.kubeoncall.domain.rag.KnowledgeDocument;
-import com.kubeoncall.domain.rag.RetrievalRequest;
-import com.kubeoncall.domain.rag.RetrievalHit;
-
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+
+import com.kubeoncall.domain.rag.KnowledgeDocument;
+import com.kubeoncall.domain.rag.RetrievalHit;
+import com.kubeoncall.domain.rag.RetrievalRequest;
 
 public interface KnowledgeRepository {
 
@@ -20,15 +20,12 @@ public interface KnowledgeRepository {
         return toHits(searchLexical(request, candidateSize), "LEXICAL");
     }
 
-    default List<RetrievalHit> searchVectorHits(RetrievalRequest request,
-                                                int candidateSize,
-                                                List<Double> queryVector) {
+    default List<RetrievalHit> searchVectorHits(RetrievalRequest request, int candidateSize, List<Double> queryVector) {
         return toHits(searchVector(request, candidateSize, queryVector), "VECTOR");
     }
 
-    default List<KnowledgeDocument> searchVector(RetrievalRequest request,
-                                                 int candidateSize,
-                                                 List<Double> queryVector) {
+    default List<KnowledgeDocument> searchVector(
+            RetrievalRequest request, int candidateSize, List<Double> queryVector) {
         return searchVector(request, candidateSize);
     }
 
@@ -38,8 +35,7 @@ public interface KnowledgeRepository {
         return Optional.empty();
     }
 
-    default void deleteById(String documentId) {
-    }
+    default void deleteById(String documentId) {}
 
     default List<KnowledgeDocument> search(RetrievalRequest request) {
         return searchLexical(request, Math.max(1, request.topK()));

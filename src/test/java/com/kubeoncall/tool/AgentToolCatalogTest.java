@@ -1,15 +1,16 @@
 package com.kubeoncall.tool;
 
-import com.kubeoncall.domain.task.TaskType;
-import com.kubeoncall.tool.mcp.McpToolRegistry;
-import org.junit.jupiter.api.Test;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 
 import java.util.List;
 import java.util.Map;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertNull;
+import org.junit.jupiter.api.Test;
+
+import com.kubeoncall.domain.task.TaskType;
+import com.kubeoncall.tool.mcp.McpToolRegistry;
 
 class AgentToolCatalogTest {
 
@@ -43,8 +44,7 @@ class AgentToolCatalogTest {
                                 false,
                                 List.of(TaskType.QUERY_METRICS),
                                 List.of("resourceType", "resourceName"),
-                                List.of("k8s")
-                        ),
+                                List.of("k8s")),
                         new ToolDefinition(
                                 "kubernetes.scaleWorkload",
                                 "kubernetes",
@@ -53,9 +53,7 @@ class AgentToolCatalogTest {
                                 true,
                                 List.of(TaskType.SCALE_WORKLOAD),
                                 List.of("namespace", "replicas"),
-                                List.of("k8s")
-                        )
-                );
+                                List.of("k8s")));
             }
 
             @Override

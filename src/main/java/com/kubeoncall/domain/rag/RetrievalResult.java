@@ -9,6 +9,4 @@ public record RetrievalResult(
         String route,
         String summary,
         List<String> retrievalReasons,
-        Map<String, Object> diagnostics
-) {
-}
+        Map<String, Object> diagnostics) {}

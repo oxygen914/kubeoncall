@@ -1,14 +1,14 @@
 package com.kubeoncall.domain.graph;
 
-import com.kubeoncall.domain.approval.ApprovalDecision;
-import com.kubeoncall.domain.task.Task;
-import com.kubeoncall.domain.task.TaskPlan;
-
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+
+import com.kubeoncall.domain.approval.ApprovalDecision;
+import com.kubeoncall.domain.task.Task;
+import com.kubeoncall.domain.task.TaskPlan;
 
 public class GraphState {
 

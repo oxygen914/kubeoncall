@@ -1,14 +1,15 @@
 package com.kubeoncall.web;
 
-import com.kubeoncall.tool.AgentToolCatalog;
-import com.kubeoncall.tool.ToolDefinition;
-import com.kubeoncall.web.dto.ToolDefinitionResponse;
+import java.util.List;
+import java.util.Map;
+
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.util.List;
-import java.util.Map;
+import com.kubeoncall.tool.AgentToolCatalog;
+import com.kubeoncall.tool.ToolDefinition;
+import com.kubeoncall.web.dto.ToolDefinitionResponse;
 
 @RestController
 @RequestMapping("/api/tools")
@@ -25,8 +26,7 @@ public class ToolController {
         return Map.of(
                 "planner", toResponses(agentToolCatalog.plannerTools()),
                 "executor", toResponses(agentToolCatalog.executorTools()),
-                "verifier", agentToolCatalog.verifierCapabilities()
-        );
+                "verifier", agentToolCatalog.verifierCapabilities());
     }
 
     @GetMapping("/planner")
@@ -54,8 +54,7 @@ public class ToolController {
                         tool.requiresApproval(),
                         tool.supportedTaskTypes().stream().map(Enum::name).toList(),
                         tool.requiredParameters(),
-                        tool.targetSystems()
-                ))
+                        tool.targetSystems()))
                 .toList();
     }
 }

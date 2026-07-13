@@ -22,7 +22,8 @@ public enum AlarmResourceType {
         if (raw == null) {
             return null;
         }
-        String normalized = raw.trim().toUpperCase(Locale.ROOT).replace('-', '_').replace(' ', '_');
+        String normalized =
+                raw.trim().toUpperCase(Locale.ROOT).replace('-', '_').replace(' ', '_');
         for (AlarmResourceType t : values()) {
             if (t.name().equals(normalized)) {
                 return t;

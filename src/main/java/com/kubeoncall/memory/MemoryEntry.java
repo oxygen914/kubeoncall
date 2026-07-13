@@ -15,8 +15,7 @@ public record MemoryEntry(
         String fingerprint,
         Instant createdAt,
         Instant updatedAt,
-        Map<String, String> metadata
-) {
+        Map<String, String> metadata) {
     public MemoryEntry {
         if (id == null || id.isBlank()) {
             id = "memory-" + UUID.randomUUID();

@@ -3,6 +3,8 @@ package com.kubeoncall.web.dto;
 import java.time.Instant;
 import java.util.Map;
 
+import com.kubeoncall.alarm.domain.AlarmIngress;
+
 /**
  * Inbound alarm request.
  *
@@ -37,8 +39,8 @@ public record AlarmRequest(
         Map<String, String> labels,
         Map<String, String> annotations,
         String runbookId,
-        String status
-) {
+        String status)
+        implements AlarmIngress {
 
     /** Compact constructor: tolerate compact canonicalization for legacy callers. */
     public AlarmRequest {

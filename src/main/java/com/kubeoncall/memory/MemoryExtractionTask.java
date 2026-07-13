@@ -15,23 +15,32 @@ public record MemoryExtractionTask(
         String fingerprint,
         Map<String, String> metadata,
         int attempts,
-        Instant createdAt
-) {
+        Instant createdAt) {
     public MemoryExtractionTask {
         metadata = metadata == null ? Map.of() : Map.copyOf(metadata);
     }
 
-    public static MemoryExtractionTask create(MemoryType memoryType,
-                                              MemoryScope scope,
-                                              String subject,
-                                              String content,
-                                              String service,
-                                              String resource,
-                                              String fingerprint,
-                                              Map<String, String> metadata) {
+    public static MemoryExtractionTask create(
+            MemoryType memoryType,
+            MemoryScope scope,
+            String subject,
+            String content,
+            String service,
+            String resource,
+            String fingerprint,
+            Map<String, String> metadata) {
         return new MemoryExtractionTask(
-                UUID.randomUUID().toString(), memoryType, scope, subject, content, service, resource,
-                fingerprint, metadata, 0, Instant.now());
+                UUID.randomUUID().toString(),
+                memoryType,
+                scope,
+                subject,
+                content,
+                service,
+                resource,
+                fingerprint,
+                metadata,
+                0,
+                Instant.now());
     }
 
     public MemoryExtractionTask retry(String error) {
@@ -39,7 +48,16 @@ public record MemoryExtractionTask(
         nextMetadata.put("last_error", error == null ? "unknown" : error);
         nextMetadata.put("last_attempt_at", Instant.now().toString());
         return new MemoryExtractionTask(
-                id, memoryType, scope, subject, content, service, resource, fingerprint,
-                nextMetadata, attempts + 1, createdAt);
+                id,
+                memoryType,
+                scope,
+                subject,
+                content,
+                service,
+                resource,
+                fingerprint,
+                nextMetadata,
+                attempts + 1,
+                createdAt);
     }
 }

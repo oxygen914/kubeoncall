@@ -1,20 +1,20 @@
 package com.kubeoncall.memory;
 
-import com.kubeoncall.common.config.KubeOnCallProperties;
-import com.kubeoncall.domain.graph.GraphState;
-import org.springframework.stereotype.Component;
-
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 
+import org.springframework.stereotype.Component;
+
+import com.kubeoncall.common.config.KubeOnCallProperties;
+import com.kubeoncall.domain.graph.GraphState;
+
 @Component
 public class ContextCompressor {
 
-    private static final List<String> PLANNING_CONTEXT_KEYS = List.of(
-            "skillPrompt", "memoryContext", "sessionContext");
+    private static final List<String> PLANNING_CONTEXT_KEYS = List.of("skillPrompt", "memoryContext", "sessionContext");
 
     private final KubeOnCallProperties properties;
     private final TokenBudget tokenBudget;
@@ -35,7 +35,8 @@ public class ContextCompressor {
                 values.put(key, String.valueOf(value));
             }
         }
-        int beforeTokens = values.values().stream().mapToInt(tokenBudget::estimateTokens).sum();
+        int beforeTokens =
+                values.values().stream().mapToInt(tokenBudget::estimateTokens).sum();
         int budget = Math.max(96, properties.getMemory().getContextTokenBudget());
         if (beforeTokens <= budget || values.isEmpty()) {
             state.getContext().put("contextCompression", compressionTrace(beforeTokens, beforeTokens, List.of()));
@@ -67,32 +68,43 @@ public class ContextCompressor {
         }
         int budget = Math.max(64, properties.getMemory().getObservationTokenBudget());
         int maxEntries = Math.max(2, properties.getMemory().getMaxObservationEntries());
-        int beforeTokens = state.getObservations().stream().mapToInt(tokenBudget::estimateTokens).sum();
+        int beforeTokens = state.getObservations().stream()
+                .mapToInt(tokenBudget::estimateTokens)
+                .sum();
         if (state.getObservations().size() <= maxEntries && beforeTokens <= budget) {
             return;
         }
 
         List<String> original = List.copyOf(state.getObservations());
         int maxRecentByBudget = Math.max(1, (budget * 2 / 3) / 8);
-        int recentCount = Math.min(
-                Math.min(maxEntries - 1, Math.max(1, original.size() / 3)),
-                maxRecentByBudget);
+        int recentCount = Math.min(Math.min(maxEntries - 1, Math.max(1, original.size() / 3)), maxRecentByBudget);
         List<String> early = original.subList(0, original.size() - recentCount);
         List<String> recent = original.subList(original.size() - recentCount, original.size());
         String summary = summarizeObservations(early, Math.max(24, budget / 3));
         int recentBudget = Math.max(1, (budget - tokenBudget.estimateTokens(summary)) / recent.size());
         List<String> compressed = new ArrayList<>();
         compressed.add(summary);
-        recent.stream().map(value -> tokenBudget.compactText(value, recentBudget)).forEach(compressed::add);
+        recent.stream()
+                .map(value -> tokenBudget.compactText(value, recentBudget))
+                .forEach(compressed::add);
         state.getObservations().clear();
         state.getObservations().addAll(compressed);
-        int afterTokens = compressed.stream().mapToInt(tokenBudget::estimateTokens).sum();
-        state.getContext().put("observationCompression", Map.of(
-                "compressed", true,
-                "originalEntries", original.size(),
-                "remainingEntries", compressed.size(),
-                "beforeTokens", beforeTokens,
-                "afterTokens", afterTokens));
+        int afterTokens =
+                compressed.stream().mapToInt(tokenBudget::estimateTokens).sum();
+        state.getContext()
+                .put(
+                        "observationCompression",
+                        Map.of(
+                                "compressed",
+                                true,
+                                "originalEntries",
+                                original.size(),
+                                "remainingEntries",
+                                compressed.size(),
+                                "beforeTokens",
+                                beforeTokens,
+                                "afterTokens",
+                                afterTokens));
     }
 
     private String summarizeObservations(List<String> observations, int budget) {
@@ -102,9 +114,8 @@ public class ContextCompressor {
                 .distinct()
                 .limit(8)
                 .toList();
-        StringBuilder builder = new StringBuilder("[compressed ")
-                .append(observations.size())
-                .append(" earlier observations]");
+        StringBuilder builder =
+                new StringBuilder("[compressed ").append(observations.size()).append(" earlier observations]");
         keyEvents.forEach(event -> builder.append("\n- ").append(event));
         return tokenBudget.compactText(builder.toString(), budget);
     }
@@ -139,10 +150,15 @@ public class ContextCompressor {
 
     private Map<String, Object> compressionTrace(int before, int after, List<String> keys) {
         return Map.of(
-                "compressed", after < before,
-                "beforeTokens", before,
-                "afterTokens", after,
-                "budgetTokens", Math.max(96, properties.getMemory().getContextTokenBudget()),
-                "compressedKeys", List.copyOf(keys));
+                "compressed",
+                after < before,
+                "beforeTokens",
+                before,
+                "afterTokens",
+                after,
+                "budgetTokens",
+                Math.max(96, properties.getMemory().getContextTokenBudget()),
+                "compressedKeys",
+                List.copyOf(keys));
     }
 }

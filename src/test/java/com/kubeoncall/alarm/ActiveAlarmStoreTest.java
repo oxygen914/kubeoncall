@@ -1,5 +1,22 @@
 package com.kubeoncall.alarm;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+
+import java.time.Duration;
+import java.time.Instant;
+import java.util.LinkedHashMap;
+import java.util.Map;
+
+import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
+import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.data.redis.core.ValueOperations;
+
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.kubeoncall.alarm.domain.AlarmEvaluationResult;
@@ -9,27 +26,10 @@ import com.kubeoncall.alarm.domain.NormalizedAlarmEvent;
 import com.kubeoncall.alarm.state.ActiveAlarmState;
 import com.kubeoncall.alarm.state.ActiveAlarmStore;
 import com.kubeoncall.common.config.KubeOnCallProperties;
-import org.junit.jupiter.api.Test;
-import org.mockito.ArgumentCaptor;
-import org.springframework.data.redis.core.StringRedisTemplate;
-import org.springframework.data.redis.core.ValueOperations;
-
-import java.time.Duration;
-import java.time.Instant;
-import java.util.LinkedHashMap;
-import java.util.Map;
-
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
 
 class ActiveAlarmStoreTest {
 
-    private static final TypeReference<Map<String, Object>> MAP_TYPE = new TypeReference<>() {
-    };
+    private static final TypeReference<Map<String, Object>> MAP_TYPE = new TypeReference<>() {};
 
     @Test
     void shouldWriteNewActiveAlarmState() throws Exception {
@@ -94,7 +94,8 @@ class ActiveAlarmStoreTest {
         when(valueOperations.get("alarm-active:fp-3")).thenReturn(objectMapper.writeValueAsString(existing));
         ActiveAlarmStore store = new ActiveAlarmStore(redisTemplate, objectMapper, new KubeOnCallProperties());
 
-        ActiveAlarmState state = store.record(event("fp-3", AlarmStatus.RESOLVED), evaluation(AlarmSeverity.INFO), "fp-3");
+        ActiveAlarmState state =
+                store.record(event("fp-3", AlarmStatus.RESOLVED), evaluation(AlarmSeverity.INFO), "fp-3");
 
         assertEquals(AlarmSeverity.P0, state.severity());
         assertEquals("host-high-cpu-p0", state.policyId());
@@ -104,16 +105,43 @@ class ActiveAlarmStoreTest {
 
     private static NormalizedAlarmEvent event(String fingerprint, AlarmStatus status) {
         return new NormalizedAlarmEvent(
-                "alarm-1", fingerprint, "HostHighCpuUsageP1", "prometheus", "warning", AlarmSeverity.P2,
-                com.kubeoncall.alarm.domain.AlarmResourceType.NODE, "node-a", "cluster-a", "monitoring", "infra",
-                "host.cpu.usage_percent", 72.0, 70.0, "%", "10m",
-                Map.of("team", "infra"), Map.of(), "runbook-host-cpu-high", status,
-                Instant.parse("2026-07-08T01:10:00Z"), "cpu high", Map.of());
+                "alarm-1",
+                fingerprint,
+                "HostHighCpuUsageP1",
+                "prometheus",
+                "warning",
+                AlarmSeverity.P2,
+                com.kubeoncall.alarm.domain.AlarmResourceType.NODE,
+                "node-a",
+                "cluster-a",
+                "monitoring",
+                "infra",
+                "host.cpu.usage_percent",
+                72.0,
+                70.0,
+                "%",
+                "10m",
+                Map.of("team", "infra"),
+                Map.of(),
+                "runbook-host-cpu-high",
+                status,
+                Instant.parse("2026-07-08T01:10:00Z"),
+                "cpu high",
+                Map.of());
     }
 
     private static AlarmEvaluationResult evaluation(AlarmSeverity severity) {
         return new AlarmEvaluationResult(
-                true, null, "host-high-cpu-p1", severity, 70.0, "runbook-host-cpu-high",
-                "cpu > 70", "15m", "host-resource", "matched", java.util.List.of());
+                true,
+                null,
+                "host-high-cpu-p1",
+                severity,
+                70.0,
+                "runbook-host-cpu-high",
+                "cpu > 70",
+                "15m",
+                "host-resource",
+                "matched",
+                java.util.List.of());
     }
 }

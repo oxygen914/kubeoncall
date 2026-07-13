@@ -1,17 +1,18 @@
 package com.kubeoncall.tool.incident;
 
-import com.kubeoncall.common.config.KubeOnCallProperties;
-import com.kubeoncall.tool.http.ToolHttpClient;
-import org.junit.jupiter.api.Test;
-
-import java.util.Map;
-
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+
+import java.util.Map;
+
+import org.junit.jupiter.api.Test;
+
+import com.kubeoncall.common.config.KubeOnCallProperties;
+import com.kubeoncall.tool.http.ToolHttpClient;
 
 class IncidentToolExecutorTest {
 
@@ -26,8 +27,7 @@ class IncidentToolExecutorTest {
         IncidentToolExecutor executor = new IncidentToolExecutor(httpClient, properties);
 
         Map<String, Object> result = executor.execute(
-                "createOrUpdateIncident",
-                Map.of("fingerprint", "fp-1", "severity", "P0", "summary", "critical alarm"));
+                "createOrUpdateIncident", Map.of("fingerprint", "fp-1", "severity", "P0", "summary", "critical alarm"));
 
         assertEquals("success", result.get("status"));
         verify(httpClient).post(eq("http://incident.test/api"), any(), eq(2500), any());

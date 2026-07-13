@@ -1,15 +1,16 @@
 package com.kubeoncall.rag;
 
-import com.kubeoncall.common.config.KubeOnCallProperties;
-import com.kubeoncall.domain.rag.KnowledgeDocument;
-import org.junit.jupiter.api.Test;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import org.junit.jupiter.api.Test;
+
+import com.kubeoncall.common.config.KubeOnCallProperties;
+import com.kubeoncall.domain.rag.KnowledgeDocument;
 
 class KnowledgeChunkerTest {
 
@@ -25,8 +26,7 @@ class KnowledgeChunkerTest {
                 "# Overview\nshort intro\n# Triage\ncheck logs\n# Recover\nrestart only after approval",
                 "manual",
                 Map.of("document_type", "runbook"),
-                Instant.now()
-        );
+                Instant.now());
 
         List<KnowledgeDocument> chunks = chunker.chunk(document);
 

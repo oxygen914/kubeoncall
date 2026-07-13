@@ -1,26 +1,27 @@
 package com.kubeoncall.memory;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
-import com.kubeoncall.common.config.KubeOnCallProperties;
-import org.junit.jupiter.api.Test;
-import org.mockito.ArgumentCaptor;
-import org.springframework.data.redis.core.StringRedisTemplate;
-import org.springframework.data.redis.core.ValueOperations;
-import org.springframework.data.redis.core.SessionCallback;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Optional;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.times;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
+import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
+import org.springframework.data.redis.core.SessionCallback;
+import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.data.redis.core.ValueOperations;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+import com.kubeoncall.common.config.KubeOnCallProperties;
 
 class RedisSessionStoreTest {
 
@@ -38,7 +39,7 @@ class RedisSessionStoreTest {
         KubeOnCallProperties properties = new KubeOnCallProperties();
         properties.getMemory().setSessionTtlSeconds(600);
         properties.getMemory().setMaxSessionTurns(2);
-        RedisSessionStore store = new RedisSessionStore(redisTemplate, objectMapper, properties);
+        RedisSessionStore store = newStore(redisTemplate, objectMapper, properties);
 
         store.append("session-1", new SessionTurn("exec-1", "q1", "a1", "SUCCESS", Instant.now()));
 
@@ -65,10 +66,9 @@ class RedisSessionStoreTest {
                 "session-2",
                 java.util.List.of(new SessionTurn("exec-2", "q2", "a2", "SUCCESS", Instant.now())),
                 Instant.now(),
-                Instant.now()
-        );
+                Instant.now());
         when(valueOperations.get("ask-session:session-2")).thenReturn(objectMapper.writeValueAsString(snapshot));
-        RedisSessionStore store = new RedisSessionStore(redisTemplate, objectMapper, new KubeOnCallProperties());
+        RedisSessionStore store = newStore(redisTemplate, objectMapper, new KubeOnCallProperties());
 
         Optional<SessionSnapshot> loaded = store.find("session-2");
 
@@ -87,7 +87,7 @@ class RedisSessionStoreTest {
         ObjectMapper objectMapper = new ObjectMapper().registerModule(new JavaTimeModule());
         KubeOnCallProperties properties = new KubeOnCallProperties();
         properties.getMemory().setSessionAppendMaxRetries(3);
-        RedisSessionStore store = new RedisSessionStore(redisTemplate, objectMapper, properties);
+        RedisSessionStore store = newStore(redisTemplate, objectMapper, properties);
 
         store.append("session-race", new SessionTurn("exec-race", "q", "a", "SUCCESS", Instant.now()));
 
@@ -101,5 +101,14 @@ class RedisSessionStoreTest {
             SessionCallback callback = invocation.getArgument(0);
             return callback.execute(redisTemplate);
         });
+    }
+
+    private static RedisSessionStore newStore(
+            StringRedisTemplate redisTemplate, ObjectMapper objectMapper, KubeOnCallProperties properties) {
+        return new RedisSessionStore(
+                redisTemplate,
+                objectMapper,
+                properties,
+                new ConversationHistoryCompactor(properties, new TokenBudget()));
     }
 }

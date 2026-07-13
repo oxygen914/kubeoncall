@@ -1,12 +1,13 @@
 package com.kubeoncall.rag;
 
-import com.kubeoncall.common.config.KubeOnCallProperties;
-import com.kubeoncall.tool.http.ToolHttpClient;
-import org.springframework.stereotype.Component;
-
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+
+import org.springframework.stereotype.Component;
+
+import com.kubeoncall.common.config.KubeOnCallProperties;
+import com.kubeoncall.tool.http.ToolHttpClient;
 
 @Component
 public class HttpEmbeddingClient implements EmbeddingClient {
@@ -29,7 +30,7 @@ public class HttpEmbeddingClient implements EmbeddingClient {
     @Override
     public List<Double> embed(String text) {
         Map<String, String> headers = properties.getRag().getEmbeddingApiKey() == null
-                || properties.getRag().getEmbeddingApiKey().isBlank()
+                        || properties.getRag().getEmbeddingApiKey().isBlank()
                 ? Map.of()
                 : Map.of("Authorization", "Bearer " + properties.getRag().getEmbeddingApiKey());
         Map<String, Object> response = toolHttpClient.post(
@@ -37,12 +38,10 @@ public class HttpEmbeddingClient implements EmbeddingClient {
                 Map.of(
                         "model", properties.getRag().getEmbeddingModel(),
                         "input", text == null ? "" : text,
-                        "dimensions", properties.getRag().getEmbeddingDimensions()
-                ),
+                        "dimensions", properties.getRag().getEmbeddingDimensions()),
                 properties.getRag().getEmbeddingTimeoutMillis(),
                 headers,
-                Map.of("targetSystem", "embedding", "tool", "embedding.embed")
-        );
+                Map.of("targetSystem", "embedding", "tool", "embedding.embed"));
         if (!"success".equalsIgnoreCase(String.valueOf(response.get("status")))) {
             return List.of();
         }

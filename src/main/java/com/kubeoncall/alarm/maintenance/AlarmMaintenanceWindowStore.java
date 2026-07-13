@@ -1,16 +1,17 @@
 package com.kubeoncall.alarm.maintenance;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import org.springframework.data.redis.core.StringRedisTemplate;
-import org.springframework.stereotype.Component;
-
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
+
+import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.stereotype.Component;
+
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 @Component
 public class AlarmMaintenanceWindowStore {
@@ -30,9 +31,15 @@ public class AlarmMaintenanceWindowStore {
     public void save(AlarmMaintenanceWindow window) {
         try {
             Duration ttl = Duration.between(Instant.now(), window.endsAt()).plus(RETENTION_AFTER_END);
-            redisTemplate.opsForValue().set(key(window.id()), objectMapper.writeValueAsString(window),
-                    ttl.isNegative() || ttl.isZero() ? Duration.ofHours(1) : ttl);
-            redisTemplate.opsForZSet().add(ACTIVE_INDEX, window.id(), window.endsAt().toEpochMilli());
+            redisTemplate
+                    .opsForValue()
+                    .set(
+                            key(window.id()),
+                            objectMapper.writeValueAsString(window),
+                            ttl.isNegative() || ttl.isZero() ? Duration.ofHours(1) : ttl);
+            redisTemplate
+                    .opsForZSet()
+                    .add(ACTIVE_INDEX, window.id(), window.endsAt().toEpochMilli());
         } catch (JsonProcessingException ex) {
             throw new IllegalStateException("Failed to serialize maintenance window", ex);
         }
@@ -56,8 +63,9 @@ public class AlarmMaintenanceWindowStore {
     public List<AlarmMaintenanceWindow> activeAt(Instant now) {
         long epochMillis = now.toEpochMilli();
         redisTemplate.opsForZSet().removeRangeByScore(ACTIVE_INDEX, 0, epochMillis);
-        Set<String> ids = redisTemplate.opsForZSet().rangeByScore(
-                ACTIVE_INDEX, Math.nextUp((double) epochMillis), Double.POSITIVE_INFINITY);
+        Set<String> ids = redisTemplate
+                .opsForZSet()
+                .rangeByScore(ACTIVE_INDEX, Math.nextUp((double) epochMillis), Double.POSITIVE_INFINITY);
         if (ids == null || ids.isEmpty()) {
             return List.of();
         }

@@ -1,14 +1,5 @@
 package com.kubeoncall.skill;
 
-import com.kubeoncall.common.config.KubeOnCallProperties;
-import jakarta.annotation.PostConstruct;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.springframework.core.io.Resource;
-import org.springframework.core.io.support.PathMatchingResourcePatternResolver;
-import org.springframework.stereotype.Component;
-import org.springframework.beans.factory.annotation.Autowired;
-
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -16,6 +7,16 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+
+import jakarta.annotation.PostConstruct;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.core.io.Resource;
+import org.springframework.core.io.support.PathMatchingResourcePatternResolver;
+import org.springframework.stereotype.Component;
+
+import com.kubeoncall.common.config.KubeOnCallProperties;
 
 @Component
 public class SkillRegistry {
@@ -29,14 +30,7 @@ public class SkillRegistry {
     private volatile List<Skill> skills = List.of();
     private volatile List<String> loadErrors = List.of();
 
-    public SkillRegistry(KubeOnCallProperties properties, SkillFrontmatterParser parser) {
-        this(properties, parser, null);
-    }
-
-    @Autowired
-    public SkillRegistry(KubeOnCallProperties properties,
-                         SkillFrontmatterParser parser,
-                         SkillStateStore stateStore) {
+    public SkillRegistry(KubeOnCallProperties properties, SkillFrontmatterParser parser, SkillStateStore stateStore) {
         this.properties = properties;
         this.parser = parser;
         this.stateStore = stateStore;
@@ -57,22 +51,21 @@ public class SkillRegistry {
         List<String> errors = new ArrayList<>();
         loadLocation(properties.getSkill().getLocation(), SkillSource.BUILTIN, loaded, errors);
         int builtinCount = loaded.size();
-        int projectLoaded = loadLocation(
-                properties.getSkill().getProjectLocation(), SkillSource.PROJECT, loaded, errors);
-        skills = loaded.values().stream()
-                .sorted(Comparator.comparing(Skill::id))
-                .toList();
+        int projectLoaded =
+                loadLocation(properties.getSkill().getProjectLocation(), SkillSource.PROJECT, loaded, errors);
+        skills =
+                loaded.values().stream().sorted(Comparator.comparing(Skill::id)).toList();
         loadErrors = List.copyOf(errors);
         int overrides = Math.max(0, builtinCount + projectLoaded - skills.size());
-        log.info("Loaded {} KubeOnCall skills (project overrides={}, errors={})",
-                skills.size(), overrides, errors.size());
+        log.info(
+                "Loaded {} KubeOnCall skills (project overrides={}, errors={})",
+                skills.size(),
+                overrides,
+                errors.size());
         return new ReloadResult(skills.size(), overrides, loadErrors);
     }
 
-    private int loadLocation(String location,
-                             SkillSource source,
-                             Map<String, Skill> target,
-                             List<String> errors) {
+    private int loadLocation(String location, SkillSource source, Map<String, Skill> target, List<String> errors) {
         if (location == null || location.isBlank()) {
             return 0;
         }
@@ -104,9 +97,6 @@ public class SkillRegistry {
     }
 
     public List<Skill> all() {
-        if (stateStore == null) {
-            return skills;
-        }
         java.util.Set<String> disabled = stateStore.disabledIds();
         return skills.stream().filter(skill -> !disabled.contains(skill.id())).toList();
     }
@@ -121,17 +111,11 @@ public class SkillRegistry {
 
     public void disable(String id) {
         requireKnown(id);
-        if (stateStore == null) {
-            throw new IllegalStateException("Skill state store is unavailable");
-        }
         stateStore.disable(id);
     }
 
     public void enable(String id) {
         requireKnown(id);
-        if (stateStore == null) {
-            throw new IllegalStateException("Skill state store is unavailable");
-        }
         stateStore.enable(id);
     }
 
@@ -142,21 +126,27 @@ public class SkillRegistry {
     }
 
     public List<Map<String, Object>> index() {
-        java.util.Set<String> disabled = stateStore == null ? java.util.Set.of() : stateStore.disabledIds();
-        return skills.stream().map(skill -> {
-            Map<String, Object> item = new LinkedHashMap<>();
-            item.put("id", skill.id());
-            item.put("name", skill.name());
-            item.put("description", skill.description());
-            item.put("triggers", skill.triggers());
-            item.put("services", skill.services());
-            item.put("maxRisk", skill.maxRisk() == null ? null : skill.maxRisk().name());
-            item.put("version", skill.version());
-            item.put("source", skill.source() == null ? null : skill.source().name());
-            item.put("skillPath", skill.skillPath());
-            item.put("enabled", !disabled.contains(skill.id()));
-            return item;
-        }).toList();
+        java.util.Set<String> disabled = stateStore.disabledIds();
+        return skills.stream()
+                .map(skill -> {
+                    Map<String, Object> item = new LinkedHashMap<>();
+                    item.put("id", skill.id());
+                    item.put("name", skill.name());
+                    item.put("description", skill.description());
+                    item.put("triggers", skill.triggers());
+                    item.put("services", skill.services());
+                    item.put(
+                            "maxRisk",
+                            skill.maxRisk() == null ? null : skill.maxRisk().name());
+                    item.put("version", skill.version());
+                    item.put(
+                            "source",
+                            skill.source() == null ? null : skill.source().name());
+                    item.put("skillPath", skill.skillPath());
+                    item.put("enabled", !disabled.contains(skill.id()));
+                    return item;
+                })
+                .toList();
     }
 
     public String indexForPrompt() {
@@ -183,6 +173,5 @@ public class SkillRegistry {
         return loadErrors;
     }
 
-    public record ReloadResult(int loaded, int projectOverrides, List<String> errors) {
-    }
+    public record ReloadResult(int loaded, int projectOverrides, List<String> errors) {}
 }

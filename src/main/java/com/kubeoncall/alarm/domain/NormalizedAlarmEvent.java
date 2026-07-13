@@ -38,8 +38,7 @@ public record NormalizedAlarmEvent(
         AlarmStatus status,
         Instant occurredAt,
         String summary,
-        Map<String, Object> metadata
-) {
+        Map<String, Object> metadata) {
 
     public NormalizedAlarmEvent {
         if (labels == null) {

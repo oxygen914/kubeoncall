@@ -1,12 +1,12 @@
 package com.kubeoncall.rag.repository;
 
+import java.util.List;
+import java.util.Map;
+
 import org.springframework.data.annotation.Id;
 import org.springframework.data.elasticsearch.annotations.Document;
 import org.springframework.data.elasticsearch.annotations.Field;
 import org.springframework.data.elasticsearch.annotations.FieldType;
-
-import java.util.Map;
-import java.util.List;
 
 @Document(indexName = "kubeoncall-knowledge")
 public class EsKnowledgeDocumentEntity {
@@ -35,26 +35,27 @@ public class EsKnowledgeDocumentEntity {
     @Field(type = FieldType.Dense_Vector)
     private List<Float> embedding;
 
-    public EsKnowledgeDocumentEntity() {
-    }
+    public EsKnowledgeDocumentEntity() {}
 
-    public EsKnowledgeDocumentEntity(String id,
-                                     String title,
-                                     String content,
-                                     String source,
-                                     Map<String, String> metadata,
-                                     long createdAtEpochMs) {
+    public EsKnowledgeDocumentEntity(
+            String id,
+            String title,
+            String content,
+            String source,
+            Map<String, String> metadata,
+            long createdAtEpochMs) {
         this(id, title, content, source, metadata, createdAtEpochMs, null, List.of());
     }
 
-    public EsKnowledgeDocumentEntity(String id,
-                                     String title,
-                                     String content,
-                                     String source,
-                                     Map<String, String> metadata,
-                                     long createdAtEpochMs,
-                                     String embeddingText,
-                                     List<Float> embedding) {
+    public EsKnowledgeDocumentEntity(
+            String id,
+            String title,
+            String content,
+            String source,
+            Map<String, String> metadata,
+            long createdAtEpochMs,
+            String embeddingText,
+            List<Float> embedding) {
         this.id = id;
         this.title = title;
         this.content = content;

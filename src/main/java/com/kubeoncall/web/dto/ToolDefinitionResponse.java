@@ -10,6 +10,4 @@ public record ToolDefinitionResponse(
         boolean requiresApproval,
         List<String> supportedTaskTypes,
         List<String> requiredParameters,
-        List<String> targetSystems
-) {
-}
+        List<String> targetSystems) {}

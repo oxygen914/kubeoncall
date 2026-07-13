@@ -1,5 +1,21 @@
 package com.kubeoncall.agent.executor;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+
+import org.junit.jupiter.api.Test;
+
 import com.kubeoncall.domain.graph.ExecutionPlan;
 import com.kubeoncall.domain.graph.GraphState;
 import com.kubeoncall.domain.graph.NodeResult;
@@ -10,21 +26,6 @@ import com.kubeoncall.domain.task.Task;
 import com.kubeoncall.domain.task.TaskType;
 import com.kubeoncall.tool.AgentToolCatalog;
 import com.kubeoncall.tool.ToolDefinition;
-import org.junit.jupiter.api.Test;
-
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
-
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNull;
-import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
 
 class ExecutorThinkNodeTest {
 
@@ -38,11 +39,10 @@ class ExecutorThinkNodeTest {
                 true,
                 List.of(TaskType.SCALE_WORKLOAD),
                 List.of("namespace", "replicas"),
-                List.of("kubernetes")
-        );
+                List.of("kubernetes"));
         AgentToolCatalog catalog = mock(AgentToolCatalog.class);
         when(catalog.findExecutorTool("kubernetes", "scaleWorkload")).thenReturn(tool);
-        ExecutorThinkNode node = new ExecutorThinkNode(catalog);
+        ExecutorThinkNode node = new ExecutorThinkNode(catalog, new ExecutorPlanFactory());
 
         GraphState state = new GraphState();
         state.setCurrentTask(new Task(
@@ -52,10 +52,10 @@ class ExecutorThinkNodeTest {
                 RiskLevel.MEDIUM,
                 "order-service",
                 Map.of("namespace", "prod"),
-                new SopReference("SOP-1", "scale", "v1", "rag:sop")
-        ));
+                new SopReference("SOP-1", "scale", "v1", "rag:sop")));
         Map<String, Object> plannerKnowledge = new LinkedHashMap<>();
-        plannerKnowledge.put("supplementalSignals", Map.of("replicas", 5, "scaleHintSource", "topology.getServiceTopology"));
+        plannerKnowledge.put(
+                "supplementalSignals", Map.of("replicas", 5, "scaleHintSource", "topology.getServiceTopology"));
         state.getContext().put("plannerKnowledge", plannerKnowledge);
 
         NodeResult result = node.execute(state);
@@ -77,11 +77,10 @@ class ExecutorThinkNodeTest {
                 true,
                 List.of(TaskType.SCALE_WORKLOAD),
                 List.of("namespace", "replicas"),
-                List.of("kubernetes")
-        );
+                List.of("kubernetes"));
         AgentToolCatalog catalog = mock(AgentToolCatalog.class);
         when(catalog.findExecutorTool("kubernetes", "scaleWorkload")).thenReturn(tool);
-        ExecutorThinkNode node = new ExecutorThinkNode(catalog);
+        ExecutorThinkNode node = new ExecutorThinkNode(catalog, new ExecutorPlanFactory());
 
         GraphState state = new GraphState();
         state.setCurrentTask(new Task(
@@ -91,8 +90,7 @@ class ExecutorThinkNodeTest {
                 RiskLevel.MEDIUM,
                 "order-service",
                 Map.of(),
-                new SopReference("SOP-1", "scale", "v1", "rag:sop")
-        ));
+                new SopReference("SOP-1", "scale", "v1", "rag:sop")));
 
         NodeResult result = node.execute(state);
 
@@ -107,8 +105,9 @@ class ExecutorThinkNodeTest {
     void shouldRejectWhenPlannedToolIsNotInSkillWhitelist() {
         AgentToolCatalog catalog = mock(AgentToolCatalog.class);
         List<String> whitelist = List.of("kubernetes.describeResource");
-        when(catalog.findExecutorTool(eq("kubernetes"), eq("scaleWorkload"), eq(whitelist))).thenReturn(null);
-        ExecutorThinkNode node = new ExecutorThinkNode(catalog);
+        when(catalog.findExecutorTool(eq("kubernetes"), eq("scaleWorkload"), eq(whitelist)))
+                .thenReturn(null);
+        ExecutorThinkNode node = new ExecutorThinkNode(catalog, new ExecutorPlanFactory());
 
         GraphState state = new GraphState();
         state.getContext().put("activatedSkillToolWhitelist", whitelist);
@@ -119,8 +118,7 @@ class ExecutorThinkNodeTest {
                 RiskLevel.MEDIUM,
                 "order-service",
                 Map.of("namespace", "prod", "replicas", 3),
-                new SopReference("SOP-1", "scale", "v1", "rag:sop")
-        ));
+                new SopReference("SOP-1", "scale", "v1", "rag:sop")));
 
         NodeResult result = node.execute(state);
 
@@ -144,12 +142,12 @@ class ExecutorThinkNodeTest {
                 true,
                 List.of(TaskType.SCALE_WORKLOAD),
                 List.of("namespace", "replicas"),
-                List.of("kubernetes")
-        );
+                List.of("kubernetes"));
         AgentToolCatalog catalog = mock(AgentToolCatalog.class);
         List<String> whitelist = List.of("kubernetes.scaleWorkload");
-        when(catalog.findExecutorTool(eq("kubernetes"), eq("scaleWorkload"), eq(whitelist))).thenReturn(tool);
-        ExecutorThinkNode node = new ExecutorThinkNode(catalog);
+        when(catalog.findExecutorTool(eq("kubernetes"), eq("scaleWorkload"), eq(whitelist)))
+                .thenReturn(tool);
+        ExecutorThinkNode node = new ExecutorThinkNode(catalog, new ExecutorPlanFactory());
 
         GraphState state = new GraphState();
         state.getContext().put("activatedSkillToolWhitelist", whitelist);
@@ -160,8 +158,7 @@ class ExecutorThinkNodeTest {
                 RiskLevel.MEDIUM,
                 "order-service",
                 Map.of("namespace", "prod", "replicas", 3),
-                new SopReference("SOP-1", "scale", "v1", "rag:sop")
-        ));
+                new SopReference("SOP-1", "scale", "v1", "rag:sop")));
 
         NodeResult result = node.execute(state);
 

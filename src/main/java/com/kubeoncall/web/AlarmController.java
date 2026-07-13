@@ -1,23 +1,10 @@
 package com.kubeoncall.web;
 
-import com.kubeoncall.alarm.state.AlarmSilenceApprovalStore;
-import com.kubeoncall.alarm.state.AlarmAcknowledgementStore;
-import com.kubeoncall.alarm.recovery.AlarmRecoveryService;
-import com.kubeoncall.alarm.recovery.AlarmRecoveryState;
-import com.kubeoncall.common.config.KubeOnCallProperties;
-import com.kubeoncall.alarm.domain.NormalizedAlarmEvent;
-import com.kubeoncall.alarm.ingest.AlarmNormalizer;
-import com.kubeoncall.domain.graph.NodeResult;
-import com.kubeoncall.service.KubeOnCallMetricsService;
-import com.kubeoncall.service.ExecutionAuditService;
-import com.kubeoncall.workflow.AlertWorkflowService;
-import com.kubeoncall.web.dto.AlarmRequest;
-import com.kubeoncall.web.dto.AlarmAcknowledgementRequest;
-import com.kubeoncall.web.dto.AlarmAcknowledgementResponse;
-import com.kubeoncall.web.dto.AlarmRecoveryConfirmationRequest;
-import com.kubeoncall.web.dto.AlarmRecoveryConfirmationResponse;
-import com.kubeoncall.web.dto.AlarmSilenceApprovalRequest;
-import com.kubeoncall.web.dto.AlarmSilenceApprovalResponse;
+import java.time.Duration;
+import java.time.Instant;
+import java.util.List;
+import java.util.Map;
+
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -25,10 +12,24 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 
-import java.time.Duration;
-import java.time.Instant;
-import java.util.Map;
-import java.util.List;
+import com.kubeoncall.alarm.domain.NormalizedAlarmEvent;
+import com.kubeoncall.alarm.ingest.AlarmNormalizer;
+import com.kubeoncall.alarm.recovery.AlarmRecoveryService;
+import com.kubeoncall.alarm.recovery.AlarmRecoveryState;
+import com.kubeoncall.alarm.state.AlarmAcknowledgementStore;
+import com.kubeoncall.alarm.state.AlarmSilenceApprovalStore;
+import com.kubeoncall.common.config.KubeOnCallProperties;
+import com.kubeoncall.domain.graph.NodeResult;
+import com.kubeoncall.service.ExecutionAuditService;
+import com.kubeoncall.service.KubeOnCallMetricsService;
+import com.kubeoncall.web.dto.AlarmAcknowledgementRequest;
+import com.kubeoncall.web.dto.AlarmAcknowledgementResponse;
+import com.kubeoncall.web.dto.AlarmRecoveryConfirmationRequest;
+import com.kubeoncall.web.dto.AlarmRecoveryConfirmationResponse;
+import com.kubeoncall.web.dto.AlarmRequest;
+import com.kubeoncall.web.dto.AlarmSilenceApprovalRequest;
+import com.kubeoncall.web.dto.AlarmSilenceApprovalResponse;
+import com.kubeoncall.workflow.AlertWorkflowService;
 
 @RestController
 @RequestMapping("/api/alarms")
@@ -43,14 +44,15 @@ public class AlarmController {
     private final ExecutionAuditService executionAuditService;
     private final AlarmRecoveryService alarmRecoveryService;
 
-    public AlarmController(AlarmNormalizer alarmNormalizer,
-                           AlertWorkflowService alertWorkflowService,
-                           AlarmSilenceApprovalStore silenceApprovalStore,
-                           AlarmAcknowledgementStore acknowledgementStore,
-                           KubeOnCallProperties properties,
-                           KubeOnCallMetricsService metricsService,
-                           ExecutionAuditService executionAuditService,
-                           AlarmRecoveryService alarmRecoveryService) {
+    public AlarmController(
+            AlarmNormalizer alarmNormalizer,
+            AlertWorkflowService alertWorkflowService,
+            AlarmSilenceApprovalStore silenceApprovalStore,
+            AlarmAcknowledgementStore acknowledgementStore,
+            KubeOnCallProperties properties,
+            KubeOnCallMetricsService metricsService,
+            ExecutionAuditService executionAuditService,
+            AlarmRecoveryService alarmRecoveryService) {
         this.alarmNormalizer = alarmNormalizer;
         this.alertWorkflowService = alertWorkflowService;
         this.silenceApprovalStore = silenceApprovalStore;
@@ -88,8 +90,7 @@ public class AlarmController {
                     request.fingerprint(),
                     request.acknowledgedBy(),
                     request.reason(),
-                    Duration.ofSeconds(Math.max(60, ttlSeconds))
-            );
+                    Duration.ofSeconds(Math.max(60, ttlSeconds)));
             metricsService.recordAlarmAcknowledgement("acknowledged");
             executionAuditService.recordAlarmExecution(
                     "alarm-ack-" + acknowledgement.fingerprint(),
@@ -105,9 +106,7 @@ public class AlarmController {
                             "acknowledgedBy", acknowledgement.acknowledgedBy(),
                             "acknowledgedAt", acknowledgement.acknowledgedAt().toString(),
                             "expiresAt", acknowledgement.expiresAt().toString(),
-                            "acknowledgementKey", acknowledgementStore.keyFor(acknowledgement.fingerprint())
-                    )
-            );
+                            "acknowledgementKey", acknowledgementStore.keyFor(acknowledgement.fingerprint())));
             return new AlarmAcknowledgementResponse(
                     acknowledgement.fingerprint(),
                     true,
@@ -115,8 +114,7 @@ public class AlarmController {
                     acknowledgement.reason(),
                     acknowledgement.acknowledgedAt(),
                     acknowledgement.expiresAt(),
-                    acknowledgementStore.keyFor(acknowledgement.fingerprint())
-            );
+                    acknowledgementStore.keyFor(acknowledgement.fingerprint()));
         } catch (RuntimeException ex) {
             metricsService.recordAlarmAcknowledgement("failed");
             throw ex;
@@ -136,8 +134,7 @@ public class AlarmController {
                     request.fingerprint(),
                     request.confirmedBy(),
                     Boolean.TRUE.equals(request.healthCheckPassed()),
-                    request.note()
-            );
+                    request.note());
             return new AlarmRecoveryConfirmationResponse(
                     state.fingerprint(),
                     state.status(),
@@ -148,8 +145,7 @@ public class AlarmController {
                     state.manualConfirmationRequired(),
                     state.confirmedBy(),
                     state.healthCheckPassed(),
-                    state.confirmedAt()
-            );
+                    state.confirmedAt());
         } catch (IllegalArgumentException ex) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, ex.getMessage(), ex);
         } catch (IllegalStateException ex) {
@@ -175,8 +171,7 @@ public class AlarmController {
                     request.fingerprint(),
                     request.approvedBy(),
                     request.reason(),
-                    Duration.ofSeconds(Math.max(60, ttlSeconds))
-            );
+                    Duration.ofSeconds(Math.max(60, ttlSeconds)));
             metricsService.recordAlarmSilenceApproval("approved");
             return new AlarmSilenceApprovalResponse(
                     approval.fingerprint(),
@@ -185,8 +180,7 @@ public class AlarmController {
                     approval.reason(),
                     approval.approvedAt(),
                     approval.expiresAt(),
-                    silenceApprovalStore.keyFor(approval.fingerprint())
-            );
+                    silenceApprovalStore.keyFor(approval.fingerprint()));
         } catch (RuntimeException ex) {
             metricsService.recordAlarmSilenceApproval("failed");
             throw ex;

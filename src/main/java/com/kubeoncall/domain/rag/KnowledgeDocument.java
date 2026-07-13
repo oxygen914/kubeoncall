@@ -12,14 +12,9 @@ public record KnowledgeDocument(
         Map<String, String> metadata,
         Instant createdAt,
         String embeddingText,
-        List<Double> embedding
-) {
-    public KnowledgeDocument(String id,
-                             String title,
-                             String content,
-                             String source,
-                             Map<String, String> metadata,
-                             Instant createdAt) {
+        List<Double> embedding) {
+    public KnowledgeDocument(
+            String id, String title, String content, String source, Map<String, String> metadata, Instant createdAt) {
         this(id, title, content, source, metadata, createdAt, null, List.of());
     }
 }

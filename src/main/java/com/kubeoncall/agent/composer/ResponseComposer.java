@@ -1,40 +1,53 @@
 package com.kubeoncall.agent.composer;
 
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+
+import org.springframework.stereotype.Component;
+
 import com.kubeoncall.domain.graph.ExecutionPlan;
 import com.kubeoncall.domain.graph.GraphState;
 import com.kubeoncall.domain.graph.NodeResult;
 import com.kubeoncall.domain.graph.PauseMetadata;
 import com.kubeoncall.domain.task.PlannerSummary;
 import com.kubeoncall.domain.task.Task;
-import org.springframework.stereotype.Component;
-
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
 
 @Component
 public class ResponseComposer {
 
     public String compose(GraphState state) {
         StringBuilder builder = new StringBuilder();
-        builder.append("executionId=").append(state.getExecutionId())
-                .append("\nstatus=").append(state.getStatus())
-                .append("\nrequestSummary=").append(buildRequestSummary(state))
-                .append("\nplanSummary=").append(buildPlanSummary(state))
-                .append("\nverifierSummary=").append(buildVerifierSummary(state))
-                .append("\napprovalSummary=").append(buildApprovalSummary(state))
-                .append("\nexecutionSummary=").append(buildExecutionSummary(state))
-                .append("\ntoolSummary=").append(buildToolSummary(state))
-                .append("\nauditSummary=").append(buildAuditSummary(state));
+        builder.append("executionId=")
+                .append(state.getExecutionId())
+                .append("\nstatus=")
+                .append(state.getStatus())
+                .append("\nrequestSummary=")
+                .append(buildRequestSummary(state))
+                .append("\nplanSummary=")
+                .append(buildPlanSummary(state))
+                .append("\nverifierSummary=")
+                .append(buildVerifierSummary(state))
+                .append("\napprovalSummary=")
+                .append(buildApprovalSummary(state))
+                .append("\nexecutionSummary=")
+                .append(buildExecutionSummary(state))
+                .append("\ntoolSummary=")
+                .append(buildToolSummary(state))
+                .append("\nauditSummary=")
+                .append(buildAuditSummary(state));
         return builder.toString();
     }
 
     private String buildRequestSummary(GraphState state) {
         PlannerSummary plannerSummary = getPlannerSummary(state);
-        String intent = plannerSummary == null ? stringValue(state.getContext().get("plannerIntent")) : plannerSummary.intent();
-        String confidence = plannerSummary == null ? stringValue(state.getContext().get("plannerConfidence")) : plannerSummary.confidence();
-        return "question='" + state.getUserRequest() + "', intent=" + defaultString(intent, "unknown")
-                + ", confidence=" + defaultString(confidence, "unknown");
+        String intent =
+                plannerSummary == null ? stringValue(state.getContext().get("plannerIntent")) : plannerSummary.intent();
+        String confidence = plannerSummary == null
+                ? stringValue(state.getContext().get("plannerConfidence"))
+                : plannerSummary.confidence();
+        return "question='" + state.getUserRequest() + "', intent=" + defaultString(intent, "unknown") + ", confidence="
+                + defaultString(confidence, "unknown");
     }
 
     private String buildPlanSummary(GraphState state) {
@@ -46,7 +59,8 @@ public class ResponseComposer {
         String summary = plannerSummary == null ? null : plannerSummary.summary();
         String targetSource = plannerSummary == null ? null : plannerSummary.targetSource();
         List<String> missingSignals = plannerSummary == null ? List.of() : plannerSummary.missingSignals();
-        boolean approvalRequired = state.getTaskPlan() != null && state.getTaskPlan().approvalRequired();
+        boolean approvalRequired =
+                state.getTaskPlan() != null && state.getTaskPlan().approvalRequired();
         return "taskId=" + task.taskId()
                 + ", type=" + task.taskType()
                 + ", target=" + task.target()
@@ -60,8 +74,8 @@ public class ResponseComposer {
     private String buildVerifierSummary(GraphState state) {
         String verifierDecision = stringValue(state.getContext().get("verifierDecision"));
         Object reasons = state.getContext().get("verifierRiskReasons");
-        return "decision=" + defaultString(verifierDecision, "not_available")
-                + ", reasons=" + (reasons == null ? List.of() : reasons);
+        return "decision=" + defaultString(verifierDecision, "not_available") + ", reasons="
+                + (reasons == null ? List.of() : reasons);
     }
 
     private String buildApprovalSummary(GraphState state) {
@@ -71,18 +85,24 @@ public class ResponseComposer {
         }
         StringBuilder builder = new StringBuilder();
         if (pauseMetadata != null) {
-            builder.append("pending={reason=").append(pauseMetadata.reason())
-                    .append(", waitingNode=").append(pauseMetadata.waitingNode())
-                    .append(", requiredRole=").append(pauseMetadata.requiredRole())
-                    .append(", riskReasons=").append(pauseMetadata.riskReasons())
+            builder.append("pending={reason=")
+                    .append(pauseMetadata.reason())
+                    .append(", waitingNode=")
+                    .append(pauseMetadata.waitingNode())
+                    .append(", requiredRole=")
+                    .append(pauseMetadata.requiredRole())
+                    .append(", riskReasons=")
+                    .append(pauseMetadata.riskReasons())
                     .append("}");
         }
         if (state.getFinalApprovalDecision() != null) {
             if (!builder.isEmpty()) {
                 builder.append(", ");
             }
-            builder.append("finalDecision=").append(state.getFinalApprovalDecision())
-                    .append(", resumeAttempts=").append(state.getResumeAttempts());
+            builder.append("finalDecision=")
+                    .append(state.getFinalApprovalDecision())
+                    .append(", resumeAttempts=")
+                    .append(state.getResumeAttempts());
         }
         return builder.toString();
     }
@@ -91,7 +111,8 @@ public class ResponseComposer {
         ExecutionPlan executionPlan = getExecutionPlan(state);
         NodeResult latest = latestNodeResult(state);
         if (executionPlan == null) {
-            return "executionPlanNotBuilt, latestNode=" + (latest == null ? "none" : latest.nodeName() + "/" + latest.status());
+            return "executionPlanNotBuilt, latestNode="
+                    + (latest == null ? "none" : latest.nodeName() + "/" + latest.status());
         }
         return "executorKind=" + executionPlan.executorKind()
                 + ", action=" + executionPlan.action()
@@ -108,15 +129,15 @@ public class ResponseComposer {
         summary.put("plannerAvailable", readToolNames(state.getContext().get("plannerAvailableTools")));
         summary.put("plannerConsulted", plannerSummary == null ? List.of() : plannerSummary.consultedTools());
         summary.put("plannerEvidence", plannerSummary == null ? Map.of() : plannerSummary.evidenceSources());
-        summary.put("verifierTool", defaultString(stringValue(state.getContext().get("verifierTool")), "not_evaluated"));
+        summary.put(
+                "verifierTool", defaultString(stringValue(state.getContext().get("verifierTool")), "not_evaluated"));
         summary.put("executorTool", defaultString(readExecutorToolName(state), "not_selected"));
         summary.put("executorResultStatus", readExecutorResultStatus(state));
         return summary.toString();
     }
 
     private String buildAuditSummary(GraphState state) {
-        return "approvalAuditTrail=" + state.getApprovalAuditTrail()
-                + ", observations=" + state.getObservations();
+        return "approvalAuditTrail=" + state.getApprovalAuditTrail() + ", observations=" + state.getObservations();
     }
 
     private PlannerSummary getPlannerSummary(GraphState state) {

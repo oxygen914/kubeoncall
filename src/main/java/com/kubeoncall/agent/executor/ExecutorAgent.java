@@ -1,11 +1,12 @@
 package com.kubeoncall.agent.executor;
 
+import java.util.List;
+
+import org.springframework.stereotype.Component;
+
 import com.kubeoncall.agent.base.ReActAgent;
 import com.kubeoncall.agent.node.AgentNode;
 import com.kubeoncall.common.config.KubeOnCallProperties;
-import org.springframework.stereotype.Component;
-
-import java.util.List;
 
 @Component
 public class ExecutorAgent extends ReActAgent {
@@ -14,9 +15,10 @@ public class ExecutorAgent extends ReActAgent {
     private final ExecutorExecuteNode executorExecuteNode;
     private final KubeOnCallProperties properties;
 
-    public ExecutorAgent(ExecutorThinkNode executorThinkNode,
-                         ExecutorExecuteNode executorExecuteNode,
-                         KubeOnCallProperties properties) {
+    public ExecutorAgent(
+            ExecutorThinkNode executorThinkNode,
+            ExecutorExecuteNode executorExecuteNode,
+            KubeOnCallProperties properties) {
         this.executorThinkNode = executorThinkNode;
         this.executorExecuteNode = executorExecuteNode;
         this.properties = properties;

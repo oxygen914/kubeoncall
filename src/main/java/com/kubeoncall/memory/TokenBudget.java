@@ -41,9 +41,7 @@ public class TokenBudget {
         int contentBudget = Math.max(2, budget - markerTokens);
         int headBudget = Math.max(1, contentBudget * 3 / 5);
         int tailBudget = Math.max(1, contentBudget - headBudget);
-        return takeFromStart(normalized, headBudget)
-                + COMPRESSION_MARKER
-                + takeFromEnd(normalized, tailBudget);
+        return takeFromStart(normalized, headBudget) + COMPRESSION_MARKER + takeFromEnd(normalized, tailBudget);
     }
 
     private String takeFromStart(String text, int maxTokens) {

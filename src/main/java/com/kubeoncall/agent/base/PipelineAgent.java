@@ -1,12 +1,12 @@
 package com.kubeoncall.agent.base;
 
+import java.util.List;
+
 import com.kubeoncall.agent.node.AgentNode;
 import com.kubeoncall.domain.graph.GraphState;
 import com.kubeoncall.domain.graph.GraphStatus;
 import com.kubeoncall.domain.graph.NodeResult;
 import com.kubeoncall.domain.graph.NodeStatus;
-
-import java.util.List;
 
 public abstract class PipelineAgent extends AbstractAgent {
 

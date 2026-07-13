@@ -1,8 +1,5 @@
 package com.kubeoncall.memory;
 
-import com.kubeoncall.common.config.KubeOnCallProperties;
-import org.junit.jupiter.api.Test;
-
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyInt;
@@ -10,6 +7,10 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+
+import org.junit.jupiter.api.Test;
+
+import com.kubeoncall.common.config.KubeOnCallProperties;
 
 class MemoryConsolidationJobTest {
 
@@ -27,7 +28,8 @@ class MemoryConsolidationJobTest {
 
         properties.getMemory().setConsolidationEnabled(true);
         job.consolidate();
-        verify(service).consolidate(any(), org.mockito.ArgumentMatchers.eq(123), org.mockito.ArgumentMatchers.eq(false));
+        verify(service)
+                .consolidate(any(), org.mockito.ArgumentMatchers.eq(123), org.mockito.ArgumentMatchers.eq(false));
         verify(lock).release(org.mockito.ArgumentMatchers.eq("memory-consolidation:lock"), any());
     }
 
@@ -37,10 +39,8 @@ class MemoryConsolidationJobTest {
         RedisLeaseLock lock = mock(RedisLeaseLock.class);
         KubeOnCallProperties properties = new KubeOnCallProperties();
         properties.getMemory().setConsolidationEnabled(true);
-        when(lock.tryAcquire(
-                org.mockito.ArgumentMatchers.eq("memory-consolidation:lock"),
-                any(),
-                any())).thenReturn(false);
+        when(lock.tryAcquire(org.mockito.ArgumentMatchers.eq("memory-consolidation:lock"), any(), any()))
+                .thenReturn(false);
         MemoryConsolidationJob job = new MemoryConsolidationJob(service, properties, lock);
 
         job.consolidate();

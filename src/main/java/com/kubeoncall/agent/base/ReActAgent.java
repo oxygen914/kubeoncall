@@ -1,14 +1,14 @@
 package com.kubeoncall.agent.base;
 
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+
 import com.kubeoncall.agent.node.AgentNode;
 import com.kubeoncall.domain.graph.GraphState;
 import com.kubeoncall.domain.graph.GraphStatus;
 import com.kubeoncall.domain.graph.NodeResult;
 import com.kubeoncall.domain.graph.NodeStatus;
-
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
 
 public abstract class ReActAgent extends AbstractAgent {
 
@@ -57,8 +57,7 @@ public abstract class ReActAgent extends AbstractAgent {
                 "Retry budget exceeded for agent " + retryGuardName,
                 "RETRY_BUDGET_EXCEEDED",
                 "ESCALATE_TO_REPLAN",
-                Map.of("maxLoops", maxLoops())
-        ));
+                Map.of("maxLoops", maxLoops())));
         return state;
     }
 

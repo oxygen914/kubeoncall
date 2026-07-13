@@ -1,12 +1,13 @@
 package com.kubeoncall.skill;
 
-import com.kubeoncall.common.config.KubeOnCallProperties;
-import org.springframework.stereotype.Component;
-
 import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+
+import org.springframework.stereotype.Component;
+
+import com.kubeoncall.common.config.KubeOnCallProperties;
 
 @Component
 public class SkillMatcher {
@@ -24,8 +25,8 @@ public class SkillMatcher {
         return skills.stream()
                 .map(skill -> new ScoredSkill(skill, score(skill, haystack)))
                 .filter(scored -> scored.score() >= threshold)
-                .sorted(Comparator.comparingInt(ScoredSkill::score).reversed()
-                        .thenComparing(scored -> scored.skill().id()))
+                .sorted(Comparator.comparingInt(ScoredSkill::score).reversed().thenComparing(scored -> scored.skill()
+                        .id()))
                 .limit(limit)
                 .map(ScoredSkill::skill)
                 .toList();
@@ -70,6 +71,5 @@ public class SkillMatcher {
         return builder.toString().toLowerCase(Locale.ROOT);
     }
 
-    private record ScoredSkill(Skill skill, int score) {
-    }
+    private record ScoredSkill(Skill skill, int score) {}
 }

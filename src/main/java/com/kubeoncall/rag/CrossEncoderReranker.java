@@ -1,9 +1,9 @@
 package com.kubeoncall.rag;
 
-import com.kubeoncall.domain.rag.KnowledgeDocument;
-
 import java.util.List;
 import java.util.Map;
+
+import com.kubeoncall.domain.rag.KnowledgeDocument;
 
 public interface CrossEncoderReranker {
 

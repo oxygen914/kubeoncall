@@ -1,9 +1,9 @@
 package com.kubeoncall.alarm.policy;
 
-import com.kubeoncall.alarm.domain.AlarmPolicy;
-
 import java.util.List;
 import java.util.Optional;
+
+import com.kubeoncall.alarm.domain.AlarmPolicy;
 
 /**
  * Read access to the configured alarm policies.

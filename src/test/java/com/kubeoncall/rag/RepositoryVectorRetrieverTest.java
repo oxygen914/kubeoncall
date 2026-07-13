@@ -1,22 +1,23 @@
 package com.kubeoncall.rag;
 
-import com.kubeoncall.common.config.KubeOnCallProperties;
-import com.kubeoncall.domain.rag.KnowledgeDocument;
-import com.kubeoncall.domain.rag.RetrievalRequest;
-import com.kubeoncall.domain.rag.RetrievalHit;
-import com.kubeoncall.rag.repository.KnowledgeRepository;
-import com.kubeoncall.tool.http.ToolHttpClient;
-import org.junit.jupiter.api.Test;
-
-import java.time.Instant;
-import java.util.List;
-import java.util.Map;
-
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+
+import java.time.Instant;
+import java.util.List;
+import java.util.Map;
+
+import org.junit.jupiter.api.Test;
+
+import com.kubeoncall.common.config.KubeOnCallProperties;
+import com.kubeoncall.domain.rag.KnowledgeDocument;
+import com.kubeoncall.domain.rag.RetrievalHit;
+import com.kubeoncall.domain.rag.RetrievalRequest;
+import com.kubeoncall.rag.repository.KnowledgeRepository;
+import com.kubeoncall.tool.http.ToolHttpClient;
 
 class RepositoryVectorRetrieverTest {
 
@@ -31,8 +32,8 @@ class RepositoryVectorRetrieverTest {
         properties.getRag().setVectorBackend("es");
         RetrievalRequest request = new RetrievalRequest("cpu high", Map.of(), 3);
         List<Double> vector = List.of(0.1, 0.2, 0.3);
-        KnowledgeDocument document = new KnowledgeDocument(
-                "doc-1", "CPU", "runbook", "manual", Map.of(), Instant.now());
+        KnowledgeDocument document =
+                new KnowledgeDocument("doc-1", "CPU", "runbook", "manual", Map.of(), Instant.now());
         when(embeddingService.embed("cpu high"))
                 .thenReturn(new EmbeddingService.EmbeddingResult(vector, "mock-provider", false));
         when(repository.searchVectorHits(request, 3, vector))
@@ -65,8 +66,7 @@ class RepositoryVectorRetrieverTest {
         properties.getRag().setVectorEnabled(true);
         properties.getRag().setVectorBackend("external");
         properties.getRag().setVectorEndpoint("http://vector/search");
-        HttpVectorRetrievalClient external = new HttpVectorRetrievalClient(
-                mock(ToolHttpClient.class), properties);
+        HttpVectorRetrievalClient external = new HttpVectorRetrievalClient(mock(ToolHttpClient.class), properties);
         RepositoryVectorRetriever local = new RepositoryVectorRetriever(
                 mock(KnowledgeRepository.class), mock(EmbeddingService.class), properties);
 
@@ -82,20 +82,22 @@ class RepositoryVectorRetrieverTest {
         properties.getRag().setVectorEndpoint("http://vector/search");
         ToolHttpClient httpClient = mock(ToolHttpClient.class);
         when(httpClient.post(
-                org.mockito.ArgumentMatchers.eq("http://vector/search"),
-                org.mockito.ArgumentMatchers.any(),
-                org.mockito.ArgumentMatchers.anyInt(),
-                org.mockito.ArgumentMatchers.any()))
+                        org.mockito.ArgumentMatchers.eq("http://vector/search"),
+                        org.mockito.ArgumentMatchers.any(),
+                        org.mockito.ArgumentMatchers.anyInt(),
+                        org.mockito.ArgumentMatchers.any()))
                 .thenReturn(Map.of(
-                        "status", "success",
-                        "response", Map.of("documents", List.of(Map.of(
-                                "id", "doc-vector",
-                                "title", "vector hit",
-                                "content", "content",
-                                "score", 0.87,
-                                "rank", 2
-                        )))
-                ));
+                        "status",
+                        "success",
+                        "response",
+                        Map.of(
+                                "documents",
+                                List.of(Map.of(
+                                        "id", "doc-vector",
+                                        "title", "vector hit",
+                                        "content", "content",
+                                        "score", 0.87,
+                                        "rank", 2)))));
         HttpVectorRetrievalClient client = new HttpVectorRetrievalClient(httpClient, properties);
 
         List<RetrievalHit> hits = client.retrieveHits(new RetrievalRequest("cpu", Map.of(), 3), 3);

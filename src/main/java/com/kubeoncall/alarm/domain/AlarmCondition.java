@@ -18,8 +18,7 @@ public record AlarmCondition(
         String operator,
         Double threshold,
         String duration,
-        Map<String, String> matchLabels
-) {
+        Map<String, String> matchLabels) {
 
     public AlarmCondition {
         if (matchLabels == null) {

@@ -1,5 +1,15 @@
 package com.kubeoncall.alarm;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+import java.time.Instant;
+import java.util.Map;
+
+import org.junit.jupiter.api.Test;
+
 import com.kubeoncall.alarm.domain.AlarmResourceType;
 import com.kubeoncall.alarm.domain.AlarmSeverity;
 import com.kubeoncall.alarm.domain.AlarmStatus;
@@ -7,15 +17,6 @@ import com.kubeoncall.alarm.domain.NormalizedAlarmEvent;
 import com.kubeoncall.alarm.ingest.AlarmNormalizer;
 import com.kubeoncall.alarm.policy.AlarmFingerprintService;
 import com.kubeoncall.web.dto.AlarmRequest;
-import org.junit.jupiter.api.Test;
-
-import java.time.Instant;
-import java.util.Map;
-
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertNull;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class AlarmNormalizerTest {
 
@@ -24,10 +25,40 @@ class AlarmNormalizerTest {
     @Test
     void shouldNormalizeLegacyRequestAndLiftNodeNameToResourceName() {
         AlarmRequest request = new AlarmRequest(
-                "alarm-1", "dedup-1", "prometheus", "critical", "node-a", "cpu high", Instant.now(),
-                Map.of("namespace", "monitoring", "service", "infra-exporter", "cluster", "lab",
-                        "alertName", "HostHighCpuUsage", "runbookId", "runbook-host-cpu-high"),
-                null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null);
+                "alarm-1",
+                "dedup-1",
+                "prometheus",
+                "critical",
+                "node-a",
+                "cpu high",
+                Instant.now(),
+                Map.of(
+                        "namespace",
+                        "monitoring",
+                        "service",
+                        "infra-exporter",
+                        "cluster",
+                        "lab",
+                        "alertName",
+                        "HostHighCpuUsage",
+                        "runbookId",
+                        "runbook-host-cpu-high"),
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null);
 
         NormalizedAlarmEvent event = normalizer.normalize(request);
 
@@ -49,11 +80,30 @@ class AlarmNormalizerTest {
     @Test
     void shouldTakeStandardFieldsAsIs() {
         AlarmRequest request = new AlarmRequest(
-                "alarm-2", null, "alertmanager", "warning", null, null, Instant.now(), Map.of(),
-                "fp-std", "HostHighCpuUsageP0", "NODE", "node-a", "lab", "monitoring", "infra-exporter",
-                "host.cpu.usage_percent", 85.1, 85.0, "%", "5m",
-                Map.of("team", "infra", "env", "lab"), Map.of("summary", "cpu high"),
-                "runbook-host-cpu-high", "FIRING");
+                "alarm-2",
+                null,
+                "alertmanager",
+                "warning",
+                null,
+                null,
+                Instant.now(),
+                Map.of(),
+                "fp-std",
+                "HostHighCpuUsageP0",
+                "NODE",
+                "node-a",
+                "lab",
+                "monitoring",
+                "infra-exporter",
+                "host.cpu.usage_percent",
+                85.1,
+                85.0,
+                "%",
+                "5m",
+                Map.of("team", "infra", "env", "lab"),
+                Map.of("summary", "cpu high"),
+                "runbook-host-cpu-high",
+                "FIRING");
 
         NormalizedAlarmEvent event = normalizer.normalize(request);
 
@@ -74,22 +124,67 @@ class AlarmNormalizerTest {
     @Test
     void shouldGenerateFingerprintWhenNoDedupKeyOrFingerprintProvided() {
         AlarmRequest request = new AlarmRequest(
-                "alarm-3", null, "prometheus", "warning", "node-a", "cpu high", Instant.now(),
+                "alarm-3",
+                null,
+                "prometheus",
+                "warning",
+                "node-a",
+                "cpu high",
+                Instant.now(),
                 Map.of("alertName", "HostHighCpuUsage"),
-                null, "HostHighCpuUsage", null, null, null, null, null, null, null, null, null, null, null, null, null, null);
+                null,
+                "HostHighCpuUsage",
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null);
 
         NormalizedAlarmEvent event = normalizer.normalize(request);
 
         assertNotNull(event.fingerprint());
-        assertTrue(event.fingerprint().startsWith("fp:"), "missing dedupKey/fingerprint must yield a generated fp: fingerprint");
+        assertTrue(
+                event.fingerprint().startsWith("fp:"),
+                "missing dedupKey/fingerprint must yield a generated fp: fingerprint");
         assertNotEqualsNullDedup(event.fingerprint());
     }
 
     @Test
     void shouldParseResolvedStatus() {
         AlarmRequest request = new AlarmRequest(
-                "alarm-4", "d4", "prometheus", "info", "node-a", "recovered", Instant.now(), Map.of(),
-                null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, "RESOLVED");
+                "alarm-4",
+                "d4",
+                "prometheus",
+                "info",
+                "node-a",
+                "recovered",
+                Instant.now(),
+                Map.of(),
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                "RESOLVED");
 
         NormalizedAlarmEvent event = normalizer.normalize(request);
         assertEquals(AlarmStatus.RESOLVED, event.status());
@@ -98,8 +193,8 @@ class AlarmNormalizerTest {
     @Test
     void shouldDefaultMissingFieldsGracefully() {
         AlarmRequest request = new AlarmRequest(
-                null, null, null, null, null, null, null, null,
-                null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null);
+                null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null,
+                null, null, null, null, null, null, null);
 
         NormalizedAlarmEvent event = normalizer.normalize(request);
         assertNull(event.alertName());

@@ -1,8 +1,20 @@
 package com.kubeoncall.web;
 
+import java.time.Instant;
+import java.util.Map;
+
+import jakarta.validation.Valid;
+
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+
 import com.kubeoncall.domain.rag.KnowledgeDocument;
-import com.kubeoncall.domain.rag.RetrieveMethod;
 import com.kubeoncall.domain.rag.RetrievalResult;
+import com.kubeoncall.domain.rag.RetrieveMethod;
 import com.kubeoncall.rag.KnowledgeIngestService;
 import com.kubeoncall.rag.repository.KnowledgeIndexAdmin;
 import com.kubeoncall.rag.runbook.RunbookImportService;
@@ -11,18 +23,6 @@ import com.kubeoncall.service.KubeOnCallMetricsService;
 import com.kubeoncall.web.dto.KnowledgeIngestRequest;
 import com.kubeoncall.web.dto.KnowledgeQueryRequest;
 import com.kubeoncall.web.dto.RunbookImportRequest;
-import jakarta.validation.Valid;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
-
-import java.time.Instant;
-import java.util.List;
-import java.util.Map;
 
 @RestController
 @RequestMapping("/api/knowledge")
@@ -34,24 +34,12 @@ public class KnowledgeController {
     private final ExecutionAuditService executionAuditService;
     private final KubeOnCallMetricsService metricsService;
 
-    public KnowledgeController(KnowledgeIngestService knowledgeIngestService,
-                               RunbookImportService runbookImportService) {
-        this(knowledgeIngestService, runbookImportService, null, null, null);
-    }
-
-    public KnowledgeController(KnowledgeIngestService knowledgeIngestService,
-                               RunbookImportService runbookImportService,
-                               KnowledgeIndexAdmin knowledgeIndexAdmin,
-                               ExecutionAuditService executionAuditService) {
-        this(knowledgeIngestService, runbookImportService, knowledgeIndexAdmin, executionAuditService, null);
-    }
-
-    @Autowired
-    public KnowledgeController(KnowledgeIngestService knowledgeIngestService,
-                               RunbookImportService runbookImportService,
-                               KnowledgeIndexAdmin knowledgeIndexAdmin,
-                               ExecutionAuditService executionAuditService,
-                               KubeOnCallMetricsService metricsService) {
+    public KnowledgeController(
+            KnowledgeIngestService knowledgeIngestService,
+            RunbookImportService runbookImportService,
+            KnowledgeIndexAdmin knowledgeIndexAdmin,
+            ExecutionAuditService executionAuditService,
+            KubeOnCallMetricsService metricsService) {
         this.knowledgeIngestService = knowledgeIngestService;
         this.runbookImportService = runbookImportService;
         this.knowledgeIndexAdmin = knowledgeIndexAdmin;
@@ -65,9 +53,13 @@ public class KnowledgeController {
         try {
             KnowledgeDocument result = knowledgeIngestService.ingest(
                     request.title(), request.content(), request.source(), request.metadata());
-            recordKnowledge("ingest", "SUCCESS", "Knowledge document ingested", startedAt, 1,
-                    Map.of("documentId", result.id(), "source", safe(result.source()),
-                            "title", safe(result.title())));
+            recordKnowledge(
+                    "ingest",
+                    "SUCCESS",
+                    "Knowledge document ingested",
+                    startedAt,
+                    1,
+                    Map.of("documentId", result.id(), "source", safe(result.source()), "title", safe(result.title())));
             return result;
         } catch (RuntimeException ex) {
             recordKnowledgeFailure("ingest", startedAt, ex);
@@ -81,14 +73,25 @@ public class KnowledgeController {
         try {
             RetrieveMethod method = RetrieveMethod.fromRaw(request.retrieveMethod());
             RetrievalResult result = knowledgeIngestService.retrieve(
-                    request.question(), request.filters(), request.topK(), method,
+                    request.question(),
+                    request.filters(),
+                    request.topK(),
+                    method,
                     Boolean.TRUE.equals(request.includeTrace()));
-            recordKnowledge("query", "SUCCESS", "Knowledge query completed", startedAt,
-                    result.documents().size(), Map.of(
+            recordKnowledge(
+                    "query",
+                    "SUCCESS",
+                    "Knowledge query completed",
+                    startedAt,
+                    result.documents().size(),
+                    Map.of(
                             "method", method.name(),
                             "route", safe(result.route()),
                             "resultCount", result.documents().size(),
-                            "filterCount", request.filters() == null ? 0 : request.filters().size(),
+                            "filterCount",
+                                    request.filters() == null
+                                            ? 0
+                                            : request.filters().size(),
                             "includeTrace", Boolean.TRUE.equals(request.includeTrace())));
             return result;
         } catch (RuntimeException ex) {
@@ -102,13 +105,28 @@ public class KnowledgeController {
             @RequestBody(required = false) RunbookImportRequest request) {
         Instant startedAt = Instant.now();
         try {
-            RunbookImportService.ImportResult result = runbookImportService.importAll(
-                    request != null && Boolean.TRUE.equals(request.dryRun()));
+            RunbookImportService.ImportResult result =
+                    runbookImportService.importAll(request != null && Boolean.TRUE.equals(request.dryRun()));
             String status = result.failed() == 0 ? "SUCCESS" : "DEGRADED";
-            recordKnowledge("runbook_import", status, "Runbook import completed", startedAt,
-                    result.imported(), Map.of("scanned", result.scanned(), "eligible", result.eligible(),
-                            "imported", result.imported(), "skipped", result.skipped(),
-                            "failed", result.failed(), "dryRun", result.dryRun()));
+            recordKnowledge(
+                    "runbook_import",
+                    status,
+                    "Runbook import completed",
+                    startedAt,
+                    result.imported(),
+                    Map.of(
+                            "scanned",
+                            result.scanned(),
+                            "eligible",
+                            result.eligible(),
+                            "imported",
+                            result.imported(),
+                            "skipped",
+                            result.skipped(),
+                            "failed",
+                            result.failed(),
+                            "dryRun",
+                            result.dryRun()));
             return result;
         } catch (RuntimeException ex) {
             recordKnowledgeFailure("runbook_import", startedAt, ex);
@@ -118,19 +136,27 @@ public class KnowledgeController {
 
     @GetMapping("/index")
     public KnowledgeIndexAdmin.AliasStatus indexStatus() {
-        requireIndexAdmin();
         return knowledgeIndexAdmin.aliasStatus();
     }
 
     @PostMapping("/index/prepare")
     public KnowledgeIndexAdmin.VersionPreparation prepareIndex(@RequestBody IndexPrepareRequest request) {
-        requireIndexAdmin();
         Instant startedAt = Instant.now();
         KnowledgeIndexAdmin.VersionPreparation result = knowledgeIndexAdmin.prepareVersion(
                 request == null ? null : request.version(), request != null && request.reindex());
-        audit("KNOWLEDGE_INDEX_PREPARED", "Knowledge index version prepared", startedAt,
-                Map.of("version", result.version(), "index", result.index(),
-                        "reindex", request != null && request.reindex(), "total", result.total()));
+        audit(
+                "KNOWLEDGE_INDEX_PREPARED",
+                "Knowledge index version prepared",
+                startedAt,
+                Map.of(
+                        "version",
+                        result.version(),
+                        "index",
+                        result.index(),
+                        "reindex",
+                        request != null && request.reindex(),
+                        "total",
+                        result.total()));
         return result;
     }
 
@@ -145,10 +171,12 @@ public class KnowledgeController {
     }
 
     private KnowledgeIndexAdmin.AliasStatus switchIndex(String version, String operation) {
-        requireIndexAdmin();
         Instant startedAt = Instant.now();
         KnowledgeIndexAdmin.AliasStatus result = knowledgeIndexAdmin.activateVersion(version);
-        audit(operation, "Knowledge index alias switched", startedAt,
+        audit(
+                operation,
+                "Knowledge index alias switched",
+                startedAt,
                 Map.of("version", version, "activeIndex", result.activeIndex(), "alias", result.alias()));
         return result;
     }
@@ -157,35 +185,30 @@ public class KnowledgeController {
         executionAuditService.recordKnowledgeOperation("index_governance", status, summary, startedAt, metadata);
     }
 
-    private void recordKnowledge(String operation,
-                                 String status,
-                                 String summary,
-                                 Instant startedAt,
-                                 long count,
-                                 Map<String, Object> metadata) {
-        if (metricsService != null) {
-            metricsService.recordKnowledge(operation, status, count);
-        }
-        if (executionAuditService != null) {
-            executionAuditService.recordKnowledgeOperation(operation, status, summary, startedAt, metadata);
-        }
+    private void recordKnowledge(
+            String operation,
+            String status,
+            String summary,
+            Instant startedAt,
+            long count,
+            Map<String, Object> metadata) {
+        metricsService.recordKnowledge(operation, status, count);
+        executionAuditService.recordKnowledgeOperation(operation, status, summary, startedAt, metadata);
     }
 
     private void recordKnowledgeFailure(String operation, Instant startedAt, RuntimeException ex) {
-        recordKnowledge(operation, "FAILED", "Knowledge operation failed: " + ex.getMessage(),
-                startedAt, 0, Map.of("errorType", ex.getClass().getSimpleName()));
+        recordKnowledge(
+                operation,
+                "FAILED",
+                "Knowledge operation failed: " + ex.getMessage(),
+                startedAt,
+                0,
+                Map.of("errorType", ex.getClass().getSimpleName()));
     }
 
     private String safe(String value) {
         return value == null ? "" : value;
     }
 
-    private void requireIndexAdmin() {
-        if (knowledgeIndexAdmin == null || executionAuditService == null) {
-            throw new IllegalStateException("Knowledge index governance is unavailable");
-        }
-    }
-
-    public record IndexPrepareRequest(String version, boolean reindex) {
-    }
+    public record IndexPrepareRequest(String version, boolean reindex) {}
 }

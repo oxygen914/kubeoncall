@@ -1,19 +1,18 @@
 package com.kubeoncall.memory;
 
+import java.time.Instant;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
-import java.time.Instant;
-
 @Component
 @ConditionalOnProperty(
         name = "kubeoncall.memory.extraction-worker-enabled",
         havingValue = "true",
-        matchIfMissing = true
-)
+        matchIfMissing = true)
 public class MemoryExtractionJob {
 
     private static final Logger log = LoggerFactory.getLogger(MemoryExtractionJob.class);
@@ -33,8 +32,17 @@ public class MemoryExtractionJob {
                 MemoryExtractionTask task = claimed.task();
                 Instant now = Instant.now();
                 memoryService.remember(new MemoryEntry(
-                        null, task.memoryType(), task.scope(), task.subject(), task.content(), task.service(),
-                        task.resource(), task.fingerprint(), task.createdAt(), now, task.metadata()));
+                        null,
+                        task.memoryType(),
+                        task.scope(),
+                        task.subject(),
+                        task.content(),
+                        task.service(),
+                        task.resource(),
+                        task.fingerprint(),
+                        task.createdAt(),
+                        now,
+                        task.metadata()));
                 queue.acknowledge(claimed);
             } catch (RuntimeException ex) {
                 queue.fail(claimed, ex);

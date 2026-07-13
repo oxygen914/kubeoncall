@@ -1,22 +1,25 @@
 package com.kubeoncall.alarm.state;
 
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import org.springframework.data.redis.core.StringRedisTemplate;
-import org.springframework.stereotype.Service;
-
 import java.time.Duration;
 import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Optional;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.stereotype.Service;
+
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
+
 @Service
 public class AlarmSilenceApprovalStore {
 
+    private static final Logger log = LoggerFactory.getLogger(AlarmSilenceApprovalStore.class);
     private static final String KEY_PREFIX = "alarm-silence-approval:";
-    private static final TypeReference<Map<String, Object>> MAP_TYPE = new TypeReference<>() {
-    };
+    private static final TypeReference<Map<String, Object>> MAP_TYPE = new TypeReference<>() {};
 
     private final StringRedisTemplate redisTemplate;
     private final ObjectMapper objectMapper;
@@ -33,14 +36,11 @@ public class AlarmSilenceApprovalStore {
         Duration safeTtl = safeTtl(ttl);
         Instant now = Instant.now();
         SilenceApproval approval = new SilenceApproval(
-                normalizedFingerprint,
-                normalizedApprovedBy,
-                normalizedReason,
-                now,
-                now.plus(safeTtl)
-        );
+                normalizedFingerprint, normalizedApprovedBy, normalizedReason, now, now.plus(safeTtl));
         try {
-            redisTemplate.opsForValue().set(keyFor(normalizedFingerprint), objectMapper.writeValueAsString(toMap(approval)), safeTtl);
+            redisTemplate
+                    .opsForValue()
+                    .set(keyFor(normalizedFingerprint), objectMapper.writeValueAsString(toMap(approval)), safeTtl);
             return approval;
         } catch (Exception ex) {
             throw new IllegalStateException("Failed to write alarm silence approval", ex);
@@ -63,14 +63,16 @@ public class AlarmSilenceApprovalStore {
                     string(map.get("approvedBy")),
                     string(map.get("reason")),
                     instant(map.get("approvedAt")),
-                    instant(map.get("expiresAt"))
-            );
+                    instant(map.get("expiresAt")));
             if (approval.isExpired(Instant.now())) {
                 redisTemplate.delete(key);
                 return Optional.empty();
             }
             return Optional.of(approval);
-        } catch (Exception ignored) {
+        } catch (Exception ex) {
+            log.warn(
+                    "Unable to parse cached alarm silence approval; treating it as absent: errorType={}",
+                    ex.getClass().getSimpleName());
             return Optional.empty();
         }
     }
@@ -117,12 +119,7 @@ public class AlarmSilenceApprovalStore {
     }
 
     public record SilenceApproval(
-            String fingerprint,
-            String approvedBy,
-            String reason,
-            Instant approvedAt,
-            Instant expiresAt
-    ) {
+            String fingerprint, String approvedBy, String reason, Instant approvedAt, Instant expiresAt) {
         public boolean isExpired(Instant now) {
             return expiresAt != null && !expiresAt.isAfter(now);
         }

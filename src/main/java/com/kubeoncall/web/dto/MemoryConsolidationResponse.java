@@ -10,6 +10,4 @@ public record MemoryConsolidationResponse(
         String status,
         int scanLimit,
         double similarityThreshold,
-        boolean dryRun
-) {
-}
+        boolean dryRun) {}

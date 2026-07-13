@@ -1,9 +1,9 @@
 package com.kubeoncall.service.audit;
 
-import com.kubeoncall.domain.audit.ExecutionAuditRecord;
-
 import java.time.Instant;
 import java.util.List;
+
+import com.kubeoncall.domain.audit.ExecutionAuditRecord;
 
 public interface ExecutionAuditRepository {
 

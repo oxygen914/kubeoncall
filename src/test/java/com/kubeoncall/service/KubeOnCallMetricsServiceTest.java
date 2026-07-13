@@ -1,12 +1,13 @@
 package com.kubeoncall.service;
 
-import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
-import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.ObjectProvider;
-
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
+
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.ObjectProvider;
+
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 
 class KubeOnCallMetricsServiceTest {
 
@@ -20,10 +21,10 @@ class KubeOnCallMetricsServiceTest {
 
         metricsService.recordAlarmSilenceApproval("approved");
 
-        assertEquals(1.0, registry.counter(
-                "kubeoncall.alarm.silence_approvals",
-                "outcome", "approved"
-        ).count());
+        assertEquals(
+                1.0,
+                registry.counter("kubeoncall.alarm.silence_approvals", "outcome", "approved")
+                        .count());
     }
 
     @Test
@@ -36,10 +37,10 @@ class KubeOnCallMetricsServiceTest {
 
         metricsService.recordAlarmAcknowledgement("acknowledged");
 
-        assertEquals(1.0, registry.counter(
-                "kubeoncall.alarm.acknowledgements",
-                "outcome", "acknowledged"
-        ).count());
+        assertEquals(
+                1.0,
+                registry.counter("kubeoncall.alarm.acknowledgements", "outcome", "acknowledged")
+                        .count());
     }
 
     @Test
@@ -52,11 +53,10 @@ class KubeOnCallMetricsServiceTest {
 
         metricsService.recordAlarmRecovery("confirmed", "P1");
 
-        assertEquals(1.0, registry.counter(
-                "kubeoncall.alarm.recoveries",
-                "outcome", "confirmed",
-                "severity", "p1"
-        ).count());
+        assertEquals(
+                1.0,
+                registry.counter("kubeoncall.alarm.recoveries", "outcome", "confirmed", "severity", "p1")
+                        .count());
     }
 
     @Test
@@ -71,12 +71,24 @@ class KubeOnCallMetricsServiceTest {
         metricsService.recordRagRetrieval("hybrid", "es", false, 0, 5);
         metricsService.recordRagRerank(true, false, true);
 
-        assertEquals(1.0, registry.counter(
-                "kubeoncall.knowledge.operations", "operation", "ingest", "outcome", "success").count());
-        assertEquals(1.0, registry.counter(
-                "kubeoncall.rag.empty_results", "method", "hybrid").count());
-        assertEquals(1.0, registry.counter(
-                "kubeoncall.rag.reranks", "cross_encoder_enabled", "true",
-                "applied", "false", "fallback", "true").count());
+        assertEquals(
+                1.0,
+                registry.counter("kubeoncall.knowledge.operations", "operation", "ingest", "outcome", "success")
+                        .count());
+        assertEquals(
+                1.0,
+                registry.counter("kubeoncall.rag.empty_results", "method", "hybrid")
+                        .count());
+        assertEquals(
+                1.0,
+                registry.counter(
+                                "kubeoncall.rag.reranks",
+                                "cross_encoder_enabled",
+                                "true",
+                                "applied",
+                                "false",
+                                "fallback",
+                                "true")
+                        .count());
     }
 }

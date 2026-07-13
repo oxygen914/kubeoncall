@@ -1,13 +1,5 @@
 package com.kubeoncall.alarm.recovery;
 
-import com.kubeoncall.alarm.domain.AlarmSeverity;
-import com.kubeoncall.common.config.KubeOnCallProperties;
-import com.kubeoncall.tool.http.ToolHttpClient;
-import org.junit.jupiter.api.Test;
-
-import java.time.Instant;
-import java.util.Map;
-
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -15,14 +7,23 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
+import java.time.Instant;
+import java.util.Map;
+
+import org.junit.jupiter.api.Test;
+
+import com.kubeoncall.alarm.domain.AlarmSeverity;
+import com.kubeoncall.common.config.KubeOnCallProperties;
+import com.kubeoncall.tool.http.ToolHttpClient;
+
 class HttpAlarmRecoveryHealthCheckerTest {
 
     @Test
     void shouldFailClosedWhenRequiredEndpointIsMissing() {
         KubeOnCallProperties properties = new KubeOnCallProperties();
         properties.getAlarm().setRecoveryHealthCheckRequired(true);
-        HttpAlarmRecoveryHealthChecker checker = new HttpAlarmRecoveryHealthChecker(
-                mock(ToolHttpClient.class), properties);
+        HttpAlarmRecoveryHealthChecker checker =
+                new HttpAlarmRecoveryHealthChecker(mock(ToolHttpClient.class), properties);
 
         AlarmRecoveryHealthChecker.HealthCheckResult result = checker.check(state());
 
@@ -49,8 +50,18 @@ class HttpAlarmRecoveryHealthCheckerTest {
     private AlarmRecoveryState state() {
         Instant now = Instant.now();
         return new AlarmRecoveryState(
-                "fp-1", "alarm-1", AlarmSeverity.P1, "policy-1", "healthy for 10m",
-                now.minusSeconds(600), now.minusSeconds(60), true, AlarmRecoveryState.PENDING,
-                null, false, null, null);
+                "fp-1",
+                "alarm-1",
+                AlarmSeverity.P1,
+                "policy-1",
+                "healthy for 10m",
+                now.minusSeconds(600),
+                now.minusSeconds(60),
+                true,
+                AlarmRecoveryState.PENDING,
+                null,
+                false,
+                null,
+                null);
     }
 }

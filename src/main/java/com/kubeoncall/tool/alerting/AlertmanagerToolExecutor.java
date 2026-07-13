@@ -1,15 +1,16 @@
 package com.kubeoncall.tool.alerting;
 
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+
+import org.springframework.stereotype.Component;
+
 import com.kubeoncall.common.config.KubeOnCallProperties;
 import com.kubeoncall.domain.task.TaskType;
 import com.kubeoncall.tool.ToolDefinition;
 import com.kubeoncall.tool.ToolExecutor;
 import com.kubeoncall.tool.http.ToolHttpClient;
-import org.springframework.stereotype.Component;
-
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
 
 @Component
 public class AlertmanagerToolExecutor implements ToolExecutor {
@@ -36,10 +37,14 @@ public class AlertmanagerToolExecutor implements ToolExecutor {
                         "List active alerts affecting the current workload",
                         true,
                         false,
-                        List.of(TaskType.QUERY_LOGS, TaskType.QUERY_METRICS, TaskType.RESTART_SERVICE, TaskType.SCALE_WORKLOAD, TaskType.PATCH_CONFIG),
+                        List.of(
+                                TaskType.QUERY_LOGS,
+                                TaskType.QUERY_METRICS,
+                                TaskType.RESTART_SERVICE,
+                                TaskType.SCALE_WORKLOAD,
+                                TaskType.PATCH_CONFIG),
                         List.of("serviceName"),
-                        List.of("alertmanager")
-                ),
+                        List.of("alertmanager")),
                 new ToolDefinition(
                         "alertmanager.sendAlertEvent",
                         "alertmanager",
@@ -48,8 +53,7 @@ public class AlertmanagerToolExecutor implements ToolExecutor {
                         false,
                         List.of(TaskType.QUERY_LOGS, TaskType.QUERY_METRICS),
                         List.of("alertName"),
-                        List.of("alertmanager")
-                ),
+                        List.of("alertmanager")),
                 new ToolDefinition(
                         "alertmanager.createSilence",
                         "alertmanager",
@@ -58,8 +62,7 @@ public class AlertmanagerToolExecutor implements ToolExecutor {
                         true,
                         List.of(TaskType.RESTART_SERVICE, TaskType.SCALE_WORKLOAD, TaskType.PATCH_CONFIG),
                         List.of("serviceName", "durationMinutes"),
-                        List.of("alertmanager")
-                ),
+                        List.of("alertmanager")),
                 new ToolDefinition(
                         "alertmanager.expireSilence",
                         "alertmanager",
@@ -68,9 +71,7 @@ public class AlertmanagerToolExecutor implements ToolExecutor {
                         true,
                         List.of(TaskType.RESTART_SERVICE, TaskType.SCALE_WORKLOAD, TaskType.PATCH_CONFIG),
                         List.of("silenceId"),
-                        List.of("alertmanager")
-                )
-        );
+                        List.of("alertmanager")));
     }
 
     @Override
@@ -78,8 +79,7 @@ public class AlertmanagerToolExecutor implements ToolExecutor {
         Map<String, Object> request = Map.of(
                 "executor", getExecutorKind(),
                 "action", action,
-                "parameters", parameters
-        );
+                "parameters", parameters);
         Map<String, Object> metadata = new LinkedHashMap<>();
         metadata.put("executor", getExecutorKind());
         metadata.put("action", action);
@@ -90,7 +90,6 @@ public class AlertmanagerToolExecutor implements ToolExecutor {
                 properties.getIntegrations().getAlertmanager().getEndpoint(),
                 request,
                 properties.getIntegrations().getAlertmanager().getTimeoutMillis(),
-                metadata
-        );
+                metadata);
     }
 }

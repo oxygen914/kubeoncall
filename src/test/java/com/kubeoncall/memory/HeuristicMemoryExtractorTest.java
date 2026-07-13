@@ -1,5 +1,18 @@
 package com.kubeoncall.memory;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+
+import java.time.Instant;
+import java.util.Map;
+
+import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
+
 import com.kubeoncall.alarm.domain.AlarmResourceType;
 import com.kubeoncall.alarm.domain.AlarmSeverity;
 import com.kubeoncall.alarm.domain.NormalizedAlarmEvent;
@@ -9,18 +22,6 @@ import com.kubeoncall.domain.task.RiskLevel;
 import com.kubeoncall.domain.task.SopReference;
 import com.kubeoncall.domain.task.Task;
 import com.kubeoncall.domain.task.TaskType;
-import org.junit.jupiter.api.Test;
-import org.mockito.ArgumentCaptor;
-
-import java.time.Instant;
-import java.util.Map;
-
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.verify;
 
 class HeuristicMemoryExtractorTest {
 
@@ -37,8 +38,7 @@ class HeuristicMemoryExtractorTest {
                 RiskLevel.LOW,
                 "payment-service",
                 Map.of(),
-                new SopReference("SOP-1", "sop", "v1", "rag")
-        ));
+                new SopReference("SOP-1", "sop", "v1", "rag")));
 
         extractor.extractFromAsk(state, "Known pitfall: avoid restarting payment-service before checking queue lag.");
 
@@ -85,13 +85,11 @@ class HeuristicMemoryExtractorTest {
                 null,
                 Instant.now(),
                 "oom",
-                Map.of()
-        );
+                Map.of());
 
         extractor.extractFromAlarm(
                 event,
-                "alert=PodOOMKilled; fingerprint=fp-1; latestMessage=kubectl get pod payment-pod; metric=当前值 2GiB; outcome=SUCCESS"
-        );
+                "alert=PodOOMKilled; fingerprint=fp-1; latestMessage=kubectl get pod payment-pod; metric=当前值 2GiB; outcome=SUCCESS");
 
         ArgumentCaptor<MemoryExtractionTask> taskCaptor = ArgumentCaptor.forClass(MemoryExtractionTask.class);
         verify(queue).enqueue(taskCaptor.capture());

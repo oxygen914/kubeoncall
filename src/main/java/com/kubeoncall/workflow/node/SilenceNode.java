@@ -1,18 +1,19 @@
 package com.kubeoncall.workflow.node;
 
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.function.Function;
+import java.util.stream.Collectors;
+
+import org.springframework.stereotype.Component;
+
 import com.kubeoncall.alarm.domain.AlarmEvaluationResult;
 import com.kubeoncall.domain.graph.NodeResult;
 import com.kubeoncall.domain.graph.NodeStatus;
 import com.kubeoncall.tool.ToolExecutor;
 import com.kubeoncall.workflow.AlertWorkflowContext;
 import com.kubeoncall.workflow.AlertWorkflowNode;
-import org.springframework.stereotype.Component;
-
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.function.Function;
-import java.util.stream.Collectors;
 
 @Component
 public class SilenceNode implements AlertWorkflowNode {
@@ -21,7 +22,8 @@ public class SilenceNode implements AlertWorkflowNode {
 
     public SilenceNode(List<ToolExecutor> toolExecutors) {
         this.executorsByKind = toolExecutors.stream()
-                .collect(Collectors.toMap(ToolExecutor::getExecutorKind, Function.identity(), (left, right) -> left, LinkedHashMap::new));
+                .collect(Collectors.toMap(
+                        ToolExecutor::getExecutorKind, Function.identity(), (left, right) -> left, LinkedHashMap::new));
     }
 
     @Override
@@ -66,7 +68,9 @@ public class SilenceNode implements AlertWorkflowNode {
 
     private boolean isSilenceApproved(AlertWorkflowContext context) {
         AlarmEvaluationResult evaluation = context.getEvaluationResult();
-        if (evaluation == null || evaluation.matchedPolicy() == null || evaluation.matchedPolicy().actions() == null) {
+        if (evaluation == null
+                || evaluation.matchedPolicy() == null
+                || evaluation.matchedPolicy().actions() == null) {
             return false;
         }
         if (!evaluation.matchedPolicy().actions().autoSilence()) {

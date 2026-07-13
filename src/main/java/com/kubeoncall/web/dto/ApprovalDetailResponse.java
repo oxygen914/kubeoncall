@@ -1,11 +1,11 @@
 package com.kubeoncall.web.dto;
 
+import java.time.Instant;
+import java.util.List;
+
 import com.kubeoncall.domain.approval.ApprovalRequest;
 import com.kubeoncall.domain.graph.GraphState;
 import com.kubeoncall.domain.graph.PauseMetadata;
-
-import java.time.Instant;
-import java.util.List;
 
 public record ApprovalDetailResponse(
         String executionId,
@@ -23,8 +23,7 @@ public record ApprovalDetailResponse(
         List<String> approvalAuditTrail,
         List<String> observations,
         int resumeAttempts,
-        String finalApprovalDecision
-) {
+        String finalApprovalDecision) {
 
     public static ApprovalDetailResponse from(ApprovalRequest request, GraphState state) {
         return new ApprovalDetailResponse(
@@ -43,7 +42,8 @@ public record ApprovalDetailResponse(
                 state.getApprovalAuditTrail(),
                 state.getObservations(),
                 state.getResumeAttempts(),
-                state.getFinalApprovalDecision() == null ? null : state.getFinalApprovalDecision().name()
-        );
+                state.getFinalApprovalDecision() == null
+                        ? null
+                        : state.getFinalApprovalDecision().name());
     }
 }

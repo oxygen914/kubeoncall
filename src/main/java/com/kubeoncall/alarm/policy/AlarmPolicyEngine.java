@@ -1,19 +1,20 @@
 package com.kubeoncall.alarm.policy;
 
-import com.kubeoncall.alarm.domain.AlarmEvaluationResult;
-import com.kubeoncall.alarm.domain.AlarmCondition;
-import com.kubeoncall.alarm.domain.AlarmPolicy;
-import com.kubeoncall.alarm.domain.AlarmResourceType;
-import com.kubeoncall.alarm.domain.AlarmSeverity;
-import com.kubeoncall.alarm.domain.NormalizedAlarmEvent;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.springframework.stereotype.Service;
-
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.stereotype.Service;
+
+import com.kubeoncall.alarm.domain.AlarmCondition;
+import com.kubeoncall.alarm.domain.AlarmEvaluationResult;
+import com.kubeoncall.alarm.domain.AlarmPolicy;
+import com.kubeoncall.alarm.domain.AlarmResourceType;
+import com.kubeoncall.alarm.domain.AlarmSeverity;
+import com.kubeoncall.alarm.domain.NormalizedAlarmEvent;
 
 /**
  * Matches a {@link NormalizedAlarmEvent} against the configured policies and produces an
@@ -66,8 +67,8 @@ public class AlarmPolicyEngine {
         AlarmSeverity finalSeverity = maxSeverity(adjusted, event.severity());
 
         String workflowTemplate = winner.actions() != null ? winner.actions().workflowTemplate() : null;
-        String reason = String.format("Matched policy %s (%s); final severity %s",
-                winner.id(), winner.name(), finalSeverity);
+        String reason =
+                String.format("Matched policy %s (%s); final severity %s", winner.id(), winner.name(), finalSeverity);
         return new AlarmEvaluationResult(
                 true,
                 winner,
@@ -101,7 +102,9 @@ public class AlarmPolicyEngine {
                 if (event.metricName() != null
                         && p.metricName() != null
                         && event.metricName().equalsIgnoreCase(p.metricName())
-                        && (event.resourceType() == null || p.resourceType() == null || event.resourceType() == p.resourceType())) {
+                        && (event.resourceType() == null
+                                || p.resourceType() == null
+                                || event.resourceType() == p.resourceType())) {
                     byNameOrMetric.add(p);
                 }
             }
@@ -121,12 +124,14 @@ public class AlarmPolicyEngine {
         if (!metricMatches && !alertNameMatches(cond.alertName(), event.alertName())) {
             return false;
         }
-        if (cond.metricName() != null && !cond.metricName().isBlank()
+        if (cond.metricName() != null
+                && !cond.metricName().isBlank()
                 && event.metricName() != null
                 && !cond.metricName().equalsIgnoreCase(event.metricName())) {
             return false;
         }
-        if (cond.resourceType() != null && event.resourceType() != null
+        if (cond.resourceType() != null
+                && event.resourceType() != null
                 && cond.resourceType() != event.resourceType()) {
             return false;
         }
@@ -170,9 +175,7 @@ public class AlarmPolicyEngine {
     }
 
     private String canonicalAlertName(String value) {
-        return value.trim()
-                .toLowerCase(java.util.Locale.ROOT)
-                .replaceAll("(?:[-_]?p[0-3]|[-_]?info)$", "");
+        return value.trim().toLowerCase(java.util.Locale.ROOT).replaceAll("(?:[-_]?p[0-3]|[-_]?info)$", "");
     }
 
     private boolean equalsIgnoreCase(String left, String right) {

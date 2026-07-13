@@ -1,9 +1,11 @@
 package com.kubeoncall.integration;
 
-import com.kubeoncall.domain.rag.RetrieveMethod;
-import com.kubeoncall.domain.rag.RetrievalResult;
-import com.kubeoncall.rag.KnowledgeIngestService;
-import com.kubeoncall.rag.runbook.RunbookImportService;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+import java.util.Map;
+
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -13,29 +15,29 @@ import org.springframework.data.elasticsearch.client.elc.ElasticsearchTemplate;
 import org.springframework.data.elasticsearch.core.IndexOperations;
 import org.springframework.data.elasticsearch.core.mapping.IndexCoordinates;
 
-import java.util.Map;
+import com.kubeoncall.domain.rag.RetrievalResult;
+import com.kubeoncall.domain.rag.RetrieveMethod;
+import com.kubeoncall.rag.KnowledgeIngestService;
+import com.kubeoncall.rag.runbook.RunbookImportService;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertTrue;
-
-@SpringBootTest(properties = {
-        "spring.elasticsearch.uris=http://localhost:9200",
-        "kubeoncall.rag.knowledge-index=kubeoncall-knowledge-it",
-        "kubeoncall.rag.vector-enabled=true",
-        "kubeoncall.rag.vector-backend=es",
-        "kubeoncall.rag.es-knn-enabled=true",
-        "kubeoncall.rag.embedding-enabled=false",
-        "kubeoncall.rag.mock-embedding-enabled=true",
-        "kubeoncall.rag.embedding-dimensions=32",
-        "kubeoncall.rag.chunk-size=400",
-        "kubeoncall.rag.chunk-overlap=50",
-        "kubeoncall.rag.runbook-bootstrap-enabled=false",
-        "kubeoncall.storage.minio.bucket=",
-        "kubeoncall.mcp.enabled=false",
-        "kubeoncall.agent.planner-llm-enabled=false",
-        "kubeoncall.memory.consolidation-enabled=false"
-})
+@SpringBootTest(
+        properties = {
+            "spring.elasticsearch.uris=http://localhost:9200",
+            "kubeoncall.rag.knowledge-index=kubeoncall-knowledge-it",
+            "kubeoncall.rag.vector-enabled=true",
+            "kubeoncall.rag.vector-backend=es",
+            "kubeoncall.rag.es-knn-enabled=true",
+            "kubeoncall.rag.embedding-enabled=false",
+            "kubeoncall.rag.mock-embedding-enabled=true",
+            "kubeoncall.rag.embedding-dimensions=32",
+            "kubeoncall.rag.chunk-size=400",
+            "kubeoncall.rag.chunk-overlap=50",
+            "kubeoncall.rag.runbook-bootstrap-enabled=false",
+            "kubeoncall.storage.minio.bucket=",
+            "kubeoncall.mcp.enabled=false",
+            "kubeoncall.agent.planner-llm-enabled=false",
+            "kubeoncall.memory.consolidation-enabled=false"
+        })
 class ElasticsearchKnowledgeE2EIT {
 
     private static final IndexCoordinates INDEX = IndexCoordinates.of("kubeoncall-knowledge-it");
@@ -77,15 +79,14 @@ class ElasticsearchKnowledgeE2EIT {
                 "runbookId", "runbook-pod-oom",
                 "document_type", "runbook",
                 "category", "k8s-pod");
-        RetrievalResult keyword = knowledgeIngestService.retrieve(
-                "OOMKilled 内存 limit 怎么处理", filters, 3, RetrieveMethod.KEYWORD, true);
+        RetrievalResult keyword =
+                knowledgeIngestService.retrieve("OOMKilled 内存 limit 怎么处理", filters, 3, RetrieveMethod.KEYWORD, true);
         assertFalse(keyword.documents().isEmpty());
         assertEquals("runbook-pod-oom", keyword.documents().get(0).metadata().get("runbookId"));
         assertTrue(keyword.documents().get(0).content().contains("安全边界"));
         assertEquals(true, keyword.diagnostics().get("parentAggregationApplied"));
 
-        RetrievalResult vector = knowledgeIngestService.retrieve(
-                "容器内存溢出恢复", filters, 3, RetrieveMethod.VECTOR, true);
+        RetrievalResult vector = knowledgeIngestService.retrieve("容器内存溢出恢复", filters, 3, RetrieveMethod.VECTOR, true);
         assertFalse(vector.documents().isEmpty());
         assertEquals("runbook-pod-oom", vector.documents().get(0).metadata().get("runbookId"));
         assertEquals("elasticsearch_knn", vector.diagnostics().get("vectorSource"));

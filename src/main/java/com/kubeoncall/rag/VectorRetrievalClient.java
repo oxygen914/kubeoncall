@@ -1,9 +1,9 @@
 package com.kubeoncall.rag;
 
+import java.util.List;
+
 import com.kubeoncall.domain.rag.KnowledgeDocument;
 import com.kubeoncall.domain.rag.RetrievalRequest;
-
-import java.util.List;
 
 public interface VectorRetrievalClient extends VectorRetriever {
 

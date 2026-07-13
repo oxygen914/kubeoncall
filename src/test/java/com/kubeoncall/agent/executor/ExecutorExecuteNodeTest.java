@@ -1,17 +1,18 @@
 package com.kubeoncall.agent.executor;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+
+import java.util.List;
+import java.util.Map;
+
+import org.junit.jupiter.api.Test;
+
 import com.kubeoncall.domain.graph.ExecutionPlan;
 import com.kubeoncall.domain.graph.GraphState;
 import com.kubeoncall.domain.graph.NodeResult;
 import com.kubeoncall.domain.graph.NodeStatus;
 import com.kubeoncall.tool.ToolDefinition;
 import com.kubeoncall.tool.ToolExecutor;
-import org.junit.jupiter.api.Test;
-
-import java.util.List;
-import java.util.Map;
-
-import static org.junit.jupiter.api.Assertions.assertEquals;
 
 class ExecutorExecuteNodeTest {
 
@@ -19,20 +20,19 @@ class ExecutorExecuteNodeTest {
     void shouldReturnFailureWhenToolCallFails() {
         ExecutorExecuteNode node = new ExecutorExecuteNode(List.of(new FailingExecutor()));
         GraphState state = new GraphState();
-        state.getContext().put("executionPlan", new ExecutionPlan(
-                "kubernetes",
-                "queryLogs",
-                Map.of("namespace", "default", "keyword", "error", "lookbackMinutes", 10),
-                List.of("namespace", "keyword", "lookbackMinutes"),
-                List.of(),
-                Map.of("namespace", "from_planner"),
-                "execute",
-                null
-        ));
-        state.getContext().put("executorPayload", Map.of(
-                "toolName", "kubernetes.queryLogs",
-                "complete", true
-        ));
+        state.getContext()
+                .put(
+                        "executionPlan",
+                        new ExecutionPlan(
+                                "kubernetes",
+                                "queryLogs",
+                                Map.of("namespace", "default", "keyword", "error", "lookbackMinutes", 10),
+                                List.of("namespace", "keyword", "lookbackMinutes"),
+                                List.of(),
+                                Map.of("namespace", "from_planner"),
+                                "execute",
+                                null));
+        state.getContext().put("executorPayload", Map.of("toolName", "kubernetes.queryLogs", "complete", true));
         state.setCurrentLoop(1);
 
         NodeResult result = node.execute(state);
@@ -44,20 +44,19 @@ class ExecutorExecuteNodeTest {
     void shouldReturnRetryWithStructuredMetadataForTransientFailure() {
         ExecutorExecuteNode node = new ExecutorExecuteNode(List.of(new TransientFailingExecutor()));
         GraphState state = new GraphState();
-        state.getContext().put("executionPlan", new ExecutionPlan(
-                "kubernetes",
-                "queryLogs",
-                Map.of("namespace", "default", "keyword", "error", "lookbackMinutes", 10),
-                List.of("namespace", "keyword", "lookbackMinutes"),
-                List.of(),
-                Map.of("namespace", "from_planner"),
-                "execute",
-                null
-        ));
-        state.getContext().put("executorPayload", Map.of(
-                "toolName", "kubernetes.queryLogs",
-                "complete", true
-        ));
+        state.getContext()
+                .put(
+                        "executionPlan",
+                        new ExecutionPlan(
+                                "kubernetes",
+                                "queryLogs",
+                                Map.of("namespace", "default", "keyword", "error", "lookbackMinutes", 10),
+                                List.of("namespace", "keyword", "lookbackMinutes"),
+                                List.of(),
+                                Map.of("namespace", "from_planner"),
+                                "execute",
+                                null));
+        state.getContext().put("executorPayload", Map.of("toolName", "kubernetes.queryLogs", "complete", true));
         state.setCurrentLoop(0);
 
         NodeResult result = node.execute(state);
@@ -71,20 +70,19 @@ class ExecutorExecuteNodeTest {
     void shouldReturnRetryWhenExecutionPayloadIncomplete() {
         ExecutorExecuteNode node = new ExecutorExecuteNode(List.of(new SuccessExecutor()));
         GraphState state = new GraphState();
-        state.getContext().put("executionPlan", new ExecutionPlan(
-                "kubernetes",
-                "queryLogs",
-                Map.of("namespace", "default", "keyword", "error", "lookbackMinutes", 10),
-                List.of("namespace", "keyword", "lookbackMinutes"),
-                List.of(),
-                Map.of("namespace", "from_planner"),
-                "execute",
-                null
-        ));
-        state.getContext().put("executorPayload", Map.of(
-                "toolName", "kubernetes.queryLogs",
-                "complete", false
-        ));
+        state.getContext()
+                .put(
+                        "executionPlan",
+                        new ExecutionPlan(
+                                "kubernetes",
+                                "queryLogs",
+                                Map.of("namespace", "default", "keyword", "error", "lookbackMinutes", 10),
+                                List.of("namespace", "keyword", "lookbackMinutes"),
+                                List.of(),
+                                Map.of("namespace", "from_planner"),
+                                "execute",
+                                null));
+        state.getContext().put("executorPayload", Map.of("toolName", "kubernetes.queryLogs", "complete", false));
 
         NodeResult result = node.execute(state);
 
@@ -110,8 +108,7 @@ class ExecutorExecuteNodeTest {
             return Map.of(
                     "status", "failed",
                     "httpStatus", 500,
-                    "errorMessage", "upstream unavailable"
-            );
+                    "errorMessage", "upstream unavailable");
         }
     }
 
@@ -132,8 +129,7 @@ class ExecutorExecuteNodeTest {
             return Map.of(
                     "status", "failed",
                     "httpStatus", 503,
-                    "errorMessage", "temporary unavailable"
-            );
+                    "errorMessage", "temporary unavailable");
         }
     }
 
@@ -151,11 +147,7 @@ class ExecutorExecuteNodeTest {
 
         @Override
         public Map<String, Object> execute(String action, Map<String, Object> parameters) {
-            return Map.of(
-                    "status", "success",
-                    "httpStatus", 200,
-                    "response", Map.of("ok", true)
-            );
+            return Map.of("status", "success", "httpStatus", 200, "response", Map.of("ok", true));
         }
     }
 }

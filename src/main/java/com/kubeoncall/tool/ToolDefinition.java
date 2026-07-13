@@ -1,8 +1,8 @@
 package com.kubeoncall.tool;
 
-import com.kubeoncall.domain.task.TaskType;
-
 import java.util.List;
+
+import com.kubeoncall.domain.task.TaskType;
 
 public record ToolDefinition(
         String name,
@@ -12,6 +12,4 @@ public record ToolDefinition(
         boolean requiresApproval,
         List<TaskType> supportedTaskTypes,
         List<String> requiredParameters,
-        List<String> targetSystems
-) {
-}
+        List<String> targetSystems) {}

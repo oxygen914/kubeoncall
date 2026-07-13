@@ -15,7 +15,7 @@ jobs:
           distribution: temurin
           java-version: "17"
           cache: maven
-      - run: mvn --batch-mode --no-transfer-progress test
+      - run: ./mvnw --batch-mode --no-transfer-progress verify
       - run: docker compose config
 
   package:

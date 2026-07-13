@@ -1,15 +1,16 @@
 package com.kubeoncall.tool.device;
 
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+
+import org.springframework.stereotype.Component;
+
 import com.kubeoncall.common.config.KubeOnCallProperties;
 import com.kubeoncall.domain.task.TaskType;
 import com.kubeoncall.tool.ToolDefinition;
 import com.kubeoncall.tool.ToolExecutor;
 import com.kubeoncall.tool.http.ToolHttpClient;
-import org.springframework.stereotype.Component;
-
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
 
 @Component
 public class DeviceToolExecutor implements ToolExecutor {
@@ -29,18 +30,15 @@ public class DeviceToolExecutor implements ToolExecutor {
 
     @Override
     public List<ToolDefinition> supportedTools() {
-        return List.of(
-                new ToolDefinition(
-                        "device.executeScript",
-                        "device",
-                        "Execute a guarded operational script on a managed device endpoint",
-                        false,
-                        true,
-                        List.of(TaskType.EXECUTE_SCRIPT),
-                        List.of("scriptName", "readonly"),
-                        List.of("device-gateway")
-                )
-        );
+        return List.of(new ToolDefinition(
+                "device.executeScript",
+                "device",
+                "Execute a guarded operational script on a managed device endpoint",
+                false,
+                true,
+                List.of(TaskType.EXECUTE_SCRIPT),
+                List.of("scriptName", "readonly"),
+                List.of("device-gateway")));
     }
 
     @Override
@@ -48,8 +46,7 @@ public class DeviceToolExecutor implements ToolExecutor {
         Map<String, Object> request = Map.of(
                 "executor", getExecutorKind(),
                 "action", action,
-                "parameters", parameters
-        );
+                "parameters", parameters);
         Map<String, Object> metadata = new LinkedHashMap<>();
         metadata.put("executor", getExecutorKind());
         metadata.put("action", action);
@@ -59,7 +56,6 @@ public class DeviceToolExecutor implements ToolExecutor {
                 properties.getIntegrations().getDevice().getEndpoint(),
                 request,
                 properties.getIntegrations().getDevice().getTimeoutMillis(),
-                metadata
-        );
+                metadata);
     }
 }

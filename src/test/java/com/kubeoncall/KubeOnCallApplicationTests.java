@@ -7,6 +7,5 @@ import org.springframework.boot.test.context.SpringBootTest;
 class KubeOnCallApplicationTests {
 
     @Test
-    void contextLoads() {
-    }
+    void contextLoads() {}
 }

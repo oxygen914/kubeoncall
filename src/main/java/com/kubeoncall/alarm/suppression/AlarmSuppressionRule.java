@@ -1,17 +1,11 @@
 package com.kubeoncall.alarm.suppression;
 
-import com.kubeoncall.alarm.domain.AlarmResourceType;
-
 import java.util.List;
 
+import com.kubeoncall.alarm.domain.AlarmResourceType;
+
 public record AlarmSuppressionRule(
-        String id,
-        Match source,
-        Match target,
-        List<String> correlateBy,
-        long ttlSeconds,
-        String reason
-) {
+        String id, Match source, Match target, List<String> correlateBy, long ttlSeconds, String reason) {
     public AlarmSuppressionRule {
         correlateBy = correlateBy == null ? List.of() : List.copyOf(correlateBy);
     }

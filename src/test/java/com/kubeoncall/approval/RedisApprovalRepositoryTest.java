@@ -1,19 +1,5 @@
 package com.kubeoncall.approval;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
-import com.kubeoncall.common.config.KubeOnCallProperties;
-import com.kubeoncall.domain.approval.ApprovalDecision;
-import com.kubeoncall.domain.approval.ApprovalRequest;
-import com.kubeoncall.domain.task.TaskPlan;
-import org.junit.jupiter.api.Test;
-import org.springframework.data.redis.core.StringRedisTemplate;
-import org.springframework.data.redis.core.ValueOperations;
-
-import java.time.Instant;
-import java.util.List;
-import java.util.Optional;
-
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -22,6 +8,21 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+
+import java.time.Instant;
+import java.util.List;
+import java.util.Optional;
+
+import org.junit.jupiter.api.Test;
+import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.data.redis.core.ValueOperations;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+import com.kubeoncall.common.config.KubeOnCallProperties;
+import com.kubeoncall.domain.approval.ApprovalDecision;
+import com.kubeoncall.domain.approval.ApprovalRequest;
+import com.kubeoncall.domain.task.TaskPlan;
 
 class RedisApprovalRepositoryTest {
 
@@ -49,8 +50,7 @@ class RedisApprovalRepositoryTest {
                 "comment",
                 null,
                 false,
-                List.of("risk")
-        );
+                List.of("risk"));
 
         repository.save(request);
 

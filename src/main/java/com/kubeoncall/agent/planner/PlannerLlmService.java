@@ -1,39 +1,42 @@
 package com.kubeoncall.agent.planner;
 
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.kubeoncall.common.config.KubeOnCallProperties;
-import com.kubeoncall.domain.task.RiskLevel;
-import com.kubeoncall.domain.task.TaskType;
-import com.kubeoncall.skill.SkillActivationService;
-import com.kubeoncall.skill.SkillActivation;
-import org.springframework.context.ApplicationContext;
-import org.springframework.stereotype.Service;
-
 import java.lang.reflect.Method;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.context.ApplicationContext;
+import org.springframework.stereotype.Service;
+
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.kubeoncall.common.config.KubeOnCallProperties;
+import com.kubeoncall.domain.task.RiskLevel;
+import com.kubeoncall.domain.task.TaskType;
+import com.kubeoncall.skill.SkillActivation;
+import com.kubeoncall.skill.SkillActivationService;
+
 @Service
 public class PlannerLlmService {
 
-    private static final TypeReference<Map<String, Object>> MAP_TYPE = new TypeReference<>() {
-    };
-    private static final TypeReference<List<String>> STRING_LIST_TYPE = new TypeReference<>() {
-    };
+    private static final Logger log = LoggerFactory.getLogger(PlannerLlmService.class);
+    private static final TypeReference<Map<String, Object>> MAP_TYPE = new TypeReference<>() {};
+    private static final TypeReference<List<String>> STRING_LIST_TYPE = new TypeReference<>() {};
 
     private final ApplicationContext applicationContext;
     private final ObjectMapper objectMapper;
     private final KubeOnCallProperties properties;
     private final SkillActivationService skillActivationService;
 
-    public PlannerLlmService(ApplicationContext applicationContext,
-                             ObjectMapper objectMapper,
-                             KubeOnCallProperties properties,
-                             SkillActivationService skillActivationService) {
+    public PlannerLlmService(
+            ApplicationContext applicationContext,
+            ObjectMapper objectMapper,
+            KubeOnCallProperties properties,
+            SkillActivationService skillActivationService) {
         this.applicationContext = applicationContext;
         this.objectMapper = objectMapper;
         this.properties = properties;
@@ -50,13 +53,13 @@ public class PlannerLlmService {
         }
 
         try {
-            String response = invokeChatClient(chatClient, buildSystemPrompt(), buildUserPrompt(request, plannerKnowledge));
+            String response =
+                    invokeChatClient(chatClient, buildSystemPrompt(), buildUserPrompt(request, plannerKnowledge));
             if (response == null || response.isBlank()) {
                 return Optional.empty();
             }
             Optional<PlannerLlmDecision> firstDecision = parseDecision(response);
-            if (firstDecision.isEmpty() || firstDecision.get().requestedSkills().isEmpty()
-                    || skillActivationService == null) {
+            if (firstDecision.isEmpty() || firstDecision.get().requestedSkills().isEmpty()) {
                 return firstDecision;
             }
             SkillActivation activation = skillActivationService.activate(
@@ -64,15 +67,17 @@ public class PlannerLlmService {
             if (!activation.active()) {
                 return firstDecision;
             }
-            Map<String, Object> expandedKnowledge = new LinkedHashMap<>(
-                    plannerKnowledge == null ? Map.of() : plannerKnowledge);
+            Map<String, Object> expandedKnowledge =
+                    new LinkedHashMap<>(plannerKnowledge == null ? Map.of() : plannerKnowledge);
             expandedKnowledge.put("activatedSkillIds", activation.skillIds());
             expandedKnowledge.put("activatedSkills", activation.skillSummaries());
             expandedKnowledge.put("activatedSkillToolWhitelist", activation.toolWhitelist());
-            expandedKnowledge.put("activatedSkillMaxRisk", activation.maxRisk() == null ? null : activation.maxRisk().name());
+            expandedKnowledge.put(
+                    "activatedSkillMaxRisk",
+                    activation.maxRisk() == null ? null : activation.maxRisk().name());
             expandedKnowledge.put("skillPrompt", activation.prompt());
-            String refinedResponse = invokeChatClient(
-                    chatClient, buildSystemPrompt(), buildUserPrompt(request, expandedKnowledge));
+            String refinedResponse =
+                    invokeChatClient(chatClient, buildSystemPrompt(), buildUserPrompt(request, expandedKnowledge));
             Optional<PlannerLlmDecision> refined = refinedResponse == null || refinedResponse.isBlank()
                     ? Optional.empty()
                     : parseDecision(refinedResponse);
@@ -81,6 +86,9 @@ public class PlannerLlmService {
                             : decision)
                     .or(() -> firstDecision);
         } catch (Exception ex) {
+            log.warn(
+                    "Planner LLM is unavailable; falling back to rule planning: errorType={}",
+                    ex.getClass().getSimpleName());
             return Optional.empty();
         }
     }
@@ -92,7 +100,8 @@ public class PlannerLlmService {
         if (direct != null) {
             return direct;
         }
-        Object builder = resolveBeanByClassName("org.springframework.ai.chat.client.ChatClient$Builder").orElse(null);
+        Object builder = resolveBeanByClassName("org.springframework.ai.chat.client.ChatClient$Builder")
+                .orElse(null);
         if (builder != null) {
             Object built = invokeNoArg(builder, "build");
             if (built != null) {
@@ -147,7 +156,12 @@ public class PlannerLlmService {
         try {
             Method method = target.getClass().getMethod(methodName);
             return method.invoke(target);
-        } catch (Exception ignored) {
+        } catch (Exception ex) {
+            log.debug(
+                    "Planner LLM reflective invocation unavailable: targetType={}, method={}, errorType={}",
+                    target.getClass().getName(),
+                    methodName,
+                    ex.getClass().getSimpleName());
             return null;
         }
     }
@@ -162,7 +176,12 @@ public class PlannerLlmService {
                     && method.getParameterTypes()[0].isAssignableFrom(String.class)) {
                 try {
                     return method.invoke(target, argument);
-                } catch (Exception ignored) {
+                } catch (Exception ex) {
+                    log.debug(
+                            "Planner LLM reflective invocation unavailable: targetType={}, method={}, errorType={}",
+                            target.getClass().getName(),
+                            methodName,
+                            ex.getClass().getSimpleName());
                     return null;
                 }
             }
@@ -175,16 +194,20 @@ public class PlannerLlmService {
         JsonNode root = objectMapper.readTree(json);
         String intent = text(root, "intent");
         TaskType taskType = enumValue(TaskType.class, text(root, "taskType")).orElse(null);
-        RiskLevel riskLevel = enumValue(RiskLevel.class, text(root, "riskLevel")).orElse(null);
-        Map<String, Object> parameters = root.has("parameters") && root.get("parameters").isObject()
-                ? objectMapper.convertValue(root.get("parameters"), MAP_TYPE)
-                : Map.of();
-        List<String> missingSignals = root.has("missingSignals") && root.get("missingSignals").isArray()
-                ? objectMapper.convertValue(root.get("missingSignals"), STRING_LIST_TYPE)
-                : List.of();
-        List<String> requestedSkills = root.has("requestedSkills") && root.get("requestedSkills").isArray()
-                ? objectMapper.convertValue(root.get("requestedSkills"), STRING_LIST_TYPE)
-                : List.of();
+        RiskLevel riskLevel =
+                enumValue(RiskLevel.class, text(root, "riskLevel")).orElse(null);
+        Map<String, Object> parameters =
+                root.has("parameters") && root.get("parameters").isObject()
+                        ? objectMapper.convertValue(root.get("parameters"), MAP_TYPE)
+                        : Map.of();
+        List<String> missingSignals =
+                root.has("missingSignals") && root.get("missingSignals").isArray()
+                        ? objectMapper.convertValue(root.get("missingSignals"), STRING_LIST_TYPE)
+                        : List.of();
+        List<String> requestedSkills =
+                root.has("requestedSkills") && root.get("requestedSkills").isArray()
+                        ? objectMapper.convertValue(root.get("requestedSkills"), STRING_LIST_TYPE)
+                        : List.of();
 
         if ((intent == null || intent.isBlank()) && taskType == null) {
             return Optional.empty();
@@ -199,8 +222,7 @@ public class PlannerLlmService {
                 new LinkedHashMap<>(parameters),
                 missingSignals,
                 requestedSkills,
-                text(root, "summary")
-        ));
+                text(root, "summary")));
     }
 
     private String extractJsonObject(String response) {
@@ -240,10 +262,9 @@ public class PlannerLlmService {
                 """ + "\n\n" + skillIndex();
     }
 
-    public SkillActivation activateRequestedSkills(String request,
-                                                   Map<String, Object> context,
-                                                   List<String> requestedSkillIds) {
-        if (skillActivationService == null || requestedSkillIds == null || requestedSkillIds.isEmpty()) {
+    public SkillActivation activateRequestedSkills(
+            String request, Map<String, Object> context, List<String> requestedSkillIds) {
+        if (requestedSkillIds == null || requestedSkillIds.isEmpty()) {
             return SkillActivation.empty();
         }
         return skillActivationService.activate(request, context, requestedSkillIds);
@@ -257,13 +278,13 @@ public class PlannerLlmService {
     }
 
     private String skillIndex() {
-        if (skillActivationService == null) {
-            return "Skill index unavailable.";
-        }
         try {
             return skillActivationService.indexForPrompt();
         } catch (RuntimeException ex) {
-            return "Skill index unavailable: " + ex.getMessage();
+            log.warn(
+                    "Skill index is unavailable for planner prompt: errorType={}",
+                    ex.getClass().getSimpleName());
+            return "Skill index unavailable.";
         }
     }
 }

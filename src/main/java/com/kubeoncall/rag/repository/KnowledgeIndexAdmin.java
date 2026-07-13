@@ -1,21 +1,22 @@
 package com.kubeoncall.rag.repository;
 
-import com.kubeoncall.common.config.KubeOnCallProperties;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+
 import org.springframework.data.elasticsearch.client.elc.ElasticsearchTemplate;
 import org.springframework.data.elasticsearch.core.IndexOperations;
 import org.springframework.data.elasticsearch.core.document.Document;
-import org.springframework.data.elasticsearch.core.mapping.IndexCoordinates;
 import org.springframework.data.elasticsearch.core.index.AliasAction;
 import org.springframework.data.elasticsearch.core.index.AliasActionParameters;
 import org.springframework.data.elasticsearch.core.index.AliasActions;
+import org.springframework.data.elasticsearch.core.mapping.IndexCoordinates;
 import org.springframework.data.elasticsearch.core.reindex.ReindexRequest;
 import org.springframework.data.elasticsearch.core.reindex.ReindexResponse;
 import org.springframework.stereotype.Component;
 
-import java.util.LinkedHashMap;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
+import com.kubeoncall.common.config.KubeOnCallProperties;
 
 @Component
 public class KnowledgeIndexAdmin {
@@ -24,8 +25,7 @@ public class KnowledgeIndexAdmin {
     private final KubeOnCallProperties properties;
     private volatile boolean vectorMappingReady;
 
-    public KnowledgeIndexAdmin(ElasticsearchTemplate elasticsearchTemplate,
-                               KubeOnCallProperties properties) {
+    public KnowledgeIndexAdmin(ElasticsearchTemplate elasticsearchTemplate, KubeOnCallProperties properties) {
         this.elasticsearchTemplate = elasticsearchTemplate;
         this.properties = properties;
     }
@@ -33,9 +33,8 @@ public class KnowledgeIndexAdmin {
     public void ensureVectorMapping(int actualDimensions) {
         int configuredDimensions = configuredDimensions();
         if (actualDimensions != configuredDimensions) {
-            throw new IllegalArgumentException(
-                    "Embedding dimensions " + actualDimensions
-                            + " do not match configured dimensions " + configuredDimensions);
+            throw new IllegalArgumentException("Embedding dimensions " + actualDimensions
+                    + " do not match configured dimensions " + configuredDimensions);
         }
         if (vectorMappingReady) {
             return;
@@ -66,20 +65,16 @@ public class KnowledgeIndexAdmin {
                 Integer existingDimensions = vectorDimensions(currentMapping);
                 String existingMetadataType = fieldType(currentMapping, "metadata");
                 if (existingMetadataType != null && !"flattened".equals(existingMetadataType)) {
-                    throw new IllegalStateException(
-                            "Knowledge index metadata mapping is " + existingMetadataType
-                                    + "; use a new index and reimport knowledge with flattened metadata");
+                    throw new IllegalStateException("Knowledge index metadata mapping is " + existingMetadataType
+                            + "; use a new index and reimport knowledge with flattened metadata");
                 }
                 if (existingDimensions != null && existingDimensions != configuredDimensions) {
-                    throw new IllegalStateException(
-                            "Knowledge index embedding dimensions " + existingDimensions
-                                    + " do not match configured dimensions " + configuredDimensions);
+                    throw new IllegalStateException("Knowledge index embedding dimensions " + existingDimensions
+                            + " do not match configured dimensions " + configuredDimensions);
                 }
                 if (existingDimensions == null || existingMetadataType == null) {
                     if (!operations.putMapping(missingFieldsMapping(
-                            configuredDimensions,
-                            existingDimensions == null,
-                            existingMetadataType == null))) {
+                            configuredDimensions, existingDimensions == null, existingMetadataType == null))) {
                         throw new IllegalStateException("Failed to add knowledge index mapping fields");
                     }
                 }
@@ -115,8 +110,13 @@ public class KnowledgeIndexAdmin {
                     .withRefresh(true)
                     .build());
         }
-        return new VersionPreparation(version, target, created, response == null ? 0 : response.getTotal(),
-                response == null ? 0 : response.getCreated(), response == null ? 0 : response.getUpdated());
+        return new VersionPreparation(
+                version,
+                target,
+                created,
+                response == null ? 0 : response.getTotal(),
+                response == null ? 0 : response.getCreated(),
+                response == null ? 0 : response.getUpdated());
     }
 
     public AliasStatus aliasStatus() {
@@ -127,8 +127,11 @@ public class KnowledgeIndexAdmin {
             return new AliasStatus(aliasName(), "", List.of());
         }
         Map<String, java.util.Set<org.springframework.data.elasticsearch.core.index.AliasData>> aliases =
-                elasticsearchTemplate.indexOps(index()).getAliases(properties.getRag().getKnowledgeIndexAlias());
-        List<String> backing = aliases == null ? List.of() : aliases.keySet().stream().sorted().toList();
+                elasticsearchTemplate
+                        .indexOps(index())
+                        .getAliases(properties.getRag().getKnowledgeIndexAlias());
+        List<String> backing =
+                aliases == null ? List.of() : aliases.keySet().stream().sorted().toList();
         String active = backing.size() == 1 ? backing.get(0) : "";
         return new AliasStatus(properties.getRag().getKnowledgeIndexAlias(), active, backing);
     }
@@ -141,18 +144,26 @@ public class KnowledgeIndexAdmin {
             throw new IllegalArgumentException("Knowledge version does not exist: " + version);
         }
         AliasStatus current = aliasStatus();
-        if (current.backingIndices().isEmpty() && elasticsearchTemplate.indexOps(index()).exists()) {
-            throw new IllegalStateException("Configured knowledge-index-alias points to a concrete legacy index; migrate it before activation");
+        if (current.backingIndices().isEmpty()
+                && elasticsearchTemplate.indexOps(index()).exists()) {
+            throw new IllegalStateException(
+                    "Configured knowledge-index-alias points to a concrete legacy index; migrate it before activation");
         }
         List<AliasAction> actions = new ArrayList<>();
         for (String backing : current.backingIndices()) {
             actions.add(new AliasAction.Remove(AliasActionParameters.builder()
-                    .withIndices(backing).withAliases(aliasName()).build()));
+                    .withIndices(backing)
+                    .withAliases(aliasName())
+                    .build()));
         }
         actions.add(new AliasAction.Add(AliasActionParameters.builder()
-                .withIndices(target).withAliases(aliasName()).withIsWriteIndex(true).build()));
-        if (!elasticsearchTemplate.indexOps(IndexCoordinates.of(target)).alias(
-                new AliasActions(actions.toArray(AliasAction[]::new)))) {
+                .withIndices(target)
+                .withAliases(aliasName())
+                .withIsWriteIndex(true)
+                .build()));
+        if (!elasticsearchTemplate
+                .indexOps(IndexCoordinates.of(target))
+                .alias(new AliasActions(actions.toArray(AliasAction[]::new)))) {
             throw new IllegalStateException("Failed to activate knowledge alias " + aliasName());
         }
         return aliasStatus();
@@ -182,13 +193,19 @@ public class KnowledgeIndexAdmin {
         if (removeExisting) {
             for (String backing : aliasStatus().backingIndices()) {
                 actions.add(new AliasAction.Remove(AliasActionParameters.builder()
-                        .withIndices(backing).withAliases(aliasName()).build()));
+                        .withIndices(backing)
+                        .withAliases(aliasName())
+                        .build()));
             }
         }
         actions.add(new AliasAction.Add(AliasActionParameters.builder()
-                .withIndices(target).withAliases(aliasName()).withIsWriteIndex(writeIndex).build()));
-        return elasticsearchTemplate.indexOps(IndexCoordinates.of(target)).alias(
-                new AliasActions(actions.toArray(AliasAction[]::new)));
+                .withIndices(target)
+                .withAliases(aliasName())
+                .withIsWriteIndex(writeIndex)
+                .build()));
+        return elasticsearchTemplate
+                .indexOps(IndexCoordinates.of(target))
+                .alias(new AliasActions(actions.toArray(AliasAction[]::new)));
     }
 
     private void requireAlias() {
@@ -202,12 +219,10 @@ public class KnowledgeIndexAdmin {
         return properties.getRag().getKnowledgeIndexAlias().trim();
     }
 
-    public record VersionPreparation(String version, String index, boolean created,
-                                     long total, long createdDocuments, long updatedDocuments) {
-    }
+    public record VersionPreparation(
+            String version, String index, boolean created, long total, long createdDocuments, long updatedDocuments) {}
 
-    public record AliasStatus(String alias, String activeIndex, List<String> backingIndices) {
-    }
+    public record AliasStatus(String alias, String activeIndex, List<String> backingIndices) {}
 
     Document fullMapping(int dimensions) {
         Map<String, Object> fields = new LinkedHashMap<>();
@@ -233,12 +248,7 @@ public class KnowledgeIndexAdmin {
     }
 
     private Map<String, Object> vectorField(int dimensions) {
-        return Map.of(
-                "type", "dense_vector",
-                "dims", dimensions,
-                "index", true,
-                "similarity", "cosine"
-        );
+        return Map.of("type", "dense_vector", "dims", dimensions, "index", true, "similarity", "cosine");
     }
 
     private Integer vectorDimensions(Map<String, Object> mapping) {
@@ -282,8 +292,9 @@ public class KnowledgeIndexAdmin {
     }
 
     private IndexCoordinates index() {
-        return IndexCoordinates.of(aliasEnabled()
-                ? properties.getRag().getKnowledgeIndexAlias().trim()
-                : properties.getRag().getKnowledgeIndex());
+        return IndexCoordinates.of(
+                aliasEnabled()
+                        ? properties.getRag().getKnowledgeIndexAlias().trim()
+                        : properties.getRag().getKnowledgeIndex());
     }
 }

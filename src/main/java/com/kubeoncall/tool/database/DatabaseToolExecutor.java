@@ -1,15 +1,16 @@
 package com.kubeoncall.tool.database;
 
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+
+import org.springframework.stereotype.Component;
+
 import com.kubeoncall.common.config.KubeOnCallProperties;
 import com.kubeoncall.domain.task.TaskType;
 import com.kubeoncall.tool.ToolDefinition;
 import com.kubeoncall.tool.ToolExecutor;
 import com.kubeoncall.tool.http.ToolHttpClient;
-import org.springframework.stereotype.Component;
-
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
 
 @Component
 public class DatabaseToolExecutor implements ToolExecutor {
@@ -29,18 +30,15 @@ public class DatabaseToolExecutor implements ToolExecutor {
 
     @Override
     public List<ToolDefinition> supportedTools() {
-        return List.of(
-                new ToolDefinition(
-                        "database.cleanData",
-                        "database",
-                        "Execute controlled data cleanup against the configured namespace scope",
-                        false,
-                        true,
-                        List.of(TaskType.CLEAN_DATA),
-                        List.of("namespace", "target"),
-                        List.of("database")
-                )
-        );
+        return List.of(new ToolDefinition(
+                "database.cleanData",
+                "database",
+                "Execute controlled data cleanup against the configured namespace scope",
+                false,
+                true,
+                List.of(TaskType.CLEAN_DATA),
+                List.of("namespace", "target"),
+                List.of("database")));
     }
 
     @Override
@@ -48,8 +46,7 @@ public class DatabaseToolExecutor implements ToolExecutor {
         Map<String, Object> request = Map.of(
                 "executor", getExecutorKind(),
                 "action", action,
-                "parameters", parameters
-        );
+                "parameters", parameters);
         Map<String, Object> metadata = new LinkedHashMap<>();
         metadata.put("executor", getExecutorKind());
         metadata.put("action", action);
@@ -59,7 +56,6 @@ public class DatabaseToolExecutor implements ToolExecutor {
                 properties.getIntegrations().getDatabase().getEndpoint(),
                 request,
                 properties.getIntegrations().getDatabase().getTimeoutMillis(),
-                metadata
-        );
+                metadata);
     }
 }

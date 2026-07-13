@@ -1,5 +1,13 @@
 package com.kubeoncall.agent.verifier;
 
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+
+import org.springframework.stereotype.Component;
+
 import com.kubeoncall.agent.node.ThinkNode;
 import com.kubeoncall.domain.graph.ExecutionPlan;
 import com.kubeoncall.domain.graph.GraphState;
@@ -10,13 +18,6 @@ import com.kubeoncall.domain.task.Task;
 import com.kubeoncall.domain.task.TaskType;
 import com.kubeoncall.tool.AgentToolCatalog;
 import com.kubeoncall.tool.ToolDefinition;
-import org.springframework.stereotype.Component;
-
-import java.util.ArrayList;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Locale;
 
 @Component
 public class VerifierThinkNode extends ThinkNode {
@@ -39,10 +40,12 @@ public class VerifierThinkNode extends ThinkNode {
             return new NodeResult(getName(), NodeStatus.FAILURE, "No task available for verification", Map.of());
         }
         if (task.sopReference() == null) {
-            return new NodeResult(getName(), NodeStatus.FAILURE, "Task missing SOP reference", Map.of("taskId", task.taskId()));
+            return new NodeResult(
+                    getName(), NodeStatus.FAILURE, "Task missing SOP reference", Map.of("taskId", task.taskId()));
         }
 
-        ExecutionPlan executionPlan = state.getContext().get("executionPlan") instanceof ExecutionPlan plan ? plan : null;
+        ExecutionPlan executionPlan =
+                state.getContext().get("executionPlan") instanceof ExecutionPlan plan ? plan : null;
         Evaluation evaluation = evaluate(task, executionPlan, state.getContext());
         state.getContext().put("verifierDecision", evaluation.decision());
         state.getContext().put("verifierRiskReasons", evaluation.reasons());
@@ -56,17 +59,12 @@ public class VerifierThinkNode extends ThinkNode {
                     getName(),
                     NodeStatus.FAILURE,
                     "Task blocked by verifier: " + String.join("; ", evaluation.reasons()),
-                    evaluation.details()
-            );
+                    evaluation.details());
         }
 
         if ("APPROVAL_REQUIRED".equals(evaluation.decision())) {
             return new NodeResult(
-                    getName(),
-                    NodeStatus.SUCCESS,
-                    "Verifier requires approval before execution",
-                    evaluation.details()
-            );
+                    getName(), NodeStatus.SUCCESS, "Verifier requires approval before execution", evaluation.details());
         }
 
         return new NodeResult(getName(), NodeStatus.SUCCESS, "Task passed verification", evaluation.details());
@@ -74,7 +72,8 @@ public class VerifierThinkNode extends ThinkNode {
 
     private Evaluation evaluate(Task task, ExecutionPlan executionPlan, Map<String, Object> context) {
         List<String> reasons = new ArrayList<>();
-        String description = task.description() == null ? "" : task.description().toLowerCase(Locale.ROOT);
+        String description =
+                task.description() == null ? "" : task.description().toLowerCase(Locale.ROOT);
         String target = task.target() == null ? "" : task.target().toLowerCase(Locale.ROOT);
         ToolDefinition toolDefinition = resolveToolDefinition(task, executionPlan);
         RiskLevel activatedSkillMaxRisk = readActivatedSkillMaxRisk(context);
@@ -90,7 +89,8 @@ public class VerifierThinkNode extends ThinkNode {
         if (task.taskType() == TaskType.CLEAN_DATA) {
             reasons.add("Data cleanup is treated as a destructive red-line action");
         }
-        if (task.taskType() == TaskType.EXECUTE_SCRIPT && !Boolean.TRUE.equals(task.parameters().get("readonly"))) {
+        if (task.taskType() == TaskType.EXECUTE_SCRIPT
+                && !Boolean.TRUE.equals(task.parameters().get("readonly"))) {
             reasons.add("Script execution without readonly guard is not allowed");
         }
         if (description.contains("生产") || description.contains("prod") || target.contains("prod")) {
@@ -103,10 +103,11 @@ public class VerifierThinkNode extends ThinkNode {
             reasons.add("database.cleanData is blocked by policy until explicit break-glass support exists");
         }
 
-        if (!reasons.isEmpty() && (task.taskType() == TaskType.CLEAN_DATA
-                || task.taskType() == TaskType.EXECUTE_SCRIPT
-                || task.riskLevel().ordinal() >= RiskLevel.CRITICAL.ordinal()
-                || toolDefinition.name().equals("database.cleanData"))) {
+        if (!reasons.isEmpty()
+                && (task.taskType() == TaskType.CLEAN_DATA
+                        || task.taskType() == TaskType.EXECUTE_SCRIPT
+                        || task.riskLevel().ordinal() >= RiskLevel.CRITICAL.ordinal()
+                        || toolDefinition.name().equals("database.cleanData"))) {
             return new Evaluation("REJECT", reasons, detailMap(task, executionPlan, toolDefinition, reasons, context));
         }
 
@@ -119,7 +120,9 @@ public class VerifierThinkNode extends ThinkNode {
         if (!toolDefinition.readOnly() && toolDefinition.requiresApproval()) {
             reasons.add("Selected executor tool mutates external state and requires approval");
         }
-        if (task.taskType() == TaskType.RESTART_SERVICE || task.taskType() == TaskType.PATCH_CONFIG || task.taskType() == TaskType.SCALE_WORKLOAD) {
+        if (task.taskType() == TaskType.RESTART_SERVICE
+                || task.taskType() == TaskType.PATCH_CONFIG
+                || task.taskType() == TaskType.SCALE_WORKLOAD) {
             reasons.add("Change action requires manual confirmation");
         }
         if (target.contains("core") || target.contains("payment") || target.contains("master")) {
@@ -127,16 +130,19 @@ public class VerifierThinkNode extends ThinkNode {
         }
 
         if (!reasons.isEmpty()) {
-            return new Evaluation("APPROVAL_REQUIRED", reasons, detailMap(task, executionPlan, toolDefinition, reasons, context));
+            return new Evaluation(
+                    "APPROVAL_REQUIRED", reasons, detailMap(task, executionPlan, toolDefinition, reasons, context));
         }
 
         List<String> allowReasons = List.of("Task is within automatic execution guardrails");
-        return new Evaluation("ALLOW", allowReasons, detailMap(task, executionPlan, toolDefinition, allowReasons, context));
+        return new Evaluation(
+                "ALLOW", allowReasons, detailMap(task, executionPlan, toolDefinition, allowReasons, context));
     }
 
     private ToolDefinition resolveToolDefinition(Task task, ExecutionPlan executionPlan) {
         if (executionPlan != null) {
-            ToolDefinition definition = agentToolCatalog.findExecutorTool(executionPlan.executorKind(), executionPlan.action());
+            ToolDefinition definition =
+                    agentToolCatalog.findExecutorTool(executionPlan.executorKind(), executionPlan.action());
             if (definition != null) {
                 return definition;
             }
@@ -147,15 +153,17 @@ public class VerifierThinkNode extends ThinkNode {
                 .orElse(null);
     }
 
-    private Map<String, Object> detailMap(Task task,
-                                          ExecutionPlan executionPlan,
-                                          ToolDefinition toolDefinition,
-                                          List<String> reasons,
-                                          Map<String, Object> context) {
+    private Map<String, Object> detailMap(
+            Task task,
+            ExecutionPlan executionPlan,
+            ToolDefinition toolDefinition,
+            List<String> reasons,
+            Map<String, Object> context) {
         Map<String, Object> details = new LinkedHashMap<>();
         details.put("taskId", task.taskId());
         details.put("taskType", task.taskType() == null ? null : task.taskType().name());
-        details.put("riskLevel", task.riskLevel() == null ? null : task.riskLevel().name());
+        details.put(
+                "riskLevel", task.riskLevel() == null ? null : task.riskLevel().name());
         details.put("target", task.target());
         details.put("riskReasons", reasons);
         details.put("toolName", toolDefinition == null ? null : toolDefinition.name());
@@ -202,6 +210,5 @@ public class VerifierThinkNode extends ThinkNode {
         }
     }
 
-    private record Evaluation(String decision, List<String> reasons, Map<String, Object> details) {
-    }
+    private record Evaluation(String decision, List<String> reasons, Map<String, Object> details) {}
 }

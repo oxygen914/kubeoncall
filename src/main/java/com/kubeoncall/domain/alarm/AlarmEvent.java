@@ -11,6 +11,4 @@ public record AlarmEvent(
         String nodeName,
         String summary,
         Instant occurredAt,
-        Map<String, Object> metadata
-) {
-}
+        Map<String, Object> metadata) {}

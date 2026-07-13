@@ -1,14 +1,15 @@
 package com.kubeoncall.alarm.recovery;
 
-import com.kubeoncall.alarm.domain.AlarmSeverity;
-import com.kubeoncall.tool.ToolExecutor;
-import org.springframework.stereotype.Service;
-
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
 import java.util.stream.Collectors;
+
+import org.springframework.stereotype.Service;
+
+import com.kubeoncall.alarm.domain.AlarmSeverity;
+import com.kubeoncall.tool.ToolExecutor;
 
 @Service
 public class AlarmRecoveryFinalizer {
@@ -17,14 +18,16 @@ public class AlarmRecoveryFinalizer {
 
     public AlarmRecoveryFinalizer(List<ToolExecutor> toolExecutors) {
         this.executorsByKind = toolExecutors.stream()
-                .collect(Collectors.toMap(ToolExecutor::getExecutorKind, Function.identity(), (left, right) -> left, LinkedHashMap::new));
+                .collect(Collectors.toMap(
+                        ToolExecutor::getExecutorKind, Function.identity(), (left, right) -> left, LinkedHashMap::new));
     }
 
     public RecoveryActions finalizeRecovery(AlarmRecoveryState state, String actor, String note) {
         LinkedHashMap<String, Object> parameters = new LinkedHashMap<>();
         parameters.put("fingerprint", state.fingerprint());
         parameters.put("alarmId", state.alarmId());
-        parameters.put("severity", state.severity() == null ? null : state.severity().name());
+        parameters.put(
+                "severity", state.severity() == null ? null : state.severity().name());
         parameters.put("policyId", state.policyId());
         parameters.put("eventType", "RECOVERY_CONFIRMED");
         parameters.put("resolution", "resolved_by_recovery");
@@ -41,29 +44,35 @@ public class AlarmRecoveryFinalizer {
         return new RecoveryActions(success, postmortemRequired, notification, resolution, postmortem);
     }
 
-    private Map<String, Object> execute(String executorKind,
-                                        String action,
-                                        Map<String, Object> parameters) {
+    private Map<String, Object> execute(String executorKind, String action, Map<String, Object> parameters) {
         ToolExecutor executor = executorsByKind.get(executorKind);
         if (executor == null) {
             return Map.of(
-                    "status", "failed",
-                    "errorType", "IntegrationUnavailable",
-                    "errorMessage", executorKind + " executor unavailable",
-                    "executor", executorKind,
-                    "action", action
-            );
+                    "status",
+                    "failed",
+                    "errorType",
+                    "IntegrationUnavailable",
+                    "errorMessage",
+                    executorKind + " executor unavailable",
+                    "executor",
+                    executorKind,
+                    "action",
+                    action);
         }
         try {
             return executor.execute(action, parameters);
         } catch (RuntimeException ex) {
             return Map.of(
-                    "status", "failed",
-                    "errorType", ex.getClass().getSimpleName(),
-                    "errorMessage", ex.getMessage() == null ? "integration call failed" : ex.getMessage(),
-                    "executor", executorKind,
-                    "action", action
-            );
+                    "status",
+                    "failed",
+                    "errorType",
+                    ex.getClass().getSimpleName(),
+                    "errorMessage",
+                    ex.getMessage() == null ? "integration call failed" : ex.getMessage(),
+                    "executor",
+                    executorKind,
+                    "action",
+                    action);
         }
     }
 
@@ -82,7 +91,5 @@ public class AlarmRecoveryFinalizer {
             boolean postmortemRequired,
             Map<String, Object> notificationResult,
             Map<String, Object> incidentResolutionResult,
-            Map<String, Object> postmortemResult
-    ) {
-    }
+            Map<String, Object> postmortemResult) {}
 }

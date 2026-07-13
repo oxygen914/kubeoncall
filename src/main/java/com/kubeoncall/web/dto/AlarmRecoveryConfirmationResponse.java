@@ -12,6 +12,4 @@ public record AlarmRecoveryConfirmationResponse(
         boolean manualConfirmationRequired,
         String confirmedBy,
         boolean healthCheckPassed,
-        Instant confirmedAt
-) {
-}
+        Instant confirmedAt) {}

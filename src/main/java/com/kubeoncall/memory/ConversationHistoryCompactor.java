@@ -1,8 +1,5 @@
 package com.kubeoncall.memory;
 
-import com.kubeoncall.common.config.KubeOnCallProperties;
-import org.springframework.stereotype.Component;
-
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
@@ -10,14 +7,32 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Set;
 
+import org.springframework.stereotype.Component;
+
+import com.kubeoncall.common.config.KubeOnCallProperties;
+
 @Component
 public class ConversationHistoryCompactor {
 
     private static final List<String> FACT_SIGNALS = List.of(
-            "记住", "负责人", "必须", "不要", "环境", "集群", "端口", "版本",
-            "owner", "namespace", "cluster", "service", "environment", "port", "version",
-            "always", "never", "="
-    );
+            "记住",
+            "负责人",
+            "必须",
+            "不要",
+            "环境",
+            "集群",
+            "端口",
+            "版本",
+            "owner",
+            "namespace",
+            "cluster",
+            "service",
+            "environment",
+            "port",
+            "version",
+            "always",
+            "never",
+            "=");
 
     private final KubeOnCallProperties properties;
     private final TokenBudget tokenBudget;
@@ -28,23 +43,26 @@ public class ConversationHistoryCompactor {
     }
 
     public SessionSnapshot append(SessionSnapshot current, SessionTurn newTurn) {
-        SessionSnapshot base = current == null
-                ? new SessionSnapshot("", List.of(), null, null)
-                : current;
-        List<SessionTurn> allTurns = new ArrayList<>(base.turns().stream().map(this::boundedTurn).toList());
+        SessionSnapshot base = current == null ? new SessionSnapshot("", List.of(), null, null) : current;
+        List<SessionTurn> allTurns =
+                new ArrayList<>(base.turns().stream().map(this::boundedTurn).toList());
         if (newTurn != null) {
             allTurns.add(boundedTurn(newTurn));
         }
         int maxTurns = Math.max(1, properties.getMemory().getMaxSessionTurns());
         int recentLimit = Math.max(1, Math.min(maxTurns, properties.getMemory().getSessionRecentTurns()));
         int storageBudget = Math.max(64, properties.getMemory().getSessionTokenBudget());
-        boolean alreadyCompacted = base.compactedTurnCount() > 0 || !base.summary().isBlank();
+        boolean alreadyCompacted =
+                base.compactedTurnCount() > 0 || !base.summary().isBlank();
         int activeTurnLimit = alreadyCompacted ? recentLimit : maxTurns;
-        if (allTurns.size() <= activeTurnLimit
-                && estimateSnapshotTokens(base.summary(), allTurns) <= storageBudget) {
+        if (allTurns.size() <= activeTurnLimit && estimateSnapshotTokens(base.summary(), allTurns) <= storageBudget) {
             return new SessionSnapshot(
-                    base.sessionId(), allTurns, base.createdAt(), Instant.now(),
-                    base.summary(), base.compactedTurnCount());
+                    base.sessionId(),
+                    allTurns,
+                    base.createdAt(),
+                    Instant.now(),
+                    base.summary(),
+                    base.compactedTurnCount());
         }
 
         int keepCount = Math.min(recentLimit, allTurns.size());
@@ -62,8 +80,12 @@ public class ConversationHistoryCompactor {
                 ? base.summary()
                 : summarize(base.summary(), compacted, base.compactedTurnCount() + compacted.size());
         return new SessionSnapshot(
-                base.sessionId(), recent, base.createdAt(), Instant.now(),
-                summary, base.compactedTurnCount() + compacted.size());
+                base.sessionId(),
+                recent,
+                base.createdAt(),
+                Instant.now(),
+                summary,
+                base.compactedTurnCount() + compacted.size());
     }
 
     public String buildContext(SessionSnapshot snapshot) {
@@ -76,18 +98,21 @@ public class ConversationHistoryCompactor {
         }
         int recentLimit = Math.max(1, properties.getMemory().getSessionRecentTurns());
         List<SessionTurn> turns = snapshot.turns();
-        List<SessionTurn> recent = turns.size() > recentLimit
-                ? turns.subList(turns.size() - recentLimit, turns.size())
-                : turns;
+        List<SessionTurn> recent =
+                turns.size() > recentLimit ? turns.subList(turns.size() - recentLimit, turns.size()) : turns;
         for (SessionTurn turn : recent) {
             if (!builder.isEmpty()) {
                 builder.append('\n');
             }
-            builder.append("Previous user: ").append(turn.question())
-                    .append("\nPrevious assistant status: ").append(nonNull(turn.status()))
-                    .append("\nPrevious assistant summary: ").append(turn.answer());
+            builder.append("Previous user: ")
+                    .append(turn.question())
+                    .append("\nPrevious assistant status: ")
+                    .append(nonNull(turn.status()))
+                    .append("\nPrevious assistant summary: ")
+                    .append(turn.answer());
         }
-        return tokenBudget.compactText(builder.toString(), properties.getMemory().getSessionTokenBudget());
+        return tokenBudget.compactText(
+                builder.toString(), properties.getMemory().getSessionTokenBudget());
     }
 
     private SessionTurn boundedTurn(SessionTurn turn) {
@@ -105,7 +130,8 @@ public class ConversationHistoryCompactor {
     private String summarize(String existingSummary, List<SessionTurn> turns, int compactedCount) {
         Set<String> facts = new LinkedHashSet<>();
         if (existingSummary != null && !existingSummary.isBlank()) {
-            existingSummary.lines()
+            existingSummary
+                    .lines()
                     .map(String::trim)
                     .filter(line -> line.startsWith("- "))
                     .map(line -> line.substring(2))
@@ -135,8 +161,7 @@ public class ConversationHistoryCompactor {
                     .append(tokenBudget.compactText(turn.answer(), 90));
         }
         return tokenBudget.compactText(
-                builder.toString(),
-                Math.max(64, properties.getMemory().getSessionSummaryTokenBudget()));
+                builder.toString(), Math.max(64, properties.getMemory().getSessionSummaryTokenBudget()));
     }
 
     private int estimateSnapshotTokens(String summary, List<SessionTurn> turns) {

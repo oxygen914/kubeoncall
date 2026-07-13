@@ -1,12 +1,13 @@
 package com.kubeoncall.rag;
 
-import com.kubeoncall.common.config.KubeOnCallProperties;
-import org.springframework.stereotype.Service;
-
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.util.ArrayList;
 import java.util.List;
+
+import org.springframework.stereotype.Service;
+
+import com.kubeoncall.common.config.KubeOnCallProperties;
 
 @Service
 public class EmbeddingService {
@@ -41,9 +42,8 @@ public class EmbeddingService {
     private EmbeddingResult validated(List<Double> vector, String provider, boolean mock) {
         int expectedDimensions = Math.max(1, properties.getRag().getEmbeddingDimensions());
         if (vector.size() != expectedDimensions) {
-            throw new IllegalStateException(
-                    "Embedding dimensions " + vector.size()
-                            + " do not match configured dimensions " + expectedDimensions);
+            throw new IllegalStateException("Embedding dimensions " + vector.size()
+                    + " do not match configured dimensions " + expectedDimensions);
         }
         if (vector.stream().anyMatch(value -> value == null || !Double.isFinite(value))) {
             throw new IllegalStateException("Embedding contains non-finite values");
@@ -67,10 +67,5 @@ public class EmbeddingService {
         }
     }
 
-    public record EmbeddingResult(
-            List<Double> vector,
-            String provider,
-            boolean mock
-    ) {
-    }
+    public record EmbeddingResult(List<Double> vector, String provider, boolean mock) {}
 }

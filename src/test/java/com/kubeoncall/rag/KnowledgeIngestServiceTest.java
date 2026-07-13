@@ -1,18 +1,5 @@
 package com.kubeoncall.rag;
 
-import com.kubeoncall.common.config.KubeOnCallProperties;
-import com.kubeoncall.domain.rag.KnowledgeDocument;
-import com.kubeoncall.domain.rag.RetrievalRequest;
-import com.kubeoncall.domain.rag.RetrievalResult;
-import com.kubeoncall.rag.repository.KnowledgeRepository;
-import com.kubeoncall.storage.KnowledgeObjectStorageService;
-import com.kubeoncall.storage.StoredDocumentReference;
-import org.junit.jupiter.api.Test;
-
-import java.time.Instant;
-import java.util.List;
-import java.util.Map;
-
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -23,7 +10,22 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+
+import java.time.Instant;
+import java.util.List;
+import java.util.Map;
+
+import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+
+import com.kubeoncall.common.config.KubeOnCallProperties;
+import com.kubeoncall.domain.rag.KnowledgeDocument;
+import com.kubeoncall.domain.rag.RetrievalRequest;
+import com.kubeoncall.domain.rag.RetrievalResult;
+import com.kubeoncall.rag.repository.KnowledgeRepository;
+import com.kubeoncall.service.KubeOnCallMetricsService;
+import com.kubeoncall.storage.KnowledgeObjectStorageService;
+import com.kubeoncall.storage.StoredDocumentReference;
 
 class KnowledgeIngestServiceTest {
 
@@ -41,8 +43,7 @@ class KnowledgeIngestServiceTest {
                 new KnowledgeChunker(properties),
                 storageService,
                 new EmbeddingService(List.of(), properties),
-                properties
-        );
+                properties);
 
         facade.ingest("CPU runbook", "check cpu usage", "manual", Map.of());
 
@@ -62,14 +63,14 @@ class KnowledgeIngestServiceTest {
         RagRouter ragRouter = new RagRouter();
         HybridRetrievalService retrievalService = mock(HybridRetrievalService.class);
         KubeOnCallProperties properties = new KubeOnCallProperties();
-        RerankService rerankService = new RerankService(properties);
-        KnowledgeChunker chunker = new KnowledgeChunker();
+        RerankService rerankService = new RerankService(properties, List.of(), mock(KubeOnCallMetricsService.class));
+        KnowledgeChunker chunker = new KnowledgeChunker(properties);
         KnowledgeObjectStorageService storageService = mock(KnowledgeObjectStorageService.class);
 
         when(storageService.store(anyString(), anyString(), anyString()))
                 .thenReturn(new StoredDocumentReference("knowledge/doc.txt", "bucket-a", true, "ok"));
 
-        KnowledgeIngestService service = new KnowledgeIngestService(
+        KnowledgeIngestService service = service(
                 repository,
                 rewriteService,
                 ragRouter,
@@ -77,8 +78,7 @@ class KnowledgeIngestServiceTest {
                 rerankService,
                 properties,
                 chunker,
-                storageService
-        );
+                storageService);
 
         String content = "x".repeat(600);
         KnowledgeDocument document = service.ingest("title", content, "manual", Map.of("env", "lab"));
@@ -99,42 +99,33 @@ class KnowledgeIngestServiceTest {
         RerankService rerankService = mock(RerankService.class);
         KubeOnCallProperties properties = new KubeOnCallProperties();
         properties.getRag().setDefaultTopK(2);
-        KnowledgeChunker chunker = new KnowledgeChunker();
+        KnowledgeChunker chunker = new KnowledgeChunker(properties);
         KnowledgeObjectStorageService storageService = mock(KnowledgeObjectStorageService.class);
 
         when(storageService.store(anyString(), anyString(), anyString()))
                 .thenReturn(new StoredDocumentReference(null, null, false, "skip"));
 
         KnowledgeDocument parent = new KnowledgeDocument(
-                "parent-1",
-                "payment timeout",
-                "runbook parent",
-                "manual",
-                Map.of("env", "lab"),
-                Instant.now()
-        );
+                "parent-1", "payment timeout", "runbook parent", "manual", Map.of("env", "lab"), Instant.now());
         KnowledgeDocument child = new KnowledgeDocument(
                 "parent-1#chunk-1",
                 "payment timeout",
                 "runbook chunk",
                 "manual",
                 Map.of("env", "lab", "parentDocumentId", "parent-1"),
-                Instant.now()
-        );
+                Instant.now());
         when(retrievalService.retrieveWithTrace(any(RetrievalRequest.class)))
                 .thenReturn(new HybridRetrievalService.RetrievalTrace(
                         List.of(child),
                         List.of("Applied lexical retrieval over title/content"),
-                        Map.of("candidateCount", 1, "latencyMs", 2)
-                ));
+                        Map.of("candidateCount", 1, "latencyMs", 2)));
         when(rerankService.rerank(anyString(), any()))
                 .thenReturn(new RerankService.RerankTrace(
                         List.of(child),
-                        Map.of("rerankLatencyMs", 1, "scoreByDocument", Map.of("parent-1#chunk-1", 8))
-                ));
+                        Map.of("rerankLatencyMs", 1, "scoreByDocument", Map.of("parent-1#chunk-1", 8))));
         when(repository.loadParents(anyList())).thenReturn(Map.of("parent-1", parent));
 
-        KnowledgeIngestService service = new KnowledgeIngestService(
+        KnowledgeIngestService service = service(
                 repository,
                 rewriteService,
                 ragRouter,
@@ -142,8 +133,7 @@ class KnowledgeIngestServiceTest {
                 rerankService,
                 properties,
                 chunker,
-                storageService
-        );
+                storageService);
 
         RetrievalResult result = service.retrieve("payment timeout 怎么处理", Map.of("env", "lab"));
 
@@ -169,38 +159,30 @@ class KnowledgeIngestServiceTest {
         HybridRetrievalService retrievalService = mock(HybridRetrievalService.class);
         RerankService rerankService = mock(RerankService.class);
         KubeOnCallProperties properties = new KubeOnCallProperties();
-        KnowledgeChunker chunker = new KnowledgeChunker();
+        KnowledgeChunker chunker = new KnowledgeChunker(properties);
         KnowledgeObjectStorageService storageService = mock(KnowledgeObjectStorageService.class);
 
         when(storageService.store(anyString(), anyString(), anyString()))
                 .thenReturn(new StoredDocumentReference(null, null, false, "skip"));
 
         KnowledgeDocument sop = new KnowledgeDocument(
-                "sop-1",
-                "payment sop",
-                "restart runbook",
-                "manual",
-                Map.of("source_type", "sop"),
-                Instant.now()
-        );
+                "sop-1", "payment sop", "restart runbook", "manual", Map.of("source_type", "sop"), Instant.now());
         KnowledgeDocument memory = new KnowledgeDocument(
                 "memory-1",
                 "payment memory",
                 "last incident note",
                 "memory",
                 Map.of("source_type", "memory"),
-                Instant.now()
-        );
+                Instant.now());
         when(retrievalService.retrieveWithTrace(any(RetrievalRequest.class)))
                 .thenReturn(new HybridRetrievalService.RetrievalTrace(
                         List.of(memory, sop),
                         List.of("Applied lexical retrieval over title/content"),
-                        Map.of("candidateCount", 2)
-                ));
+                        Map.of("candidateCount", 2)));
         when(rerankService.rerank(anyString(), any()))
                 .thenReturn(new RerankService.RerankTrace(List.of(sop), Map.of("scoreByDocument", Map.of("sop-1", 1))));
 
-        KnowledgeIngestService service = new KnowledgeIngestService(
+        KnowledgeIngestService service = service(
                 repository,
                 rewriteService,
                 ragRouter,
@@ -208,14 +190,31 @@ class KnowledgeIngestServiceTest {
                 rerankService,
                 properties,
                 chunker,
-                storageService
-        );
+                storageService);
 
         RetrievalResult result = service.retrieve("payment 怎么处理", Map.of());
 
-        assertEquals(List.of("sop-1"), result.documents().stream().map(KnowledgeDocument::id).toList());
+        assertEquals(
+                List.of("sop-1"),
+                result.documents().stream().map(KnowledgeDocument::id).toList());
         assertEquals(1, result.diagnostics().get("memoryDocumentsExcluded"));
         assertEquals(false, result.diagnostics().get("memorySearchExplicit"));
         assertTrue(result.retrievalReasons().stream().anyMatch(reason -> reason.contains("Excluded long-term memory")));
+    }
+
+    private static KnowledgeIngestService service(
+            KnowledgeRepository repository,
+            QueryRewriteService rewriteService,
+            RagRouter ragRouter,
+            HybridRetrievalService retrievalService,
+            RerankService rerankService,
+            KubeOnCallProperties properties,
+            KnowledgeChunker chunker,
+            KnowledgeObjectStorageService storageService) {
+        KnowledgeIngestionFacade ingestionFacade = new KnowledgeIngestionFacade(
+                repository, chunker, storageService, new EmbeddingService(List.of(), properties), properties);
+        KnowledgeRetrievalFacade retrievalFacade = new KnowledgeRetrievalFacade(
+                repository, rewriteService, ragRouter, retrievalService, rerankService, properties);
+        return new KnowledgeIngestService(ingestionFacade, retrievalFacade);
     }
 }

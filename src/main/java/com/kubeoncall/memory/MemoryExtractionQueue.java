@@ -1,12 +1,13 @@
 package com.kubeoncall.memory;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.kubeoncall.common.config.KubeOnCallProperties;
-import com.kubeoncall.service.KubeOnCallMetricsService;
+import java.util.Optional;
+
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 
-import java.util.Optional;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.kubeoncall.common.config.KubeOnCallProperties;
+import com.kubeoncall.service.KubeOnCallMetricsService;
 
 @Service
 public class MemoryExtractionQueue {
@@ -20,10 +21,11 @@ public class MemoryExtractionQueue {
     private final KubeOnCallProperties properties;
     private final KubeOnCallMetricsService metricsService;
 
-    public MemoryExtractionQueue(StringRedisTemplate redisTemplate,
-                                 ObjectMapper objectMapper,
-                                 KubeOnCallProperties properties,
-                                 KubeOnCallMetricsService metricsService) {
+    public MemoryExtractionQueue(
+            StringRedisTemplate redisTemplate,
+            ObjectMapper objectMapper,
+            KubeOnCallProperties properties,
+            KubeOnCallMetricsService metricsService) {
         this.redisTemplate = redisTemplate;
         this.objectMapper = objectMapper;
         this.properties = properties;
@@ -92,6 +94,5 @@ public class MemoryExtractionQueue {
         return replayed;
     }
 
-    public record ClaimedTask(String raw, MemoryExtractionTask task) {
-    }
+    public record ClaimedTask(String raw, MemoryExtractionTask task) {}
 }

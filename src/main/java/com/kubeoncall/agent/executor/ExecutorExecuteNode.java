@@ -1,18 +1,19 @@
 package com.kubeoncall.agent.executor;
 
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.function.Function;
+import java.util.stream.Collectors;
+
+import org.springframework.stereotype.Component;
+
 import com.kubeoncall.agent.node.ExecuteNode;
 import com.kubeoncall.domain.graph.ExecutionPlan;
 import com.kubeoncall.domain.graph.GraphState;
 import com.kubeoncall.domain.graph.NodeResult;
 import com.kubeoncall.domain.graph.NodeStatus;
 import com.kubeoncall.tool.ToolExecutor;
-import org.springframework.stereotype.Component;
-
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.function.Function;
-import java.util.stream.Collectors;
 
 @Component
 public class ExecutorExecuteNode extends ExecuteNode {
@@ -28,7 +29,8 @@ public class ExecutorExecuteNode extends ExecuteNode {
 
     public ExecutorExecuteNode(List<ToolExecutor> toolExecutors) {
         this.executorsByKind = toolExecutors.stream()
-                .collect(Collectors.toMap(ToolExecutor::getExecutorKind, Function.identity(), (left, right) -> left, LinkedHashMap::new));
+                .collect(Collectors.toMap(
+                        ToolExecutor::getExecutorKind, Function.identity(), (left, right) -> left, LinkedHashMap::new));
     }
 
     @Override
@@ -38,11 +40,14 @@ public class ExecutorExecuteNode extends ExecuteNode {
 
     @Override
     public NodeResult execute(GraphState state) {
-        ExecutionPlan executionPlan = state.getContext().get("executionPlan") instanceof ExecutionPlan plan ? plan : null;
+        ExecutionPlan executionPlan =
+                state.getContext().get("executionPlan") instanceof ExecutionPlan plan ? plan : null;
         Map<String, Object> payload = state.getContext().get("executorPayload") instanceof Map<?, ?> rawPayload
-                ? rawPayload.entrySet().stream().collect(LinkedHashMap::new,
-                (map, entry) -> map.put(String.valueOf(entry.getKey()), entry.getValue()),
-                Map::putAll)
+                ? rawPayload.entrySet().stream()
+                        .collect(
+                                LinkedHashMap::new,
+                                (map, entry) -> map.put(String.valueOf(entry.getKey()), entry.getValue()),
+                                Map::putAll)
                 : Map.of();
 
         if (executionPlan == null) {
@@ -59,9 +64,7 @@ public class ExecutorExecuteNode extends ExecuteNode {
                             "errorCode", 400,
                             "missingParameters", executionPlan.missingParameters(),
                             "action", executionPlan.action(),
-                            "executorKind", executionPlan.executorKind()
-                    )
-            );
+                            "executorKind", executionPlan.executorKind()));
         }
 
         Object complete = payload.get("complete");
@@ -71,8 +74,13 @@ public class ExecutorExecuteNode extends ExecuteNode {
                     defaultMessage(executionPlan.retryHint(), "Execution payload is incomplete"),
                     RETRY_REASON_INCOMPLETE_PAYLOAD,
                     RETRY_STRATEGY_REPLAN_EXECUTION,
-                    Map.of("errorCode", 409, "action", executionPlan.action(), "executorKind", executionPlan.executorKind())
-            );
+                    Map.of(
+                            "errorCode",
+                            409,
+                            "action",
+                            executionPlan.action(),
+                            "executorKind",
+                            executionPlan.executorKind()));
         }
 
         String executorKind = executionPlan.executorKind();
@@ -86,13 +94,13 @@ public class ExecutorExecuteNode extends ExecuteNode {
                     getName(),
                     NodeStatus.FAILURE,
                     "No tool executor registered for executorKind=" + executorKind,
-                    Map.of("executorKind", executorKind, "action", action, "errorCode", 404)
-            );
+                    Map.of("executorKind", executorKind, "action", action, "errorCode", 404));
         }
 
         Map<String, Object> toolResult = toolExecutor.execute(action, parameters);
         state.getContext().put("executorResult", toolResult);
-        state.addObservation("Executor execute: dispatched " + executorKind + "." + action + " with parameters=" + parameters.keySet());
+        state.addObservation("Executor execute: dispatched " + executorKind + "." + action + " with parameters="
+                + parameters.keySet());
 
         int httpStatus = readHttpStatus(toolResult);
         String resultStatus = String.valueOf(toolResult.getOrDefault("status", "unknown"));
@@ -107,9 +115,7 @@ public class ExecutorExecuteNode extends ExecuteNode {
                             "executorKind", executorKind,
                             "action", action,
                             "toolName", payload.get("toolName"),
-                            "result", toolResult
-                    )
-            );
+                            "result", toolResult));
         }
 
         if (httpStatus >= 400 || "failed".equalsIgnoreCase(resultStatus)) {
@@ -122,9 +128,7 @@ public class ExecutorExecuteNode extends ExecuteNode {
                             "executorKind", executorKind,
                             "action", action,
                             "toolName", payload.get("toolName"),
-                            "result", toolResult
-                    )
-            );
+                            "result", toolResult));
         }
 
         return new NodeResult(
@@ -132,23 +136,31 @@ public class ExecutorExecuteNode extends ExecuteNode {
                 NodeStatus.SUCCESS,
                 defaultMessage(executionSummary, "Execution prepared successfully"),
                 Map.of(
-                        "httpStatus", httpStatus,
-                        "executorKind", executorKind,
-                        "action", action,
-                        "parameterCount", parameters.size(),
-                        "requiredParameters", executionPlan.requiredParameters(),
-                        "parameterSources", executionPlan.parameterSources(),
-                        "toolName", payload.get("toolName"),
-                        "result", toolResult
-                )
-        );
+                        "httpStatus",
+                        httpStatus,
+                        "executorKind",
+                        executorKind,
+                        "action",
+                        action,
+                        "parameterCount",
+                        parameters.size(),
+                        "requiredParameters",
+                        executionPlan.requiredParameters(),
+                        "parameterSources",
+                        executionPlan.parameterSources(),
+                        "toolName",
+                        payload.get("toolName"),
+                        "result",
+                        toolResult));
     }
 
     private boolean shouldRetryToolFailure(int httpStatus, String resultStatus, int currentLoop) {
         if (currentLoop > 0) {
             return false;
         }
-        return httpStatus == 408 || httpStatus == 429 || httpStatus >= 500
+        return httpStatus == 408
+                || httpStatus == 429
+                || httpStatus >= 500
                 || "timeout".equalsIgnoreCase(resultStatus)
                 || "retryable".equalsIgnoreCase(resultStatus)
                 || "transient_failed".equalsIgnoreCase(resultStatus);

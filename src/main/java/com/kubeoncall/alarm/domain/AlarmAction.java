@@ -11,8 +11,7 @@ public record AlarmAction(
         String notificationChannel,
         boolean approvalRequiredForActions,
         boolean autoSilence,
-        List<String> allowedTools
-) {
+        List<String> allowedTools) {
 
     public AlarmAction {
         if (allowedTools == null) {

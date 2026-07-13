@@ -1,13 +1,14 @@
 package com.kubeoncall.memory;
 
-import com.kubeoncall.alarm.domain.NormalizedAlarmEvent;
-import com.kubeoncall.common.config.KubeOnCallProperties;
-import org.springframework.stereotype.Service;
-
 import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+
+import org.springframework.stereotype.Service;
+
+import com.kubeoncall.alarm.domain.NormalizedAlarmEvent;
+import com.kubeoncall.common.config.KubeOnCallProperties;
 
 @Service
 public class AlertMemoryService {
@@ -15,8 +16,7 @@ public class AlertMemoryService {
     private final MemoryService memoryService;
     private final KubeOnCallProperties properties;
 
-    public AlertMemoryService(MemoryService memoryService,
-                              KubeOnCallProperties properties) {
+    public AlertMemoryService(MemoryService memoryService, KubeOnCallProperties properties) {
         this.memoryService = memoryService;
         this.properties = properties;
     }
@@ -26,7 +26,8 @@ public class AlertMemoryService {
             return List.of();
         }
         LinkedHashMap<String, MemoryEntry> recalled = new LinkedHashMap<>();
-        String query = String.join(" ",
+        String query = String.join(
+                " ",
                 safe(event.alertName()),
                 safe(event.service()),
                 safe(event.resourceName()),
@@ -46,7 +47,9 @@ public class AlertMemoryService {
         MemoryEntry entry = new MemoryEntry(
                 null,
                 MemoryType.INCIDENT_SUMMARY,
-                event.fingerprint() == null || event.fingerprint().isBlank() ? MemoryScope.SERVICE : MemoryScope.FINGERPRINT,
+                event.fingerprint() == null || event.fingerprint().isBlank()
+                        ? MemoryScope.SERVICE
+                        : MemoryScope.FINGERPRINT,
                 safe(event.alertName()),
                 summary,
                 event.service(),
@@ -54,8 +57,7 @@ public class AlertMemoryService {
                 event.fingerprint(),
                 Instant.now(),
                 Instant.now(),
-                Map.of("source", "alarm", "alert_name", safe(event.alertName()))
-        );
+                Map.of("source", "alarm", "alert_name", safe(event.alertName())));
         return memoryService.remember(entry);
     }
 
@@ -64,7 +66,8 @@ public class AlertMemoryService {
             return;
         }
         Map<String, String> filters = Map.of(key, value);
-        for (MemoryEntry entry : memoryService.search(query, filters, Math.max(1, properties.getMemory().getInjectMaxEntries()))) {
+        for (MemoryEntry entry : memoryService.search(
+                query, filters, Math.max(1, properties.getMemory().getInjectMaxEntries()))) {
             recalled.putIfAbsent(entry.id(), entry);
         }
     }

@@ -1,5 +1,11 @@
 package com.kubeoncall.workflow.node;
 
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+
+import org.springframework.stereotype.Component;
+
 import com.kubeoncall.alarm.domain.AlarmEvaluationResult;
 import com.kubeoncall.alarm.domain.NormalizedAlarmEvent;
 import com.kubeoncall.common.config.KubeOnCallProperties;
@@ -8,11 +14,6 @@ import com.kubeoncall.domain.graph.NodeStatus;
 import com.kubeoncall.tool.ToolExecutor;
 import com.kubeoncall.workflow.AlertWorkflowContext;
 import com.kubeoncall.workflow.AlertWorkflowNode;
-import org.springframework.stereotype.Component;
-
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
 
 /**
  * Emits a structured diagnostic summary as the workflow's terminal result.
@@ -23,8 +24,7 @@ import java.util.Map;
 @Component
 public class ResultPushNode implements AlertWorkflowNode {
 
-    public ResultPushNode(List<ToolExecutor> toolExecutors, KubeOnCallProperties properties) {
-    }
+    public ResultPushNode(List<ToolExecutor> toolExecutors, KubeOnCallProperties properties) {}
 
     @Override
     public NodeResult execute(AlertWorkflowContext context) {
@@ -35,8 +35,7 @@ public class ResultPushNode implements AlertWorkflowNode {
                 "resultPushNode",
                 NodeStatus.SUCCESS,
                 context.isDegraded() ? "Recorded degraded diagnostic summary" : "Recorded diagnostic summary",
-                summary
-        );
+                summary);
     }
 
     private Map<String, Object> buildSummary(AlertWorkflowContext context) {
@@ -48,13 +47,21 @@ public class ResultPushNode implements AlertWorkflowNode {
         summary.put("severity", severity(context));
         summary.put("failedNodes", context.getFailedNodes());
         summary.put("skippedNodes", context.getSkippedNodes());
-        summary.put("steps", context.getNodeResults().stream().map(result -> result.nodeName() + ":" + result.status()).toList());
+        summary.put(
+                "steps",
+                context.getNodeResults().stream()
+                        .map(result -> result.nodeName() + ":" + result.status())
+                        .toList());
         summary.put("knowledgeHints", context.getAttribute("knowledgeHints"));
         summary.put("diagnosis", context.getAttribute("diagnosis"));
         if (normalized != null) {
             summary.put("fingerprint", normalized.fingerprint());
             summary.put("alertName", normalized.alertName());
-            summary.put("resourceType", normalized.resourceType() == null ? null : normalized.resourceType().name());
+            summary.put(
+                    "resourceType",
+                    normalized.resourceType() == null
+                            ? null
+                            : normalized.resourceType().name());
             summary.put("resourceName", normalized.resourceName());
             summary.put("runbookId", normalized.runbookId());
         }

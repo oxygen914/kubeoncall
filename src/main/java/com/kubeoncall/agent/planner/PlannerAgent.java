@@ -1,11 +1,12 @@
 package com.kubeoncall.agent.planner;
 
+import java.util.List;
+
+import org.springframework.stereotype.Component;
+
 import com.kubeoncall.agent.base.ReActAgent;
 import com.kubeoncall.agent.node.AgentNode;
 import com.kubeoncall.common.config.KubeOnCallProperties;
-import org.springframework.stereotype.Component;
-
-import java.util.List;
 
 @Component
 public class PlannerAgent extends ReActAgent {
@@ -14,9 +15,10 @@ public class PlannerAgent extends ReActAgent {
     private final PlannerQueryToolNode plannerQueryToolNode;
     private final KubeOnCallProperties properties;
 
-    public PlannerAgent(PlannerThinkNode plannerThinkNode,
-                        PlannerQueryToolNode plannerQueryToolNode,
-                        KubeOnCallProperties properties) {
+    public PlannerAgent(
+            PlannerThinkNode plannerThinkNode,
+            PlannerQueryToolNode plannerQueryToolNode,
+            KubeOnCallProperties properties) {
         this.plannerThinkNode = plannerThinkNode;
         this.plannerQueryToolNode = plannerQueryToolNode;
         this.properties = properties;

@@ -10,6 +10,4 @@ public record AlarmMaintenanceWindowRequest(
         String reason,
         String createdBy,
         String approvedBy,
-        String approvalReference
-) {
-}
+        String approvalReference) {}

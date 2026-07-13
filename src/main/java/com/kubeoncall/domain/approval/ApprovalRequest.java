@@ -1,9 +1,9 @@
 package com.kubeoncall.domain.approval;
 
-import com.kubeoncall.domain.task.TaskPlan;
-
 import java.time.Instant;
 import java.util.List;
+
+import com.kubeoncall.domain.task.TaskPlan;
 
 public record ApprovalRequest(
         String executionId,
@@ -16,6 +16,4 @@ public record ApprovalRequest(
         String comment,
         String decidedBy,
         boolean processed,
-        List<String> riskReasons
-) {
-}
+        List<String> riskReasons) {}

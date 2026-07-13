@@ -9,6 +9,4 @@ public record Task(
         RiskLevel riskLevel,
         String target,
         Map<String, Object> parameters,
-        SopReference sopReference
-) {
-}
+        SopReference sopReference) {}

@@ -9,6 +9,4 @@ public record AlarmSilenceApprovalResponse(
         String reason,
         Instant approvedAt,
         Instant expiresAt,
-        String approvalKey
-) {
-}
+        String approvalKey) {}

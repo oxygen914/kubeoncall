@@ -19,6 +19,4 @@ public record ExecutionStats(
         double toolSuccessRate,
         double degradedRate,
         long averageApprovalLatencyMs,
-        List<ExecutionAuditRecord> recentExecutions
-) {
-}
+        List<ExecutionAuditRecord> recentExecutions) {}

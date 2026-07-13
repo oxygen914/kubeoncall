@@ -1,9 +1,9 @@
 package com.kubeoncall.alarm.state;
 
+import java.time.Instant;
+
 import com.kubeoncall.alarm.domain.AlarmSeverity;
 import com.kubeoncall.alarm.domain.AlarmStatus;
-
-import java.time.Instant;
 
 public record ActiveAlarmState(
         String fingerprint,
@@ -18,6 +18,4 @@ public record ActiveAlarmState(
         String policyId,
         Instant firstSeen,
         Instant lastSeen,
-        long count
-) {
-}
+        long count) {}

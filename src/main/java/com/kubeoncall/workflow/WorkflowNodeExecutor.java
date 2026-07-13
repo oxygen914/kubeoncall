@@ -1,13 +1,14 @@
 package com.kubeoncall.workflow;
 
-import com.kubeoncall.domain.graph.NodeResult;
-import com.kubeoncall.domain.graph.NodeStatus;
-import org.springframework.stereotype.Component;
-
 import java.time.Duration;
 import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.Map;
+
+import org.springframework.stereotype.Component;
+
+import com.kubeoncall.domain.graph.NodeResult;
+import com.kubeoncall.domain.graph.NodeStatus;
 
 @Component
 public class WorkflowNodeExecutor {
@@ -25,8 +26,7 @@ public class WorkflowNodeExecutor {
                         nodeName,
                         NodeStatus.FAILURE,
                         "Node execution timed out after " + durationMs + " ms",
-                        Map.of("durationMs", durationMs, "timeoutMs", timeout.toMillis())
-                );
+                        Map.of("durationMs", durationMs, "timeoutMs", timeout.toMillis()));
                 context.addNodeResult(enrichPayload(timeoutResult, context, durationMs));
                 if (!definition.continueOnFailure()) {
                     context.terminate(nodeName);
@@ -55,8 +55,7 @@ public class WorkflowNodeExecutor {
                     nodeName,
                     NodeStatus.FAILURE,
                     "Node execution failed: " + ex.getMessage(),
-                    Map.of("exceptionType", ex.getClass().getSimpleName())
-            );
+                    Map.of("exceptionType", ex.getClass().getSimpleName()));
             context.addNodeResult(enrichPayload(failure, context, durationMs));
             return failure;
         }

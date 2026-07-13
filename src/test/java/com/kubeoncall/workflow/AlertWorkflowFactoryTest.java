@@ -1,5 +1,13 @@
 package com.kubeoncall.workflow;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertIterableEquals;
+import static org.mockito.Mockito.mock;
+
+import java.util.List;
+
+import org.junit.jupiter.api.Test;
+
 import com.kubeoncall.workflow.node.DeviceInfoNode;
 import com.kubeoncall.workflow.node.IntelligentDiagnosisNode;
 import com.kubeoncall.workflow.node.KnowledgeRetrieveNode;
@@ -9,13 +17,6 @@ import com.kubeoncall.workflow.node.ResultPushNode;
 import com.kubeoncall.workflow.node.SilenceNode;
 import com.kubeoncall.workflow.node.StateCompareNode;
 import com.kubeoncall.workflow.node.TicketNode;
-import org.junit.jupiter.api.Test;
-
-import java.util.List;
-
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertIterableEquals;
-import static org.mockito.Mockito.mock;
 
 class AlertWorkflowFactoryTest {
 
@@ -27,17 +28,18 @@ class AlertWorkflowFactoryTest {
                 .map(AlertWorkflowDefinition::name)
                 .toList();
 
-        assertIterableEquals(List.of(
-                "logCollectionNode",
-                "deviceInfoNode",
-                "stateCompareNode",
-                "knowledgeRetrieveNode",
-                "intelligentDiagnosisNode",
-                "resultPushNode",
-                "notificationNode",
-                "ticketNode",
-                "silenceNode"
-        ), nodeNames);
+        assertIterableEquals(
+                List.of(
+                        "logCollectionNode",
+                        "deviceInfoNode",
+                        "stateCompareNode",
+                        "knowledgeRetrieveNode",
+                        "intelligentDiagnosisNode",
+                        "resultPushNode",
+                        "notificationNode",
+                        "ticketNode",
+                        "silenceNode"),
+                nodeNames);
     }
 
     @Test
@@ -48,16 +50,17 @@ class AlertWorkflowFactoryTest {
                 .map(AlertWorkflowDefinition::name)
                 .toList();
 
-        assertIterableEquals(List.of(
-                "logCollectionNode",
-                "stateCompareNode",
-                "knowledgeRetrieveNode",
-                "intelligentDiagnosisNode",
-                "resultPushNode",
-                "notificationNode",
-                "ticketNode",
-                "silenceNode"
-        ), nodeNames);
+        assertIterableEquals(
+                List.of(
+                        "logCollectionNode",
+                        "stateCompareNode",
+                        "knowledgeRetrieveNode",
+                        "intelligentDiagnosisNode",
+                        "resultPushNode",
+                        "notificationNode",
+                        "ticketNode",
+                        "silenceNode"),
+                nodeNames);
     }
 
     @Test
@@ -67,7 +70,9 @@ class AlertWorkflowFactoryTest {
         List<AlertWorkflowDefinition> workflow = factory.buildWorkflow("control-plane");
 
         assertEquals("stateCompareNode", workflow.get(0).name());
-        assertIterableEquals(List.of("knowledgeRetrieveNode", "stateCompareNode"), workflow.get(2).dependencies());
+        assertIterableEquals(
+                List.of("knowledgeRetrieveNode", "stateCompareNode"),
+                workflow.get(2).dependencies());
     }
 
     @Test
@@ -95,7 +100,6 @@ class AlertWorkflowFactoryTest {
                 mock(NotificationNode.class),
                 mock(TicketNode.class),
                 mock(SilenceNode.class),
-                new WorkflowTemplateRegistry()
-        );
+                new WorkflowTemplateRegistry());
     }
 }

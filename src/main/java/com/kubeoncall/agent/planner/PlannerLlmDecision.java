@@ -1,10 +1,10 @@
 package com.kubeoncall.agent.planner;
 
-import com.kubeoncall.domain.task.RiskLevel;
-import com.kubeoncall.domain.task.TaskType;
-
 import java.util.List;
 import java.util.Map;
+
+import com.kubeoncall.domain.task.RiskLevel;
+import com.kubeoncall.domain.task.TaskType;
 
 public record PlannerLlmDecision(
         String intent,
@@ -16,11 +16,18 @@ public record PlannerLlmDecision(
         Map<String, Object> parameters,
         List<String> missingSignals,
         List<String> requestedSkills,
-        String summary
-) {
+        String summary) {
     public PlannerLlmDecision withRequestedSkills(List<String> skillIds) {
         return new PlannerLlmDecision(
-                intent, confidence, target, targetSource, taskType, riskLevel,
-                parameters, missingSignals, skillIds == null ? List.of() : List.copyOf(skillIds), summary);
+                intent,
+                confidence,
+                target,
+                targetSource,
+                taskType,
+                riskLevel,
+                parameters,
+                missingSignals,
+                skillIds == null ? List.of() : List.copyOf(skillIds),
+                summary);
     }
 }

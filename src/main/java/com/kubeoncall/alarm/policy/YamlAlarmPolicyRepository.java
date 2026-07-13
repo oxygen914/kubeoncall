@@ -1,5 +1,21 @@
 package com.kubeoncall.alarm.policy;
 
+import java.io.IOException;
+import java.io.InputStream;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.concurrent.ConcurrentHashMap;
+
+import jakarta.annotation.PostConstruct;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.core.io.ClassPathResource;
+import org.springframework.core.io.Resource;
+import org.springframework.stereotype.Component;
+
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
@@ -9,21 +25,6 @@ import com.kubeoncall.alarm.domain.AlarmPolicy;
 import com.kubeoncall.alarm.domain.AlarmResourceType;
 import com.kubeoncall.alarm.domain.AlarmSeverity;
 import com.kubeoncall.common.config.KubeOnCallProperties;
-import jakarta.annotation.PostConstruct;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.springframework.core.io.ClassPathResource;
-import org.springframework.core.io.Resource;
-import org.springframework.stereotype.Component;
-
-import java.io.IOException;
-import java.io.InputStream;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
-import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Loads alarm policies from a YAML file and validates them at startup.
@@ -46,20 +47,12 @@ public class YamlAlarmPolicyRepository implements AlarmPolicyRepository {
     private volatile Map<String, AlarmPolicy> byName = Map.of();
     private volatile String activeVersion = "unversioned";
 
-    @Autowired
     public YamlAlarmPolicyRepository(KubeOnCallProperties properties) {
         KubeOnCallProperties.Alarm alarm = properties.getAlarm();
         this.policyLocation = alarm.getPolicyLocation();
         this.enabled = alarm.isEnabled();
         AlarmSeverity parsed = AlarmSeverity.fromRaw(alarm.getDefaultSeverity());
         this.defaultSeverity = parsed == null ? AlarmSeverity.P3 : parsed;
-    }
-
-    /** Test-only constructor that bypasses configuration. */
-    public YamlAlarmPolicyRepository(String policyLocation, boolean enabled, AlarmSeverity defaultSeverity) {
-        this.policyLocation = policyLocation;
-        this.enabled = enabled;
-        this.defaultSeverity = defaultSeverity;
     }
 
     @PostConstruct
@@ -73,7 +66,8 @@ public class YamlAlarmPolicyRepository implements AlarmPolicyRepository {
         }
         Resource resource = resolveResource(policyLocation);
         if (!resource.exists()) {
-            log.warn("Alarm policy file not found at {}; alarm policy engine will run with no policies", policyLocation);
+            log.warn(
+                    "Alarm policy file not found at {}; alarm policy engine will run with no policies", policyLocation);
             policies = List.of();
             byId = Map.of();
             byName = Map.of();
@@ -139,12 +133,14 @@ public class YamlAlarmPolicyRepository implements AlarmPolicyRepository {
     }
 
     private AlarmPolicy toPolicy(PolicyDto dto, String version) {
-        AlarmResourceType resourceType = dto.resourceType() == null ? null : AlarmResourceType.fromRaw(dto.resourceType());
+        AlarmResourceType resourceType =
+                dto.resourceType() == null ? null : AlarmResourceType.fromRaw(dto.resourceType());
         AlarmSeverity severity = null;
         if (dto.severity() != null && !dto.severity().isBlank()) {
             severity = AlarmSeverity.fromRaw(dto.severity());
             if (severity == null) {
-                throw new IllegalStateException("Alarm policy " + dto.id() + " has an invalid severity: " + dto.severity());
+                throw new IllegalStateException(
+                        "Alarm policy " + dto.id() + " has an invalid severity: " + dto.severity());
             }
         }
         if (severity == null) {
@@ -201,8 +197,11 @@ public class YamlAlarmPolicyRepository implements AlarmPolicyRepository {
         if (policy.runbookId() == null || policy.runbookId().isBlank()) {
             throw new IllegalStateException("Alarm policy " + policy.id() + " must declare a runbookId");
         }
-        if (policy.condition().threshold() == null && (policy.condition().operator() != null && !policy.condition().operator().isBlank())) {
-            throw new IllegalStateException("Alarm policy " + policy.id() + " declares an operator without a threshold");
+        if (policy.condition().threshold() == null
+                && (policy.condition().operator() != null
+                        && !policy.condition().operator().isBlank())) {
+            throw new IllegalStateException(
+                    "Alarm policy " + policy.id() + " declares an operator without a threshold");
         }
     }
 
@@ -220,15 +219,15 @@ public class YamlAlarmPolicyRepository implements AlarmPolicyRepository {
         if (location.startsWith("classpath:")) {
             return new ClassPathResource(location.substring("classpath:".length()));
         }
-        org.springframework.core.io.FileSystemResource fs = new org.springframework.core.io.FileSystemResource(location);
+        org.springframework.core.io.FileSystemResource fs =
+                new org.springframework.core.io.FileSystemResource(location);
         return fs.exists() ? fs : new ClassPathResource(location);
     }
 
     // ---- YAML binding DTOs ----
 
     @JsonIgnoreProperties(ignoreUnknown = true)
-    record PolicyFile(String version, List<PolicyDto> policies) {
-    }
+    record PolicyFile(String version, List<PolicyDto> policies) {}
 
     @JsonIgnoreProperties(ignoreUnknown = true)
     record PolicyDto(
@@ -240,7 +239,10 @@ public class YamlAlarmPolicyRepository implements AlarmPolicyRepository {
             String severity,
             String operator,
             Double threshold,
-            @com.fasterxml.jackson.annotation.JsonProperty("for") String for_,
+
+            @com.fasterxml.jackson.annotation.JsonProperty("for")
+            String for_,
+
             String forDuration,
             String promql,
             String window,
@@ -250,18 +252,18 @@ public class YamlAlarmPolicyRepository implements AlarmPolicyRepository {
             Map<String, String> matchLabels,
             Map<String, String> labels,
             Map<String, String> ragFilters,
-            ActionDto actions
-    ) {
-    }
+            ActionDto actions) {}
 
     @JsonIgnoreProperties(ignoreUnknown = true)
     record ActionDto(
             String workflowTemplate,
-            @com.fasterxml.jackson.annotation.JsonProperty("notify") String notificationChannel,
+
+            @com.fasterxml.jackson.annotation.JsonProperty("notify")
+            String notificationChannel,
+
             boolean approvalRequiredForActions,
             boolean autoSilence,
-            List<String> allowedTools
-    ) {
+            List<String> allowedTools) {
         ActionDto {
             if (allowedTools == null) {
                 allowedTools = List.of();
@@ -269,12 +271,15 @@ public class YamlAlarmPolicyRepository implements AlarmPolicyRepository {
         }
     }
 
-    public record ReloadResult(String previousVersion, String activeVersion, int policyCount) {
-    }
+    public record ReloadResult(String previousVersion, String activeVersion, int policyCount) {}
 
     /** Allows the caller to load an arbitrary classpath resource directly (for tests). */
     public static YamlAlarmPolicyRepository loadFromClasspath(String classpathLocation, AlarmSeverity defaultSeverity) {
-        YamlAlarmPolicyRepository repo = new YamlAlarmPolicyRepository("classpath:" + classpathLocation, true, defaultSeverity);
+        KubeOnCallProperties properties = new KubeOnCallProperties();
+        properties.getAlarm().setPolicyLocation("classpath:" + classpathLocation);
+        properties.getAlarm().setEnabled(true);
+        properties.getAlarm().setDefaultSeverity(defaultSeverity.name());
+        YamlAlarmPolicyRepository repo = new YamlAlarmPolicyRepository(properties);
         repo.load();
         return repo;
     }

@@ -1,5 +1,13 @@
 package com.kubeoncall.workflow.node;
 
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.function.Function;
+import java.util.stream.Collectors;
+
+import org.springframework.stereotype.Component;
+
 import com.kubeoncall.alarm.domain.AlarmEvaluationResult;
 import com.kubeoncall.alarm.domain.NormalizedAlarmEvent;
 import com.kubeoncall.domain.graph.NodeResult;
@@ -7,13 +15,6 @@ import com.kubeoncall.domain.graph.NodeStatus;
 import com.kubeoncall.tool.ToolExecutor;
 import com.kubeoncall.workflow.AlertWorkflowContext;
 import com.kubeoncall.workflow.AlertWorkflowNode;
-import org.springframework.stereotype.Component;
-
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.function.Function;
-import java.util.stream.Collectors;
 
 @Component
 public class NotificationNode implements AlertWorkflowNode {
@@ -22,7 +23,8 @@ public class NotificationNode implements AlertWorkflowNode {
 
     public NotificationNode(List<ToolExecutor> toolExecutors) {
         this.executorsByKind = toolExecutors.stream()
-                .collect(Collectors.toMap(ToolExecutor::getExecutorKind, Function.identity(), (left, right) -> left, LinkedHashMap::new));
+                .collect(Collectors.toMap(
+                        ToolExecutor::getExecutorKind, Function.identity(), (left, right) -> left, LinkedHashMap::new));
     }
 
     @Override
@@ -51,7 +53,8 @@ public class NotificationNode implements AlertWorkflowNode {
             return new NodeResult("notificationNode", NodeStatus.SUCCESS, "Alert event sent", payload);
         } catch (RuntimeException ex) {
             payload.put("exceptionType", ex.getClass().getSimpleName());
-            return new NodeResult("notificationNode", NodeStatus.FAILURE, "Failed to send alert event: " + ex.getMessage(), payload);
+            return new NodeResult(
+                    "notificationNode", NodeStatus.FAILURE, "Failed to send alert event: " + ex.getMessage(), payload);
         }
     }
 
@@ -67,7 +70,9 @@ public class NotificationNode implements AlertWorkflowNode {
 
     private String alertName(AlertWorkflowContext context) {
         NormalizedAlarmEvent normalized = context.getNormalizedAlarm();
-        return normalized != null && normalized.alertName() != null ? normalized.alertName() : context.getAlarmEvent().summary();
+        return normalized != null && normalized.alertName() != null
+                ? normalized.alertName()
+                : context.getAlarmEvent().summary();
     }
 
     private String severity(AlertWorkflowContext context) {

@@ -1,16 +1,17 @@
 package com.kubeoncall.rag;
 
-import com.kubeoncall.common.config.KubeOnCallProperties;
-import com.kubeoncall.domain.rag.KnowledgeDocument;
-import com.kubeoncall.domain.rag.RetrievalRequest;
-import com.kubeoncall.domain.rag.RetrievalHit;
-import com.kubeoncall.tool.http.ToolHttpClient;
-import org.springframework.stereotype.Component;
-
 import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+
+import org.springframework.stereotype.Component;
+
+import com.kubeoncall.common.config.KubeOnCallProperties;
+import com.kubeoncall.domain.rag.KnowledgeDocument;
+import com.kubeoncall.domain.rag.RetrievalHit;
+import com.kubeoncall.domain.rag.RetrievalRequest;
+import com.kubeoncall.tool.http.ToolHttpClient;
 
 @Component
 public class HttpVectorRetrievalClient implements VectorRetrievalClient {
@@ -33,7 +34,9 @@ public class HttpVectorRetrievalClient implements VectorRetrievalClient {
 
     @Override
     public List<KnowledgeDocument> search(RetrievalRequest request, int candidateSize) {
-        return retrieveHits(request, candidateSize).stream().map(RetrievalHit::document).toList();
+        return retrieveHits(request, candidateSize).stream()
+                .map(RetrievalHit::document)
+                .toList();
     }
 
     @Override
@@ -46,11 +49,9 @@ public class HttpVectorRetrievalClient implements VectorRetrievalClient {
                 Map.of(
                         "query", request.question() == null ? "" : request.question(),
                         "filters", request.filters() == null ? Map.of() : request.filters(),
-                        "topK", candidateSize
-                ),
+                        "topK", candidateSize),
                 properties.getRag().getVectorTimeoutMillis(),
-                Map.of("targetSystem", "vector-search", "tool", "vector.search")
-        );
+                Map.of("targetSystem", "vector-search", "tool", "vector.search"));
         if (!"success".equalsIgnoreCase(String.valueOf(response.get("status")))) {
             return List.of();
         }
@@ -93,8 +94,7 @@ public class HttpVectorRetrievalClient implements VectorRetrievalClient {
                 stringValue(raw.get("content")),
                 stringValue(raw.containsKey("source") ? raw.get("source") : "vector"),
                 metadata,
-                Instant.now()
-        );
+                Instant.now());
     }
 
     private String stringValue(Object value) {

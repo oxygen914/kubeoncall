@@ -1,15 +1,16 @@
 package com.kubeoncall.tool;
 
-import com.kubeoncall.domain.task.TaskType;
-import com.kubeoncall.tool.mcp.McpToolRegistry;
-import org.springframework.stereotype.Component;
-
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
 import java.util.stream.Collectors;
+
+import org.springframework.stereotype.Component;
+
+import com.kubeoncall.domain.task.TaskType;
+import com.kubeoncall.tool.mcp.McpToolRegistry;
 
 @Component
 public class AgentToolCatalog {
@@ -48,19 +49,18 @@ public class AgentToolCatalog {
                 Map.of(
                         "node", "verifierThinkNode",
                         "type", "policy",
-                        "description", "Checks SOP presence, task risk, executor tool compliance, and red-line operations before execution"
-                ),
+                        "description",
+                                "Checks SOP presence, task risk, executor tool compliance, and red-line operations before execution"),
                 Map.of(
                         "node", "verifierApprovalNode",
                         "type", "human_approval",
-                        "description", "Suspends execution for human review when risk or policy requires approval"
-                )
-        );
+                        "description", "Suspends execution for human review when risk or policy requires approval"));
     }
 
     public Map<String, ToolDefinition> allToolsByName() {
         return allTools().stream()
-                .collect(Collectors.toMap(ToolDefinition::name, Function.identity(), (left, right) -> left, LinkedHashMap::new));
+                .collect(Collectors.toMap(
+                        ToolDefinition::name, Function.identity(), (left, right) -> left, LinkedHashMap::new));
     }
 
     public Map<String, List<ToolDefinition>> toolsByExecutorKind() {
@@ -89,7 +89,8 @@ public class AgentToolCatalog {
     }
 
     private List<ToolDefinition> allTools() {
-        return java.util.stream.Stream.concat(plannerTools().stream(), executorTools().stream()).toList();
+        return java.util.stream.Stream.concat(plannerTools().stream(), executorTools().stream())
+                .toList();
     }
 
     public List<TaskType> taskTypesFor(String toolName) {
@@ -103,6 +104,7 @@ public class AgentToolCatalog {
         }
         return toolWhitelist.stream()
                 .filter(entry -> entry != null && !entry.isBlank())
-                .anyMatch(entry -> entry.equals(toolName) || entry.endsWith(".*") && toolName.startsWith(entry.substring(0, entry.length() - 1)));
+                .anyMatch(entry -> entry.equals(toolName)
+                        || entry.endsWith(".*") && toolName.startsWith(entry.substring(0, entry.length() - 1)));
     }
 }

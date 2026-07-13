@@ -1,9 +1,5 @@
 package com.kubeoncall.tool.http;
 
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import org.springframework.stereotype.Component;
-
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -13,34 +9,39 @@ import java.time.Duration;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.stereotype.Component;
+
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
+
 @Component
 public class ToolHttpClient {
 
-    private static final TypeReference<Map<String, Object>> MAP_TYPE = new TypeReference<>() {
-    };
+    private static final Logger log = LoggerFactory.getLogger(ToolHttpClient.class);
+    private static final TypeReference<Map<String, Object>> MAP_TYPE = new TypeReference<>() {};
 
     private final HttpClient httpClient;
     private final ObjectMapper objectMapper;
 
     public ToolHttpClient(ObjectMapper objectMapper) {
-        this.httpClient = HttpClient.newBuilder()
-                .connectTimeout(Duration.ofSeconds(2))
-                .build();
+        this.httpClient =
+                HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(2)).build();
         this.objectMapper = objectMapper;
     }
 
-    public Map<String, Object> post(String endpoint,
-                                    Map<String, Object> body,
-                                    int timeoutMillis,
-                                    Map<String, Object> metadata) {
+    public Map<String, Object> post(
+            String endpoint, Map<String, Object> body, int timeoutMillis, Map<String, Object> metadata) {
         return post(endpoint, body, timeoutMillis, Map.of(), metadata);
     }
 
-    public Map<String, Object> post(String endpoint,
-                                    Map<String, Object> body,
-                                    int timeoutMillis,
-                                    Map<String, String> headers,
-                                    Map<String, Object> metadata) {
+    public Map<String, Object> post(
+            String endpoint,
+            Map<String, Object> body,
+            int timeoutMillis,
+            Map<String, String> headers,
+            Map<String, Object> metadata) {
         LinkedHashMap<String, Object> result = new LinkedHashMap<>();
         if (metadata != null) {
             result.putAll(metadata);
@@ -70,7 +71,8 @@ public class ToolHttpClient {
             }
             HttpRequest request = requestBuilder.build();
 
-            HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+            HttpResponse<String> response =
+                    httpClient.send(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
             int statusCode = response.statusCode();
             long latencyMs = System.currentTimeMillis() - startedAt;
 
@@ -97,7 +99,10 @@ public class ToolHttpClient {
         }
         try {
             return objectMapper.readValue(responseBody, MAP_TYPE);
-        } catch (Exception ignored) {
+        } catch (Exception ex) {
+            log.debug(
+                    "Tool HTTP response is not JSON; returning its text representation: errorType={}",
+                    ex.getClass().getSimpleName());
             return responseBody;
         }
     }

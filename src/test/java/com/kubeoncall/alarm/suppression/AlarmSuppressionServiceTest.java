@@ -1,18 +1,5 @@
 package com.kubeoncall.alarm.suppression;
 
-import com.kubeoncall.alarm.domain.AlarmResourceType;
-import com.kubeoncall.alarm.domain.AlarmSeverity;
-import com.kubeoncall.alarm.domain.AlarmStatus;
-import com.kubeoncall.alarm.domain.NormalizedAlarmEvent;
-import org.junit.jupiter.api.Test;
-import org.springframework.data.redis.core.StringRedisTemplate;
-import org.springframework.data.redis.core.ValueOperations;
-
-import java.time.Duration;
-import java.time.Instant;
-import java.util.List;
-import java.util.Map;
-
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -20,6 +7,20 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+
+import java.time.Duration;
+import java.time.Instant;
+import java.util.List;
+import java.util.Map;
+
+import org.junit.jupiter.api.Test;
+import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.data.redis.core.ValueOperations;
+
+import com.kubeoncall.alarm.domain.AlarmResourceType;
+import com.kubeoncall.alarm.domain.AlarmSeverity;
+import com.kubeoncall.alarm.domain.AlarmStatus;
+import com.kubeoncall.alarm.domain.NormalizedAlarmEvent;
 
 class AlarmSuppressionServiceTest {
 
@@ -72,7 +73,8 @@ class AlarmSuppressionServiceTest {
                 "node-not-ready-suppresses-pod",
                 new AlarmSuppressionRule.Match(List.of(AlarmResourceType.NODE), List.of("*NodeNotReady*")),
                 new AlarmSuppressionRule.Match(List.of(AlarmResourceType.POD), List.of()),
-                List.of("cluster", "node"), 1800,
+                List.of("cluster", "node"),
+                1800,
                 "Pod alarm suppressed while NodeNotReady is active on the same node");
         when(repository.findAll()).thenReturn(List.of(rule));
         when(repository.activeVersion()).thenReturn("v1");
@@ -80,25 +82,51 @@ class AlarmSuppressionServiceTest {
     }
 
     private NormalizedAlarmEvent nodeEvent(AlarmStatus status) {
-        return event("node-alarm", "fp-node", "KubeNodeNotReadyP0", AlarmResourceType.NODE,
-                "node-a", Map.of(), status);
+        return event("node-alarm", "fp-node", "KubeNodeNotReadyP0", AlarmResourceType.NODE, "node-a", Map.of(), status);
     }
 
     private NormalizedAlarmEvent podEvent() {
-        return event("pod-alarm", "fp-pod", "PodCrashLoop", AlarmResourceType.POD,
-                "payment-pod", Map.of("node", "node-a"), AlarmStatus.FIRING);
+        return event(
+                "pod-alarm",
+                "fp-pod",
+                "PodCrashLoop",
+                AlarmResourceType.POD,
+                "payment-pod",
+                Map.of("node", "node-a"),
+                AlarmStatus.FIRING);
     }
 
-    private NormalizedAlarmEvent event(String alarmId,
-                                       String fingerprint,
-                                       String alertName,
-                                       AlarmResourceType resourceType,
-                                       String resourceName,
-                                       Map<String, String> labels,
-                                       AlarmStatus status) {
+    private NormalizedAlarmEvent event(
+            String alarmId,
+            String fingerprint,
+            String alertName,
+            AlarmResourceType resourceType,
+            String resourceName,
+            Map<String, String> labels,
+            AlarmStatus status) {
         return new NormalizedAlarmEvent(
-                alarmId, fingerprint, alertName, "prometheus", "warning", AlarmSeverity.P1,
-                resourceType, resourceName, "cluster-a", "prod", "payment-service", null,
-                null, null, null, null, labels, Map.of(), null, status, Instant.now(), alertName, Map.of());
+                alarmId,
+                fingerprint,
+                alertName,
+                "prometheus",
+                "warning",
+                AlarmSeverity.P1,
+                resourceType,
+                resourceName,
+                "cluster-a",
+                "prod",
+                "payment-service",
+                null,
+                null,
+                null,
+                null,
+                null,
+                labels,
+                Map.of(),
+                null,
+                status,
+                Instant.now(),
+                alertName,
+                Map.of());
     }
 }

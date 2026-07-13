@@ -1,14 +1,14 @@
 package com.kubeoncall.rag;
 
-import com.kubeoncall.common.config.KubeOnCallProperties;
-import com.kubeoncall.domain.rag.KnowledgeDocument;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.stereotype.Component;
-
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+
+import org.springframework.stereotype.Component;
+
+import com.kubeoncall.common.config.KubeOnCallProperties;
+import com.kubeoncall.domain.rag.KnowledgeDocument;
 
 @Component
 public class KnowledgeChunker {
@@ -17,17 +17,13 @@ public class KnowledgeChunker {
 
     private final KubeOnCallProperties properties;
 
-    public KnowledgeChunker() {
-        this(new KubeOnCallProperties());
-    }
-
-    @Autowired
     public KnowledgeChunker(KubeOnCallProperties properties) {
         this.properties = properties;
     }
 
     public List<KnowledgeDocument> chunk(KnowledgeDocument sourceDocument) {
-        String content = sourceDocument.content() == null ? "" : sourceDocument.content().trim();
+        String content =
+                sourceDocument.content() == null ? "" : sourceDocument.content().trim();
         if (content.isBlank()) {
             return List.of(sourceDocument);
         }
@@ -55,16 +51,21 @@ public class KnowledgeChunker {
                     chunkContents.get(i),
                     sourceDocument.source(),
                     metadata,
-                    sourceDocument.createdAt()
-            ));
+                    sourceDocument.createdAt()));
         }
         return chunks;
     }
 
     private List<String> split(String content) {
-        int chunkSize = Math.max(32, properties.getRag().getChunkSize() <= 0 ? DEFAULT_CHUNK_SIZE : properties.getRag().getChunkSize());
+        int chunkSize = Math.max(
+                32,
+                properties.getRag().getChunkSize() <= 0
+                        ? DEFAULT_CHUNK_SIZE
+                        : properties.getRag().getChunkSize());
         int overlap = Math.max(0, Math.min(properties.getRag().getChunkOverlap(), chunkSize / 2));
-        String strategy = properties.getRag().getChunkStrategy() == null ? "recursive" : properties.getRag().getChunkStrategy();
+        String strategy = properties.getRag().getChunkStrategy() == null
+                ? "recursive"
+                : properties.getRag().getChunkStrategy();
         if ("markdown".equalsIgnoreCase(strategy)) {
             List<String> sections = splitMarkdownSections(content);
             if (sections.stream().allMatch(section -> section.length() <= chunkSize)) {
@@ -96,7 +97,9 @@ public class KnowledgeChunker {
         if (!current.isEmpty()) {
             sections.add(current.toString().trim());
         }
-        return sections.isEmpty() ? List.of(content) : sections.stream().filter(s -> !s.isBlank()).toList();
+        return sections.isEmpty()
+                ? List.of(content)
+                : sections.stream().filter(s -> !s.isBlank()).toList();
     }
 
     private List<String> splitRecursive(String content, int chunkSize, int overlap) {

@@ -1,10 +1,5 @@
 package com.kubeoncall.workflow;
 
-import com.kubeoncall.alarm.domain.AlarmEvaluationResult;
-import com.kubeoncall.alarm.domain.NormalizedAlarmEvent;
-import com.kubeoncall.domain.alarm.AlarmEvent;
-import com.kubeoncall.domain.graph.NodeResult;
-
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -12,6 +7,11 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+
+import com.kubeoncall.alarm.domain.AlarmEvaluationResult;
+import com.kubeoncall.alarm.domain.NormalizedAlarmEvent;
+import com.kubeoncall.domain.alarm.AlarmEvent;
+import com.kubeoncall.domain.graph.NodeResult;
 
 /**
  * Mutable per-execution state for an alarm workflow run.
@@ -40,10 +40,11 @@ public class AlertWorkflowContext {
         this(alarmEvent, null, null, startedAt);
     }
 
-    public AlertWorkflowContext(AlarmEvent alarmEvent,
-                                NormalizedAlarmEvent normalizedAlarm,
-                                AlarmEvaluationResult evaluationResult,
-                                Instant startedAt) {
+    public AlertWorkflowContext(
+            AlarmEvent alarmEvent,
+            NormalizedAlarmEvent normalizedAlarm,
+            AlarmEvaluationResult evaluationResult,
+            Instant startedAt) {
         this.alarmEvent = alarmEvent;
         this.normalizedAlarm = normalizedAlarm;
         this.evaluationResult = evaluationResult;

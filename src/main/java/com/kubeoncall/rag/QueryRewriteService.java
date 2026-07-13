@@ -1,18 +1,19 @@
 package com.kubeoncall.rag;
 
-import org.springframework.stereotype.Service;
-
 import java.util.LinkedHashSet;
 import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+
+import org.springframework.stereotype.Service;
 
 @Service
 public class QueryRewriteService {
 
     private static final Pattern IP_PATTERN = Pattern.compile("\\b(?:\\d{1,3}\\.){3}\\d{1,3}\\b");
     private static final Pattern ALERT_CODE_PATTERN = Pattern.compile("[A-Z]{2,}-\\d+");
-    private static final Pattern POD_PATTERN = Pattern.compile("[a-z0-9]([-a-z0-9]*[a-z0-9])?(?:-[a-z0-9]([-a-z0-9]*[a-z0-9])?)+");
+    private static final Pattern POD_PATTERN =
+            Pattern.compile("[a-z0-9]([-a-z0-9]*[a-z0-9])?(?:-[a-z0-9]([-a-z0-9]*[a-z0-9])?)+");
 
     public String rewrite(String question) {
         if (question == null || question.isBlank()) {

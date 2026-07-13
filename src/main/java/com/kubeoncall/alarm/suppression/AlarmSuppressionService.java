@@ -1,13 +1,5 @@
 package com.kubeoncall.alarm.suppression;
 
-import com.kubeoncall.alarm.domain.AlarmResourceType;
-import com.kubeoncall.alarm.domain.AlarmStatus;
-import com.kubeoncall.alarm.domain.NormalizedAlarmEvent;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.springframework.data.redis.core.StringRedisTemplate;
-import org.springframework.stereotype.Service;
-
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
@@ -15,6 +7,15 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
 import java.util.regex.Pattern;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.stereotype.Service;
+
+import com.kubeoncall.alarm.domain.AlarmResourceType;
+import com.kubeoncall.alarm.domain.AlarmStatus;
+import com.kubeoncall.alarm.domain.NormalizedAlarmEvent;
 
 @Service
 public class AlarmSuppressionService {
@@ -25,8 +26,7 @@ public class AlarmSuppressionService {
     private final StringRedisTemplate redisTemplate;
     private final AlarmSuppressionRuleRepository repository;
 
-    public AlarmSuppressionService(StringRedisTemplate redisTemplate,
-                                   AlarmSuppressionRuleRepository repository) {
+    public AlarmSuppressionService(StringRedisTemplate redisTemplate, AlarmSuppressionRuleRepository repository) {
         this.redisTemplate = redisTemplate;
         this.repository = repository;
     }
@@ -72,12 +72,14 @@ public class AlarmSuppressionService {
                     String reason = rule.reason() == null || rule.reason().isBlank()
                             ? "Suppressed by active root-cause alarm rule " + rule.id()
                             : rule.reason();
-                    return new SuppressionDecision(true, rule.id(), repository.activeVersion(), key.get(),
-                            sourceFingerprint, reason);
+                    return new SuppressionDecision(
+                            true, rule.id(), repository.activeVersion(), key.get(), sourceFingerprint, reason);
                 }
             } catch (RuntimeException ex) {
-                log.warn("Suppression lookup failed for rule {}; alarm processing continues: {}",
-                        rule.id(), ex.getMessage());
+                log.warn(
+                        "Suppression lookup failed for rule {}; alarm processing continues: {}",
+                        rule.id(),
+                        ex.getMessage());
             }
         }
         return SuppressionDecision.none();
@@ -87,15 +89,17 @@ public class AlarmSuppressionService {
         if (match == null) {
             return false;
         }
-        boolean resourceMatches = match.resourceTypes().isEmpty()
-                || match.resourceTypes().contains(event.resourceType());
+        boolean resourceMatches =
+                match.resourceTypes().isEmpty() || match.resourceTypes().contains(event.resourceType());
         boolean alertMatches = match.alertNamePatterns().isEmpty()
                 || match.alertNamePatterns().stream().anyMatch(pattern -> wildcardMatches(event.alertName(), pattern));
         return resourceMatches && alertMatches;
     }
 
     Optional<String> correlationKey(AlarmSuppressionRule rule, NormalizedAlarmEvent event) {
-        List<String> values = rule.correlateBy().stream().map(field -> correlationValue(field, event)).toList();
+        List<String> values = rule.correlateBy().stream()
+                .map(field -> correlationValue(field, event))
+                .toList();
         if (values.stream().anyMatch(value -> value == null || value.isBlank())) {
             return Optional.empty();
         }
@@ -115,15 +119,17 @@ public class AlarmSuppressionService {
             case "namespace" -> event.namespace();
             case "service" -> event.service();
             case "resource" -> event.resourceName();
-            case "node" -> firstNonBlank(
-                    event.labels().get("node"),
-                    event.labels().get("nodeName"),
-                    event.labels().get("kubernetes.io/hostname"),
-                    event.annotations().get("node"),
-                    event.resourceType() == AlarmResourceType.NODE ? event.resourceName() : null);
-            default -> field.regionMatches(true, 0, "label.", 0, "label.".length())
-                    ? event.labels().get(field.substring("label.".length()))
-                    : null;
+            case "node" ->
+                firstNonBlank(
+                        event.labels().get("node"),
+                        event.labels().get("nodeName"),
+                        event.labels().get("kubernetes.io/hostname"),
+                        event.annotations().get("node"),
+                        event.resourceType() == AlarmResourceType.NODE ? event.resourceName() : null);
+            default ->
+                field.regionMatches(true, 0, "label.", 0, "label.".length())
+                        ? event.labels().get(field.substring("label.".length()))
+                        : null;
         };
     }
 
@@ -150,8 +156,7 @@ public class AlarmSuppressionService {
             String ruleVersion,
             String suppressionKey,
             String sourceFingerprint,
-            String reason
-    ) {
+            String reason) {
         static SuppressionDecision none() {
             return new SuppressionDecision(false, null, null, null, null, "");
         }

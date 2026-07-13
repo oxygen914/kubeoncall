@@ -12,12 +12,10 @@ public interface MemoryExtractor {
     static MemoryExtractor noop() {
         return new MemoryExtractor() {
             @Override
-            public void extractFromAsk(GraphState state, String answer) {
-            }
+            public void extractFromAsk(GraphState state, String answer) {}
 
             @Override
-            public void extractFromAlarm(NormalizedAlarmEvent event, String summary) {
-            }
+            public void extractFromAlarm(NormalizedAlarmEvent event, String summary) {}
         };
     }
 }

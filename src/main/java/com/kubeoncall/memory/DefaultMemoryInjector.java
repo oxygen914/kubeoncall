@@ -1,12 +1,13 @@
 package com.kubeoncall.memory;
 
-import com.kubeoncall.common.config.KubeOnCallProperties;
-import org.springframework.stereotype.Service;
-
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+
+import org.springframework.stereotype.Service;
+
+import com.kubeoncall.common.config.KubeOnCallProperties;
 
 @Service
 public class DefaultMemoryInjector implements MemoryInjector {
@@ -14,8 +15,7 @@ public class DefaultMemoryInjector implements MemoryInjector {
     private final MemoryService memoryService;
     private final KubeOnCallProperties properties;
 
-    public DefaultMemoryInjector(MemoryService memoryService,
-                                 KubeOnCallProperties properties) {
+    public DefaultMemoryInjector(MemoryService memoryService, KubeOnCallProperties properties) {
         this.memoryService = memoryService;
         this.properties = properties;
     }
@@ -26,14 +26,16 @@ public class DefaultMemoryInjector implements MemoryInjector {
             return MemoryInjection.empty();
         }
         try {
-            List<MemoryEntry> entries = memoryService.search(
-                            query,
-                            filters,
-                            Math.max(1, properties.getMemory().getInjectMaxEntries()))
-                    .stream()
-                    .filter(this::isInjectable)
-                    .limit(Math.max(1, properties.getMemory().getInjectMaxEntries()))
-                    .toList();
+            List<MemoryEntry> entries =
+                    memoryService
+                            .search(
+                                    query,
+                                    filters,
+                                    Math.max(1, properties.getMemory().getInjectMaxEntries()))
+                            .stream()
+                            .filter(this::isInjectable)
+                            .limit(Math.max(1, properties.getMemory().getInjectMaxEntries()))
+                            .toList();
             if (entries.isEmpty()) {
                 return MemoryInjection.empty();
             }

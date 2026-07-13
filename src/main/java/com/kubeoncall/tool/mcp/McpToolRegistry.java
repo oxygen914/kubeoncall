@@ -1,10 +1,11 @@
 package com.kubeoncall.tool.mcp;
 
-import com.kubeoncall.domain.task.TaskType;
-import com.kubeoncall.tool.ToolDefinition;
+import java.util.List;
+
 import org.springframework.stereotype.Component;
 
-import java.util.List;
+import com.kubeoncall.domain.task.TaskType;
+import com.kubeoncall.tool.ToolDefinition;
 
 @Component
 public class McpToolRegistry {
@@ -19,8 +20,7 @@ public class McpToolRegistry {
                         false,
                         List.of(TaskType.values()),
                         List.of("query"),
-                        List.of("knowledge-base")
-                ),
+                        List.of("knowledge-base")),
                 new ToolDefinition(
                         "topology.getServiceTopology",
                         "topology",
@@ -29,8 +29,7 @@ public class McpToolRegistry {
                         false,
                         List.of(TaskType.values()),
                         List.of("serviceName"),
-                        List.of("cmdb", "service-mesh")
-                ),
+                        List.of("cmdb", "service-mesh")),
                 new ToolDefinition(
                         "cmdb.getServiceMetadata",
                         "cmdb",
@@ -39,28 +38,34 @@ public class McpToolRegistry {
                         false,
                         List.of(TaskType.values()),
                         List.of("serviceName"),
-                        List.of("cmdb")
-                ),
+                        List.of("cmdb")),
                 new ToolDefinition(
                         "kubernetes.describeResource",
                         "kubernetes",
                         "Describe Kubernetes resource metadata without changing cluster state",
                         true,
                         false,
-                        List.of(TaskType.QUERY_LOGS, TaskType.QUERY_METRICS, TaskType.RESTART_SERVICE, TaskType.SCALE_WORKLOAD, TaskType.PATCH_CONFIG),
+                        List.of(
+                                TaskType.QUERY_LOGS,
+                                TaskType.QUERY_METRICS,
+                                TaskType.RESTART_SERVICE,
+                                TaskType.SCALE_WORKLOAD,
+                                TaskType.PATCH_CONFIG),
                         List.of("namespace", "resourceName"),
-                        List.of("k8s-api")
-                ),
+                        List.of("k8s-api")),
                 new ToolDefinition(
                         "prometheus.queryRange",
                         "prometheus",
                         "Query historical metrics trends for diagnostics and planning",
                         true,
                         false,
-                        List.of(TaskType.QUERY_METRICS, TaskType.RESTART_SERVICE, TaskType.SCALE_WORKLOAD, TaskType.PATCH_CONFIG),
+                        List.of(
+                                TaskType.QUERY_METRICS,
+                                TaskType.RESTART_SERVICE,
+                                TaskType.SCALE_WORKLOAD,
+                                TaskType.PATCH_CONFIG),
                         List.of("query", "windowMinutes"),
-                        List.of("prometheus")
-                ),
+                        List.of("prometheus")),
                 new ToolDefinition(
                         "alerts.getActiveAlerts",
                         "alerts",
@@ -69,8 +74,6 @@ public class McpToolRegistry {
                         false,
                         List.of(TaskType.values()),
                         List.of("serviceName"),
-                        List.of("alertmanager")
-                )
-        );
+                        List.of("alertmanager")));
     }
 }

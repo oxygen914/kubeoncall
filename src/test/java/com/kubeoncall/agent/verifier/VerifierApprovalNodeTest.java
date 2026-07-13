@@ -1,17 +1,17 @@
 package com.kubeoncall.agent.verifier;
 
-import com.kubeoncall.domain.graph.GraphState;
-import com.kubeoncall.domain.graph.NodeResult;
-import com.kubeoncall.domain.graph.NodeStatus;
-import org.junit.jupiter.api.Test;
-
-import java.util.List;
-import java.util.Map;
-
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+
+import java.util.List;
+
+import org.junit.jupiter.api.Test;
+
+import com.kubeoncall.domain.graph.GraphState;
+import com.kubeoncall.domain.graph.NodeResult;
+import com.kubeoncall.domain.graph.NodeStatus;
 
 class VerifierApprovalNodeTest {
 
@@ -26,7 +26,11 @@ class VerifierApprovalNodeTest {
 
         assertEquals(NodeStatus.SUCCESS, result.status());
         assertEquals("Approval not required", result.message());
-        verify(approvalService, never()).createPending(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.anyString());
+        verify(approvalService, never())
+                .createPending(
+                        org.mockito.ArgumentMatchers.any(),
+                        org.mockito.ArgumentMatchers.anyString(),
+                        org.mockito.ArgumentMatchers.anyString());
     }
 
     @Test
@@ -39,10 +43,21 @@ class VerifierApprovalNodeTest {
         state.getContext().put("verifierRiskReasons", List.of("Risk level requires human approval"));
 
         com.kubeoncall.domain.approval.ApprovalRequest request = new com.kubeoncall.domain.approval.ApprovalRequest(
-                "exec-1", null, null, "system", com.kubeoncall.domain.approval.ApprovalDecision.PENDING,
-                java.time.Instant.now(), null, "comment", null, false, List.of("Risk level requires human approval")
-        );
-        org.mockito.Mockito.when(approvalService.createPending(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.anyString()))
+                "exec-1",
+                null,
+                null,
+                "system",
+                com.kubeoncall.domain.approval.ApprovalDecision.PENDING,
+                java.time.Instant.now(),
+                null,
+                "comment",
+                null,
+                false,
+                List.of("Risk level requires human approval"));
+        org.mockito.Mockito.when(approvalService.createPending(
+                        org.mockito.ArgumentMatchers.any(),
+                        org.mockito.ArgumentMatchers.anyString(),
+                        org.mockito.ArgumentMatchers.anyString()))
                 .thenReturn(request);
 
         NodeResult result = node.execute(state);

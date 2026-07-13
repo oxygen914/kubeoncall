@@ -1,38 +1,5 @@
 package com.kubeoncall.service;
 
-import com.kubeoncall.agent.composer.ResponseComposer;
-import com.kubeoncall.agent.executor.ExecutorAgent;
-import com.kubeoncall.agent.planner.PlannerAgent;
-import com.kubeoncall.agent.verifier.VerifierAgent;
-import com.kubeoncall.approval.ApprovalService;
-import com.kubeoncall.domain.approval.ApprovalDecision;
-import com.kubeoncall.domain.approval.ApprovalRequest;
-import com.kubeoncall.domain.graph.GraphState;
-import com.kubeoncall.domain.graph.GraphStatus;
-import com.kubeoncall.domain.graph.NodeResult;
-import com.kubeoncall.domain.graph.NodeStatus;
-import com.kubeoncall.domain.task.RiskLevel;
-import com.kubeoncall.domain.task.SopReference;
-import com.kubeoncall.domain.task.Task;
-import com.kubeoncall.domain.task.TaskPlan;
-import com.kubeoncall.domain.task.TaskType;
-import com.kubeoncall.memory.MemoryEntry;
-import com.kubeoncall.memory.MemoryExtractor;
-import com.kubeoncall.memory.MemoryInjection;
-import com.kubeoncall.memory.MemoryInjector;
-import com.kubeoncall.memory.MemoryScope;
-import com.kubeoncall.memory.MemoryType;
-import com.kubeoncall.memory.SessionSnapshot;
-import com.kubeoncall.memory.SessionStore;
-import com.kubeoncall.memory.SessionTurn;
-import org.junit.jupiter.api.Test;
-import org.mockito.ArgumentCaptor;
-
-import java.time.Instant;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
-
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -46,6 +13,46 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import java.time.Instant;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+
+import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
+
+import com.kubeoncall.agent.composer.ResponseComposer;
+import com.kubeoncall.agent.executor.ExecutorAgent;
+import com.kubeoncall.agent.planner.PlannerAgent;
+import com.kubeoncall.agent.verifier.VerifierAgent;
+import com.kubeoncall.approval.ApprovalService;
+import com.kubeoncall.common.config.KubeOnCallProperties;
+import com.kubeoncall.domain.approval.ApprovalDecision;
+import com.kubeoncall.domain.approval.ApprovalRequest;
+import com.kubeoncall.domain.graph.GraphState;
+import com.kubeoncall.domain.graph.GraphStatus;
+import com.kubeoncall.domain.graph.NodeResult;
+import com.kubeoncall.domain.graph.NodeStatus;
+import com.kubeoncall.domain.task.RiskLevel;
+import com.kubeoncall.domain.task.SopReference;
+import com.kubeoncall.domain.task.Task;
+import com.kubeoncall.domain.task.TaskPlan;
+import com.kubeoncall.domain.task.TaskType;
+import com.kubeoncall.memory.ContextCompressor;
+import com.kubeoncall.memory.ConversationHistoryCompactor;
+import com.kubeoncall.memory.MemoryEntry;
+import com.kubeoncall.memory.MemoryExtractor;
+import com.kubeoncall.memory.MemoryInjection;
+import com.kubeoncall.memory.MemoryInjector;
+import com.kubeoncall.memory.MemoryScope;
+import com.kubeoncall.memory.MemoryType;
+import com.kubeoncall.memory.SessionSnapshot;
+import com.kubeoncall.memory.SessionStore;
+import com.kubeoncall.memory.SessionTurn;
+import com.kubeoncall.memory.TokenBudget;
+import com.kubeoncall.skill.SkillActivation;
+import com.kubeoncall.skill.SkillActivationService;
+
 class AskServiceTest {
 
     @Test
@@ -57,40 +64,43 @@ class AskServiceTest {
         ResponseComposer responseComposer = mock(ResponseComposer.class);
         ExecutionAuditService executionAuditService = mock(ExecutionAuditService.class);
 
-        AskService service = new AskService(
-                plannerAgent,
-                verifierAgent,
-                executorAgent,
-                approvalService,
-                responseComposer,
-                executionAuditService
-        );
+        AskService service = askService(
+                plannerAgent, verifierAgent, executorAgent, approvalService, responseComposer, executionAuditService);
 
         when(responseComposer.compose(any())).thenReturn("running");
         doAnswer(invocation -> {
-            GraphState state = invocation.getArgument(0);
-            Task task = restartTask();
-            state.setExecutionId("exec-handle");
-            state.setTaskPlan(new TaskPlan("exec-handle", "restart payment-service", List.of(task), Instant.now(), true));
-            state.setCurrentTask(task);
-            state.setStatus(GraphStatus.SUCCESS);
-            return null;
-        }).when(plannerAgent).run(any(GraphState.class));
+                    GraphState state = invocation.getArgument(0);
+                    Task task = restartTask();
+                    state.setExecutionId("exec-handle");
+                    state.setTaskPlan(
+                            new TaskPlan("exec-handle", "restart payment-service", List.of(task), Instant.now(), true));
+                    state.setCurrentTask(task);
+                    state.setStatus(GraphStatus.SUCCESS);
+                    return null;
+                })
+                .when(plannerAgent)
+                .run(any(GraphState.class));
         doAnswer(invocation -> {
-            GraphState state = invocation.getArgument(0);
-            state.setStatus(GraphStatus.SUCCESS);
-            return null;
-        }).when(executorAgent).plan(any(GraphState.class));
+                    GraphState state = invocation.getArgument(0);
+                    state.setStatus(GraphStatus.SUCCESS);
+                    return null;
+                })
+                .when(executorAgent)
+                .plan(any(GraphState.class));
         doAnswer(invocation -> {
-            GraphState state = invocation.getArgument(0);
-            state.setStatus(GraphStatus.SUCCESS);
-            return null;
-        }).when(verifierAgent).run(any(GraphState.class));
+                    GraphState state = invocation.getArgument(0);
+                    state.setStatus(GraphStatus.SUCCESS);
+                    return null;
+                })
+                .when(verifierAgent)
+                .run(any(GraphState.class));
         doAnswer(invocation -> {
-            GraphState state = invocation.getArgument(0);
-            state.setStatus(GraphStatus.SUCCESS);
-            return null;
-        }).when(executorAgent).executePrepared(any(GraphState.class));
+                    GraphState state = invocation.getArgument(0);
+                    state.setStatus(GraphStatus.SUCCESS);
+                    return null;
+                })
+                .when(executorAgent)
+                .executePrepared(any(GraphState.class));
 
         AskService.AskExecutionResult result = service.handle("请重启 payment-service");
 
@@ -120,49 +130,58 @@ class AskServiceTest {
         ExecutionAuditService executionAuditService = mock(ExecutionAuditService.class);
         SessionStore sessionStore = mock(SessionStore.class);
 
-        AskService service = new AskService(
+        AskService service = askService(
                 plannerAgent,
                 verifierAgent,
                 executorAgent,
                 approvalService,
                 responseComposer,
                 executionAuditService,
-                sessionStore
-        );
+                sessionStore);
 
-        when(sessionStore.find("session-1")).thenReturn(Optional.of(new SessionSnapshot(
-                "session-1",
-                List.of(new SessionTurn("exec-prev", "payment-service CPU 高", "checked metrics", "SUCCESS", Instant.now())),
-                Instant.now(),
-                Instant.now()
-        )));
+        when(sessionStore.find("session-1"))
+                .thenReturn(Optional.of(new SessionSnapshot(
+                        "session-1",
+                        List.of(new SessionTurn(
+                                "exec-prev", "payment-service CPU 高", "checked metrics", "SUCCESS", Instant.now())),
+                        Instant.now(),
+                        Instant.now())));
         when(responseComposer.compose(any())).thenReturn("ok");
         doAnswer(invocation -> {
-            GraphState state = invocation.getArgument(0);
-            assertEquals("session-1", state.getContext().get("sessionId"));
-            assertTrue(String.valueOf(state.getContext().get("sessionContext")).contains("payment-service"));
-            Task task = restartTask();
-            state.setExecutionId("exec-session");
-            state.setTaskPlan(new TaskPlan("exec-session", "继续看下 CPU", List.of(task), Instant.now(), true));
-            state.setCurrentTask(task);
-            state.setStatus(GraphStatus.SUCCESS);
-            return null;
-        }).when(plannerAgent).run(any(GraphState.class));
+                    GraphState state = invocation.getArgument(0);
+                    assertEquals("session-1", state.getContext().get("sessionId"));
+                    assertTrue(String.valueOf(state.getContext().get("sessionContext"))
+                            .contains("payment-service"));
+                    Task task = restartTask();
+                    state.setExecutionId("exec-session");
+                    state.setTaskPlan(new TaskPlan("exec-session", "继续看下 CPU", List.of(task), Instant.now(), true));
+                    state.setCurrentTask(task);
+                    state.setStatus(GraphStatus.SUCCESS);
+                    return null;
+                })
+                .when(plannerAgent)
+                .run(any(GraphState.class));
         doAnswer(invocation -> {
-            GraphState state = invocation.getArgument(0);
-            state.setStatus(GraphStatus.SUCCESS);
-            return null;
-        }).when(executorAgent).plan(any(GraphState.class));
+                    GraphState state = invocation.getArgument(0);
+                    state.setStatus(GraphStatus.SUCCESS);
+                    return null;
+                })
+                .when(executorAgent)
+                .plan(any(GraphState.class));
         doAnswer(invocation -> {
-            GraphState state = invocation.getArgument(0);
-            state.setStatus(GraphStatus.SUCCESS);
-            return null;
-        }).when(verifierAgent).run(any(GraphState.class));
+                    GraphState state = invocation.getArgument(0);
+                    state.setStatus(GraphStatus.SUCCESS);
+                    return null;
+                })
+                .when(verifierAgent)
+                .run(any(GraphState.class));
         doAnswer(invocation -> {
-            GraphState state = invocation.getArgument(0);
-            state.setStatus(GraphStatus.SUCCESS);
-            return null;
-        }).when(executorAgent).executePrepared(any(GraphState.class));
+                    GraphState state = invocation.getArgument(0);
+                    state.setStatus(GraphStatus.SUCCESS);
+                    return null;
+                })
+                .when(executorAgent)
+                .executePrepared(any(GraphState.class));
 
         AskService.AskExecutionResult result = service.handle("继续看下 CPU", " session-1 ");
 
@@ -185,7 +204,7 @@ class AskServiceTest {
         MemoryInjector memoryInjector = mock(MemoryInjector.class);
         MemoryExtractor memoryExtractor = mock(MemoryExtractor.class);
 
-        AskService service = new AskService(
+        AskService service = askService(
                 plannerAgent,
                 verifierAgent,
                 executorAgent,
@@ -194,8 +213,7 @@ class AskServiceTest {
                 executionAuditService,
                 sessionStore,
                 memoryInjector,
-                memoryExtractor
-        );
+                memoryExtractor);
 
         when(memoryInjector.inject(eq("payment owner 是谁"), any()))
                 .thenReturn(new MemoryInjection(
@@ -210,40 +228,49 @@ class AskServiceTest {
                                 null,
                                 Instant.now(),
                                 Instant.now(),
-                                Map.of()
-                        )),
+                                Map.of())),
                         "Long-term memory hints. Verify current cluster state before using them.",
-                        ""
-                ));
+                        ""));
         when(responseComposer.compose(any())).thenReturn("ok");
         doThrow(new IllegalStateException("extract failed"))
-                .when(memoryExtractor).extractFromAsk(any(GraphState.class), anyString());
+                .when(memoryExtractor)
+                .extractFromAsk(any(GraphState.class), anyString());
         doAnswer(invocation -> {
-            GraphState state = invocation.getArgument(0);
-            assertEquals("Long-term memory hints. Verify current cluster state before using them.",
-                    state.getContext().get("memoryContext"));
-            Task task = restartTask();
-            state.setExecutionId("exec-memory");
-            state.setTaskPlan(new TaskPlan("exec-memory", "payment owner 是谁", List.of(task), Instant.now(), false));
-            state.setCurrentTask(task);
-            state.setStatus(GraphStatus.SUCCESS);
-            return null;
-        }).when(plannerAgent).run(any(GraphState.class));
+                    GraphState state = invocation.getArgument(0);
+                    assertEquals(
+                            "Long-term memory hints. Verify current cluster state before using them.",
+                            state.getContext().get("memoryContext"));
+                    Task task = restartTask();
+                    state.setExecutionId("exec-memory");
+                    state.setTaskPlan(
+                            new TaskPlan("exec-memory", "payment owner 是谁", List.of(task), Instant.now(), false));
+                    state.setCurrentTask(task);
+                    state.setStatus(GraphStatus.SUCCESS);
+                    return null;
+                })
+                .when(plannerAgent)
+                .run(any(GraphState.class));
         doAnswer(invocation -> {
-            GraphState state = invocation.getArgument(0);
-            state.setStatus(GraphStatus.SUCCESS);
-            return null;
-        }).when(executorAgent).plan(any(GraphState.class));
+                    GraphState state = invocation.getArgument(0);
+                    state.setStatus(GraphStatus.SUCCESS);
+                    return null;
+                })
+                .when(executorAgent)
+                .plan(any(GraphState.class));
         doAnswer(invocation -> {
-            GraphState state = invocation.getArgument(0);
-            state.setStatus(GraphStatus.SUCCESS);
-            return null;
-        }).when(verifierAgent).run(any(GraphState.class));
+                    GraphState state = invocation.getArgument(0);
+                    state.setStatus(GraphStatus.SUCCESS);
+                    return null;
+                })
+                .when(verifierAgent)
+                .run(any(GraphState.class));
         doAnswer(invocation -> {
-            GraphState state = invocation.getArgument(0);
-            state.setStatus(GraphStatus.SUCCESS);
-            return null;
-        }).when(executorAgent).executePrepared(any(GraphState.class));
+                    GraphState state = invocation.getArgument(0);
+                    state.setStatus(GraphStatus.SUCCESS);
+                    return null;
+                })
+                .when(executorAgent)
+                .executePrepared(any(GraphState.class));
 
         AskService.AskExecutionResult result = service.handle("payment owner 是谁");
 
@@ -260,23 +287,19 @@ class AskServiceTest {
         ResponseComposer responseComposer = mock(ResponseComposer.class);
         ExecutionAuditService executionAuditService = mock(ExecutionAuditService.class);
 
-        AskService service = new AskService(
-                plannerAgent,
-                verifierAgent,
-                executorAgent,
-                approvalService,
-                responseComposer,
-                executionAuditService
-        );
+        AskService service = askService(
+                plannerAgent, verifierAgent, executorAgent, approvalService, responseComposer, executionAuditService);
 
         GraphState state = approvedRunnableState("exec-1");
         when(approvalService.loadState("exec-1")).thenReturn(state);
         when(responseComposer.compose(state)).thenReturn("ok");
         doAnswer(invocation -> {
-            GraphState graphState = invocation.getArgument(0);
-            graphState.setStatus(GraphStatus.SUCCESS);
-            return null;
-        }).when(executorAgent).executePrepared(state);
+                    GraphState graphState = invocation.getArgument(0);
+                    graphState.setStatus(GraphStatus.SUCCESS);
+                    return null;
+                })
+                .when(executorAgent)
+                .executePrepared(state);
 
         AskService.AskExecutionResult result = service.resumeAfterApproval("exec-1");
 
@@ -295,14 +318,8 @@ class AskServiceTest {
         ResponseComposer responseComposer = mock(ResponseComposer.class);
         ExecutionAuditService executionAuditService = mock(ExecutionAuditService.class);
 
-        AskService service = new AskService(
-                plannerAgent,
-                verifierAgent,
-                executorAgent,
-                approvalService,
-                responseComposer,
-                executionAuditService
-        );
+        AskService service = askService(
+                plannerAgent, verifierAgent, executorAgent, approvalService, responseComposer, executionAuditService);
 
         GraphState state = approvedRunnableState("exec-2");
         state.setFinalApprovalDecision(ApprovalDecision.PENDING);
@@ -321,14 +338,8 @@ class AskServiceTest {
         ResponseComposer responseComposer = mock(ResponseComposer.class);
         ExecutionAuditService executionAuditService = mock(ExecutionAuditService.class);
 
-        AskService service = new AskService(
-                plannerAgent,
-                verifierAgent,
-                executorAgent,
-                approvalService,
-                responseComposer,
-                executionAuditService
-        );
+        AskService service = askService(
+                plannerAgent, verifierAgent, executorAgent, approvalService, responseComposer, executionAuditService);
 
         GraphState state = approvedRunnableState("exec-3");
         ApprovalRequest approvalRequest = new ApprovalRequest(
@@ -342,19 +353,21 @@ class AskServiceTest {
                 "ok",
                 "tester",
                 true,
-                List.of("high-risk")
-        );
+                List.of("high-risk"));
         when(approvalService.decide("exec-3", ApprovalDecision.APPROVED, "ok", "tester"))
                 .thenReturn(approvalRequest);
         when(approvalService.loadState("exec-3")).thenReturn(state);
         when(responseComposer.compose(state)).thenReturn("resumed");
         doAnswer(invocation -> {
-            GraphState graphState = invocation.getArgument(0);
-            graphState.setStatus(GraphStatus.SUCCESS);
-            return null;
-        }).when(executorAgent).executePrepared(state);
+                    GraphState graphState = invocation.getArgument(0);
+                    graphState.setStatus(GraphStatus.SUCCESS);
+                    return null;
+                })
+                .when(executorAgent)
+                .executePrepared(state);
 
-        AskService.ApprovalExecutionResult result = service.decideAndResume("exec-3", ApprovalDecision.APPROVED, "ok", "tester");
+        AskService.ApprovalExecutionResult result =
+                service.decideAndResume("exec-3", ApprovalDecision.APPROVED, "ok", "tester");
 
         assertEquals("exec-3", result.executionId());
         verify(approvalService).decide("exec-3", ApprovalDecision.APPROVED, "ok", "tester");
@@ -370,14 +383,8 @@ class AskServiceTest {
         ResponseComposer responseComposer = mock(ResponseComposer.class);
         ExecutionAuditService executionAuditService = mock(ExecutionAuditService.class);
 
-        AskService service = new AskService(
-                plannerAgent,
-                verifierAgent,
-                executorAgent,
-                approvalService,
-                responseComposer,
-                executionAuditService
-        );
+        AskService service = askService(
+                plannerAgent, verifierAgent, executorAgent, approvalService, responseComposer, executionAuditService);
 
         GraphState state = approvedRunnableState("exec-4");
         ApprovalRequest approvalRequest = new ApprovalRequest(
@@ -391,8 +398,7 @@ class AskServiceTest {
                 null,
                 null,
                 false,
-                List.of("high-risk")
-        );
+                List.of("high-risk"));
         when(approvalService.getApproval("exec-4")).thenReturn(approvalRequest);
         when(approvalService.loadState("exec-4")).thenReturn(state);
 
@@ -424,7 +430,76 @@ class AskServiceTest {
                 RiskLevel.HIGH,
                 "payment-service",
                 Map.of("rolloutStrategy", "rolling"),
-                new SopReference("SOP-RESTART_SERVICE", "restart", "v1", "rag:sop")
-        );
+                new SopReference("SOP-RESTART_SERVICE", "restart", "v1", "rag:sop"));
+    }
+
+    private AskService askService(
+            PlannerAgent plannerAgent,
+            VerifierAgent verifierAgent,
+            ExecutorAgent executorAgent,
+            ApprovalService approvalService,
+            ResponseComposer responseComposer,
+            ExecutionAuditService auditService) {
+        return askService(
+                plannerAgent,
+                verifierAgent,
+                executorAgent,
+                approvalService,
+                responseComposer,
+                auditService,
+                SessionStore.noop(),
+                MemoryInjector.noop(),
+                MemoryExtractor.noop());
+    }
+
+    private AskService askService(
+            PlannerAgent plannerAgent,
+            VerifierAgent verifierAgent,
+            ExecutorAgent executorAgent,
+            ApprovalService approvalService,
+            ResponseComposer responseComposer,
+            ExecutionAuditService auditService,
+            SessionStore sessionStore) {
+        return askService(
+                plannerAgent,
+                verifierAgent,
+                executorAgent,
+                approvalService,
+                responseComposer,
+                auditService,
+                sessionStore,
+                MemoryInjector.noop(),
+                MemoryExtractor.noop());
+    }
+
+    private AskService askService(
+            PlannerAgent plannerAgent,
+            VerifierAgent verifierAgent,
+            ExecutorAgent executorAgent,
+            ApprovalService approvalService,
+            ResponseComposer responseComposer,
+            ExecutionAuditService auditService,
+            SessionStore sessionStore,
+            MemoryInjector memoryInjector,
+            MemoryExtractor memoryExtractor) {
+        KubeOnCallProperties properties = new KubeOnCallProperties();
+        TokenBudget tokenBudget = new TokenBudget();
+        SkillActivationService skillActivationService = mock(SkillActivationService.class);
+        when(skillActivationService.activate(anyString(), any())).thenReturn(SkillActivation.empty());
+        AskContextLifecycle contextLifecycle = new AskContextLifecycle(
+                sessionStore,
+                memoryInjector,
+                memoryExtractor,
+                skillActivationService,
+                new ContextCompressor(properties, tokenBudget),
+                new ConversationHistoryCompactor(properties, tokenBudget));
+        return new AskService(
+                plannerAgent,
+                verifierAgent,
+                executorAgent,
+                approvalService,
+                responseComposer,
+                auditService,
+                contextLifecycle);
     }
 }

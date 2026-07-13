@@ -1,25 +1,26 @@
 package com.kubeoncall.alarm;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.kubeoncall.alarm.domain.AlarmEvaluationResult;
-import com.kubeoncall.alarm.domain.AlarmResourceType;
-import com.kubeoncall.alarm.domain.AlarmSeverity;
-import com.kubeoncall.alarm.domain.NormalizedAlarmEvent;
-import com.kubeoncall.alarm.policy.AlarmPolicyEngine;
-import com.kubeoncall.alarm.policy.AlarmFingerprintService;
-import com.kubeoncall.alarm.policy.YamlAlarmPolicyRepository;
-import com.kubeoncall.alarm.ingest.AlarmNormalizer;
-import com.kubeoncall.web.dto.AlarmRequest;
-import org.junit.jupiter.api.Test;
-import org.springframework.core.io.ClassPathResource;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import org.junit.jupiter.api.Test;
+import org.springframework.core.io.ClassPathResource;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.kubeoncall.alarm.domain.AlarmEvaluationResult;
+import com.kubeoncall.alarm.domain.AlarmResourceType;
+import com.kubeoncall.alarm.domain.AlarmSeverity;
+import com.kubeoncall.alarm.domain.NormalizedAlarmEvent;
+import com.kubeoncall.alarm.ingest.AlarmNormalizer;
+import com.kubeoncall.alarm.policy.AlarmFingerprintService;
+import com.kubeoncall.alarm.policy.AlarmPolicyEngine;
+import com.kubeoncall.alarm.policy.YamlAlarmPolicyRepository;
+import com.kubeoncall.web.dto.AlarmRequest;
 
 class AlarmPolicyEngineTest {
 
@@ -78,10 +79,29 @@ class AlarmPolicyEngineTest {
     @Test
     void diskPolicyShouldTriggerAt85() {
         NormalizedAlarmEvent event = new NormalizedAlarmEvent(
-                "id", "fp", "HostDiskUsageP1", "prometheus", "warning", null,
-                AlarmResourceType.NODE, "node-a", "lab", "monitoring", "svc",
-                "host.disk.usage_percent", 86.0, 85.0, "%", "10m",
-                Map.of("team", "infra"), Map.of(), "runbook-host-disk-usage", null, Instant.now(), "disk high", Map.of());
+                "id",
+                "fp",
+                "HostDiskUsageP1",
+                "prometheus",
+                "warning",
+                null,
+                AlarmResourceType.NODE,
+                "node-a",
+                "lab",
+                "monitoring",
+                "svc",
+                "host.disk.usage_percent",
+                86.0,
+                85.0,
+                "%",
+                "10m",
+                Map.of("team", "infra"),
+                Map.of(),
+                "runbook-host-disk-usage",
+                null,
+                Instant.now(),
+                "disk high",
+                Map.of());
         AlarmEvaluationResult result = engine.evaluate(event);
         assertTrue(result.matched());
         assertEquals(AlarmSeverity.P1, result.finalSeverity());
@@ -91,10 +111,29 @@ class AlarmPolicyEngineTest {
     @Test
     void kubeNodeNotReadyShouldFireOnMatchWithoutThreshold() {
         NormalizedAlarmEvent event = new NormalizedAlarmEvent(
-                "id", "fp", "KubeNodeNotReadyP0", "kubernetes", "critical", null,
-                AlarmResourceType.NODE, "node-a", "lab", null, null,
-                "kube.node.ready", null, null, null, "3m",
-                Map.of("team", "infra"), Map.of(), "runbook-node-notready", null, Instant.now(), "node not ready", Map.of());
+                "id",
+                "fp",
+                "KubeNodeNotReadyP0",
+                "kubernetes",
+                "critical",
+                null,
+                AlarmResourceType.NODE,
+                "node-a",
+                "lab",
+                null,
+                null,
+                "kube.node.ready",
+                null,
+                null,
+                null,
+                "3m",
+                Map.of("team", "infra"),
+                Map.of(),
+                "runbook-node-notready",
+                null,
+                Instant.now(),
+                "node not ready",
+                Map.of());
         AlarmEvaluationResult result = engine.evaluate(event);
         assertTrue(result.matched());
         assertEquals(AlarmSeverity.P0, result.finalSeverity());
@@ -104,10 +143,29 @@ class AlarmPolicyEngineTest {
     @Test
     void unmatchedEventShouldReturnDefaultSeverity() {
         NormalizedAlarmEvent event = new NormalizedAlarmEvent(
-                "id", "fp", "SomeUnknownAlert", "prometheus", "warning", null,
-                AlarmResourceType.SERVICE, "svc-x", "lab", "ns", "svc",
-                "custom.metric", 1.0, null, null, null,
-                Map.of(), Map.of(), "rb", null, Instant.now(), "s", Map.of());
+                "id",
+                "fp",
+                "SomeUnknownAlert",
+                "prometheus",
+                "warning",
+                null,
+                AlarmResourceType.SERVICE,
+                "svc-x",
+                "lab",
+                "ns",
+                "svc",
+                "custom.metric",
+                1.0,
+                null,
+                null,
+                null,
+                Map.of(),
+                Map.of(),
+                "rb",
+                null,
+                Instant.now(),
+                "s",
+                Map.of());
         AlarmEvaluationResult result = engine.evaluate(event);
         assertFalse(result.matched());
         assertEquals(AlarmSeverity.P3, result.finalSeverity());
@@ -116,8 +174,10 @@ class AlarmPolicyEngineTest {
     @Test
     void autoSilenceShouldBeFalseForAllDefaultPolicies() {
         // Safety invariant: no default policy may default to auto-silence.
-        repository.findAll().forEach(p -> assertFalse(p.actions().autoSilence(),
-                "policy " + p.id() + " must not auto-silence by default"));
+        repository
+                .findAll()
+                .forEach(p -> assertFalse(
+                        p.actions().autoSilence(), "policy " + p.id() + " must not auto-silence by default"));
     }
 
     @Test
@@ -139,10 +199,29 @@ class AlarmPolicyEngineTest {
     @Test
     void unmatchedAlarmShouldPreserveMoreSevereUpstreamSeverity() {
         NormalizedAlarmEvent event = new NormalizedAlarmEvent(
-                "id", "fp", "UnknownCriticalAlert", "prometheus", "critical", AlarmSeverity.P0,
-                AlarmResourceType.SERVICE, "svc-x", "prod", "ns", "svc",
-                "custom.metric", null, null, null, null,
-                Map.of(), Map.of(), null, null, Instant.now(), "critical unknown", Map.of());
+                "id",
+                "fp",
+                "UnknownCriticalAlert",
+                "prometheus",
+                "critical",
+                AlarmSeverity.P0,
+                AlarmResourceType.SERVICE,
+                "svc-x",
+                "prod",
+                "ns",
+                "svc",
+                "custom.metric",
+                null,
+                null,
+                null,
+                null,
+                Map.of(),
+                Map.of(),
+                null,
+                null,
+                Instant.now(),
+                "critical unknown",
+                Map.of());
 
         AlarmEvaluationResult result = engine.evaluate(event);
 
@@ -153,10 +232,29 @@ class AlarmPolicyEngineTest {
     @Test
     void customAlertNameShouldStillMatchKnownMetricPolicy() {
         NormalizedAlarmEvent event = new NormalizedAlarmEvent(
-                "id", "fp", "CustomCpuSaturation", "prometheus", "warning", AlarmSeverity.P2,
-                AlarmResourceType.NODE, "node-a", "prod", "monitoring", "infra-exporter",
-                "host.cpu.usage_percent", 72.0, null, "%", "10m",
-                Map.of(), Map.of(), null, null, Instant.now(), "cpu high", Map.of());
+                "id",
+                "fp",
+                "CustomCpuSaturation",
+                "prometheus",
+                "warning",
+                AlarmSeverity.P2,
+                AlarmResourceType.NODE,
+                "node-a",
+                "prod",
+                "monitoring",
+                "infra-exporter",
+                "host.cpu.usage_percent",
+                72.0,
+                null,
+                "%",
+                "10m",
+                Map.of(),
+                Map.of(),
+                null,
+                null,
+                Instant.now(),
+                "cpu high",
+                Map.of());
 
         AlarmEvaluationResult result = engine.evaluate(event);
 
@@ -168,10 +266,29 @@ class AlarmPolicyEngineTest {
     @Test
     void eventWithoutAlertNameOrMetricShouldNotMatchStatePolicy() {
         NormalizedAlarmEvent event = new NormalizedAlarmEvent(
-                "id", "fp", null, "legacy", "critical", AlarmSeverity.P0,
-                null, "node-a", null, null, null,
-                null, null, null, null, null,
-                Map.of(), Map.of(), null, null, Instant.now(), "legacy alarm", Map.of());
+                "id",
+                "fp",
+                null,
+                "legacy",
+                "critical",
+                AlarmSeverity.P0,
+                null,
+                "node-a",
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                Map.of(),
+                Map.of(),
+                null,
+                null,
+                Instant.now(),
+                "legacy alarm",
+                Map.of());
 
         AlarmEvaluationResult result = engine.evaluate(event);
 
@@ -188,9 +305,28 @@ class AlarmPolicyEngineTest {
         mergedLabels.put("team", "infra");
         mergedLabels.putAll(labels);
         return new NormalizedAlarmEvent(
-                "id", "fp", "HostHighCpuUsageP1", "prometheus", "warning", null,
-                AlarmResourceType.NODE, "node-a", "lab", "monitoring", "infra-exporter",
-                "host.cpu.usage_percent", currentValue, 70.0, "%", "10m",
-                mergedLabels, Map.of(), "runbook-host-cpu-high", null, Instant.now(), "cpu high", Map.of());
+                "id",
+                "fp",
+                "HostHighCpuUsageP1",
+                "prometheus",
+                "warning",
+                null,
+                AlarmResourceType.NODE,
+                "node-a",
+                "lab",
+                "monitoring",
+                "infra-exporter",
+                "host.cpu.usage_percent",
+                currentValue,
+                70.0,
+                "%",
+                "10m",
+                mergedLabels,
+                Map.of(),
+                "runbook-host-cpu-high",
+                null,
+                Instant.now(),
+                "cpu high",
+                Map.of());
     }
 }

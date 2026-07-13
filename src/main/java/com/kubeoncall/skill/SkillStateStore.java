@@ -1,14 +1,17 @@
 package com.kubeoncall.skill;
 
-import org.springframework.data.redis.core.StringRedisTemplate;
-import org.springframework.stereotype.Service;
-
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.stereotype.Service;
 
 @Service
 public class SkillStateStore {
 
+    private static final Logger log = LoggerFactory.getLogger(SkillStateStore.class);
     private static final String DISABLED_KEY = "skill:disabled";
 
     private final StringRedisTemplate redisTemplate;
@@ -25,7 +28,8 @@ public class SkillStateStore {
                 localDisabled.clear();
                 localDisabled.addAll(members);
             }
-        } catch (RuntimeException ignored) {
+        } catch (RuntimeException ex) {
+            log.warn("Unable to refresh disabled skill state from Redis; using local cache", ex);
         }
         return Set.copyOf(localDisabled);
     }

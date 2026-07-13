@@ -1,11 +1,12 @@
 package com.kubeoncall.alarm.recovery;
 
-import com.kubeoncall.common.config.KubeOnCallProperties;
-import com.kubeoncall.tool.http.ToolHttpClient;
-import org.springframework.stereotype.Component;
-
 import java.util.LinkedHashMap;
 import java.util.Map;
+
+import org.springframework.stereotype.Component;
+
+import com.kubeoncall.common.config.KubeOnCallProperties;
+import com.kubeoncall.tool.http.ToolHttpClient;
 
 @Component
 public class HttpAlarmRecoveryHealthChecker implements AlarmRecoveryHealthChecker {
@@ -23,7 +24,9 @@ public class HttpAlarmRecoveryHealthChecker implements AlarmRecoveryHealthChecke
         String endpoint = properties.getAlarm().getRecoveryHealthCheckEndpoint();
         if (endpoint == null || endpoint.isBlank()) {
             boolean required = properties.getAlarm().isRecoveryHealthCheckRequired();
-            return new HealthCheckResult(!required, required ? "endpoint-not-configured" : "disabled",
+            return new HealthCheckResult(
+                    !required,
+                    required ? "endpoint-not-configured" : "disabled",
                     Map.of("required", required, "endpointConfigured", false));
         }
         Map<String, Object> request = new LinkedHashMap<>();
@@ -36,8 +39,7 @@ public class HttpAlarmRecoveryHealthChecker implements AlarmRecoveryHealthChecke
                 endpoint,
                 request,
                 properties.getAlarm().getRecoveryHealthCheckTimeoutMillis(),
-                Map.of("checker", "alarm-recovery", "fingerprint", state.fingerprint())
-        );
+                Map.of("checker", "alarm-recovery", "fingerprint", state.fingerprint()));
         boolean transportSuccess = "success".equalsIgnoreCase(String.valueOf(response.get("status")));
         boolean healthy = transportSuccess && explicitHealthy(response.get("response"));
         LinkedHashMap<String, Object> details = new LinkedHashMap<>(response);

@@ -3,12 +3,7 @@ package com.kubeoncall.domain.graph;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
-public record NodeResult(
-        String nodeName,
-        NodeStatus status,
-        String message,
-        Map<String, Object> payload
-) {
+public record NodeResult(String nodeName, NodeStatus status, String message, Map<String, Object> payload) {
 
     public String retryReason() {
         if (status != NodeStatus.RETRY || payload == null) {
@@ -26,11 +21,8 @@ public record NodeResult(
         return value == null ? null : String.valueOf(value);
     }
 
-    public static NodeResult retry(String nodeName,
-                                   String message,
-                                   String retryReason,
-                                   String retryStrategy,
-                                   Map<String, Object> payload) {
+    public static NodeResult retry(
+            String nodeName, String message, String retryReason, String retryStrategy, Map<String, Object> payload) {
         LinkedHashMap<String, Object> merged = new LinkedHashMap<>();
         if (payload != null) {
             merged.putAll(payload);

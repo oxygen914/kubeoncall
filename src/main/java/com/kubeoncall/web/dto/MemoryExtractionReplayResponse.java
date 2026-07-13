@@ -1,4 +1,3 @@
 package com.kubeoncall.web.dto;
 
-public record MemoryExtractionReplayResponse(int replayed) {
-}
+public record MemoryExtractionReplayResponse(int replayed) {}

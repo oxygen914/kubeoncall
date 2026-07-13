@@ -1,23 +1,23 @@
 package com.kubeoncall.memory;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.kubeoncall.common.config.KubeOnCallProperties;
-import com.kubeoncall.service.KubeOnCallMetricsService;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+
+import java.time.Instant;
+import java.util.Map;
+
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.data.redis.core.ListOperations;
 import org.springframework.data.redis.core.StringRedisTemplate;
 
-import java.time.Instant;
-import java.util.Map;
-
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.kubeoncall.common.config.KubeOnCallProperties;
+import com.kubeoncall.service.KubeOnCallMetricsService;
 
 class MemoryExtractionQueueTest {
 
@@ -27,7 +27,8 @@ class MemoryExtractionQueueTest {
         MemoryExtractionTask task = task(0);
         String raw = fixture.objectMapper.writeValueAsString(task);
         when(fixture.listOperations.rightPopAndLeftPush(
-                MemoryExtractionQueue.PENDING_KEY, MemoryExtractionQueue.PROCESSING_KEY)).thenReturn(raw);
+                        MemoryExtractionQueue.PENDING_KEY, MemoryExtractionQueue.PROCESSING_KEY))
+                .thenReturn(raw);
 
         MemoryExtractionQueue.ClaimedTask claimed = fixture.queue.claim().orElseThrow();
         fixture.queue.acknowledge(claimed);
@@ -59,7 +60,8 @@ class MemoryExtractionQueueTest {
     void shouldReplayDeadLetterTasksToPendingQueue() throws Exception {
         Fixture fixture = new Fixture();
         String raw = fixture.objectMapper.writeValueAsString(task(3));
-        when(fixture.listOperations.rightPop(MemoryExtractionQueue.DEAD_LETTER_KEY)).thenReturn(raw, null);
+        when(fixture.listOperations.rightPop(MemoryExtractionQueue.DEAD_LETTER_KEY))
+                .thenReturn(raw, null);
 
         int replayed = fixture.queue.replayDeadLetters(10);
 
@@ -70,14 +72,25 @@ class MemoryExtractionQueueTest {
 
     private static MemoryExtractionTask task(int attempts) {
         return new MemoryExtractionTask(
-                "task-1", MemoryType.SERVICE_FACT, MemoryScope.SERVICE, "owner", "owned by infra",
-                "payment-service", null, null, Map.of("source", "ask"), attempts, Instant.now());
+                "task-1",
+                MemoryType.SERVICE_FACT,
+                MemoryScope.SERVICE,
+                "owner",
+                "owned by infra",
+                "payment-service",
+                null,
+                null,
+                Map.of("source", "ask"),
+                attempts,
+                Instant.now());
     }
 
     private static class Fixture {
         private final StringRedisTemplate redisTemplate = mock(StringRedisTemplate.class);
+
         @SuppressWarnings("unchecked")
         private final ListOperations<String, String> listOperations = mock(ListOperations.class);
+
         private final ObjectMapper objectMapper = new ObjectMapper().findAndRegisterModules();
         private final KubeOnCallProperties properties = new KubeOnCallProperties();
         private final KubeOnCallMetricsService metrics = mock(KubeOnCallMetricsService.class);

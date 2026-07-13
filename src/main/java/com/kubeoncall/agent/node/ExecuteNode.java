@@ -1,4 +1,3 @@
 package com.kubeoncall.agent.node;
 
-public abstract class ExecuteNode implements AgentNode {
-}
+public abstract class ExecuteNode implements AgentNode {}

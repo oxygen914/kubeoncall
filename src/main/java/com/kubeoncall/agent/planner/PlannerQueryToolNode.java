@@ -1,5 +1,11 @@
 package com.kubeoncall.agent.planner;
 
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+
+import org.springframework.stereotype.Component;
+
 import com.kubeoncall.agent.node.QueryToolNode;
 import com.kubeoncall.domain.graph.GraphState;
 import com.kubeoncall.domain.graph.NodeResult;
@@ -7,11 +13,6 @@ import com.kubeoncall.domain.graph.NodeStatus;
 import com.kubeoncall.tool.AgentToolCatalog;
 import com.kubeoncall.tool.ToolDefinition;
 import com.kubeoncall.tool.mcp.McpClient;
-import org.springframework.stereotype.Component;
-
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
 
 @Component
 public class PlannerQueryToolNode extends QueryToolNode {
@@ -33,82 +34,107 @@ public class PlannerQueryToolNode extends QueryToolNode {
     public NodeResult execute(GraphState state) {
         String request = planningRequest(state);
         String target = inferTarget(request);
-        List<Map<String, Object>> availableTools = agentToolCatalog.plannerTools().stream()
-                .map(this::toToolMap)
-                .toList();
+        List<Map<String, Object>> availableTools =
+                agentToolCatalog.plannerTools().stream().map(this::toToolMap).toList();
 
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("query", request);
         payload.put("plannerReadOnlyValidated", agentToolCatalog.isPlannerReadOnly());
 
-        payload.put("sop", queryWithFallback(
-                "knowledge.searchSop",
-                Map.of("query", request),
-                Map.of(
-                        "tool", "knowledge.searchSop",
-                        "documentId", "SOP-GENERAL-001",
-                        "title", "Standard investigation procedure for " + target,
-                        "matchedIntent", inferIntent(request)
-                )
-        ));
+        payload.put(
+                "sop",
+                queryWithFallback(
+                        "knowledge.searchSop",
+                        Map.of("query", request),
+                        Map.of(
+                                "tool",
+                                "knowledge.searchSop",
+                                "documentId",
+                                "SOP-GENERAL-001",
+                                "title",
+                                "Standard investigation procedure for " + target,
+                                "matchedIntent",
+                                inferIntent(request))));
 
-        payload.put("topology", queryWithFallback(
-                "topology.getServiceTopology",
-                Map.of("serviceName", target),
-                Map.of(
-                        "tool", "topology.getServiceTopology",
-                        "service", target,
-                        "upstreams", List.of("gateway-service"),
-                        "downstreams", List.of("mysql", "redis")
-                )
-        ));
+        payload.put(
+                "topology",
+                queryWithFallback(
+                        "topology.getServiceTopology",
+                        Map.of("serviceName", target),
+                        Map.of(
+                                "tool",
+                                "topology.getServiceTopology",
+                                "service",
+                                target,
+                                "upstreams",
+                                List.of("gateway-service"),
+                                "downstreams",
+                                List.of("mysql", "redis"))));
 
-        payload.put("serviceMetadata", queryWithFallback(
-                "cmdb.getServiceMetadata",
-                Map.of("serviceName", target),
-                Map.of(
-                        "tool", "cmdb.getServiceMetadata",
-                        "service", target,
-                        "namespace", inferNamespace(request),
-                        "environment", inferEnvironment(request),
-                        "criticality", inferCriticality(target),
-                        "owner", "lab-ops"
-                )
-        ));
+        payload.put(
+                "serviceMetadata",
+                queryWithFallback(
+                        "cmdb.getServiceMetadata",
+                        Map.of("serviceName", target),
+                        Map.of(
+                                "tool",
+                                "cmdb.getServiceMetadata",
+                                "service",
+                                target,
+                                "namespace",
+                                inferNamespace(request),
+                                "environment",
+                                inferEnvironment(request),
+                                "criticality",
+                                inferCriticality(target),
+                                "owner",
+                                "lab-ops")));
 
-        payload.put("resourceSnapshot", queryWithFallback(
-                "kubernetes.describeResource",
-                Map.of("resourceName", target, "namespace", inferNamespace(request)),
-                Map.of(
-                        "tool", "kubernetes.describeResource",
-                        "resourceName", target,
-                        "namespace", inferNamespace(request),
-                        "kind", "Deployment",
-                        "status", "Healthy"
-                )
-        ));
+        payload.put(
+                "resourceSnapshot",
+                queryWithFallback(
+                        "kubernetes.describeResource",
+                        Map.of("resourceName", target, "namespace", inferNamespace(request)),
+                        Map.of(
+                                "tool", "kubernetes.describeResource",
+                                "resourceName", target,
+                                "namespace", inferNamespace(request),
+                                "kind", "Deployment",
+                                "status", "Healthy")));
 
-        payload.put("activeAlerts", queryWithFallback(
-                "alerts.getActiveAlerts",
-                Map.of("serviceName", target),
-                Map.of(
-                        "tool", "alerts.getActiveAlerts",
-                        "service", target,
-                        "count", request.contains("告警") || request.toLowerCase().contains("alert") ? 2 : 0,
-                        "labels", List.of("service=" + target, "severity=warning")
-                )
-        ));
+        payload.put(
+                "activeAlerts",
+                queryWithFallback(
+                        "alerts.getActiveAlerts",
+                        Map.of("serviceName", target),
+                        Map.of(
+                                "tool",
+                                "alerts.getActiveAlerts",
+                                "service",
+                                target,
+                                "count",
+                                request.contains("告警") || request.toLowerCase().contains("alert") ? 2 : 0,
+                                "labels",
+                                List.of("service=" + target, "severity=warning"))));
 
-        payload.put("metricsContext", queryWithFallback(
-                "prometheus.queryRange",
-                Map.of("query", "rate(http_requests_total{service=\"" + target + "\"}[5m])", "windowMinutes", 10),
-                Map.of(
-                        "tool", "prometheus.queryRange",
-                        "query", "rate(http_requests_total{service=\"" + target + "\"}[5m])",
-                        "windowMinutes", 10,
-                        "trend", "stable"
-                )
-        ));
+        payload.put(
+                "metricsContext",
+                queryWithFallback(
+                        "prometheus.queryRange",
+                        Map.of(
+                                "query",
+                                "rate(http_requests_total{service=\"" + target + "\"}[5m])",
+                                "windowMinutes",
+                                10),
+                        Map.of(
+                                "tool",
+                                "prometheus.queryRange",
+                                "query",
+                                "rate(http_requests_total{service=\"" + target + "\"}[5m])",
+                                "windowMinutes",
+                                10,
+                                "trend",
+                                "stable")));
 
         List<String> missingSignals = readMissingSignals(state);
         if (!missingSignals.isEmpty()) {
@@ -117,20 +143,24 @@ public class PlannerQueryToolNode extends QueryToolNode {
                 Map<String, Object> scaleHint = queryWithFallback(
                         "topology.getServiceTopology",
                         Map.of("serviceName", target, "mode", "capacity_hint"),
-                        Map.of("tool", "topology.getServiceTopology", "recommendedReplicas", 3)
-                );
+                        Map.of("tool", "topology.getServiceTopology", "recommendedReplicas", 3));
                 Object replicas = scaleHint.get("recommendedReplicas");
-                supplementalSignals.put("recommendedReplicas", replicas instanceof Number number ? number.intValue() : 3);
-                supplementalSignals.put("scaleHintSource", String.valueOf(scaleHint.getOrDefault("tool", "topology.getServiceTopology")));
+                supplementalSignals.put(
+                        "recommendedReplicas", replicas instanceof Number number ? number.intValue() : 3);
+                supplementalSignals.put(
+                        "scaleHintSource",
+                        String.valueOf(scaleHint.getOrDefault("tool", "topology.getServiceTopology")));
             }
             if (missingSignals.contains("specific_config_key_not_identified")) {
                 Map<String, Object> configHint = queryWithFallback(
                         "knowledge.searchSop",
                         Map.of("query", request + " config key recommendation"),
-                        Map.of("tool", "knowledge.searchSop", "recommendedConfigKey", "timeout")
-                );
-                supplementalSignals.put("recommendedConfigKey", String.valueOf(configHint.getOrDefault("recommendedConfigKey", "timeout")));
-                supplementalSignals.put("configHintSource", String.valueOf(configHint.getOrDefault("tool", "knowledge.searchSop")));
+                        Map.of("tool", "knowledge.searchSop", "recommendedConfigKey", "timeout"));
+                supplementalSignals.put(
+                        "recommendedConfigKey",
+                        String.valueOf(configHint.getOrDefault("recommendedConfigKey", "timeout")));
+                supplementalSignals.put(
+                        "configHintSource", String.valueOf(configHint.getOrDefault("tool", "knowledge.searchSop")));
             }
             if (!supplementalSignals.isEmpty()) {
                 payload.put("supplementalSignals", supplementalSignals);
@@ -142,11 +172,14 @@ public class PlannerQueryToolNode extends QueryToolNode {
         attachSkillKnowledge(payload, state);
         state.getContext().put("plannerKnowledge", payload);
         state.addObservation("Planner queried read-only tools for target=" + target + ", tools="
-                + availableTools.stream().map(tool -> String.valueOf(tool.get("name"))).toList());
+                + availableTools.stream()
+                        .map(tool -> String.valueOf(tool.get("name")))
+                        .toList());
         return new NodeResult(getName(), NodeStatus.SUCCESS, "Planner queried knowledge sources", payload);
     }
 
-    private Map<String, Object> queryWithFallback(String toolName, Map<String, Object> requestPayload, Map<String, Object> fallback) {
+    private Map<String, Object> queryWithFallback(
+            String toolName, Map<String, Object> requestPayload, Map<String, Object> fallback) {
         Map<String, Object> response = mcpClient.call(toolName, requestPayload);
         String status = String.valueOf(response.getOrDefault("status", "failed"));
         if (!"success".equalsIgnoreCase(status)) {
@@ -176,11 +209,14 @@ public class PlannerQueryToolNode extends QueryToolNode {
     private String planningRequest(GraphState state) {
         String currentRequest = state.getUserRequest() == null ? "" : state.getUserRequest();
         Object sessionContext = state.getContext().get("sessionContext");
-        String sessionText = sessionContext == null ? "" : String.valueOf(sessionContext).trim();
+        String sessionText =
+                sessionContext == null ? "" : String.valueOf(sessionContext).trim();
         Object memoryContext = state.getContext().get("memoryContext");
-        String memoryText = memoryContext == null ? "" : String.valueOf(memoryContext).trim();
+        String memoryText =
+                memoryContext == null ? "" : String.valueOf(memoryContext).trim();
         Object skillPrompt = state.getContext().get("skillPrompt");
-        String skillText = skillPrompt == null ? "" : String.valueOf(skillPrompt).trim();
+        String skillText =
+                skillPrompt == null ? "" : String.valueOf(skillPrompt).trim();
         if (sessionText.isBlank() && memoryText.isBlank() && skillText.isBlank()) {
             return currentRequest;
         }
@@ -226,8 +262,7 @@ public class PlannerQueryToolNode extends QueryToolNode {
                 "description", tool.description(),
                 "readOnly", tool.readOnly(),
                 "requiredParameters", tool.requiredParameters(),
-                "targetSystems", tool.targetSystems()
-        );
+                "targetSystems", tool.targetSystems());
     }
 
     private String inferTarget(String request) {

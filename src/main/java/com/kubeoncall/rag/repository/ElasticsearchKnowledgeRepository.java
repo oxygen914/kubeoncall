@@ -1,12 +1,13 @@
 package com.kubeoncall.rag.repository;
 
-import co.elastic.clients.elasticsearch._types.KnnQuery;
-import co.elastic.clients.elasticsearch._types.query_dsl.Query;
-import com.kubeoncall.common.config.KubeOnCallProperties;
-import com.kubeoncall.domain.rag.KnowledgeDocument;
-import com.kubeoncall.domain.rag.RetrievalRequest;
-import com.kubeoncall.domain.rag.RetrievalHit;
-import org.springframework.beans.factory.annotation.Autowired;
+import java.time.Instant;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Optional;
+
 import org.springframework.context.annotation.Primary;
 import org.springframework.data.elasticsearch.client.elc.ElasticsearchTemplate;
 import org.springframework.data.elasticsearch.client.elc.NativeQuery;
@@ -17,13 +18,13 @@ import org.springframework.data.elasticsearch.core.query.Criteria;
 import org.springframework.data.elasticsearch.core.query.CriteriaQuery;
 import org.springframework.stereotype.Repository;
 
-import java.time.Instant;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Locale;
-import java.util.Map;
-import java.util.Objects;
-import java.util.Optional;
+import com.kubeoncall.common.config.KubeOnCallProperties;
+import com.kubeoncall.domain.rag.KnowledgeDocument;
+import com.kubeoncall.domain.rag.RetrievalHit;
+import com.kubeoncall.domain.rag.RetrievalRequest;
+
+import co.elastic.clients.elasticsearch._types.KnnQuery;
+import co.elastic.clients.elasticsearch._types.query_dsl.Query;
 
 @Repository
 @Primary
@@ -33,15 +34,10 @@ public class ElasticsearchKnowledgeRepository implements KnowledgeRepository {
     private final KubeOnCallProperties properties;
     private final KnowledgeIndexAdmin indexAdmin;
 
-    public ElasticsearchKnowledgeRepository(ElasticsearchTemplate elasticsearchTemplate,
-                                            KubeOnCallProperties properties) {
-        this(elasticsearchTemplate, properties, null);
-    }
-
-    @Autowired
-    public ElasticsearchKnowledgeRepository(ElasticsearchTemplate elasticsearchTemplate,
-                                            KubeOnCallProperties properties,
-                                            KnowledgeIndexAdmin indexAdmin) {
+    public ElasticsearchKnowledgeRepository(
+            ElasticsearchTemplate elasticsearchTemplate,
+            KubeOnCallProperties properties,
+            KnowledgeIndexAdmin indexAdmin) {
         this.elasticsearchTemplate = elasticsearchTemplate;
         this.properties = properties;
         this.indexAdmin = indexAdmin;
@@ -49,10 +45,11 @@ public class ElasticsearchKnowledgeRepository implements KnowledgeRepository {
 
     @Override
     public void save(KnowledgeDocument document) {
-        if (indexAdmin != null && shouldPrepareVectorIndex(document)) {
-            int dimensions = document.embedding() == null || document.embedding().isEmpty()
-                    ? Math.max(1, properties.getRag().getEmbeddingDimensions())
-                    : document.embedding().size();
+        if (shouldPrepareVectorIndex(document)) {
+            int dimensions =
+                    document.embedding() == null || document.embedding().isEmpty()
+                            ? Math.max(1, properties.getRag().getEmbeddingDimensions())
+                            : document.embedding().size();
             indexAdmin.ensureVectorMapping(dimensions);
         }
         EsKnowledgeDocumentEntity entity = toEntity(document);
@@ -61,12 +58,14 @@ public class ElasticsearchKnowledgeRepository implements KnowledgeRepository {
 
     @Override
     public List<KnowledgeDocument> searchLexical(RetrievalRequest request, int candidateSize) {
-        return searchLexicalHits(request, candidateSize).stream().map(RetrievalHit::document).toList();
+        return searchLexicalHits(request, candidateSize).stream()
+                .map(RetrievalHit::document)
+                .toList();
     }
 
     @Override
     public List<RetrievalHit> searchLexicalHits(RetrievalRequest request, int candidateSize) {
-        if (indexAdmin != null && !indexAdmin.indexExists()) {
+        if (!indexAdmin.indexExists()) {
             return List.of();
         }
         Criteria criteria = buildLexicalCriteria(request);
@@ -81,22 +80,18 @@ public class ElasticsearchKnowledgeRepository implements KnowledgeRepository {
     }
 
     @Override
-    public List<KnowledgeDocument> searchVector(RetrievalRequest request,
-                                                int candidateSize,
-                                                List<Double> queryVector) {
-        return searchVectorHits(request, candidateSize, queryVector).stream().map(RetrievalHit::document).toList();
+    public List<KnowledgeDocument> searchVector(RetrievalRequest request, int candidateSize, List<Double> queryVector) {
+        return searchVectorHits(request, candidateSize, queryVector).stream()
+                .map(RetrievalHit::document)
+                .toList();
     }
 
     @Override
-    public List<RetrievalHit> searchVectorHits(RetrievalRequest request,
-                                               int candidateSize,
-                                               List<Double> queryVector) {
+    public List<RetrievalHit> searchVectorHits(RetrievalRequest request, int candidateSize, List<Double> queryVector) {
         if (queryVector == null || queryVector.isEmpty()) {
             return List.of();
         }
-        if (indexAdmin != null) {
-            indexAdmin.ensureVectorMapping(queryVector.size());
-        }
+        indexAdmin.ensureVectorMapping(queryVector.size());
         List<Float> vector = queryVector.stream().map(Double::floatValue).toList();
         List<Query> filters = vectorFilters(request);
         KnnQuery.Builder knnBuilder = new KnnQuery.Builder()
@@ -143,8 +138,8 @@ public class ElasticsearchKnowledgeRepository implements KnowledgeRepository {
         if (documentId == null || documentId.isBlank()) {
             return Optional.empty();
         }
-        EsKnowledgeDocumentEntity entity = elasticsearchTemplate.get(
-                documentId.trim(), EsKnowledgeDocumentEntity.class, index());
+        EsKnowledgeDocumentEntity entity =
+                elasticsearchTemplate.get(documentId.trim(), EsKnowledgeDocumentEntity.class, index());
         return Optional.ofNullable(entity).map(this::toDomain);
     }
 
@@ -195,34 +190,35 @@ public class ElasticsearchKnowledgeRepository implements KnowledgeRepository {
             return List.of();
         }
         return request.filters().entrySet().stream()
-                .map(entry -> Query.of(query -> query.term(term -> term
-                        .field("metadata." + entry.getKey())
-                        .value(entry.getValue()))))
+                .map(entry -> Query.of(query -> query.term(
+                        term -> term.field("metadata." + entry.getKey()).value(entry.getValue()))))
                 .toList();
     }
 
     private boolean shouldPrepareVectorIndex(KnowledgeDocument document) {
-        boolean hasEmbedding = document.embedding() != null && !document.embedding().isEmpty();
-        boolean localEmbeddingConfigured = "es".equalsIgnoreCase(properties.getRag().getVectorBackend())
-                && (properties.getRag().isEmbeddingEnabled() || properties.getRag().isMockEmbeddingEnabled());
+        boolean hasEmbedding =
+                document.embedding() != null && !document.embedding().isEmpty();
+        boolean localEmbeddingConfigured =
+                "es".equalsIgnoreCase(properties.getRag().getVectorBackend())
+                        && (properties.getRag().isEmbeddingEnabled()
+                                || properties.getRag().isMockEmbeddingEnabled());
         return hasEmbedding || localEmbeddingConfigured;
     }
 
     private List<KnowledgeDocument> searchByQuery(org.springframework.data.elasticsearch.core.query.Query query) {
-        SearchHits<EsKnowledgeDocumentEntity> hits = elasticsearchTemplate.search(query, EsKnowledgeDocumentEntity.class, index());
-        return hits.stream()
-                .map(SearchHit::getContent)
-                .map(this::toDomain)
-                .toList();
+        SearchHits<EsKnowledgeDocumentEntity> hits =
+                elasticsearchTemplate.search(query, EsKnowledgeDocumentEntity.class, index());
+        return hits.stream().map(SearchHit::getContent).map(this::toDomain).toList();
     }
 
-    private List<RetrievalHit> searchHitsByQuery(org.springframework.data.elasticsearch.core.query.Query query,
-                                                 String channel) {
-        SearchHits<EsKnowledgeDocumentEntity> hits = elasticsearchTemplate.search(
-                query, EsKnowledgeDocumentEntity.class, index());
+    private List<RetrievalHit> searchHitsByQuery(
+            org.springframework.data.elasticsearch.core.query.Query query, String channel) {
+        SearchHits<EsKnowledgeDocumentEntity> hits =
+                elasticsearchTemplate.search(query, EsKnowledgeDocumentEntity.class, index());
         java.util.concurrent.atomic.AtomicInteger rank = new java.util.concurrent.atomic.AtomicInteger(1);
         return hits.stream()
-                .map(hit -> new RetrievalHit(toDomain(hit.getContent()), (double) hit.getScore(), rank.getAndIncrement(), channel))
+                .map(hit -> new RetrievalHit(
+                        toDomain(hit.getContent()), (double) hit.getScore(), rank.getAndIncrement(), channel))
                 .toList();
     }
 
@@ -232,12 +228,19 @@ public class ElasticsearchKnowledgeRepository implements KnowledgeRepository {
         String title = document.title() == null ? "" : document.title();
         String content = document.content() == null ? "" : document.content();
         String source = document.source() == null ? "manual" : document.source().toLowerCase(Locale.ROOT);
-        List<Float> embedding = document.embedding() == null || document.embedding().isEmpty()
-                ? null
-                : document.embedding().stream().map(Double::floatValue).toList();
+        List<Float> embedding =
+                document.embedding() == null || document.embedding().isEmpty()
+                        ? null
+                        : document.embedding().stream().map(Double::floatValue).toList();
         return new EsKnowledgeDocumentEntity(
-                document.id(), title, content, source, metadata, createdAt.toEpochMilli(),
-                document.embeddingText(), embedding);
+                document.id(),
+                title,
+                content,
+                source,
+                metadata,
+                createdAt.toEpochMilli(),
+                document.embeddingText(),
+                embedding);
     }
 
     private KnowledgeDocument toDomain(EsKnowledgeDocumentEntity entity) {
@@ -251,14 +254,12 @@ public class ElasticsearchKnowledgeRepository implements KnowledgeRepository {
                 entity.getEmbeddingText(),
                 entity.getEmbedding() == null
                         ? List.of()
-                        : entity.getEmbedding().stream().map(Float::doubleValue).toList()
-        );
+                        : entity.getEmbedding().stream().map(Float::doubleValue).toList());
     }
 
     private IndexCoordinates index() {
         String alias = properties.getRag().getKnowledgeIndexAlias();
-        return IndexCoordinates.of(alias == null || alias.isBlank()
-                ? properties.getRag().getKnowledgeIndex()
-                : alias.trim());
+        return IndexCoordinates.of(
+                alias == null || alias.isBlank() ? properties.getRag().getKnowledgeIndex() : alias.trim());
     }
 }

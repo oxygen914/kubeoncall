@@ -12,15 +12,12 @@ public record AlarmMaintenanceWindow(
         String createdBy,
         String approvedBy,
         String approvalReference,
-        Instant createdAt
-) {
+        Instant createdAt) {
     public AlarmMaintenanceWindow {
         matchers = matchers == null ? Map.of() : Map.copyOf(matchers);
     }
 
     public boolean activeAt(Instant instant) {
-        return instant != null
-                && !instant.isBefore(startsAt)
-                && instant.isBefore(endsAt);
+        return instant != null && !instant.isBefore(startsAt) && instant.isBefore(endsAt);
     }
 }

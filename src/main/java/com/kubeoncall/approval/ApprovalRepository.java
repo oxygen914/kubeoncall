@@ -1,8 +1,8 @@
 package com.kubeoncall.approval;
 
-import com.kubeoncall.domain.approval.ApprovalRequest;
-
 import java.util.Optional;
+
+import com.kubeoncall.domain.approval.ApprovalRequest;
 
 public interface ApprovalRepository {
 

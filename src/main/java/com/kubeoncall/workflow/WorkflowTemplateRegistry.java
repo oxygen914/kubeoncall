@@ -1,9 +1,9 @@
 package com.kubeoncall.workflow;
 
-import org.springframework.stereotype.Component;
-
 import java.util.Locale;
 import java.util.Set;
+
+import org.springframework.stereotype.Component;
 
 /**
  * Registry of workflow template names supported by the first alarm-governance iteration.
@@ -21,14 +21,7 @@ public class WorkflowTemplateRegistry {
     public static final String WORKLOAD = "workload";
     public static final String CONTROL_PLANE = "control-plane";
 
-    private static final Set<String> KNOWN = Set.of(
-            DEFAULT,
-            HOST_RESOURCE,
-            K8S_POD,
-            K8S_NODE,
-            WORKLOAD,
-            CONTROL_PLANE
-    );
+    private static final Set<String> KNOWN = Set.of(DEFAULT, HOST_RESOURCE, K8S_POD, K8S_NODE, WORKLOAD, CONTROL_PLANE);
 
     public String normalize(String template) {
         if (template == null || template.isBlank()) {

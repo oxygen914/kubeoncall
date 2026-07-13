@@ -1,20 +1,21 @@
 package com.kubeoncall.skill;
 
-import com.kubeoncall.common.config.KubeOnCallProperties;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
-
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.util.Set;
-import java.util.Map;
-
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.Map;
+import java.util.Set;
+
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
+
+import com.kubeoncall.common.config.KubeOnCallProperties;
 
 class SkillRegistryGovernanceTest {
 
@@ -43,9 +44,11 @@ class SkillRegistryGovernanceTest {
                 invalid
                 """);
         KubeOnCallProperties properties = new KubeOnCallProperties();
-        properties.getSkill().setProjectLocation(
-                "file:" + tempDir.toAbsolutePath().toString().replace('\\', '/') + "/**/SKILL.md");
-        SkillRegistry registry = new SkillRegistry(properties, new SkillFrontmatterParser());
+        properties
+                .getSkill()
+                .setProjectLocation(
+                        "file:" + tempDir.toAbsolutePath().toString().replace('\\', '/') + "/**/SKILL.md");
+        SkillRegistry registry = new SkillRegistry(properties, new SkillFrontmatterParser(), enabledStateStore());
 
         SkillRegistry.ReloadResult result = registry.reload();
         Skill skill = registry.findById("payment-oom-triage").orElseThrow();
@@ -75,5 +78,11 @@ class SkillRegistryGovernanceTest {
 
         registry.enable("payment-oom-triage");
         verify(stateStore).enable("payment-oom-triage");
+    }
+
+    private static SkillStateStore enabledStateStore() {
+        SkillStateStore stateStore = mock(SkillStateStore.class);
+        when(stateStore.disabledIds()).thenReturn(Set.of());
+        return stateStore;
     }
 }

@@ -21,8 +21,7 @@ public record AlarmEvaluationResult(
         String window,
         String workflowTemplate,
         String reason,
-        List<String> notes
-) {
+        List<String> notes) {
 
     public AlarmEvaluationResult {
         if (notes == null) {
@@ -32,8 +31,7 @@ public record AlarmEvaluationResult(
 
     /** An unmatched result carrying only a reason and the computed/default severity. */
     public static AlarmEvaluationResult unmatched(AlarmSeverity severity, String reason) {
-        return new AlarmEvaluationResult(
-                false, null, null, severity, null, null, null, null, null, reason, List.of());
+        return new AlarmEvaluationResult(false, null, null, severity, null, null, null, null, null, reason, List.of());
     }
 
     public Map<String, String> ragFilters() {

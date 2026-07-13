@@ -1,14 +1,5 @@
 package com.kubeoncall.service.audit;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.kubeoncall.common.config.KubeOnCallProperties;
-import com.kubeoncall.domain.audit.ExecutionAuditRecord;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
-import org.springframework.context.annotation.Primary;
-import org.springframework.data.redis.core.StringRedisTemplate;
-import org.springframework.stereotype.Repository;
-
 import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
@@ -16,6 +7,16 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
+
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.context.annotation.Primary;
+import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.stereotype.Repository;
+
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.kubeoncall.common.config.KubeOnCallProperties;
+import com.kubeoncall.domain.audit.ExecutionAuditRecord;
 
 @Repository
 @Primary
@@ -29,9 +30,8 @@ public class RedisExecutionAuditRepository implements ExecutionAuditRepository {
     private final ObjectMapper objectMapper;
     private final KubeOnCallProperties properties;
 
-    public RedisExecutionAuditRepository(StringRedisTemplate redisTemplate,
-                                        ObjectMapper objectMapper,
-                                        KubeOnCallProperties properties) {
+    public RedisExecutionAuditRepository(
+            StringRedisTemplate redisTemplate, ObjectMapper objectMapper, KubeOnCallProperties properties) {
         this.redisTemplate = redisTemplate;
         this.objectMapper = objectMapper;
         this.properties = properties;

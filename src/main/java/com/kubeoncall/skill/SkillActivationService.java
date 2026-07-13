@@ -1,16 +1,16 @@
 package com.kubeoncall.skill;
 
-import com.kubeoncall.common.config.KubeOnCallProperties;
-import com.kubeoncall.domain.task.RiskLevel;
-import com.kubeoncall.service.KubeOnCallMetricsService;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.stereotype.Service;
-
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.LinkedHashMap;
+
+import org.springframework.stereotype.Service;
+
+import com.kubeoncall.common.config.KubeOnCallProperties;
+import com.kubeoncall.domain.task.RiskLevel;
+import com.kubeoncall.service.KubeOnCallMetricsService;
 
 @Service
 public class SkillActivationService {
@@ -20,28 +20,22 @@ public class SkillActivationService {
     private final SkillMatcher matcher;
     private final KubeOnCallMetricsService metricsService;
 
-    @Autowired
-    public SkillActivationService(KubeOnCallProperties properties,
-                                  SkillRegistry registry,
-                                  SkillMatcher matcher,
-                                  KubeOnCallMetricsService metricsService) {
+    public SkillActivationService(
+            KubeOnCallProperties properties,
+            SkillRegistry registry,
+            SkillMatcher matcher,
+            KubeOnCallMetricsService metricsService) {
         this.properties = properties;
         this.registry = registry;
         this.matcher = matcher;
         this.metricsService = metricsService;
     }
 
-    public SkillActivationService(KubeOnCallProperties properties, SkillRegistry registry, SkillMatcher matcher) {
-        this(properties, registry, matcher, null);
-    }
-
     public SkillActivation activate(String request, Map<String, Object> context) {
         return activate(request, context, List.of());
     }
 
-    public SkillActivation activate(String request,
-                                    Map<String, Object> context,
-                                    List<String> requestedSkillIds) {
+    public SkillActivation activate(String request, Map<String, Object> context, List<String> requestedSkillIds) {
         if (!properties.getSkill().isEnabled()) {
             recordActivation(false, 0);
             return SkillActivation.empty();
@@ -62,12 +56,14 @@ public class SkillActivationService {
             recordActivation(false, 0);
             return SkillActivation.empty();
         }
-        List<Map<String, Object>> summaries = matched.stream().map(Skill::summary).toList();
+        List<Map<String, Object>> summaries =
+                matched.stream().map(Skill::summary).toList();
         List<String> ids = matched.stream().map(Skill::id).toList();
         List<String> whitelist = combinedWhitelist(matched);
         RiskLevel maxRisk = mostRestrictiveRisk(matched);
         recordActivation(true, matched.size());
-        return new SkillActivation(matched, summaries, ids, whitelist, maxRisk, buildPrompt(matched, whitelist, maxRisk));
+        return new SkillActivation(
+                matched, summaries, ids, whitelist, maxRisk, buildPrompt(matched, whitelist, maxRisk));
     }
 
     public String indexForPrompt() {
@@ -94,11 +90,18 @@ public class SkillActivationService {
 
     private String buildPrompt(List<Skill> skills, List<String> whitelist, RiskLevel maxRisk) {
         StringBuilder builder = new StringBuilder();
-        builder.append("Activated operational skills. Treat them as experience hints, not proof. Verify current state first.\n");
+        builder.append(
+                "Activated operational skills. Treat them as experience hints, not proof. Verify current state first.\n");
         builder.append("Combined tool whitelist: ").append(whitelist).append('\n');
-        builder.append("Combined maxRisk: ").append(maxRisk == null ? "UNSPECIFIED" : maxRisk.name()).append('\n');
+        builder.append("Combined maxRisk: ")
+                .append(maxRisk == null ? "UNSPECIFIED" : maxRisk.name())
+                .append('\n');
         for (Skill skill : skills) {
-            builder.append("\n## ").append(skill.name()).append(" (").append(skill.id()).append(")\n");
+            builder.append("\n## ")
+                    .append(skill.name())
+                    .append(" (")
+                    .append(skill.id())
+                    .append(")\n");
             builder.append("Description: ").append(skill.description()).append('\n');
             builder.append("Max risk: ").append(skill.maxRisk()).append('\n');
             builder.append("Allowed tools: ").append(skill.toolWhitelist()).append('\n');
@@ -113,8 +116,6 @@ public class SkillActivationService {
     }
 
     private void recordActivation(boolean active, long count) {
-        if (metricsService != null) {
-            metricsService.recordSkillActivation(active, count);
-        }
+        metricsService.recordSkillActivation(active, count);
     }
 }

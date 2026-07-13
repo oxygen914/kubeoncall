@@ -1,5 +1,14 @@
 package com.kubeoncall.workflow.node;
 
+import java.time.Duration;
+import java.time.Instant;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+
+import org.springframework.stereotype.Component;
+
 import com.kubeoncall.alarm.state.ActiveAlarmState;
 import com.kubeoncall.common.config.KubeOnCallProperties;
 import com.kubeoncall.domain.graph.NodeResult;
@@ -7,19 +16,10 @@ import com.kubeoncall.domain.graph.NodeStatus;
 import com.kubeoncall.memory.MemoryEntry;
 import com.kubeoncall.memory.MemoryType;
 import com.kubeoncall.memory.TokenBudget;
+import com.kubeoncall.skill.SkillActivation;
+import com.kubeoncall.skill.SkillActivationService;
 import com.kubeoncall.workflow.AlertWorkflowContext;
 import com.kubeoncall.workflow.AlertWorkflowNode;
-import com.kubeoncall.skill.SkillActivationService;
-import com.kubeoncall.skill.SkillActivation;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.stereotype.Component;
-
-import java.time.Duration;
-import java.time.Instant;
-import java.util.ArrayList;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
 
 /**
  * Produces a bounded, memory-aware diagnosis without executing historical remediation.
@@ -33,21 +33,14 @@ public class IntelligentDiagnosisNode implements AlertWorkflowNode {
     private static final List<String> MEMORY_GUARDRAILS = List.of(
             "Verify current metrics, logs, and resource state before reusing historical handling",
             "Do not execute commands or mutations copied from memory",
-            "Prefer the matched runbook when memory conflicts with current evidence"
-    );
+            "Prefer the matched runbook when memory conflicts with current evidence");
 
     private final KubeOnCallProperties properties;
     private final TokenBudget tokenBudget;
     private final SkillActivationService skillActivationService;
 
-    public IntelligentDiagnosisNode(KubeOnCallProperties properties, TokenBudget tokenBudget) {
-        this(properties, tokenBudget, null);
-    }
-
-    @Autowired
-    public IntelligentDiagnosisNode(KubeOnCallProperties properties,
-                                    TokenBudget tokenBudget,
-                                    SkillActivationService skillActivationService) {
+    public IntelligentDiagnosisNode(
+            KubeOnCallProperties properties, TokenBudget tokenBudget, SkillActivationService skillActivationService) {
         this.properties = properties;
         this.tokenBudget = tokenBudget;
         this.skillActivationService = skillActivationService;
@@ -58,8 +51,7 @@ public class IntelligentDiagnosisNode implements AlertWorkflowNode {
         List<MemoryEntry> memories = supportedMemories(context);
         int maxEntries = Math.max(1, properties.getMemory().getInjectMaxEntries());
         List<MemoryEntry> selectedMemories = memories.stream().limit(maxEntries).toList();
-        int memoryBudget = Math.max(128, Math.min(
-                800, properties.getMemory().getContextTokenBudget() / 3));
+        int memoryBudget = Math.max(128, Math.min(800, properties.getMemory().getContextTokenBudget() / 3));
         int perEntryBudget = Math.max(32, memoryBudget / Math.max(1, selectedMemories.size()));
         Instant reference = Instant.now();
 
@@ -71,7 +63,8 @@ public class IntelligentDiagnosisNode implements AlertWorkflowNode {
                 .toList();
         List<String> evidenceSources = currentEvidenceSources(context);
         long activeCount = activeCount(context);
-        long priorIncidentCount = selectedMemories.stream().filter(this::isPriorIncident).count();
+        long priorIncidentCount =
+                selectedMemories.stream().filter(this::isPriorIncident).count();
         boolean repeatedIncident = activeCount > 1 || priorIncidentCount > 0;
         boolean memoryConsumed = !previousHandling.isEmpty();
         SkillActivation skillActivation = activateSkills(context);
@@ -90,9 +83,11 @@ public class IntelligentDiagnosisNode implements AlertWorkflowNode {
         diagnosis.put("guardrails", memoryConsumed ? MEMORY_GUARDRAILS : List.of());
         diagnosis.put("activatedSkillIds", skillActivation.skillIds());
         diagnosis.put("activatedSkills", skillActivation.skillSummaries());
-        diagnosis.put("skillPrompt", skillActivation.active()
-                ? tokenBudget.compactText(skillActivation.prompt(), Math.max(128, memoryBudget))
-                : "");
+        diagnosis.put(
+                "skillPrompt",
+                skillActivation.active()
+                        ? tokenBudget.compactText(skillActivation.prompt(), Math.max(128, memoryBudget))
+                        : "");
 
         context.putAttribute("diagnosis", diagnosis);
         context.putAttribute("alertMemoryConsumed", previousHandling.size());
@@ -102,7 +97,11 @@ public class IntelligentDiagnosisNode implements AlertWorkflowNode {
             context.putAttribute("activatedSkillIds", skillActivation.skillIds());
             context.putAttribute("activatedSkills", skillActivation.skillSummaries());
             context.putAttribute("activatedSkillToolWhitelist", skillActivation.toolWhitelist());
-            context.putAttribute("activatedSkillMaxRisk", skillActivation.maxRisk() == null ? null : skillActivation.maxRisk().name());
+            context.putAttribute(
+                    "activatedSkillMaxRisk",
+                    skillActivation.maxRisk() == null
+                            ? null
+                            : skillActivation.maxRisk().name());
             context.putAttribute("skillPrompt", skillActivation.prompt());
         }
 
@@ -112,24 +111,34 @@ public class IntelligentDiagnosisNode implements AlertWorkflowNode {
                 memoryConsumed
                         ? "Synthesized diagnosis with historical context requiring live validation"
                         : "Synthesized diagnosis from current evidence",
-                diagnosis
-        );
+                diagnosis);
     }
 
     private SkillActivation activateSkills(AlertWorkflowContext context) {
-        if (skillActivationService == null || context.getNormalizedAlarm() == null) {
+        if (context.getNormalizedAlarm() == null) {
             return SkillActivation.empty();
         }
         var event = context.getNormalizedAlarm();
-        String request = String.join(" ",
-                safe(event.alertName()), safe(event.summary()), safe(event.service()),
-                safe(event.resourceName()), event.resourceType() == null ? "" : event.resourceType().name());
+        String request = String.join(
+                " ",
+                safe(event.alertName()),
+                safe(event.summary()),
+                safe(event.service()),
+                safe(event.resourceName()),
+                event.resourceType() == null ? "" : event.resourceType().name());
         try {
-            return skillActivationService.activate(request, Map.of(
-                    "service", safe(event.service()),
-                    "resourceType", event.resourceType() == null ? "" : event.resourceType().name(),
-                    "severity", event.severity() == null ? "" : event.severity().name()
-            ));
+            return skillActivationService.activate(
+                    request,
+                    Map.of(
+                            "service", safe(event.service()),
+                            "resourceType",
+                                    event.resourceType() == null
+                                            ? ""
+                                            : event.resourceType().name(),
+                            "severity",
+                                    event.severity() == null
+                                            ? ""
+                                            : event.severity().name()));
         } catch (RuntimeException ex) {
             context.putAttribute("skillWarning", "alarm skill activation failed: " + ex.getMessage());
             return SkillActivation.empty();
@@ -180,10 +189,8 @@ public class IntelligentDiagnosisNode implements AlertWorkflowNode {
         return List.copyOf(sources);
     }
 
-    private void addEvidenceSource(List<String> sources,
-                                   AlertWorkflowContext context,
-                                   String attribute,
-                                   String source) {
+    private void addEvidenceSource(
+            List<String> sources, AlertWorkflowContext context, String attribute, String source) {
         if (context.getAttribute(attribute) != null) {
             sources.add(source);
         }

@@ -1,5 +1,13 @@
 package com.kubeoncall.workflow.node;
 
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.function.Function;
+import java.util.stream.Collectors;
+
+import org.springframework.stereotype.Component;
+
 import com.kubeoncall.alarm.domain.AlarmEvaluationResult;
 import com.kubeoncall.alarm.domain.NormalizedAlarmEvent;
 import com.kubeoncall.common.config.KubeOnCallProperties;
@@ -8,13 +16,6 @@ import com.kubeoncall.domain.graph.NodeStatus;
 import com.kubeoncall.tool.ToolExecutor;
 import com.kubeoncall.workflow.AlertWorkflowContext;
 import com.kubeoncall.workflow.AlertWorkflowNode;
-import org.springframework.stereotype.Component;
-
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.function.Function;
-import java.util.stream.Collectors;
 
 @Component
 public class StateCompareNode implements AlertWorkflowNode {
@@ -24,7 +25,8 @@ public class StateCompareNode implements AlertWorkflowNode {
 
     public StateCompareNode(List<ToolExecutor> toolExecutors, KubeOnCallProperties properties) {
         this.executorsByKind = toolExecutors.stream()
-                .collect(Collectors.toMap(ToolExecutor::getExecutorKind, Function.identity(), (left, right) -> left, LinkedHashMap::new));
+                .collect(Collectors.toMap(
+                        ToolExecutor::getExecutorKind, Function.identity(), (left, right) -> left, LinkedHashMap::new));
         this.properties = properties;
     }
 
@@ -32,7 +34,11 @@ public class StateCompareNode implements AlertWorkflowNode {
     public NodeResult execute(AlertWorkflowContext context) {
         ToolExecutor prometheus = executorsByKind.get("prometheus");
         if (prometheus == null) {
-            return new NodeResult("stateCompareNode", NodeStatus.FAILURE, "Prometheus tool executor is not configured", Map.of("executorKind", "prometheus"));
+            return new NodeResult(
+                    "stateCompareNode",
+                    NodeStatus.FAILURE,
+                    "Prometheus tool executor is not configured",
+                    Map.of("executorKind", "prometheus"));
         }
 
         QueryPlan plan = resolveQueryPlan(context);
@@ -47,8 +53,7 @@ public class StateCompareNode implements AlertWorkflowNode {
                     "stateCompareNode",
                     NodeStatus.FAILURE,
                     "Failed to compare runtime state",
-                    Map.of("executorKind", "prometheus", "action", "rangeQuery", "result", toolResult)
-            );
+                    Map.of("executorKind", "prometheus", "action", "rangeQuery", "result", toolResult));
         }
 
         context.putAttribute("baseline", plan.baseline);
@@ -64,11 +69,7 @@ public class StateCompareNode implements AlertWorkflowNode {
         payload.put("action", "rangeQuery");
         payload.put("result", toolResult);
         return new NodeResult(
-                "stateCompareNode",
-                NodeStatus.SUCCESS,
-                "Compared runtime state against baseline",
-                payload
-        );
+                "stateCompareNode", NodeStatus.SUCCESS, "Compared runtime state against baseline", payload);
     }
 
     /**
@@ -81,19 +82,31 @@ public class StateCompareNode implements AlertWorkflowNode {
      */
     private QueryPlan resolveQueryPlan(AlertWorkflowContext context) {
         AlarmEvaluationResult evaluation = context.getEvaluationResult();
-        if (evaluation != null && evaluation.promql() != null && !evaluation.promql().isBlank()) {
+        if (evaluation != null
+                && evaluation.promql() != null
+                && !evaluation.promql().isBlank()) {
             int windowMinutes = parseWindowMinutes(evaluation.window(), 15);
-            return new QueryPlan(evaluation.promql().trim(), windowMinutes, evaluation.runbookId() == null ? "policy" : evaluation.runbookId(), "policy");
+            return new QueryPlan(
+                    evaluation.promql().trim(),
+                    windowMinutes,
+                    evaluation.runbookId() == null ? "policy" : evaluation.runbookId(),
+                    "policy");
         }
         NormalizedAlarmEvent normalized = context.getNormalizedAlarm();
         if (normalized != null && normalized.metadata() != null) {
             Object query = normalized.metadata().get("compareQuery");
             if (query != null && !String.valueOf(query).isBlank()) {
-                return new QueryPlan(String.valueOf(query), 15, String.valueOf(normalized.metadata().getOrDefault("baseline", "lab-default")), "metadata");
+                return new QueryPlan(
+                        String.valueOf(query),
+                        15,
+                        String.valueOf(normalized.metadata().getOrDefault("baseline", "lab-default")),
+                        "metadata");
             }
         }
         // Legacy path: metadata on the AlarmEvent.
-        Map<String, Object> metadata = context.getAlarmEvent().metadata() == null ? Map.of() : context.getAlarmEvent().metadata();
+        Map<String, Object> metadata = context.getAlarmEvent().metadata() == null
+                ? Map.of()
+                : context.getAlarmEvent().metadata();
         Object query = metadata.get("compareQuery");
         String baseline = String.valueOf(metadata.getOrDefault("baseline", "lab-default"));
         if (query != null && !String.valueOf(query).isBlank()) {
@@ -109,10 +122,15 @@ public class StateCompareNode implements AlertWorkflowNode {
         String trimmed = window.trim().toLowerCase();
         try {
             if (trimmed.endsWith("m")) {
-                return Integer.parseInt(trimmed.substring(0, trimmed.length() - 1).trim());
+                return Integer.parseInt(
+                        trimmed.substring(0, trimmed.length() - 1).trim());
             }
             if (trimmed.endsWith("h")) {
-                return Math.max(1, Integer.parseInt(trimmed.substring(0, trimmed.length() - 1).trim()) * 60);
+                return Math.max(
+                        1,
+                        Integer.parseInt(trimmed.substring(0, trimmed.length() - 1)
+                                        .trim())
+                                * 60);
             }
             return Integer.parseInt(trimmed);
         } catch (NumberFormatException ex) {
@@ -136,6 +154,5 @@ public class StateCompareNode implements AlertWorkflowNode {
         return properties.getIntegrations().getPrometheus().getTimeoutMillis() > 0 ? 200 : 500;
     }
 
-    private record QueryPlan(String query, int windowMinutes, String baseline, String source) {
-    }
+    private record QueryPlan(String query, int windowMinutes, String baseline, String source) {}
 }

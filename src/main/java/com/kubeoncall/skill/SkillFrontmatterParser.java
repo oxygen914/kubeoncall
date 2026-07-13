@@ -1,22 +1,22 @@
 package com.kubeoncall.skill;
 
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
-import com.kubeoncall.domain.task.RiskLevel;
-import org.springframework.stereotype.Component;
-
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 
+import org.springframework.stereotype.Component;
+
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
+import com.kubeoncall.domain.task.RiskLevel;
+
 @Component
 public class SkillFrontmatterParser {
 
-    private static final TypeReference<Map<String, Object>> MAP_TYPE = new TypeReference<>() {
-    };
+    private static final TypeReference<Map<String, Object>> MAP_TYPE = new TypeReference<>() {};
 
     private final ObjectMapper yamlMapper = new ObjectMapper(new YAMLFactory());
 
@@ -24,10 +24,7 @@ public class SkillFrontmatterParser {
         return parse(resourceName, content, SkillSource.BUILTIN, resourceName);
     }
 
-    public Skill parse(String resourceName,
-                       String content,
-                       SkillSource source,
-                       String skillPath) {
+    public Skill parse(String resourceName, String content, SkillSource source, String skillPath) {
         ParsedDocument parsed = splitFrontmatter(content == null ? "" : content);
         Map<String, Object> metadata = parseMetadata(parsed.frontmatter());
         String id = text(metadata, "id");
@@ -51,8 +48,7 @@ public class SkillFrontmatterParser {
                 riskLevel(text(metadata, "maxRisk")),
                 stringList(metadata.get("toolWhitelist")),
                 parsed.body().trim(),
-                metadata
-        );
+                metadata);
     }
 
     private ParsedDocument splitFrontmatter(String content) {
@@ -128,11 +124,10 @@ public class SkillFrontmatterParser {
     }
 
     private String slug(String value) {
-        return value == null ? "skill" : value.toLowerCase(Locale.ROOT)
-                .replaceAll("[^a-z0-9]+", "-")
-                .replaceAll("(^-|-$)", "");
+        return value == null
+                ? "skill"
+                : value.toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9]+", "-").replaceAll("(^-|-$)", "");
     }
 
-    private record ParsedDocument(String frontmatter, String body) {
-    }
+    private record ParsedDocument(String frontmatter, String body) {}
 }

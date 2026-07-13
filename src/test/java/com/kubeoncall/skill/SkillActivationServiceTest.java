@@ -1,18 +1,19 @@
 package com.kubeoncall.skill;
 
-import com.kubeoncall.common.config.KubeOnCallProperties;
-import com.kubeoncall.domain.task.RiskLevel;
-import com.kubeoncall.service.KubeOnCallMetricsService;
-import org.junit.jupiter.api.Test;
-
-import java.util.List;
-import java.util.Map;
-
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
+
+import java.util.List;
+import java.util.Map;
+
+import org.junit.jupiter.api.Test;
+
+import com.kubeoncall.common.config.KubeOnCallProperties;
+import com.kubeoncall.domain.task.RiskLevel;
+import com.kubeoncall.service.KubeOnCallMetricsService;
 
 class SkillActivationServiceTest {
 
@@ -45,10 +46,8 @@ class SkillActivationServiceTest {
     void shouldActivateEnabledSkillExplicitlyRequestedByPlanner() {
         KubeOnCallMetricsService metricsService = mock(KubeOnCallMetricsService.class);
 
-        SkillActivation activation = service(metricsService).activate(
-                "unrelated wording",
-                Map.of(),
-                List.of("payment-oom-triage"));
+        SkillActivation activation =
+                service(metricsService).activate("unrelated wording", Map.of(), List.of("payment-oom-triage"));
 
         assertTrue(activation.active());
         assertEquals(List.of("payment-oom-triage"), activation.skillIds());
@@ -58,8 +57,14 @@ class SkillActivationServiceTest {
     private SkillActivationService service(KubeOnCallMetricsService metricsService) {
         KubeOnCallProperties properties = new KubeOnCallProperties();
         SkillFrontmatterParser parser = new SkillFrontmatterParser();
-        SkillRegistry registry = new SkillRegistry(properties, parser);
+        SkillRegistry registry = new SkillRegistry(properties, parser, enabledStateStore());
         registry.load();
         return new SkillActivationService(properties, registry, new SkillMatcher(properties), metricsService);
+    }
+
+    private static SkillStateStore enabledStateStore() {
+        SkillStateStore stateStore = mock(SkillStateStore.class);
+        org.mockito.Mockito.when(stateStore.disabledIds()).thenReturn(java.util.Set.of());
+        return stateStore;
     }
 }

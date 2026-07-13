@@ -1,5 +1,15 @@
 package com.kubeoncall.agent.verifier;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
+
+import java.util.List;
+import java.util.Map;
+
+import org.junit.jupiter.api.Test;
+
 import com.kubeoncall.domain.graph.ExecutionPlan;
 import com.kubeoncall.domain.graph.GraphState;
 import com.kubeoncall.domain.graph.NodeResult;
@@ -10,15 +20,6 @@ import com.kubeoncall.domain.task.Task;
 import com.kubeoncall.domain.task.TaskType;
 import com.kubeoncall.tool.AgentToolCatalog;
 import com.kubeoncall.tool.ToolDefinition;
-import org.junit.jupiter.api.Test;
-
-import java.util.List;
-import java.util.Map;
-
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
 
 class VerifierThinkNodeTest {
 
@@ -33,8 +34,7 @@ class VerifierThinkNodeTest {
                 true,
                 List.of(TaskType.RESTART_SERVICE),
                 List.of("namespace"),
-                List.of("k8s")
-        );
+                List.of("k8s"));
         when(catalog.findExecutorTool("kubernetes", "rolloutRestart")).thenReturn(tool);
 
         VerifierThinkNode node = new VerifierThinkNode(catalog);
@@ -46,18 +46,19 @@ class VerifierThinkNodeTest {
                 RiskLevel.HIGH,
                 "payment-service",
                 Map.of("namespace", "default"),
-                new SopReference("SOP-RESTART_SERVICE", "restart", "v1", "rag:sop")
-        ));
-        state.getContext().put("executionPlan", new ExecutionPlan(
-                "kubernetes",
-                "rolloutRestart",
-                Map.of("namespace", "default"),
-                List.of("namespace"),
-                List.of(),
-                Map.of("namespace", "from_planner"),
-                "summary",
-                null
-        ));
+                new SopReference("SOP-RESTART_SERVICE", "restart", "v1", "rag:sop")));
+        state.getContext()
+                .put(
+                        "executionPlan",
+                        new ExecutionPlan(
+                                "kubernetes",
+                                "rolloutRestart",
+                                Map.of("namespace", "default"),
+                                List.of("namespace"),
+                                List.of(),
+                                Map.of("namespace", "from_planner"),
+                                "summary",
+                                null));
 
         NodeResult result = node.execute(state);
 
@@ -77,8 +78,7 @@ class VerifierThinkNodeTest {
                 false,
                 List.of(TaskType.QUERY_LOGS),
                 List.of("namespace"),
-                List.of("k8s")
-        );
+                List.of("k8s"));
         when(catalog.findExecutorTool("kubernetes", "queryLogs")).thenReturn(tool);
 
         VerifierThinkNode node = new VerifierThinkNode(catalog);
@@ -90,27 +90,28 @@ class VerifierThinkNodeTest {
                 RiskLevel.MEDIUM,
                 "order-service",
                 Map.of("namespace", "default"),
-                new SopReference("SOP-QUERY_LOGS", "logs", "v1", "rag:sop")
-        ));
+                new SopReference("SOP-QUERY_LOGS", "logs", "v1", "rag:sop")));
         state.getContext().put("activatedSkillIds", List.of("payment-oom-triage"));
         state.getContext().put("activatedSkillMaxRisk", "LOW");
-        state.getContext().put("executionPlan", new ExecutionPlan(
-                "kubernetes",
-                "queryLogs",
-                Map.of("namespace", "default"),
-                List.of("namespace"),
-                List.of(),
-                Map.of("namespace", "from_planner"),
-                "summary",
-                null
-        ));
+        state.getContext()
+                .put(
+                        "executionPlan",
+                        new ExecutionPlan(
+                                "kubernetes",
+                                "queryLogs",
+                                Map.of("namespace", "default"),
+                                List.of("namespace"),
+                                List.of(),
+                                Map.of("namespace", "from_planner"),
+                                "summary",
+                                null));
 
         NodeResult result = node.execute(state);
 
         assertEquals(NodeStatus.SUCCESS, result.status());
         assertEquals("APPROVAL_REQUIRED", state.getContext().get("verifierDecision"));
-        assertTrue(((List<?>) result.payload().get("riskReasons")).stream()
-                .anyMatch(reason -> String.valueOf(reason).contains("maxRisk LOW")));
+        assertTrue(((List<?>) result.payload().get("riskReasons"))
+                .stream().anyMatch(reason -> String.valueOf(reason).contains("maxRisk LOW")));
         assertEquals("LOW", result.payload().get("activatedSkillMaxRisk"));
     }
 }

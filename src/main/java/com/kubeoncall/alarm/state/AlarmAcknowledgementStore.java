@@ -1,23 +1,26 @@
 package com.kubeoncall.alarm.state;
 
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import org.springframework.data.redis.core.StringRedisTemplate;
-import org.springframework.stereotype.Service;
-
 import java.time.Duration;
 import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Optional;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.stereotype.Service;
+
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
+
 @Service
 public class AlarmAcknowledgementStore {
 
+    private static final Logger log = LoggerFactory.getLogger(AlarmAcknowledgementStore.class);
     private static final String KEY_PREFIX = "alarm-ack:";
     private static final String ESCALATION_KEY_PREFIX = "alarm-escalation:";
-    private static final TypeReference<Map<String, Object>> MAP_TYPE = new TypeReference<>() {
-    };
+    private static final TypeReference<Map<String, Object>> MAP_TYPE = new TypeReference<>() {};
 
     private final StringRedisTemplate redisTemplate;
     private final ObjectMapper objectMapper;
@@ -27,28 +30,21 @@ public class AlarmAcknowledgementStore {
         this.objectMapper = objectMapper;
     }
 
-    public AlarmAcknowledgement acknowledge(String fingerprint,
-                                             String acknowledgedBy,
-                                             String reason,
-                                             Duration ttl) {
+    public AlarmAcknowledgement acknowledge(String fingerprint, String acknowledgedBy, String reason, Duration ttl) {
         String normalizedFingerprint = requireText(fingerprint, "fingerprint");
         String normalizedAcknowledgedBy = requireText(acknowledgedBy, "acknowledgedBy");
         String normalizedReason = text(reason, "alarm acknowledged");
         Duration safeTtl = safeTtl(ttl);
         Instant now = Instant.now();
         AlarmAcknowledgement acknowledgement = new AlarmAcknowledgement(
-                normalizedFingerprint,
-                normalizedAcknowledgedBy,
-                normalizedReason,
-                now,
-                now.plus(safeTtl)
-        );
+                normalizedFingerprint, normalizedAcknowledgedBy, normalizedReason, now, now.plus(safeTtl));
         try {
-            redisTemplate.opsForValue().set(
-                    keyFor(normalizedFingerprint),
-                    objectMapper.writeValueAsString(toMap(acknowledgement)),
-                    safeTtl
-            );
+            redisTemplate
+                    .opsForValue()
+                    .set(
+                            keyFor(normalizedFingerprint),
+                            objectMapper.writeValueAsString(toMap(acknowledgement)),
+                            safeTtl);
             redisTemplate.delete(escalationKeyFor(normalizedFingerprint));
             return acknowledgement;
         } catch (Exception ex) {
@@ -72,14 +68,16 @@ public class AlarmAcknowledgementStore {
                     string(map.get("acknowledgedBy")),
                     string(map.get("reason")),
                     instant(map.get("acknowledgedAt")),
-                    instant(map.get("expiresAt"))
-            );
+                    instant(map.get("expiresAt")));
             if (acknowledgement.isExpired(Instant.now())) {
                 redisTemplate.delete(key);
                 return Optional.empty();
             }
             return Optional.of(acknowledgement);
-        } catch (Exception ignored) {
+        } catch (Exception ex) {
+            log.warn(
+                    "Unable to parse cached alarm acknowledgement; treating it as absent: errorType={}",
+                    ex.getClass().getSimpleName());
             return Optional.empty();
         }
     }
@@ -130,12 +128,7 @@ public class AlarmAcknowledgementStore {
     }
 
     public record AlarmAcknowledgement(
-            String fingerprint,
-            String acknowledgedBy,
-            String reason,
-            Instant acknowledgedAt,
-            Instant expiresAt
-    ) {
+            String fingerprint, String acknowledgedBy, String reason, Instant acknowledgedAt, Instant expiresAt) {
         public boolean isExpired(Instant now) {
             return expiresAt != null && !expiresAt.isAfter(now);
         }

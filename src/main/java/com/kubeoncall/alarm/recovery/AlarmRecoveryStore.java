@@ -1,18 +1,22 @@
 package com.kubeoncall.alarm.recovery;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-import org.springframework.data.redis.core.StringRedisTemplate;
-import org.springframework.stereotype.Service;
-
 import java.time.Duration;
 import java.time.Instant;
 import java.util.LinkedHashSet;
 import java.util.Optional;
 import java.util.Set;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.stereotype.Service;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
+
 @Service
 public class AlarmRecoveryStore {
 
+    private static final Logger log = LoggerFactory.getLogger(AlarmRecoveryStore.class);
     private static final String KEY_PREFIX = "alarm-recovery:";
     private static final String DUE_KEY = "alarm-recovery:due";
 
@@ -27,7 +31,9 @@ public class AlarmRecoveryStore {
     public void savePending(AlarmRecoveryState state, Duration ttl) {
         write(state, ttl);
         if (!state.manualConfirmationRequired()) {
-            redisTemplate.opsForZSet().add(DUE_KEY, state.fingerprint(), state.confirmAfter().toEpochMilli());
+            redisTemplate
+                    .opsForZSet()
+                    .add(DUE_KEY, state.fingerprint(), state.confirmAfter().toEpochMilli());
         }
     }
 
@@ -46,19 +52,17 @@ public class AlarmRecoveryStore {
         }
         try {
             return Optional.of(objectMapper.readValue(raw, AlarmRecoveryState.class));
-        } catch (Exception ignored) {
+        } catch (Exception ex) {
+            log.warn(
+                    "Unable to parse cached alarm recovery state; treating it as absent: errorType={}",
+                    ex.getClass().getSimpleName());
             return Optional.empty();
         }
     }
 
     public Set<String> dueFingerprints(Instant now, int limit) {
-        Set<String> values = redisTemplate.opsForZSet().rangeByScore(
-                DUE_KEY,
-                0,
-                now.toEpochMilli(),
-                0,
-                Math.max(1, limit)
-        );
+        Set<String> values =
+                redisTemplate.opsForZSet().rangeByScore(DUE_KEY, 0, now.toEpochMilli(), 0, Math.max(1, limit));
         return values == null ? Set.of() : new LinkedHashSet<>(values);
     }
 
@@ -68,11 +72,7 @@ public class AlarmRecoveryStore {
 
     private void write(AlarmRecoveryState state, Duration ttl) {
         try {
-            redisTemplate.opsForValue().set(
-                    keyFor(state.fingerprint()),
-                    objectMapper.writeValueAsString(state),
-                    ttl
-            );
+            redisTemplate.opsForValue().set(keyFor(state.fingerprint()), objectMapper.writeValueAsString(state), ttl);
         } catch (Exception ex) {
             throw new IllegalStateException("Failed to persist alarm recovery state", ex);
         }

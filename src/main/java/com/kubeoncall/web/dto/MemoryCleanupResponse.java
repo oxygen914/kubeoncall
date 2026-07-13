@@ -10,6 +10,4 @@ public record MemoryCleanupResponse(
         int scanLimit,
         Instant staleThreshold,
         int staleAfterDays,
-        boolean dryRun
-) {
-}
+        boolean dryRun) {}

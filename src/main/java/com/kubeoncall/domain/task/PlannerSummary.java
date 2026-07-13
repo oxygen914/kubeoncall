@@ -13,6 +13,4 @@ public record PlannerSummary(
         List<String> missingSignals,
         String summary,
         List<String> consultedTools,
-        Map<String, String> evidenceSources
-) {
-}
+        Map<String, String> evidenceSources) {}

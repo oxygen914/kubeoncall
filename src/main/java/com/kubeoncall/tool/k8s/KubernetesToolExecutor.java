@@ -1,15 +1,16 @@
 package com.kubeoncall.tool.k8s;
 
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+
+import org.springframework.stereotype.Component;
+
 import com.kubeoncall.common.config.KubeOnCallProperties;
 import com.kubeoncall.domain.task.TaskType;
 import com.kubeoncall.tool.ToolDefinition;
 import com.kubeoncall.tool.ToolExecutor;
 import com.kubeoncall.tool.http.ToolHttpClient;
-import org.springframework.stereotype.Component;
-
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
 
 @Component
 public class KubernetesToolExecutor implements ToolExecutor {
@@ -38,8 +39,7 @@ public class KubernetesToolExecutor implements ToolExecutor {
                         false,
                         List.of(TaskType.QUERY_LOGS),
                         List.of("namespace", "keyword", "lookbackMinutes"),
-                        List.of("k8s-api")
-                ),
+                        List.of("k8s-api")),
                 new ToolDefinition(
                         "kubernetes.queryMetricsContext",
                         "kubernetes",
@@ -48,8 +48,7 @@ public class KubernetesToolExecutor implements ToolExecutor {
                         false,
                         List.of(TaskType.QUERY_METRICS),
                         List.of("namespace", "metricNames", "windowMinutes"),
-                        List.of("k8s-api", "metrics-server")
-                ),
+                        List.of("k8s-api", "metrics-server")),
                 new ToolDefinition(
                         "kubernetes.rolloutRestart",
                         "kubernetes",
@@ -58,8 +57,7 @@ public class KubernetesToolExecutor implements ToolExecutor {
                         true,
                         List.of(TaskType.RESTART_SERVICE),
                         List.of("namespace", "rolloutStrategy"),
-                        List.of("k8s-api")
-                ),
+                        List.of("k8s-api")),
                 new ToolDefinition(
                         "kubernetes.scaleWorkload",
                         "kubernetes",
@@ -68,8 +66,7 @@ public class KubernetesToolExecutor implements ToolExecutor {
                         true,
                         List.of(TaskType.SCALE_WORKLOAD),
                         List.of("namespace", "replicas"),
-                        List.of("k8s-api")
-                ),
+                        List.of("k8s-api")),
                 new ToolDefinition(
                         "kubernetes.patchConfig",
                         "kubernetes",
@@ -78,8 +75,7 @@ public class KubernetesToolExecutor implements ToolExecutor {
                         true,
                         List.of(TaskType.PATCH_CONFIG),
                         List.of("namespace", "configKey", "desiredValue"),
-                        List.of("k8s-api", "configmap")
-                ),
+                        List.of("k8s-api", "configmap")),
                 new ToolDefinition(
                         "kubernetes.getPods",
                         "kubernetes",
@@ -88,18 +84,21 @@ public class KubernetesToolExecutor implements ToolExecutor {
                         false,
                         List.of(TaskType.QUERY_LOGS, TaskType.QUERY_METRICS, TaskType.RESTART_SERVICE),
                         List.of("namespace"),
-                        List.of("k8s-api")
-                ),
+                        List.of("k8s-api")),
                 new ToolDefinition(
                         "kubernetes.describeWorkload",
                         "kubernetes",
                         "Describe workload details and rollout conditions",
                         true,
                         false,
-                        List.of(TaskType.QUERY_LOGS, TaskType.QUERY_METRICS, TaskType.RESTART_SERVICE, TaskType.SCALE_WORKLOAD, TaskType.PATCH_CONFIG),
+                        List.of(
+                                TaskType.QUERY_LOGS,
+                                TaskType.QUERY_METRICS,
+                                TaskType.RESTART_SERVICE,
+                                TaskType.SCALE_WORKLOAD,
+                                TaskType.PATCH_CONFIG),
                         List.of("namespace"),
-                        List.of("k8s-api")
-                ),
+                        List.of("k8s-api")),
                 new ToolDefinition(
                         "kubernetes.describeResource",
                         "kubernetes",
@@ -108,9 +107,7 @@ public class KubernetesToolExecutor implements ToolExecutor {
                         false,
                         List.of(TaskType.QUERY_LOGS, TaskType.QUERY_METRICS),
                         List.of("resourceType", "resourceName"),
-                        List.of("k8s-api")
-                )
-        );
+                        List.of("k8s-api")));
     }
 
     @Override
@@ -118,8 +115,7 @@ public class KubernetesToolExecutor implements ToolExecutor {
         Map<String, Object> request = Map.of(
                 "executor", getExecutorKind(),
                 "action", action,
-                "parameters", parameters
-        );
+                "parameters", parameters);
         Map<String, Object> metadata = new LinkedHashMap<>();
         metadata.put("executor", getExecutorKind());
         metadata.put("action", action);
@@ -129,7 +125,6 @@ public class KubernetesToolExecutor implements ToolExecutor {
                 properties.getIntegrations().getKubernetes().getEndpoint(),
                 request,
                 properties.getIntegrations().getKubernetes().getTimeoutMillis(),
-                metadata
-        );
+                metadata);
     }
 }

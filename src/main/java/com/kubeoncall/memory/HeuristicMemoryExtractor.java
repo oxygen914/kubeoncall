@@ -1,12 +1,12 @@
 package com.kubeoncall.memory;
 
+import java.util.Map;
+
+import org.springframework.stereotype.Service;
+
 import com.kubeoncall.alarm.domain.NormalizedAlarmEvent;
 import com.kubeoncall.common.config.KubeOnCallProperties;
 import com.kubeoncall.domain.graph.GraphState;
-import org.springframework.stereotype.Service;
-
-import java.time.Instant;
-import java.util.Map;
 
 @Service
 public class HeuristicMemoryExtractor implements MemoryExtractor {
@@ -14,8 +14,7 @@ public class HeuristicMemoryExtractor implements MemoryExtractor {
     private final MemoryExtractionQueue extractionQueue;
     private final KubeOnCallProperties properties;
 
-    public HeuristicMemoryExtractor(MemoryExtractionQueue extractionQueue,
-                                    KubeOnCallProperties properties) {
+    public HeuristicMemoryExtractor(MemoryExtractionQueue extractionQueue, KubeOnCallProperties properties) {
         this.extractionQueue = extractionQueue;
         this.properties = properties;
     }
@@ -29,7 +28,8 @@ public class HeuristicMemoryExtractor implements MemoryExtractor {
         if (type == null) {
             return;
         }
-        String service = state.getCurrentTask() == null ? null : state.getCurrentTask().target();
+        String service =
+                state.getCurrentTask() == null ? null : state.getCurrentTask().target();
         MemoryScope scope = service == null || service.isBlank() ? MemoryScope.GLOBAL : MemoryScope.SERVICE;
         extractionQueue.enqueue(MemoryExtractionTask.create(
                 type,
@@ -39,8 +39,7 @@ public class HeuristicMemoryExtractor implements MemoryExtractor {
                 service,
                 null,
                 null,
-                Map.of("source", "ask", "execution_id", safe(state.getExecutionId()))
-        ));
+                Map.of("source", "ask", "execution_id", safe(state.getExecutionId()))));
     }
 
     @Override
@@ -51,19 +50,23 @@ public class HeuristicMemoryExtractor implements MemoryExtractor {
         }
         extractionQueue.enqueue(MemoryExtractionTask.create(
                 MemoryType.INCIDENT_SUMMARY,
-                event.fingerprint() == null || event.fingerprint().isBlank() ? MemoryScope.SERVICE : MemoryScope.FINGERPRINT,
+                event.fingerprint() == null || event.fingerprint().isBlank()
+                        ? MemoryScope.SERVICE
+                        : MemoryScope.FINGERPRINT,
                 safe(event.alertName()),
                 abbreviate(sanitizedSummary, 1000),
                 event.service(),
                 event.resourceName(),
                 event.fingerprint(),
-                Map.of("source", "alarm", "alert_name", safe(event.alertName()))
-        ));
+                Map.of("source", "alarm", "alert_name", safe(event.alertName()))));
     }
 
     private MemoryType inferType(String answer) {
         String lower = answer == null ? "" : answer.toLowerCase();
-        if (lower.contains("known pitfall") || lower.contains("pitfall") || lower.contains("注意") || lower.contains("坑")) {
+        if (lower.contains("known pitfall")
+                || lower.contains("pitfall")
+                || lower.contains("注意")
+                || lower.contains("坑")) {
             return MemoryType.KNOWN_PITFALL;
         }
         if (lower.contains("owned by") || lower.contains("owner") || lower.contains("负责人") || lower.contains("归属")) {

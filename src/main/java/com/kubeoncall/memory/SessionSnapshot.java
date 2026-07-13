@@ -10,8 +10,7 @@ public record SessionSnapshot(
         Instant createdAt,
         Instant updatedAt,
         String summary,
-        int compactedTurnCount
-) {
+        int compactedTurnCount) {
     public SessionSnapshot {
         turns = turns == null ? List.of() : List.copyOf(turns);
         Instant now = Instant.now();
@@ -25,10 +24,7 @@ public record SessionSnapshot(
         compactedTurnCount = Math.max(0, compactedTurnCount);
     }
 
-    public SessionSnapshot(String sessionId,
-                           List<SessionTurn> turns,
-                           Instant createdAt,
-                           Instant updatedAt) {
+    public SessionSnapshot(String sessionId, List<SessionTurn> turns, Instant createdAt, Instant updatedAt) {
         this(sessionId, turns, createdAt, updatedAt, "", 0);
     }
 

@@ -14,6 +14,4 @@ public record PauseMetadata(
         String riskLevel,
         String requiredRole,
         List<String> riskReasons,
-        Map<String, Object> snapshot
-) {
-}
+        Map<String, Object> snapshot) {}

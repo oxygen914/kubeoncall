@@ -1,10 +1,10 @@
 package com.kubeoncall.skill;
 
-import com.kubeoncall.domain.task.RiskLevel;
-
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+
+import com.kubeoncall.domain.task.RiskLevel;
 
 public record Skill(
         String id,
@@ -19,8 +19,7 @@ public record Skill(
         RiskLevel maxRisk,
         List<String> toolWhitelist,
         String body,
-        Map<String, Object> metadata
-) {
+        Map<String, Object> metadata) {
 
     public Map<String, Object> summary() {
         Map<String, Object> summary = new LinkedHashMap<>();

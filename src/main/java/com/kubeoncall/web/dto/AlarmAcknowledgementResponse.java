@@ -9,6 +9,4 @@ public record AlarmAcknowledgementResponse(
         String reason,
         Instant acknowledgedAt,
         Instant expiresAt,
-        String acknowledgementKey
-) {
-}
+        String acknowledgementKey) {}

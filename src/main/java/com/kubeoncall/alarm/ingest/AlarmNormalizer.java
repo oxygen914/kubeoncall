@@ -1,16 +1,17 @@
 package com.kubeoncall.alarm.ingest;
 
+import java.time.Instant;
+import java.util.LinkedHashMap;
+import java.util.Map;
+
+import org.springframework.stereotype.Service;
+
+import com.kubeoncall.alarm.domain.AlarmIngress;
 import com.kubeoncall.alarm.domain.AlarmResourceType;
 import com.kubeoncall.alarm.domain.AlarmSeverity;
 import com.kubeoncall.alarm.domain.AlarmStatus;
 import com.kubeoncall.alarm.domain.NormalizedAlarmEvent;
 import com.kubeoncall.alarm.policy.AlarmFingerprintService;
-import com.kubeoncall.web.dto.AlarmRequest;
-import org.springframework.stereotype.Service;
-
-import java.time.Instant;
-import java.util.LinkedHashMap;
-import java.util.Map;
 
 /**
  * Reconciles the various inbound alarm shapes into one {@link NormalizedAlarmEvent}.
@@ -35,7 +36,7 @@ public class AlarmNormalizer {
         this.fingerprintService = fingerprintService;
     }
 
-    public NormalizedAlarmEvent normalize(AlarmRequest request) {
+    public NormalizedAlarmEvent normalize(AlarmIngress request) {
         Map<String, Object> metadata = request.metadata() == null ? Map.of() : request.metadata();
 
         String alertName = firstNonBlank(request.alertName(), stringFrom(metadata, "alertName"));
@@ -46,12 +47,17 @@ public class AlarmNormalizer {
             resourceType = AlarmResourceType.NODE;
         }
 
-        String resourceName = firstNonBlank(request.resourceName(), request.nodeName(), stringFrom(metadata, "nodeName"), stringFrom(metadata, "resourceName"));
+        String resourceName = firstNonBlank(
+                request.resourceName(),
+                request.nodeName(),
+                stringFrom(metadata, "nodeName"),
+                stringFrom(metadata, "resourceName"));
         String cluster = firstNonBlank(request.cluster(), stringFrom(metadata, "cluster"));
         String namespace = firstNonBlank(request.namespace(), stringFrom(metadata, "namespace"));
         String service = firstNonBlank(request.service(), stringFrom(metadata, "service"));
         String metricName = firstNonBlank(request.metricName(), stringFrom(metadata, "metricName"));
-        Double currentValue = request.currentValue() != null ? request.currentValue() : doubleFrom(metadata, "currentValue");
+        Double currentValue =
+                request.currentValue() != null ? request.currentValue() : doubleFrom(metadata, "currentValue");
         Double threshold = request.threshold() != null ? request.threshold() : doubleFrom(metadata, "threshold");
         String unit = firstNonBlank(request.unit(), stringFrom(metadata, "unit"));
         String duration = firstNonBlank(request.duration(), stringFrom(metadata, "duration"));

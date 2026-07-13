@@ -1,20 +1,21 @@
 package com.kubeoncall.web;
 
-import com.kubeoncall.service.ExecutionAuditService;
-import com.kubeoncall.service.KubeOnCallMetricsService;
-import com.kubeoncall.skill.SkillRegistry;
-import org.junit.jupiter.api.Test;
-
-import java.time.Instant;
-import java.util.List;
-import java.util.Map;
-
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+
+import java.time.Instant;
+import java.util.List;
+import java.util.Map;
+
+import org.junit.jupiter.api.Test;
+
+import com.kubeoncall.service.ExecutionAuditService;
+import com.kubeoncall.service.KubeOnCallMetricsService;
+import com.kubeoncall.skill.SkillRegistry;
 
 class SkillControllerTest {
 
@@ -31,9 +32,7 @@ class SkillControllerTest {
 
         assertEquals(4, result.loaded());
         assertEquals(false, disabled.get("enabled"));
-        verify(audit).recordSkillOperation(
-                eq("reload"), eq("success"), any(), any(Instant.class), any(Map.class));
-        verify(audit).recordSkillOperation(
-                eq("disable"), eq("success"), any(), any(Instant.class), any(Map.class));
+        verify(audit).recordSkillOperation(eq("reload"), eq("success"), any(), any(Instant.class), any(Map.class));
+        verify(audit).recordSkillOperation(eq("disable"), eq("success"), any(), any(Instant.class), any(Map.class));
     }
 }

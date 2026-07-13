@@ -1,12 +1,13 @@
 package com.kubeoncall.approval;
 
-import com.kubeoncall.domain.approval.ApprovalRequest;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
-import org.springframework.stereotype.Repository;
-
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
+
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.stereotype.Repository;
+
+import com.kubeoncall.domain.approval.ApprovalRequest;
 
 @Repository
 @ConditionalOnProperty(prefix = "kubeoncall.approval", name = "repository", havingValue = "memory")

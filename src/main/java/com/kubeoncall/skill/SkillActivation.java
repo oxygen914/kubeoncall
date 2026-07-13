@@ -1,9 +1,9 @@
 package com.kubeoncall.skill;
 
-import com.kubeoncall.domain.task.RiskLevel;
-
 import java.util.List;
 import java.util.Map;
+
+import com.kubeoncall.domain.task.RiskLevel;
 
 public record SkillActivation(
         List<Skill> skills,
@@ -11,8 +11,7 @@ public record SkillActivation(
         List<String> skillIds,
         List<String> toolWhitelist,
         RiskLevel maxRisk,
-        String prompt
-) {
+        String prompt) {
 
     public static SkillActivation empty() {
         return new SkillActivation(List.of(), List.of(), List.of(), List.of(), null, "");

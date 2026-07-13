@@ -1,5 +1,16 @@
 package com.kubeoncall.alarm.state;
 
+import java.time.Duration;
+import java.time.Instant;
+import java.util.LinkedHashMap;
+import java.util.Map;
+import java.util.Optional;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.stereotype.Service;
+
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.kubeoncall.alarm.domain.AlarmEvaluationResult;
@@ -7,37 +18,26 @@ import com.kubeoncall.alarm.domain.AlarmSeverity;
 import com.kubeoncall.alarm.domain.AlarmStatus;
 import com.kubeoncall.alarm.domain.NormalizedAlarmEvent;
 import com.kubeoncall.common.config.KubeOnCallProperties;
-import org.springframework.data.redis.core.StringRedisTemplate;
-import org.springframework.stereotype.Service;
-
-import java.time.Duration;
-import java.time.Instant;
-import java.util.LinkedHashMap;
-import java.util.Map;
-import java.util.Optional;
 
 @Service
 public class ActiveAlarmStore {
 
+    private static final Logger log = LoggerFactory.getLogger(ActiveAlarmStore.class);
     private static final String KEY_PREFIX = "alarm-active:";
-    private static final TypeReference<Map<String, Object>> MAP_TYPE = new TypeReference<>() {
-    };
+    private static final TypeReference<Map<String, Object>> MAP_TYPE = new TypeReference<>() {};
 
     private final StringRedisTemplate redisTemplate;
     private final ObjectMapper objectMapper;
     private final KubeOnCallProperties properties;
 
-    public ActiveAlarmStore(StringRedisTemplate redisTemplate,
-                            ObjectMapper objectMapper,
-                            KubeOnCallProperties properties) {
+    public ActiveAlarmStore(
+            StringRedisTemplate redisTemplate, ObjectMapper objectMapper, KubeOnCallProperties properties) {
         this.redisTemplate = redisTemplate;
         this.objectMapper = objectMapper;
         this.properties = properties;
     }
 
-    public ActiveAlarmState record(NormalizedAlarmEvent event,
-                                   AlarmEvaluationResult evaluation,
-                                   String fingerprint) {
+    public ActiveAlarmState record(NormalizedAlarmEvent event, AlarmEvaluationResult evaluation, String fingerprint) {
         Instant now = Instant.now();
         Instant eventTime = event.occurredAt() == null ? now : event.occurredAt();
         ActiveAlarmState previous = find(fingerprint).orElse(null);
@@ -45,8 +45,8 @@ public class ActiveAlarmStore {
         AlarmSeverity severity = status == AlarmStatus.RESOLVED && previous != null
                 ? previous.severity()
                 : evaluation != null && evaluation.finalSeverity() != null
-                    ? evaluation.finalSeverity()
-                    : event.severity();
+                        ? evaluation.finalSeverity()
+                        : event.severity();
         String policyId = status == AlarmStatus.RESOLVED && previous != null
                 ? previous.policyId()
                 : evaluation == null ? null : evaluation.policyId();
@@ -64,8 +64,7 @@ public class ActiveAlarmStore {
                 policyId,
                 previous == null ? eventTime : previous.firstSeen(),
                 eventTime,
-                previous == null ? 1 : status == AlarmStatus.RESOLVED ? previous.count() : previous.count() + 1
-        );
+                previous == null ? 1 : status == AlarmStatus.RESOLVED ? previous.count() : previous.count() + 1);
         write(next, status);
         return next;
     }
@@ -97,9 +96,11 @@ public class ActiveAlarmStore {
                     string(map.get("policyId")),
                     instant(map.get("firstSeen")),
                     instant(map.get("lastSeen")),
-                    number(map.get("count"))
-            ));
-        } catch (Exception ignored) {
+                    number(map.get("count"))));
+        } catch (Exception ex) {
+            log.warn(
+                    "Unable to parse cached active alarm state; treating it as absent: errorType={}",
+                    ex.getClass().getSimpleName());
             return Optional.empty();
         }
     }
@@ -114,16 +115,27 @@ public class ActiveAlarmStore {
             map.put("namespace", state.namespace());
             map.put("service", state.service());
             map.put("resourceName", state.resourceName());
-            map.put("severity", state.severity() == null ? null : state.severity().name());
+            map.put(
+                    "severity",
+                    state.severity() == null ? null : state.severity().name());
             map.put("status", state.status() == null ? null : state.status().name());
             map.put("policyId", state.policyId());
-            map.put("firstSeen", state.firstSeen() == null ? null : state.firstSeen().toString());
-            map.put("lastSeen", state.lastSeen() == null ? null : state.lastSeen().toString());
+            map.put(
+                    "firstSeen",
+                    state.firstSeen() == null ? null : state.firstSeen().toString());
+            map.put(
+                    "lastSeen",
+                    state.lastSeen() == null ? null : state.lastSeen().toString());
             map.put("count", state.count());
             long ttlSeconds = status == AlarmStatus.RESOLVED
                     ? properties.getAlarm().getResolvedRetentionSeconds()
                     : properties.getAlarm().getActiveTtlSeconds();
-            redisTemplate.opsForValue().set(keyFor(state.fingerprint()), objectMapper.writeValueAsString(map), Duration.ofSeconds(ttlSeconds));
+            redisTemplate
+                    .opsForValue()
+                    .set(
+                            keyFor(state.fingerprint()),
+                            objectMapper.writeValueAsString(map),
+                            Duration.ofSeconds(ttlSeconds));
         } catch (Exception ex) {
             throw new IllegalStateException("Failed to write active alarm state", ex);
         }

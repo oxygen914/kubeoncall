@@ -1,18 +1,19 @@
 package com.kubeoncall.memory;
 
-import com.kubeoncall.common.config.KubeOnCallProperties;
-import org.junit.jupiter.api.Test;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Map;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
+import org.junit.jupiter.api.Test;
+
+import com.kubeoncall.common.config.KubeOnCallProperties;
 
 class DefaultMemoryInjectorTest {
 
@@ -23,7 +24,8 @@ class DefaultMemoryInjectorTest {
         properties.getMemory().setStaleAfterDays(1);
         DefaultMemoryInjector injector = new DefaultMemoryInjector(memoryService, properties);
         MemoryEntry fact = entry("m1", MemoryType.SERVICE_FACT, Instant.now());
-        MemoryEntry pitfall = entry("m2", MemoryType.KNOWN_PITFALL, Instant.now().minus(3, ChronoUnit.DAYS));
+        MemoryEntry pitfall =
+                entry("m2", MemoryType.KNOWN_PITFALL, Instant.now().minus(3, ChronoUnit.DAYS));
         MemoryEntry incident = entry("m3", MemoryType.INCIDENT_SUMMARY, Instant.now());
         when(memoryService.search("payment", Map.of(), 5)).thenReturn(List.of(fact, pitfall, incident));
 
@@ -48,7 +50,6 @@ class DefaultMemoryInjectorTest {
                 null,
                 updatedAt,
                 updatedAt,
-                Map.of()
-        );
+                Map.of());
     }
 }

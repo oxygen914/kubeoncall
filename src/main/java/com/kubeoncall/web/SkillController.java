@@ -1,35 +1,31 @@
 package com.kubeoncall.web;
 
-import com.kubeoncall.service.KubeOnCallMetricsService;
-import com.kubeoncall.service.ExecutionAuditService;
-import com.kubeoncall.skill.SkillRegistry;
-import org.springframework.beans.factory.annotation.Autowired;
+import java.time.Instant;
+import java.util.Map;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.util.List;
-import java.util.Map;
-import java.time.Instant;
+import com.kubeoncall.service.ExecutionAuditService;
+import com.kubeoncall.service.KubeOnCallMetricsService;
+import com.kubeoncall.skill.SkillRegistry;
 
 @RestController
 @RequestMapping("/api/skills")
 public class SkillController {
 
+    private static final Logger log = LoggerFactory.getLogger(SkillController.class);
     private final SkillRegistry registry;
     private final KubeOnCallMetricsService metricsService;
     private final ExecutionAuditService auditService;
 
-    public SkillController(SkillRegistry registry, KubeOnCallMetricsService metricsService) {
-        this(registry, metricsService, null);
-    }
-
-    @Autowired
-    public SkillController(SkillRegistry registry,
-                           KubeOnCallMetricsService metricsService,
-                           ExecutionAuditService auditService) {
+    public SkillController(
+            SkillRegistry registry, KubeOnCallMetricsService metricsService, ExecutionAuditService auditService) {
         this.registry = registry;
         this.metricsService = metricsService;
         this.auditService = auditService;
@@ -39,8 +35,7 @@ public class SkillController {
     public Map<String, Object> list() {
         return Map.of(
                 "skills", registry.index(),
-                "loadErrors", registry.loadErrors()
-        );
+                "loadErrors", registry.loadErrors());
     }
 
     @PostMapping("/reload")
@@ -50,13 +45,26 @@ public class SkillController {
             SkillRegistry.ReloadResult result = registry.reload();
             String outcome = result.errors().isEmpty() ? "success" : "partial";
             metricsService.recordSkillGovernance("reload", outcome);
-            audit("reload", outcome, "Skill registry reloaded", startedAt, Map.of(
-                    "loaded", result.loaded(), "projectOverrides", result.projectOverrides(),
-                    "errorCount", result.errors().size()));
+            audit(
+                    "reload",
+                    outcome,
+                    "Skill registry reloaded",
+                    startedAt,
+                    Map.of(
+                            "loaded",
+                            result.loaded(),
+                            "projectOverrides",
+                            result.projectOverrides(),
+                            "errorCount",
+                            result.errors().size()));
             return result;
         } catch (RuntimeException ex) {
             metricsService.recordSkillGovernance("reload", "failed");
-            audit("reload", "failed", "Skill registry reload failed", startedAt,
+            audit(
+                    "reload",
+                    "failed",
+                    "Skill registry reload failed",
+                    startedAt,
                     Map.of("errorType", ex.getClass().getSimpleName()));
             throw ex;
         }
@@ -82,29 +90,37 @@ public class SkillController {
                 registry.disable(skillId);
             }
             metricsService.recordSkillGovernance(operation, "success");
-            audit(operation, "success", "Skill state updated", startedAt,
+            audit(
+                    operation,
+                    "success",
+                    "Skill state updated",
+                    startedAt,
                     Map.of("skillId", skillId, "enabled", enabled));
             return Map.of("skillId", skillId, "enabled", enabled);
         } catch (RuntimeException ex) {
             metricsService.recordSkillGovernance(operation, "failed");
-            audit(operation, "failed", "Skill state update failed", startedAt,
-                    Map.of("skillId", skillId == null ? "" : skillId,
-                            "enabled", enabled, "errorType", ex.getClass().getSimpleName()));
+            audit(
+                    operation,
+                    "failed",
+                    "Skill state update failed",
+                    startedAt,
+                    Map.of(
+                            "skillId",
+                            skillId == null ? "" : skillId,
+                            "enabled",
+                            enabled,
+                            "errorType",
+                            ex.getClass().getSimpleName()));
             throw ex;
         }
     }
 
-    private void audit(String operation,
-                       String status,
-                       String summary,
-                       Instant startedAt,
-        Map<String, Object> metadata) {
-        if (auditService != null) {
-            try {
-                auditService.recordSkillOperation(operation, status, summary, startedAt, metadata);
-            } catch (RuntimeException ignored) {
-                // Governance state is authoritative; an audit backend outage is reported separately.
-            }
+    private void audit(
+            String operation, String status, String summary, Instant startedAt, Map<String, Object> metadata) {
+        try {
+            auditService.recordSkillOperation(operation, status, summary, startedAt, metadata);
+        } catch (RuntimeException ex) {
+            log.warn("Unable to audit skill governance operation: operation={}, status={}", operation, status, ex);
         }
     }
 }

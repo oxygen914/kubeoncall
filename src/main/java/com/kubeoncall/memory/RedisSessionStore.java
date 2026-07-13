@@ -1,16 +1,16 @@
 package com.kubeoncall.memory;
 
+import java.time.Duration;
+import java.util.Optional;
+
+import org.springframework.data.redis.core.RedisOperations;
+import org.springframework.data.redis.core.SessionCallback;
+import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.stereotype.Component;
+
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.kubeoncall.common.config.KubeOnCallProperties;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.data.redis.core.StringRedisTemplate;
-import org.springframework.data.redis.core.SessionCallback;
-import org.springframework.data.redis.core.RedisOperations;
-import org.springframework.stereotype.Component;
-
-import java.time.Duration;
-import java.util.Optional;
 
 @Component
 public class RedisSessionStore implements SessionStore {
@@ -22,22 +22,15 @@ public class RedisSessionStore implements SessionStore {
     private final KubeOnCallProperties properties;
     private final ConversationHistoryCompactor historyCompactor;
 
-    @Autowired
-    public RedisSessionStore(StringRedisTemplate redisTemplate,
-                             ObjectMapper objectMapper,
-                             KubeOnCallProperties properties,
-                             ConversationHistoryCompactor historyCompactor) {
+    public RedisSessionStore(
+            StringRedisTemplate redisTemplate,
+            ObjectMapper objectMapper,
+            KubeOnCallProperties properties,
+            ConversationHistoryCompactor historyCompactor) {
         this.redisTemplate = redisTemplate;
         this.objectMapper = objectMapper;
         this.properties = properties;
         this.historyCompactor = historyCompactor;
-    }
-
-    public RedisSessionStore(StringRedisTemplate redisTemplate,
-                             ObjectMapper objectMapper,
-                             KubeOnCallProperties properties) {
-        this(redisTemplate, objectMapper, properties,
-                new ConversationHistoryCompactor(properties, new TokenBudget()));
     }
 
     @Override

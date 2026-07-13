@@ -1,13 +1,5 @@
 package com.kubeoncall.rag.runbook;
 
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
-import com.kubeoncall.common.config.KubeOnCallProperties;
-import org.springframework.core.io.Resource;
-import org.springframework.core.io.support.PathMatchingResourcePatternResolver;
-import org.springframework.stereotype.Component;
-
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -17,11 +9,19 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import org.springframework.core.io.Resource;
+import org.springframework.core.io.support.PathMatchingResourcePatternResolver;
+import org.springframework.stereotype.Component;
+
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
+import com.kubeoncall.common.config.KubeOnCallProperties;
+
 @Component
 public class RunbookCatalog {
 
-    private static final TypeReference<Map<String, Object>> MAP_TYPE = new TypeReference<>() {
-    };
+    private static final TypeReference<Map<String, Object>> MAP_TYPE = new TypeReference<>() {};
 
     private final KubeOnCallProperties properties;
     private final PathMatchingResourcePatternResolver resolver = new PathMatchingResourcePatternResolver();
@@ -44,7 +44,9 @@ public class RunbookCatalog {
                 }
                 assets.add(asset);
             }
-            return assets.stream().sorted(Comparator.comparing(RunbookAsset::runbookId)).toList();
+            return assets.stream()
+                    .sorted(Comparator.comparing(RunbookAsset::runbookId))
+                    .toList();
         } catch (Exception ex) {
             throw new IllegalStateException("Failed to load runbooks from " + location, ex);
         }
@@ -81,16 +83,14 @@ public class RunbookCatalog {
         metadata.put("dataset_version", version);
         metadata.put("document_type", "runbook");
         metadata.put("source_type", "runbook");
-        return new RunbookAsset(
-                runbookId, title, body, resource.getFilename(), metadata);
+        return new RunbookAsset(runbookId, title, body, resource.getFilename(), metadata);
     }
 
     private String required(Map<String, Object> metadata, String key, Resource resource) {
         Object value = metadata == null ? null : metadata.get(key);
         String text = value == null ? "" : String.valueOf(value).trim();
         if (text.isBlank()) {
-            throw new IllegalArgumentException(
-                    "Runbook " + resource.getFilename() + " missing " + key);
+            throw new IllegalArgumentException("Runbook " + resource.getFilename() + " missing " + key);
         }
         return text;
     }

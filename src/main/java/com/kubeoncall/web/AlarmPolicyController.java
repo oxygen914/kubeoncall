@@ -1,5 +1,18 @@
 package com.kubeoncall.web;
 
+import java.time.Instant;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+
 import com.kubeoncall.alarm.domain.AlarmEvaluationResult;
 import com.kubeoncall.alarm.domain.NormalizedAlarmEvent;
 import com.kubeoncall.alarm.ingest.AlarmNormalizer;
@@ -8,30 +21,22 @@ import com.kubeoncall.alarm.policy.YamlAlarmPolicyRepository;
 import com.kubeoncall.service.ExecutionAuditService;
 import com.kubeoncall.web.dto.AlarmPolicyReplayRequest;
 import com.kubeoncall.web.dto.AlarmRequest;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
-
-import java.time.Instant;
-import java.util.ArrayList;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
 
 @RestController
 @RequestMapping("/api/alarm-policies")
 public class AlarmPolicyController {
 
+    private static final Logger log = LoggerFactory.getLogger(AlarmPolicyController.class);
     private final YamlAlarmPolicyRepository repository;
     private final AlarmNormalizer alarmNormalizer;
     private final AlarmPolicyEngine policyEngine;
     private final ExecutionAuditService executionAuditService;
 
-    public AlarmPolicyController(YamlAlarmPolicyRepository repository,
-                                 AlarmNormalizer alarmNormalizer,
-                                 AlarmPolicyEngine policyEngine,
-                                 ExecutionAuditService executionAuditService) {
+    public AlarmPolicyController(
+            YamlAlarmPolicyRepository repository,
+            AlarmNormalizer alarmNormalizer,
+            AlarmPolicyEngine policyEngine,
+            ExecutionAuditService executionAuditService) {
         this.repository = repository;
         this.alarmNormalizer = alarmNormalizer;
         this.policyEngine = policyEngine;
@@ -42,10 +47,19 @@ public class AlarmPolicyController {
     public YamlAlarmPolicyRepository.ReloadResult reload() {
         Instant startedAt = Instant.now();
         YamlAlarmPolicyRepository.ReloadResult result = repository.reload();
-        auditPolicy("reload", "POLICY_RELOADED",
-                "Alarm policies reloaded to version " + result.activeVersion(), null, startedAt,
-                Map.of("previousVersion", result.previousVersion(), "activeVersion", result.activeVersion(),
-                        "policyCount", result.policyCount()));
+        auditPolicy(
+                "reload",
+                "POLICY_RELOADED",
+                "Alarm policies reloaded to version " + result.activeVersion(),
+                null,
+                startedAt,
+                Map.of(
+                        "previousVersion",
+                        result.previousVersion(),
+                        "activeVersion",
+                        result.activeVersion(),
+                        "policyCount",
+                        result.policyCount()));
         return result;
     }
 
@@ -59,12 +73,16 @@ public class AlarmPolicyController {
             metadata.put("policyId", result.get("policyId"));
             metadata.put("policyVersion", result.get("policyVersion"));
             metadata.put("severity", result.get("severity"));
-            auditPolicy("dry_run", "POLICY_DRY_RUN", "Alarm policy dry-run completed",
-                    null, startedAt, metadata);
+            auditPolicy("dry_run", "POLICY_DRY_RUN", "Alarm policy dry-run completed", null, startedAt, metadata);
             return result;
         } catch (RuntimeException ex) {
-            auditPolicy("dry_run", "FAILED", "Alarm policy dry-run failed",
-                    ex.getMessage(), startedAt, Map.of("errorType", ex.getClass().getSimpleName()));
+            auditPolicy(
+                    "dry_run",
+                    "FAILED",
+                    "Alarm policy dry-run failed",
+                    ex.getMessage(),
+                    startedAt,
+                    Map.of("errorType", ex.getClass().getSimpleName()));
             throw ex;
         }
     }
@@ -74,8 +92,13 @@ public class AlarmPolicyController {
         Instant startedAt = Instant.now();
         List<AlarmRequest> alarms = request == null || request.alarms() == null ? List.of() : request.alarms();
         if (alarms.size() > 1000) {
-            auditPolicy("replay", "FAILED", "Alarm policy replay rejected",
-                    "Replay accepts at most 1000 alarms", startedAt, Map.of("total", alarms.size()));
+            auditPolicy(
+                    "replay",
+                    "FAILED",
+                    "Alarm policy replay rejected",
+                    "Replay accepts at most 1000 alarms",
+                    startedAt,
+                    Map.of("total", alarms.size()));
             throw new IllegalArgumentException("Replay accepts at most 1000 alarms");
         }
         List<Map<String, Object>> results = new ArrayList<>();
@@ -93,24 +116,44 @@ public class AlarmPolicyController {
         response.put("matched", matched);
         response.put("unmatched", alarms.size() - matched);
         response.put("results", results);
-        auditPolicy("replay", "POLICY_REPLAYED", "Alarm policy replay completed", null, startedAt,
-                Map.of("policyVersion", repository.activeVersion(), "total", alarms.size(),
-                        "matched", matched, "unmatched", alarms.size() - matched));
+        auditPolicy(
+                "replay",
+                "POLICY_REPLAYED",
+                "Alarm policy replay completed",
+                null,
+                startedAt,
+                Map.of(
+                        "policyVersion",
+                        repository.activeVersion(),
+                        "total",
+                        alarms.size(),
+                        "matched",
+                        matched,
+                        "unmatched",
+                        alarms.size() - matched));
         return response;
     }
 
-    private void auditPolicy(String operation,
-                             String status,
-                             String summary,
-                             String failureReason,
-                             Instant startedAt,
-                             Map<String, Object> metadata) {
+    private void auditPolicy(
+            String operation,
+            String status,
+            String summary,
+            String failureReason,
+            Instant startedAt,
+            Map<String, Object> metadata) {
         try {
             executionAuditService.recordAlarmExecution(
-                    "alarm-policy-" + operation + "-" + startedAt.toEpochMilli(), status, true, false,
-                    summary, failureReason, List.of("alarm.policy." + operation), startedAt, metadata);
-        } catch (RuntimeException ignored) {
-            // Policy evaluation/reload must not be changed by an audit backend outage.
+                    "alarm-policy-" + operation + "-" + startedAt.toEpochMilli(),
+                    status,
+                    true,
+                    false,
+                    summary,
+                    failureReason,
+                    List.of("alarm.policy." + operation),
+                    startedAt,
+                    metadata);
+        } catch (RuntimeException ex) {
+            log.warn("Unable to audit alarm policy operation: operation={}, status={}", operation, status, ex);
         }
     }
 
@@ -123,10 +166,16 @@ public class AlarmPolicyController {
         result.put("alertName", event.alertName());
         result.put("matched", evaluation.matched());
         result.put("policyId", evaluation.policyId());
-        result.put("policyVersion", evaluation.matchedPolicy() == null
-                ? repository.activeVersion()
-                : evaluation.matchedPolicy().version());
-        result.put("severity", evaluation.finalSeverity() == null ? null : evaluation.finalSeverity().name());
+        result.put(
+                "policyVersion",
+                evaluation.matchedPolicy() == null
+                        ? repository.activeVersion()
+                        : evaluation.matchedPolicy().version());
+        result.put(
+                "severity",
+                evaluation.finalSeverity() == null
+                        ? null
+                        : evaluation.finalSeverity().name());
         result.put("workflowTemplate", evaluation.workflowTemplate());
         result.put("runbookId", evaluation.runbookId());
         result.put("reason", evaluation.reason());
