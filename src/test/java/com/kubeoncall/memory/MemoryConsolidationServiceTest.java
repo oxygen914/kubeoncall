@@ -1,6 +1,7 @@
 package com.kubeoncall.memory;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
@@ -23,6 +24,20 @@ import com.kubeoncall.service.ExecutionAuditService;
 import com.kubeoncall.service.KubeOnCallMetricsService;
 
 class MemoryConsolidationServiceTest {
+
+    @Test
+    void shouldRequireMetricsDependency() {
+        KubeOnCallProperties properties = new KubeOnCallProperties();
+
+        assertThrows(
+                NullPointerException.class,
+                () -> new MemoryConsolidationService(
+                        mock(KnowledgeRepository.class),
+                        properties,
+                        null,
+                        mock(ExecutionAuditService.class),
+                        new MemoryTemporalNormalizer(properties)));
+    }
 
     @Test
     void shouldKeepNewestCanonicalAndSoftDeleteDuplicate() {

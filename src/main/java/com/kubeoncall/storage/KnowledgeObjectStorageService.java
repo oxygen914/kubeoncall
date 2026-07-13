@@ -4,6 +4,8 @@ import java.io.ByteArrayInputStream;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 import com.kubeoncall.common.config.KubeOnCallProperties;
@@ -13,6 +15,8 @@ import io.minio.PutObjectArgs;
 
 @Service
 public class KnowledgeObjectStorageService {
+
+    private static final Logger log = LoggerFactory.getLogger(KnowledgeObjectStorageService.class);
 
     private final MinioClient minioClient;
     private final KubeOnCallProperties properties;
@@ -38,7 +42,11 @@ public class KnowledgeObjectStorageService {
                     .build());
             return new StoredDocumentReference(objectKey, bucket, true, "Stored source document from " + source);
         } catch (Exception ex) {
-            return new StoredDocumentReference(objectKey, bucket, false, "MinIO store failed: " + ex.getMessage());
+            log.warn(
+                    "Knowledge source storage failed: bucket={}, errorType={}",
+                    bucket,
+                    ex.getClass().getSimpleName());
+            return new StoredDocumentReference(objectKey, bucket, false, "MinIO store failed");
         }
     }
 }

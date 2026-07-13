@@ -42,6 +42,36 @@ public class AlarmWorkflowAuditRecorder {
                         request.extras()));
     }
 
+    public void recordTerminal(
+            AlarmEventPreparationService.PreparedAlarm preparedAlarm,
+            AlertWorkflowMemory.Recall memoryRecall,
+            NodeResult result,
+            String status,
+            boolean autoHandled,
+            boolean approvalRequired,
+            String summary,
+            List<String> tools,
+            Instant startedAt,
+            Map<String, Object> extras) {
+        com.kubeoncall.alarm.domain.NormalizedAlarmEvent event = preparedAlarm.event();
+        record(new AuditRequest(
+                event.alarmId() == null ? event.fingerprint() : event.alarmId(),
+                status,
+                autoHandled,
+                approvalRequired,
+                summary,
+                null,
+                tools,
+                startedAt,
+                event,
+                preparedAlarm.evaluation(),
+                preparedAlarm.activeState(),
+                memoryRecall,
+                null,
+                List.of(result),
+                extras));
+    }
+
     public String summary(
             com.kubeoncall.alarm.domain.NormalizedAlarmEvent event,
             AlarmEvaluationResult evaluation,

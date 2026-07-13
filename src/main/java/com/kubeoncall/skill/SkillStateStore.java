@@ -29,7 +29,9 @@ public class SkillStateStore {
                 localDisabled.addAll(members);
             }
         } catch (RuntimeException ex) {
-            log.warn("Unable to refresh disabled skill state from Redis; using local cache", ex);
+            log.warn(
+                    "Unable to refresh disabled skill state from Redis; using local cache: errorType={}",
+                    ex.getClass().getSimpleName());
         }
         return Set.copyOf(localDisabled);
     }

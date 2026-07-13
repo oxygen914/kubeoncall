@@ -91,4 +91,14 @@ class KubeOnCallMetricsServiceTest {
                                 "true")
                         .count());
     }
+
+    @Test
+    void shouldUseEmptyRegistryWhenMetricsRegistryIsUnavailable() {
+        @SuppressWarnings("unchecked")
+        ObjectProvider<io.micrometer.core.instrument.MeterRegistry> provider = mock(ObjectProvider.class);
+        when(provider.getIfAvailable()).thenReturn(null);
+        KubeOnCallMetricsService metricsService = new KubeOnCallMetricsService(provider);
+
+        metricsService.recordGraphExecution("ask", "success", false, false);
+    }
 }

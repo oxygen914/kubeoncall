@@ -31,7 +31,7 @@ public class AlarmRecoveryJob {
             recoveryService.confirmDueRecoveries();
         } catch (RuntimeException ex) {
             metricsService.recordAlarmRecovery("scan_failed", "unknown");
-            log.warn("Alarm recovery scan failed: {}", ex.getMessage());
+            log.warn("Alarm recovery scan failed: errorType={}", ex.getClass().getSimpleName());
         }
     }
 }

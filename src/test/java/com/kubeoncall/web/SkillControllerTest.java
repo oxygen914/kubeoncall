@@ -16,6 +16,7 @@ import org.junit.jupiter.api.Test;
 import com.kubeoncall.service.ExecutionAuditService;
 import com.kubeoncall.service.KubeOnCallMetricsService;
 import com.kubeoncall.skill.SkillRegistry;
+import com.kubeoncall.web.dto.SkillStateResponse;
 
 class SkillControllerTest {
 
@@ -28,10 +29,10 @@ class SkillControllerTest {
         SkillController controller = new SkillController(registry, metrics, audit);
 
         SkillRegistry.ReloadResult result = controller.reload();
-        Map<String, Object> disabled = controller.disable("payment-oom-triage");
+        SkillStateResponse disabled = controller.disable("payment-oom-triage");
 
         assertEquals(4, result.loaded());
-        assertEquals(false, disabled.get("enabled"));
+        assertEquals(false, disabled.enabled());
         verify(audit).recordSkillOperation(eq("reload"), eq("success"), any(), any(Instant.class), any(Map.class));
         verify(audit).recordSkillOperation(eq("disable"), eq("success"), any(), any(Instant.class), any(Map.class));
     }

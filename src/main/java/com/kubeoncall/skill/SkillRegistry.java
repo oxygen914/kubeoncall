@@ -83,15 +83,21 @@ public class SkillRegistry {
                     target.put(skill.id(), skill);
                     loaded++;
                 } catch (Exception ex) {
-                    String error = source + ":" + resource.getDescription() + ": " + ex.getMessage();
-                    errors.add(error);
-                    log.warn("Failed to load skill {}", resource.getDescription(), ex);
+                    String resourceName = resource.getFilename() == null ? "unknown" : resource.getFilename();
+                    errors.add(source + ":" + resourceName + ": skill load failed");
+                    log.warn(
+                            "Failed to load skill: source={}, resource={}, errorType={}",
+                            source,
+                            resourceName,
+                            ex.getClass().getSimpleName());
                 }
             }
         } catch (Exception ex) {
-            String error = source + ":" + location + ": " + ex.getMessage();
-            errors.add(error);
-            log.warn("Failed to scan skill resources from {}", location, ex);
+            errors.add(source + ": skill scan failed");
+            log.warn(
+                    "Failed to scan skill resources: source={}, errorType={}",
+                    source,
+                    ex.getClass().getSimpleName());
         }
         return loaded;
     }
@@ -125,27 +131,20 @@ public class SkillRegistry {
         }
     }
 
-    public List<Map<String, Object>> index() {
+    public List<SkillIndexEntry> index() {
         java.util.Set<String> disabled = stateStore.disabledIds();
         return skills.stream()
-                .map(skill -> {
-                    Map<String, Object> item = new LinkedHashMap<>();
-                    item.put("id", skill.id());
-                    item.put("name", skill.name());
-                    item.put("description", skill.description());
-                    item.put("triggers", skill.triggers());
-                    item.put("services", skill.services());
-                    item.put(
-                            "maxRisk",
-                            skill.maxRisk() == null ? null : skill.maxRisk().name());
-                    item.put("version", skill.version());
-                    item.put(
-                            "source",
-                            skill.source() == null ? null : skill.source().name());
-                    item.put("skillPath", skill.skillPath());
-                    item.put("enabled", !disabled.contains(skill.id()));
-                    return item;
-                })
+                .map(skill -> new SkillIndexEntry(
+                        skill.id(),
+                        skill.name(),
+                        skill.description(),
+                        skill.triggers(),
+                        skill.services(),
+                        skill.maxRisk() == null ? null : skill.maxRisk().name(),
+                        skill.version(),
+                        skill.source() == null ? null : skill.source().name(),
+                        skill.skillPath(),
+                        !disabled.contains(skill.id())))
                 .toList();
     }
 

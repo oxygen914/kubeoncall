@@ -44,17 +44,16 @@ public class AgentToolCatalog {
                 .toList();
     }
 
-    public List<Map<String, Object>> verifierCapabilities() {
+    public List<VerifierCapability> verifierCapabilities() {
         return List.of(
-                Map.of(
-                        "node", "verifierThinkNode",
-                        "type", "policy",
-                        "description",
-                                "Checks SOP presence, task risk, executor tool compliance, and red-line operations before execution"),
-                Map.of(
-                        "node", "verifierApprovalNode",
-                        "type", "human_approval",
-                        "description", "Suspends execution for human review when risk or policy requires approval"));
+                new VerifierCapability(
+                        "verifierThinkNode",
+                        "policy",
+                        "Checks SOP presence, task risk, executor tool compliance, and red-line operations before execution"),
+                new VerifierCapability(
+                        "verifierApprovalNode",
+                        "human_approval",
+                        "Suspends execution for human review when risk or policy requires approval"));
     }
 
     public Map<String, ToolDefinition> allToolsByName() {

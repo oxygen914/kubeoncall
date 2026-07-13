@@ -33,7 +33,11 @@ public class MemoryOperationObserver {
         try {
             auditService.recordMemoryOperation(operation, status, summary, startedAt, metadata);
         } catch (RuntimeException ex) {
-            log.warn("Unable to record memory operation audit: operation={}, status={}", operation, status, ex);
+            log.warn(
+                    "Unable to record memory operation audit: operation={}, status={}, errorType={}",
+                    operation,
+                    status,
+                    ex.getClass().getSimpleName());
         }
     }
 

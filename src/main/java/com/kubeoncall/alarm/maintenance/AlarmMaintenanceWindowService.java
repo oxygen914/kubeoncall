@@ -81,7 +81,9 @@ public class AlarmMaintenanceWindowService {
                     .filter(window -> matches(window, event))
                     .findFirst();
         } catch (RuntimeException ex) {
-            log.warn("Maintenance window lookup failed; alarm processing continues: {}", ex.getMessage());
+            log.warn(
+                    "Maintenance window lookup failed; alarm processing continues: errorType={}",
+                    ex.getClass().getSimpleName());
             return Optional.empty();
         }
     }

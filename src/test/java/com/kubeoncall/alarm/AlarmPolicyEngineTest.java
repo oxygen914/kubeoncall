@@ -25,7 +25,7 @@ import com.kubeoncall.web.dto.AlarmRequest;
 class AlarmPolicyEngineTest {
 
     private final YamlAlarmPolicyRepository repository =
-            YamlAlarmPolicyRepository.loadFromClasspath("alarm-policies.yml", AlarmSeverity.P3);
+            AlarmPolicyRepositoryFixtures.loadFromClasspath("alarm-policies.yml", AlarmSeverity.P3);
     private final AlarmPolicyEngine engine = new AlarmPolicyEngine(repository);
 
     @Test

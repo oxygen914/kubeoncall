@@ -1,6 +1,7 @@
 package com.kubeoncall.service;
 
 import java.util.Locale;
+import java.util.Objects;
 
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Service;
@@ -8,6 +9,7 @@ import org.springframework.stereotype.Service;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.DistributionSummary;
 import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.composite.CompositeMeterRegistry;
 
 @Service
 public class KubeOnCallMetricsService {
@@ -15,7 +17,9 @@ public class KubeOnCallMetricsService {
     private final MeterRegistry meterRegistry;
 
     public KubeOnCallMetricsService(ObjectProvider<MeterRegistry> meterRegistryProvider) {
-        this.meterRegistry = meterRegistryProvider == null ? null : meterRegistryProvider.getIfAvailable();
+        MeterRegistry provided = Objects.requireNonNull(meterRegistryProvider, "meterRegistryProvider")
+                .getIfAvailable();
+        this.meterRegistry = provided == null ? new CompositeMeterRegistry() : provided;
     }
 
     public void recordGraphExecution(String requestType, String status, boolean degraded, boolean approvalRequired) {
@@ -114,16 +118,10 @@ public class KubeOnCallMetricsService {
     }
 
     private void increment(String name, String... tags) {
-        if (meterRegistry == null) {
-            return;
-        }
         Counter.builder(name).tags(tags).register(meterRegistry).increment();
     }
 
     private void recordAmount(String name, double amount, String... tags) {
-        if (meterRegistry == null) {
-            return;
-        }
         DistributionSummary.builder(name).tags(tags).register(meterRegistry).record(amount);
     }
 

@@ -25,9 +25,8 @@ public class ToolHttpClient {
     private final HttpClient httpClient;
     private final ObjectMapper objectMapper;
 
-    public ToolHttpClient(ObjectMapper objectMapper) {
-        this.httpClient =
-                HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(2)).build();
+    public ToolHttpClient(HttpClient httpClient, ObjectMapper objectMapper) {
+        this.httpClient = httpClient;
         this.objectMapper = objectMapper;
     }
 
@@ -76,19 +75,24 @@ public class ToolHttpClient {
             int statusCode = response.statusCode();
             long latencyMs = System.currentTimeMillis() - startedAt;
 
-            result.put("status", statusCode >= 200 && statusCode < 300 ? "success" : "failed");
+            boolean successful = statusCode >= 200 && statusCode < 300;
+            result.put("status", successful ? "success" : "failed");
             result.put("httpStatus", statusCode);
             result.put("latencyMs", latencyMs);
-            result.put("endpoint", endpoint);
-            result.put("response", parseBody(response.body()));
+            if (successful) {
+                result.put("response", parseBody(response.body()));
+            } else {
+                result.put("errorType", "HttpStatusError");
+                result.put("errorMessage", "Tool endpoint returned HTTP " + statusCode);
+            }
             return result;
         } catch (Exception ex) {
+            log.warn("Tool HTTP request failed: errorType={}", ex.getClass().getSimpleName());
             result.put("status", "failed");
             result.put("httpStatus", 500);
             result.put("latencyMs", System.currentTimeMillis() - startedAt);
-            result.put("endpoint", endpoint);
-            result.put("errorType", ex.getClass().getSimpleName());
-            result.put("errorMessage", ex.getMessage());
+            result.put("errorType", "ToolTransportError");
+            result.put("errorMessage", "Tool request failed");
             return result;
         }
     }

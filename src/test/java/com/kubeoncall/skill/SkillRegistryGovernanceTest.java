@@ -9,7 +9,6 @@ import static org.mockito.Mockito.when;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.Map;
 import java.util.Set;
 
 import org.junit.jupiter.api.Test;
@@ -58,6 +57,8 @@ class SkillRegistryGovernanceTest {
         assertTrue(skill.body().contains("Project-specific"));
         assertEquals(1, result.projectOverrides());
         assertEquals(1, result.errors().size());
+        assertEquals("PROJECT:SKILL.md: skill load failed", result.errors().get(0));
+        assertFalse(result.errors().get(0).contains(tempDir.toString()));
     }
 
     @Test
@@ -70,11 +71,11 @@ class SkillRegistryGovernanceTest {
         registry.reload();
 
         assertTrue(registry.all().stream().noneMatch(skill -> "payment-oom-triage".equals(skill.id())));
-        Map<String, Object> payment = registry.index().stream()
-                .filter(item -> "payment-oom-triage".equals(item.get("id")))
+        SkillIndexEntry payment = registry.index().stream()
+                .filter(item -> "payment-oom-triage".equals(item.id()))
                 .findFirst()
                 .orElseThrow();
-        assertFalse((Boolean) payment.get("enabled"));
+        assertFalse(payment.enabled());
 
         registry.enable("payment-oom-triage");
         verify(stateStore).enable("payment-oom-triage");

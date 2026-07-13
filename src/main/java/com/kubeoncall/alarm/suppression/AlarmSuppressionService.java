@@ -48,7 +48,10 @@ public class AlarmSuppressionService {
                         redisTemplate.opsForValue().set(key, value, Duration.ofSeconds(rule.ttlSeconds()));
                     }
                 } catch (RuntimeException ex) {
-                    log.warn("Failed to update suppression source for rule {}: {}", rule.id(), ex.getMessage());
+                    log.warn(
+                            "Failed to update suppression source: rule={}, errorType={}",
+                            rule.id(),
+                            ex.getClass().getSimpleName());
                 }
             });
         }
@@ -77,9 +80,9 @@ public class AlarmSuppressionService {
                 }
             } catch (RuntimeException ex) {
                 log.warn(
-                        "Suppression lookup failed for rule {}; alarm processing continues: {}",
+                        "Suppression lookup failed; alarm processing continues: rule={}, errorType={}",
                         rule.id(),
-                        ex.getMessage());
+                        ex.getClass().getSimpleName());
             }
         }
         return SuppressionDecision.none();

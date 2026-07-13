@@ -64,7 +64,7 @@ class ElasticsearchKnowledgeE2EIT {
     @Test
     void shouldImportAndRetrieveRunbooksThroughRealElasticsearch() {
         RunbookImportService.ImportResult imported = runbookImportService.importAll(false);
-        assertEquals(8, imported.imported(), () -> "runbook import results: " + imported.assets());
+        assertEquals(imported.scanned(), imported.imported(), () -> "runbook import results: " + imported.assets());
         assertEquals(0, imported.failed());
 
         IndexOperations operations = elasticsearchTemplate.indexOps(INDEX);
@@ -96,7 +96,7 @@ class ElasticsearchKnowledgeE2EIT {
         operations.refresh();
         RunbookImportService.ImportResult repeated = runbookImportService.importAll(false);
         assertEquals(0, repeated.imported());
-        assertEquals(8, repeated.skipped());
+        assertEquals(repeated.scanned(), repeated.skipped());
         assertEquals(0, repeated.failed());
     }
 

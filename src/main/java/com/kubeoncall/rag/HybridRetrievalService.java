@@ -8,6 +8,8 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 import com.kubeoncall.common.config.KubeOnCallProperties;
@@ -20,6 +22,8 @@ import com.kubeoncall.service.KubeOnCallMetricsService;
 
 @Service
 public class HybridRetrievalService {
+
+    private static final Logger log = LoggerFactory.getLogger(HybridRetrievalService.class);
 
     private final KnowledgeRepository knowledgeRepository;
     private final KubeOnCallProperties properties;
@@ -84,9 +88,12 @@ public class HybridRetrievalService {
                 reasons.add("Applied vector retrieval over content semantics");
             } catch (RuntimeException ex) {
                 vectorFallback = true;
-                vectorFallbackReason = ex.getMessage();
+                vectorFallbackReason = "Vector retrieval unavailable";
                 vectorSource = "fallback";
                 reasons.add("Vector retrieval failed and fell back to lexical");
+                log.warn(
+                        "Vector retrieval failed; falling back to lexical: errorType={}",
+                        ex.getClass().getSimpleName());
             }
         } else if (!vectorRequested) {
             vectorSource = "not_requested";

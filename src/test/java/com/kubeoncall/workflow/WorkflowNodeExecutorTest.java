@@ -54,4 +54,21 @@ class WorkflowNodeExecutorTest {
         assertEquals(List.of("dependentNode"), context.getSkippedNodes());
         assertTrue(context.getCompletedNodes().isEmpty());
     }
+
+    @Test
+    void shouldAvoidExposingUnexpectedNodeFailureDetails() {
+        WorkflowNodeExecutor executor = new WorkflowNodeExecutor();
+        AlertWorkflowContext context = new AlertWorkflowContext(
+                new AlarmEvent("a1", "d1", "prom", "critical", "node-a", "cpu high", Instant.now(), Map.of()),
+                Instant.now());
+        AlertWorkflowDefinition definition = new AlertWorkflowDefinition("ticketNode", true, List.of(), ignored -> {
+            throw new IllegalStateException("credential=secret is invalid");
+        });
+
+        NodeResult result = executor.execute(definition, context, Duration.ofSeconds(1));
+
+        assertEquals(NodeStatus.FAILURE, result.status());
+        assertEquals("Node execution failed", result.message());
+        assertEquals("IllegalStateException", result.payload().get("exceptionType"));
+    }
 }

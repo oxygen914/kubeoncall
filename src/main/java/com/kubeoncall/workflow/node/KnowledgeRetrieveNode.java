@@ -8,6 +8,8 @@ import java.util.Map;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 import com.kubeoncall.alarm.domain.AlarmEvaluationResult;
@@ -23,6 +25,8 @@ import com.kubeoncall.workflow.AlertWorkflowNode;
 
 @Component
 public class KnowledgeRetrieveNode implements AlertWorkflowNode {
+
+    private static final Logger log = LoggerFactory.getLogger(KnowledgeRetrieveNode.class);
 
     private final KnowledgeIngestService knowledgeIngestService;
     private final Map<String, ToolExecutor> executorsByKind;
@@ -85,12 +89,15 @@ public class KnowledgeRetrieveNode implements AlertWorkflowNode {
                             .toList());
             hints.put("diagnostics", retrieval.diagnostics());
         } catch (RuntimeException ex) {
+            log.warn(
+                    "SOP knowledge retrieval failed: errorType={}",
+                    ex.getClass().getSimpleName());
             Map<String, Object> failure = new LinkedHashMap<>();
             failure.put("route", "RAG");
             failure.put("ragQuery", ragQuery);
             failure.put("ragStrictFilters", strictFilters);
             failure.put("errorType", ex.getClass().getSimpleName());
-            failure.put("errorMessage", ex.getMessage() == null ? "" : ex.getMessage());
+            failure.put("errorMessage", "Knowledge retrieval failed");
             return new NodeResult(
                     "knowledgeRetrieveNode", NodeStatus.FAILURE, "Failed to retrieve SOP knowledge", failure);
         }

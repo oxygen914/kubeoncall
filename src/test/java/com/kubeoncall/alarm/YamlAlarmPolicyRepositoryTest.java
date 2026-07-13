@@ -19,7 +19,7 @@ class YamlAlarmPolicyRepositoryTest {
     @Test
     void shouldLoadDefaultClasspathPolicies() {
         YamlAlarmPolicyRepository repo =
-                YamlAlarmPolicyRepository.loadFromClasspath("alarm-policies.yml", AlarmSeverity.P3);
+                AlarmPolicyRepositoryFixtures.loadFromClasspath("alarm-policies.yml", AlarmSeverity.P3);
         assertTrue(repo.findAll().size() >= 11, "default policies should cover the first batch");
         assertTrue(repo.findByName("HostHighCpuUsageP1").isPresent());
         assertTrue(repo.findByName("HostHighCpuUsageP0").isPresent());

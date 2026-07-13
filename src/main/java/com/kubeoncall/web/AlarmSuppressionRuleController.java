@@ -11,6 +11,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.kubeoncall.alarm.suppression.AlarmSuppressionRuleRepository;
 import com.kubeoncall.service.ExecutionAuditService;
+import com.kubeoncall.web.dto.AlarmSuppressionRuleListResponse;
 
 @RestController
 @RequestMapping("/api/alarm-suppression-rules")
@@ -26,8 +27,8 @@ public class AlarmSuppressionRuleController {
     }
 
     @GetMapping
-    public Map<String, Object> list() {
-        return Map.of("activeVersion", repository.activeVersion(), "rules", repository.findAll());
+    public AlarmSuppressionRuleListResponse list() {
+        return new AlarmSuppressionRuleListResponse(repository.activeVersion(), repository.findAll());
     }
 
     @PostMapping("/reload")

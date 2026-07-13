@@ -5,12 +5,16 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 import com.kubeoncall.common.config.KubeOnCallProperties;
 
 @Service
 public class DefaultMemoryInjector implements MemoryInjector {
+
+    private static final Logger log = LoggerFactory.getLogger(DefaultMemoryInjector.class);
 
     private final MemoryService memoryService;
     private final KubeOnCallProperties properties;
@@ -41,7 +45,10 @@ public class DefaultMemoryInjector implements MemoryInjector {
             }
             return new MemoryInjection(entries, buildPrompt(entries), "");
         } catch (RuntimeException ex) {
-            return new MemoryInjection(List.of(), "", "memory injection unavailable: " + ex.getMessage());
+            log.warn(
+                    "Memory injection failed; continuing without memory: errorType={}",
+                    ex.getClass().getSimpleName());
+            return new MemoryInjection(List.of(), "", "memory injection unavailable");
         }
     }
 

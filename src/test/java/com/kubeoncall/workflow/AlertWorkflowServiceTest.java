@@ -1125,21 +1125,26 @@ class AlertWorkflowServiceTest {
                     .thenReturn(
                             new NodeResult("alarmEscalation", NodeStatus.FAILURE, "escalation unavailable", Map.of()));
         }
+        AlarmWorkflowAuditRecorder auditRecorder = new AlarmWorkflowAuditRecorder(auditService);
+        AlarmEventPreparationService eventPreparationService =
+                new AlarmEventPreparationService(new AlarmFingerprintService(), engine, activeAlarmStore);
+        AlertWorkflowMemory workflowMemory = new AlertWorkflowMemory(
+                alertMemoryService == null ? mock(AlertMemoryService.class) : alertMemoryService, memoryExtractor);
+        AlarmNodeNoiseSuppression nodeNoiseSuppression = new AlarmNodeNoiseSuppression(redisTemplate, properties);
         return new AlertWorkflowService(
-                redisTemplate,
-                properties,
-                new AlertWorkflowRunner(factory, executor, properties),
-                new AlarmWorkflowAuditRecorder(auditService),
-                new AlarmEventPreparationService(new AlarmFingerprintService(), engine, activeAlarmStore),
-                new AlertWorkflowMemory(
-                        alertMemoryService == null ? mock(AlertMemoryService.class) : alertMemoryService,
-                        memoryExtractor),
-                silenceStore,
-                recoveryService,
-                new AlarmNodeNoiseSuppression(redisTemplate, properties),
-                new AlarmWorkflowEscalation(redisTemplate, properties, escalationService),
-                maintenanceService,
-                suppressionService);
+                eventPreparationService,
+                new AlertWorkflowPreflight(
+                        workflowMemory,
+                        new AlarmWorkflowRecoveryHandler(eventPreparationService, recoveryService, auditRecorder),
+                        new AlarmWorkflowSuppressionHandler(
+                                maintenanceService, suppressionService, nodeNoiseSuppression, auditRecorder),
+                        new AlarmWorkflowDeduplicator(redisTemplate, properties, auditRecorder)),
+                new AlertWorkflowCoordinator(
+                        new AlertWorkflowRunner(factory, executor, properties),
+                        auditRecorder,
+                        workflowMemory,
+                        silenceStore,
+                        new AlarmWorkflowEscalation(redisTemplate, properties, escalationService)));
     }
 
     private static AlarmRecoveryState pendingRecovery(NormalizedAlarmEvent event) {

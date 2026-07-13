@@ -14,6 +14,8 @@ import org.springframework.web.bind.annotation.RestController;
 import com.kubeoncall.service.ExecutionAuditService;
 import com.kubeoncall.service.KubeOnCallMetricsService;
 import com.kubeoncall.skill.SkillRegistry;
+import com.kubeoncall.web.dto.SkillListResponse;
+import com.kubeoncall.web.dto.SkillStateResponse;
 
 @RestController
 @RequestMapping("/api/skills")
@@ -32,10 +34,8 @@ public class SkillController {
     }
 
     @GetMapping
-    public Map<String, Object> list() {
-        return Map.of(
-                "skills", registry.index(),
-                "loadErrors", registry.loadErrors());
+    public SkillListResponse list() {
+        return new SkillListResponse(registry.index(), registry.loadErrors());
     }
 
     @PostMapping("/reload")
@@ -71,16 +71,16 @@ public class SkillController {
     }
 
     @PostMapping("/{skillId}/disable")
-    public Map<String, Object> disable(@PathVariable String skillId) {
+    public SkillStateResponse disable(@PathVariable String skillId) {
         return setEnabled(skillId, false);
     }
 
     @PostMapping("/{skillId}/enable")
-    public Map<String, Object> enable(@PathVariable String skillId) {
+    public SkillStateResponse enable(@PathVariable String skillId) {
         return setEnabled(skillId, true);
     }
 
-    private Map<String, Object> setEnabled(String skillId, boolean enabled) {
+    private SkillStateResponse setEnabled(String skillId, boolean enabled) {
         Instant startedAt = Instant.now();
         String operation = enabled ? "enable" : "disable";
         try {
@@ -96,7 +96,7 @@ public class SkillController {
                     "Skill state updated",
                     startedAt,
                     Map.of("skillId", skillId, "enabled", enabled));
-            return Map.of("skillId", skillId, "enabled", enabled);
+            return new SkillStateResponse(skillId, enabled);
         } catch (RuntimeException ex) {
             metricsService.recordSkillGovernance(operation, "failed");
             audit(
@@ -120,7 +120,11 @@ public class SkillController {
         try {
             auditService.recordSkillOperation(operation, status, summary, startedAt, metadata);
         } catch (RuntimeException ex) {
-            log.warn("Unable to audit skill governance operation: operation={}, status={}", operation, status, ex);
+            log.warn(
+                    "Unable to audit skill governance operation: operation={}, status={}, errorType={}",
+                    operation,
+                    status,
+                    ex.getClass().getSimpleName());
         }
     }
 }

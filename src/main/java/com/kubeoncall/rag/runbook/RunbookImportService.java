@@ -52,11 +52,7 @@ public class RunbookImportService {
                 results.add(new AssetResult(asset.runbookId(), asset.resourceName(), "imported", "success"));
             } catch (RuntimeException ex) {
                 failed++;
-                results.add(new AssetResult(
-                        asset.runbookId(),
-                        asset.resourceName(),
-                        "failed",
-                        ex.getMessage() == null ? ex.getClass().getSimpleName() : ex.getMessage()));
+                results.add(new AssetResult(asset.runbookId(), asset.resourceName(), "failed", "Import failed"));
             }
         }
         return new ImportResult(assets.size(), eligible, imported, skipped, failed, dryRun, List.copyOf(results));

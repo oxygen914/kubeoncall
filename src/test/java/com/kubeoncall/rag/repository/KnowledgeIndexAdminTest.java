@@ -34,7 +34,7 @@ class KnowledgeIndexAdminTest {
                 .thenReturn(operations);
         when(operations.exists()).thenReturn(false);
         when(operations.create(eq(Map.of()), any(Document.class))).thenReturn(true);
-        KnowledgeIndexAdmin admin = new KnowledgeIndexAdmin(template, properties);
+        KnowledgeIndexAdmin admin = admin(template, properties);
 
         admin.ensureVectorMapping(384);
 
@@ -54,7 +54,7 @@ class KnowledgeIndexAdminTest {
         ElasticsearchTemplate template = mock(ElasticsearchTemplate.class);
         KubeOnCallProperties properties = new KubeOnCallProperties();
         properties.getRag().setEmbeddingDimensions(384);
-        KnowledgeIndexAdmin admin = new KnowledgeIndexAdmin(template, properties);
+        KnowledgeIndexAdmin admin = admin(template, properties);
 
         assertThrows(IllegalArgumentException.class, () -> admin.ensureVectorMapping(8));
 
@@ -73,7 +73,7 @@ class KnowledgeIndexAdminTest {
         when(operations.exists()).thenReturn(true);
         when(operations.getMapping())
                 .thenReturn(Map.of("properties", Map.of("embedding", Map.of("type", "dense_vector", "dims", 8))));
-        KnowledgeIndexAdmin admin = new KnowledgeIndexAdmin(template, properties);
+        KnowledgeIndexAdmin admin = admin(template, properties);
 
         assertThrows(IllegalStateException.class, () -> admin.ensureVectorMapping(384));
 
@@ -91,7 +91,7 @@ class KnowledgeIndexAdminTest {
         when(operations.exists()).thenReturn(true);
         when(operations.getMapping()).thenReturn(Map.of("properties", Map.of("title", Map.of("type", "text"))));
         when(operations.putMapping(any(Document.class))).thenReturn(true);
-        KnowledgeIndexAdmin admin = new KnowledgeIndexAdmin(template, properties);
+        KnowledgeIndexAdmin admin = admin(template, properties);
 
         admin.ensureVectorMapping(32);
 
@@ -117,7 +117,7 @@ class KnowledgeIndexAdminTest {
                         Map.of(
                                 "embedding", Map.of("type", "dense_vector", "dims", 32),
                                 "metadata", Map.of("type", "object"))));
-        KnowledgeIndexAdmin admin = new KnowledgeIndexAdmin(template, properties);
+        KnowledgeIndexAdmin admin = admin(template, properties);
 
         IllegalStateException error = assertThrows(IllegalStateException.class, () -> admin.ensureVectorMapping(32));
 
@@ -129,7 +129,7 @@ class KnowledgeIndexAdminTest {
     void shouldNormalizeGovernanceVersionsAndRequireConfiguredAlias() {
         KubeOnCallProperties properties = new KubeOnCallProperties();
         properties.getRag().setKnowledgeIndex("knowledge");
-        KnowledgeIndexAdmin admin = new KnowledgeIndexAdmin(null, properties);
+        KnowledgeIndexAdmin admin = admin(null, properties);
 
         assertEquals("v2026.07", admin.normalizeVersion("2026.07"));
         assertEquals("knowledge-v2026.07", admin.versionedIndex("2026.07"));
@@ -138,7 +138,7 @@ class KnowledgeIndexAdminTest {
 
     @Test
     void shouldRejectUnsafeGovernanceVersion() {
-        KnowledgeIndexAdmin admin = new KnowledgeIndexAdmin(null, new KubeOnCallProperties());
+        KnowledgeIndexAdmin admin = admin(null, new KubeOnCallProperties());
 
         assertThrows(IllegalArgumentException.class, () -> admin.normalizeVersion("../../delete"));
     }
@@ -155,11 +155,22 @@ class KnowledgeIndexAdminTest {
         when(operations.exists()).thenReturn(true);
         when(operations.getAliases("knowledge-active")).thenReturn(Map.of("knowledge-v1", Set.<AliasData>of()));
         when(operations.alias(any())).thenReturn(true);
-        KnowledgeIndexAdmin admin = new KnowledgeIndexAdmin(template, properties);
+        KnowledgeIndexAdmin admin = admin(template, properties);
 
         KnowledgeIndexAdmin.AliasStatus status = admin.activateVersion("v2");
 
         assertEquals("knowledge-active", status.alias());
         verify(operations).alias(any());
+    }
+
+    private static KnowledgeIndexAdmin admin(ElasticsearchTemplate template, KubeOnCallProperties properties) {
+        KnowledgeIndexNaming indexNaming = new KnowledgeIndexNaming(properties);
+        KnowledgeIndexMappingManager mappingManager = new KnowledgeIndexMappingManager();
+        KnowledgeIndexAliasManager aliasManager = new KnowledgeIndexAliasManager(template, indexNaming);
+        return new KnowledgeIndexAdmin(
+                new KnowledgeIndexInitializer(template, indexNaming, mappingManager, aliasManager),
+                new KnowledgeIndexVersionManager(template, indexNaming, mappingManager),
+                aliasManager,
+                indexNaming);
     }
 }

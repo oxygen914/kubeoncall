@@ -152,7 +152,7 @@ class HybridRetrievalServiceTest {
                 List.of("doc-1"),
                 trace.documents().stream().map(KnowledgeDocument::id).toList());
         assertEquals(true, trace.diagnostics().get("vectorFallback"));
-        assertEquals("embedding service unavailable", trace.diagnostics().get("vectorFallbackReason"));
+        assertEquals("Vector retrieval unavailable", trace.diagnostics().get("vectorFallbackReason"));
         verify(metricsService).recordRagRetrieval("HYBRID", "fallback", true, 1, (Long)
                 trace.diagnostics().get("latencyMs"));
     }

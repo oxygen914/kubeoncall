@@ -82,6 +82,21 @@ public class PlannerContextAssembler {
         return evidence;
     }
 
+    public List<String> missingSignals(GraphState state) {
+        Object value = state.getContext().get("plannerMissingSignals");
+        if (value instanceof List<?> list) {
+            return list.stream()
+                    .map(String::valueOf)
+                    .filter(entry -> !entry.isBlank())
+                    .toList();
+        }
+        return List.of();
+    }
+
+    public void attachSkillKnowledge(Map<String, Object> knowledge, GraphState state) {
+        mergeSkillKnowledge(knowledge, state);
+    }
+
     private String contextText(GraphState state, String key) {
         Object value = state.getContext().get(key);
         return value == null ? "" : String.valueOf(value).trim();

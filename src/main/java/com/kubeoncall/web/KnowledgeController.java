@@ -200,7 +200,7 @@ public class KnowledgeController {
         recordKnowledge(
                 operation,
                 "FAILED",
-                "Knowledge operation failed: " + ex.getMessage(),
+                "Knowledge operation failed",
                 startedAt,
                 0,
                 Map.of("errorType", ex.getClass().getSimpleName()));

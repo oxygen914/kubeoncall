@@ -6,6 +6,8 @@ import java.util.Map;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 import com.kubeoncall.alarm.domain.AlarmEvaluationResult;
@@ -17,6 +19,8 @@ import com.kubeoncall.workflow.AlertWorkflowNode;
 
 @Component
 public class TicketNode implements AlertWorkflowNode {
+
+    private static final Logger log = LoggerFactory.getLogger(TicketNode.class);
 
     private final Map<String, ToolExecutor> executorsByKind;
 
@@ -66,15 +70,14 @@ public class TicketNode implements AlertWorkflowNode {
                             : "Ticket created or updated",
                     ticket);
         } catch (RuntimeException ex) {
+            log.warn(
+                    "Incident or ticket operation failed: errorType={}",
+                    ex.getClass().getSimpleName());
             ticket.put("status", "failed");
             ticket.put("exceptionType", ex.getClass().getSimpleName());
-            ticket.put("errorMessage", ex.getMessage());
+            ticket.put("errorMessage", "Ticket operation failed");
             context.putAttribute("ticket", ticket);
-            return new NodeResult(
-                    "ticketNode",
-                    NodeStatus.FAILURE,
-                    "Failed to create incident or ticket: " + ex.getMessage(),
-                    ticket);
+            return new NodeResult("ticketNode", NodeStatus.FAILURE, "Failed to create incident or ticket", ticket);
         }
     }
 

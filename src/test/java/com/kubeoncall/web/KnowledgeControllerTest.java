@@ -1,5 +1,7 @@
 package com.kubeoncall.web;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
@@ -12,6 +14,7 @@ import java.util.List;
 import java.util.Map;
 
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 
 import com.kubeoncall.domain.rag.KnowledgeDocument;
 import com.kubeoncall.rag.KnowledgeIngestService;
@@ -68,5 +71,32 @@ class KnowledgeControllerTest {
         verify(metricsService).recordKnowledge("ingest", "SUCCESS", 1);
         verify(auditService)
                 .recordKnowledgeOperation(eq("ingest"), eq("SUCCESS"), any(), any(Instant.class), any(Map.class));
+    }
+
+    @Test
+    void shouldUseStableAuditSummaryWhenKnowledgeIngestFails() {
+        KnowledgeIngestService knowledgeIngestService = mock(KnowledgeIngestService.class);
+        RunbookImportService runbookImportService = mock(RunbookImportService.class);
+        ExecutionAuditService auditService = mock(ExecutionAuditService.class);
+        KubeOnCallMetricsService metricsService = mock(KubeOnCallMetricsService.class);
+        IllegalStateException failure = new IllegalStateException("MinIO access key rejected");
+        when(knowledgeIngestService.ingest("CPU SOP", "check cpu", "manual", Map.of()))
+                .thenThrow(failure);
+        KnowledgeController controller = new KnowledgeController(
+                knowledgeIngestService,
+                runbookImportService,
+                mock(KnowledgeIndexAdmin.class),
+                auditService,
+                metricsService);
+
+        assertThrows(
+                IllegalStateException.class,
+                () -> controller.ingest(new KnowledgeIngestRequest("CPU SOP", "check cpu", "manual", Map.of())));
+
+        ArgumentCaptor<String> summary = ArgumentCaptor.forClass(String.class);
+        verify(auditService)
+                .recordKnowledgeOperation(
+                        eq("ingest"), eq("FAILED"), summary.capture(), any(Instant.class), any(Map.class));
+        assertEquals("Knowledge operation failed", summary.getValue());
     }
 }

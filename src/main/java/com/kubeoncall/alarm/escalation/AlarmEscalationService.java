@@ -6,6 +6,8 @@ import java.util.Map;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 import com.kubeoncall.alarm.domain.AlarmEvaluationResult;
@@ -17,6 +19,8 @@ import com.kubeoncall.tool.ToolExecutor;
 
 @Service
 public class AlarmEscalationService {
+
+    private static final Logger log = LoggerFactory.getLogger(AlarmEscalationService.class);
 
     private final Map<String, ToolExecutor> executorsByKind;
 
@@ -83,13 +87,18 @@ public class AlarmEscalationService {
         try {
             return executor.execute(action, parameters);
         } catch (RuntimeException ex) {
+            log.warn(
+                    "Alarm escalation integration failed: executor={}, action={}, errorType={}",
+                    executorKind,
+                    action,
+                    ex.getClass().getSimpleName());
             return Map.of(
                     "status",
                     "failed",
                     "errorType",
-                    ex.getClass().getSimpleName(),
+                    "IntegrationCallFailed",
                     "errorMessage",
-                    ex.getMessage() == null ? "integration call failed" : ex.getMessage(),
+                    "Integration call failed",
                     "executor",
                     executorKind,
                     "action",

@@ -7,6 +7,8 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 import com.kubeoncall.alarm.state.ActiveAlarmState;
@@ -29,6 +31,8 @@ import com.kubeoncall.workflow.AlertWorkflowNode;
  */
 @Component
 public class IntelligentDiagnosisNode implements AlertWorkflowNode {
+
+    private static final Logger log = LoggerFactory.getLogger(IntelligentDiagnosisNode.class);
 
     private static final List<String> MEMORY_GUARDRAILS = List.of(
             "Verify current metrics, logs, and resource state before reusing historical handling",
@@ -140,7 +144,10 @@ public class IntelligentDiagnosisNode implements AlertWorkflowNode {
                                             ? ""
                                             : event.severity().name()));
         } catch (RuntimeException ex) {
-            context.putAttribute("skillWarning", "alarm skill activation failed: " + ex.getMessage());
+            log.warn(
+                    "Alarm skill activation failed; continuing without skill context: errorType={}",
+                    ex.getClass().getSimpleName());
+            context.putAttribute("skillWarning", "alarm skill activation failed");
             return SkillActivation.empty();
         }
     }

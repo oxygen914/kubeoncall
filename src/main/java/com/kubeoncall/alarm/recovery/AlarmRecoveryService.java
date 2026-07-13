@@ -5,6 +5,8 @@ import java.time.Instant;
 import java.util.Map;
 import java.util.Optional;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 
@@ -19,6 +21,8 @@ import com.kubeoncall.service.KubeOnCallMetricsService;
 
 @Service
 public class AlarmRecoveryService {
+
+    private static final Logger log = LoggerFactory.getLogger(AlarmRecoveryService.class);
 
     private final AlarmRecoveryStore recoveryStore;
     private final ActiveAlarmStore activeAlarmStore;
@@ -185,14 +189,13 @@ public class AlarmRecoveryService {
         try {
             return healthChecker.check(state);
         } catch (RuntimeException ex) {
+            log.warn(
+                    "Alarm recovery health check failed: errorType={}",
+                    ex.getClass().getSimpleName());
             return new AlarmRecoveryHealthChecker.HealthCheckResult(
                     false,
                     "checker-error",
-                    Map.of(
-                            "errorType",
-                            ex.getClass().getSimpleName(),
-                            "errorMessage",
-                            ex.getMessage() == null ? "" : ex.getMessage()));
+                    Map.of("errorType", "HealthCheckFailed", "errorMessage", "Health check failed"));
         }
     }
 

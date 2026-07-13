@@ -1,7 +1,6 @@
 package com.kubeoncall.memory;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
@@ -52,7 +51,7 @@ class MemoryExtractionQueueTest {
         verify(fixture.listOperations).leftPush(eq(MemoryExtractionQueue.DEAD_LETTER_KEY), deadLetter.capture());
         MemoryExtractionTask stored = fixture.objectMapper.readValue(deadLetter.getValue(), MemoryExtractionTask.class);
         assertEquals(3, stored.attempts());
-        assertTrue(stored.metadata().get("last_error").contains("ES unavailable"));
+        assertEquals("IllegalStateException", stored.metadata().get("last_error"));
         verify(fixture.metrics).recordMemory("extract_dead_letter", "max_attempts", 1);
     }
 

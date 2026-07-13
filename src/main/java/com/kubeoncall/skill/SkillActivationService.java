@@ -70,7 +70,7 @@ public class SkillActivationService {
         return registry.indexForPrompt();
     }
 
-    public List<Map<String, Object>> index() {
+    public List<SkillIndexEntry> index() {
         return registry.index();
     }
 

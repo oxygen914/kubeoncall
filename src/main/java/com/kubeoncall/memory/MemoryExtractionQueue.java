@@ -63,7 +63,8 @@ public class MemoryExtractionQueue {
     }
 
     public void fail(ClaimedTask claimedTask, RuntimeException failure) {
-        MemoryExtractionTask retried = claimedTask.task().retry(failure == null ? "unknown" : failure.getMessage());
+        String failureType = failure == null ? "unknown" : failure.getClass().getSimpleName();
+        MemoryExtractionTask retried = claimedTask.task().retry(failureType);
         redisTemplate.opsForList().remove(PROCESSING_KEY, 1, claimedTask.raw());
         try {
             String raw = objectMapper.writeValueAsString(retried);

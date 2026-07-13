@@ -46,7 +46,10 @@ public class MemoryExtractionJob {
                 queue.acknowledge(claimed);
             } catch (RuntimeException ex) {
                 queue.fail(claimed, ex);
-                log.warn("Memory extraction task {} failed: {}", claimed.task().id(), ex.getMessage());
+                log.warn(
+                        "Memory extraction task failed: taskId={}, errorType={}",
+                        claimed.task().id(),
+                        ex.getClass().getSimpleName());
             }
         });
     }

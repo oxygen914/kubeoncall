@@ -6,6 +6,8 @@ import java.util.Map;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 import com.kubeoncall.alarm.domain.AlarmEvaluationResult;
@@ -18,6 +20,8 @@ import com.kubeoncall.workflow.AlertWorkflowNode;
 
 @Component
 public class NotificationNode implements AlertWorkflowNode {
+
+    private static final Logger log = LoggerFactory.getLogger(NotificationNode.class);
 
     private final Map<String, ToolExecutor> executorsByKind;
 
@@ -52,9 +56,9 @@ public class NotificationNode implements AlertWorkflowNode {
             }
             return new NodeResult("notificationNode", NodeStatus.SUCCESS, "Alert event sent", payload);
         } catch (RuntimeException ex) {
+            log.warn("Alert notification failed: errorType={}", ex.getClass().getSimpleName());
             payload.put("exceptionType", ex.getClass().getSimpleName());
-            return new NodeResult(
-                    "notificationNode", NodeStatus.FAILURE, "Failed to send alert event: " + ex.getMessage(), payload);
+            return new NodeResult("notificationNode", NodeStatus.FAILURE, "Failed to send alert event", payload);
         }
     }
 

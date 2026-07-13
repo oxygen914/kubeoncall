@@ -16,6 +16,7 @@ import java.util.Map;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
+import com.kubeoncall.alarm.AlarmPolicyRepositoryFixtures;
 import com.kubeoncall.alarm.domain.AlarmEvaluationResult;
 import com.kubeoncall.alarm.domain.AlarmPolicy;
 import com.kubeoncall.alarm.domain.AlarmResourceType;
@@ -143,7 +144,7 @@ class KnowledgeRetrieveNodeTest {
                 "payment pod was OOMKilled",
                 Map.of());
         YamlAlarmPolicyRepository repository =
-                YamlAlarmPolicyRepository.loadFromClasspath("alarm-policies.yml", AlarmSeverity.P3);
+                AlarmPolicyRepositoryFixtures.loadFromClasspath("alarm-policies.yml", AlarmSeverity.P3);
         AlarmEvaluationResult evaluation = new AlarmPolicyEngine(repository).evaluate(event);
         assertTrue(evaluation.matched());
         AlarmEvent legacy = new AlarmEvent(

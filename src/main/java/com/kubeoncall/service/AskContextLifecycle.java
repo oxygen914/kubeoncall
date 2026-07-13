@@ -90,9 +90,12 @@ public class AskContextLifecycle {
             state.getContext().put("sessionCompactedTurnCount", snapshot.compactedTurnCount());
             state.getContext().put("sessionContext", historyCompactor.buildContext(snapshot));
         } catch (RuntimeException ex) {
+            log.warn(
+                    "Session history lookup failed; continuing without history: errorType={}",
+                    ex.getClass().getSimpleName());
             state.getContext().put("sessionHistory", List.of());
             state.getContext().put("sessionContext", "");
-            state.getContext().put("sessionWarning", "session history unavailable: " + ex.getMessage());
+            state.getContext().put("sessionWarning", "session history unavailable");
         }
     }
 
@@ -118,7 +121,10 @@ public class AskContextLifecycle {
                 state.getContext().put("memoryWarning", injection.warning());
             }
         } catch (RuntimeException ex) {
-            state.getContext().put("memoryWarning", "memory injection failed: " + ex.getMessage());
+            log.warn(
+                    "Memory injection failed; continuing without memory: errorType={}",
+                    ex.getClass().getSimpleName());
+            state.getContext().put("memoryWarning", "memory injection failed");
         }
     }
 
@@ -139,7 +145,10 @@ public class AskContextLifecycle {
             }
             mergePlannerSkillKnowledge(state, activation);
         } catch (RuntimeException ex) {
-            state.getContext().put("skillWarning", "skill activation failed: " + ex.getMessage());
+            log.warn(
+                    "Skill activation failed; continuing without skills: errorType={}",
+                    ex.getClass().getSimpleName());
+            state.getContext().put("skillWarning", "skill activation failed");
         }
     }
 
@@ -174,10 +183,10 @@ public class AskContextLifecycle {
                             Instant.now()));
         } catch (RuntimeException ex) {
             log.warn(
-                    "Unable to append session turn: sessionId={}, executionId={}",
+                    "Unable to append session turn: sessionId={}, executionId={}, errorType={}",
                     sessionId,
                     state.getExecutionId(),
-                    ex);
+                    ex.getClass().getSimpleName());
         }
     }
 
@@ -185,7 +194,10 @@ public class AskContextLifecycle {
         try {
             memoryExtractor.extractFromAsk(state, message);
         } catch (RuntimeException ex) {
-            state.getContext().put("memoryExtractionWarning", "memory extraction failed: " + ex.getMessage());
+            log.warn(
+                    "Memory extraction failed; continuing workflow completion: errorType={}",
+                    ex.getClass().getSimpleName());
+            state.getContext().put("memoryExtractionWarning", "memory extraction failed");
         }
     }
 

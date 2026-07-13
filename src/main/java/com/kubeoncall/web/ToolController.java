@@ -1,7 +1,6 @@
 package com.kubeoncall.web;
 
 import java.util.List;
-import java.util.Map;
 
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -9,6 +8,8 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.kubeoncall.tool.AgentToolCatalog;
 import com.kubeoncall.tool.ToolDefinition;
+import com.kubeoncall.tool.VerifierCapability;
+import com.kubeoncall.web.dto.ToolCatalogResponse;
 import com.kubeoncall.web.dto.ToolDefinitionResponse;
 
 @RestController
@@ -22,11 +23,11 @@ public class ToolController {
     }
 
     @GetMapping
-    public Map<String, Object> allTools() {
-        return Map.of(
-                "planner", toResponses(agentToolCatalog.plannerTools()),
-                "executor", toResponses(agentToolCatalog.executorTools()),
-                "verifier", agentToolCatalog.verifierCapabilities());
+    public ToolCatalogResponse allTools() {
+        return new ToolCatalogResponse(
+                toResponses(agentToolCatalog.plannerTools()),
+                toResponses(agentToolCatalog.executorTools()),
+                agentToolCatalog.verifierCapabilities());
     }
 
     @GetMapping("/planner")
@@ -40,7 +41,7 @@ public class ToolController {
     }
 
     @GetMapping("/verifier")
-    public List<Map<String, Object>> verifierTools() {
+    public List<VerifierCapability> verifierTools() {
         return agentToolCatalog.verifierCapabilities();
     }
 

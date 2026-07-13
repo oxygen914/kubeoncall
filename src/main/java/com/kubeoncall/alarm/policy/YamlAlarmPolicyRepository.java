@@ -272,15 +272,4 @@ public class YamlAlarmPolicyRepository implements AlarmPolicyRepository {
     }
 
     public record ReloadResult(String previousVersion, String activeVersion, int policyCount) {}
-
-    /** Allows the caller to load an arbitrary classpath resource directly (for tests). */
-    public static YamlAlarmPolicyRepository loadFromClasspath(String classpathLocation, AlarmSeverity defaultSeverity) {
-        KubeOnCallProperties properties = new KubeOnCallProperties();
-        properties.getAlarm().setPolicyLocation("classpath:" + classpathLocation);
-        properties.getAlarm().setEnabled(true);
-        properties.getAlarm().setDefaultSeverity(defaultSeverity.name());
-        YamlAlarmPolicyRepository repo = new YamlAlarmPolicyRepository(properties);
-        repo.load();
-        return repo;
-    }
 }

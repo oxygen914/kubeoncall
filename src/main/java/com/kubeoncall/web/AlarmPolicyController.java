@@ -19,7 +19,9 @@ import com.kubeoncall.alarm.ingest.AlarmNormalizer;
 import com.kubeoncall.alarm.policy.AlarmPolicyEngine;
 import com.kubeoncall.alarm.policy.YamlAlarmPolicyRepository;
 import com.kubeoncall.service.ExecutionAuditService;
+import com.kubeoncall.web.dto.AlarmPolicyEvaluationResponse;
 import com.kubeoncall.web.dto.AlarmPolicyReplayRequest;
+import com.kubeoncall.web.dto.AlarmPolicyReplayResponse;
 import com.kubeoncall.web.dto.AlarmRequest;
 
 @RestController
@@ -64,15 +66,15 @@ public class AlarmPolicyController {
     }
 
     @PostMapping("/dry-run")
-    public Map<String, Object> dryRun(@RequestBody AlarmRequest request) {
+    public AlarmPolicyEvaluationResponse dryRun(@RequestBody AlarmRequest request) {
         Instant startedAt = Instant.now();
         try {
-            Map<String, Object> result = evaluate(request);
+            AlarmPolicyEvaluationResponse result = evaluate(request);
             LinkedHashMap<String, Object> metadata = new LinkedHashMap<>();
-            metadata.put("matched", result.get("matched"));
-            metadata.put("policyId", result.get("policyId"));
-            metadata.put("policyVersion", result.get("policyVersion"));
-            metadata.put("severity", result.get("severity"));
+            metadata.put("matched", result.matched());
+            metadata.put("policyId", result.policyId());
+            metadata.put("policyVersion", result.policyVersion());
+            metadata.put("severity", result.severity());
             auditPolicy("dry_run", "POLICY_DRY_RUN", "Alarm policy dry-run completed", null, startedAt, metadata);
             return result;
         } catch (RuntimeException ex) {
@@ -80,7 +82,7 @@ public class AlarmPolicyController {
                     "dry_run",
                     "FAILED",
                     "Alarm policy dry-run failed",
-                    ex.getMessage(),
+                    "Alarm policy evaluation failed",
                     startedAt,
                     Map.of("errorType", ex.getClass().getSimpleName()));
             throw ex;
@@ -88,7 +90,7 @@ public class AlarmPolicyController {
     }
 
     @PostMapping("/replay")
-    public Map<String, Object> replay(@RequestBody AlarmPolicyReplayRequest request) {
+    public AlarmPolicyReplayResponse replay(@RequestBody AlarmPolicyReplayRequest request) {
         Instant startedAt = Instant.now();
         List<AlarmRequest> alarms = request == null || request.alarms() == null ? List.of() : request.alarms();
         if (alarms.size() > 1000) {
@@ -101,21 +103,17 @@ public class AlarmPolicyController {
                     Map.of("total", alarms.size()));
             throw new IllegalArgumentException("Replay accepts at most 1000 alarms");
         }
-        List<Map<String, Object>> results = new ArrayList<>();
+        List<AlarmPolicyEvaluationResponse> results = new ArrayList<>();
         int matched = 0;
         for (AlarmRequest alarm : alarms) {
-            Map<String, Object> result = evaluate(alarm);
+            AlarmPolicyEvaluationResponse result = evaluate(alarm);
             results.add(result);
-            if (Boolean.TRUE.equals(result.get("matched"))) {
+            if (result.matched()) {
                 matched++;
             }
         }
-        Map<String, Object> response = new LinkedHashMap<>();
-        response.put("policyVersion", repository.activeVersion());
-        response.put("total", alarms.size());
-        response.put("matched", matched);
-        response.put("unmatched", alarms.size() - matched);
-        response.put("results", results);
+        AlarmPolicyReplayResponse response = new AlarmPolicyReplayResponse(
+                repository.activeVersion(), alarms.size(), matched, alarms.size() - matched, results);
         auditPolicy(
                 "replay",
                 "POLICY_REPLAYED",
@@ -153,32 +151,31 @@ public class AlarmPolicyController {
                     startedAt,
                     metadata);
         } catch (RuntimeException ex) {
-            log.warn("Unable to audit alarm policy operation: operation={}, status={}", operation, status, ex);
+            log.warn(
+                    "Unable to audit alarm policy operation: operation={}, status={}, errorType={}",
+                    operation,
+                    status,
+                    ex.getClass().getSimpleName());
         }
     }
 
-    private Map<String, Object> evaluate(AlarmRequest request) {
+    private AlarmPolicyEvaluationResponse evaluate(AlarmRequest request) {
         NormalizedAlarmEvent event = alarmNormalizer.normalize(request);
         AlarmEvaluationResult evaluation = policyEngine.evaluate(event);
-        Map<String, Object> result = new LinkedHashMap<>();
-        result.put("alarmId", event.alarmId());
-        result.put("fingerprint", event.fingerprint());
-        result.put("alertName", event.alertName());
-        result.put("matched", evaluation.matched());
-        result.put("policyId", evaluation.policyId());
-        result.put(
-                "policyVersion",
+        return new AlarmPolicyEvaluationResponse(
+                event.alarmId(),
+                event.fingerprint(),
+                event.alertName(),
+                evaluation.matched(),
+                evaluation.policyId(),
                 evaluation.matchedPolicy() == null
                         ? repository.activeVersion()
-                        : evaluation.matchedPolicy().version());
-        result.put(
-                "severity",
+                        : evaluation.matchedPolicy().version(),
                 evaluation.finalSeverity() == null
                         ? null
-                        : evaluation.finalSeverity().name());
-        result.put("workflowTemplate", evaluation.workflowTemplate());
-        result.put("runbookId", evaluation.runbookId());
-        result.put("reason", evaluation.reason());
-        return result;
+                        : evaluation.finalSeverity().name(),
+                evaluation.workflowTemplate(),
+                evaluation.runbookId(),
+                evaluation.reason());
     }
 }

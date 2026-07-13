@@ -5,6 +5,8 @@ import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 import com.kubeoncall.domain.graph.NodeResult;
@@ -12,6 +14,8 @@ import com.kubeoncall.domain.graph.NodeStatus;
 
 @Component
 public class WorkflowNodeExecutor {
+
+    private static final Logger log = LoggerFactory.getLogger(WorkflowNodeExecutor.class);
 
     public NodeResult execute(AlertWorkflowDefinition definition, AlertWorkflowContext context, Duration timeout) {
         String nodeName = definition.name();
@@ -46,6 +50,10 @@ public class WorkflowNodeExecutor {
             return result;
         } catch (Exception ex) {
             long durationMs = Duration.between(nodeStartedAt, Instant.now()).toMillis();
+            log.warn(
+                    "Alert workflow node failed: node={}, errorType={}",
+                    nodeName,
+                    ex.getClass().getSimpleName());
             context.setDegraded(true);
             context.addFailedNode(nodeName);
             if (!definition.continueOnFailure()) {
@@ -54,7 +62,7 @@ public class WorkflowNodeExecutor {
             NodeResult failure = new NodeResult(
                     nodeName,
                     NodeStatus.FAILURE,
-                    "Node execution failed: " + ex.getMessage(),
+                    "Node execution failed",
                     Map.of("exceptionType", ex.getClass().getSimpleName()));
             context.addNodeResult(enrichPayload(failure, context, durationMs));
             return failure;

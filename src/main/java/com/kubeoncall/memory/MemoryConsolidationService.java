@@ -9,6 +9,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 
 import org.slf4j.Logger;
@@ -39,11 +40,11 @@ public class MemoryConsolidationService {
             KubeOnCallMetricsService metricsService,
             ExecutionAuditService auditService,
             MemoryTemporalNormalizer temporalNormalizer) {
-        this.knowledgeRepository = knowledgeRepository;
-        this.properties = properties;
-        this.metricsService = metricsService;
-        this.auditService = auditService;
-        this.temporalNormalizer = temporalNormalizer;
+        this.knowledgeRepository = Objects.requireNonNull(knowledgeRepository, "knowledgeRepository");
+        this.properties = Objects.requireNonNull(properties, "properties");
+        this.metricsService = Objects.requireNonNull(metricsService, "metricsService");
+        this.auditService = Objects.requireNonNull(auditService, "auditService");
+        this.temporalNormalizer = Objects.requireNonNull(temporalNormalizer, "temporalNormalizer");
     }
 
     public ConsolidationResult consolidate(Instant now, int scanLimit, boolean dryRun) {
@@ -227,15 +228,11 @@ public class MemoryConsolidationService {
     }
 
     private void recordMetric(String outcome, long count) {
-        if (metricsService != null) {
-            metricsService.recordMemory("consolidate", outcome, count);
-        }
+        metricsService.recordMemory("consolidate", outcome, count);
     }
 
     private void recordNormalizationMetric(String outcome, long count) {
-        if (metricsService != null) {
-            metricsService.recordMemory("normalize", outcome, count);
-        }
+        metricsService.recordMemory("normalize", outcome, count);
     }
 
     private void audit(ConsolidationResult result, Instant startedAt) {
@@ -256,7 +253,10 @@ public class MemoryConsolidationService {
                             "scanLimit", result.scanLimit(),
                             "similarityThreshold", result.similarityThreshold()));
         } catch (RuntimeException ex) {
-            log.warn("Unable to audit memory consolidation: status={}", result.status(), ex);
+            log.warn(
+                    "Unable to audit memory consolidation: status={}, errorType={}",
+                    result.status(),
+                    ex.getClass().getSimpleName());
         }
     }
 

@@ -17,6 +17,7 @@ import com.kubeoncall.alarm.maintenance.AlarmMaintenanceWindow;
 import com.kubeoncall.alarm.maintenance.AlarmMaintenanceWindowService;
 import com.kubeoncall.service.ExecutionAuditService;
 import com.kubeoncall.web.dto.AlarmMaintenanceWindowRequest;
+import com.kubeoncall.web.dto.AlarmMaintenanceWindowRevocationResponse;
 
 @RestController
 @RequestMapping("/api/alarm-maintenance-windows")
@@ -76,7 +77,7 @@ public class AlarmMaintenanceWindowController {
     }
 
     @DeleteMapping("/{id}")
-    public Map<String, Object> revoke(@PathVariable String id) {
+    public AlarmMaintenanceWindowRevocationResponse revoke(@PathVariable String id) {
         Instant startedAt = Instant.now();
         boolean removed = service.revoke(id);
         auditService.recordAlarmExecution(
@@ -92,6 +93,6 @@ public class AlarmMaintenanceWindowController {
         if (!removed) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "maintenance window not found");
         }
-        return Map.of("id", id, "revoked", true);
+        return new AlarmMaintenanceWindowRevocationResponse(id, true);
     }
 }
