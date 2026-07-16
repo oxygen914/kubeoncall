@@ -9,6 +9,7 @@ spring:
 kubeoncall:
   rag:
     knowledge-index-alias: ${RAG_KNOWLEDGE_INDEX_ALIAS:kubeoncall-knowledge-active}
+    active-dataset-version: ${RAG_ACTIVE_DATASET_VERSION:}
     vector-enabled: true
     vector-backend: es
     es-knn-enabled: true

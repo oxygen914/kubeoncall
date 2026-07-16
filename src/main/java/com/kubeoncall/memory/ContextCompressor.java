@@ -40,6 +40,7 @@ public class ContextCompressor {
         int budget = Math.max(96, properties.getMemory().getContextTokenBudget());
         if (beforeTokens <= budget || values.isEmpty()) {
             state.getContext().put("contextCompression", compressionTrace(beforeTokens, beforeTokens, List.of()));
+            enforceUnifiedContextBudget(state);
             return;
         }
 
@@ -60,10 +61,15 @@ public class ContextCompressor {
                 .mapToInt(tokenBudget::estimateTokens)
                 .sum();
         state.getContext().put("contextCompression", compressionTrace(beforeTokens, afterTokens, compressedKeys));
+        enforceUnifiedContextBudget(state);
     }
 
     public void compressRuntime(GraphState state) {
-        if (state == null || state.getObservations().isEmpty()) {
+        if (state == null) {
+            return;
+        }
+        if (state.getObservations().isEmpty()) {
+            enforceUnifiedContextBudget(state);
             return;
         }
         int budget = Math.max(64, properties.getMemory().getObservationTokenBudget());
@@ -72,6 +78,7 @@ public class ContextCompressor {
                 .mapToInt(tokenBudget::estimateTokens)
                 .sum();
         if (state.getObservations().size() <= maxEntries && beforeTokens <= budget) {
+            enforceUnifiedContextBudget(state);
             return;
         }
 
@@ -105,6 +112,84 @@ public class ContextCompressor {
                                 beforeTokens,
                                 "afterTokens",
                                 afterTokens));
+        enforceUnifiedContextBudget(state);
+    }
+
+    /**
+     * Keeps the textual state that can reach the planner under one shared cap. Planning context
+     * and observations used to be compressed independently, which allowed their sum to exceed the
+     * LLM context contract.
+     */
+    private void enforceUnifiedContextBudget(GraphState state) {
+        int budget = Math.max(128, properties.getMemory().getUnifiedContextTokenBudget());
+        int planningBefore = planningTokens(state);
+        int observationsBefore = observationTokens(state);
+        int before = planningBefore + observationsBefore;
+        if (before <= budget) {
+            state.getContext().put("unifiedContextBudget", unifiedTrace(before, before, budget, false));
+            return;
+        }
+
+        int observationReserve = state.getObservations().isEmpty() ? 0 : Math.max(32, budget / 4);
+        compactPlanningToBudget(state, Math.max(32, budget - observationReserve));
+
+        int remainingForObservations = Math.max(16, budget - planningTokens(state));
+        compactObservationsToBudget(state, remainingForObservations);
+
+        int after = planningTokens(state) + observationTokens(state);
+        state.getContext().put("unifiedContextBudget", unifiedTrace(before, after, budget, true));
+    }
+
+    private void compactPlanningToBudget(GraphState state, int budget) {
+        List<String> populatedKeys = PLANNING_CONTEXT_KEYS.stream()
+                .filter(key -> state.getContext().get(key) != null)
+                .filter(key -> !String.valueOf(state.getContext().get(key)).isBlank())
+                .toList();
+        if (populatedKeys.isEmpty() || planningTokens(state) <= budget) {
+            return;
+        }
+        int perSectionBudget = Math.max(1, budget / populatedKeys.size());
+        for (String key : populatedKeys) {
+            state.getContext()
+                    .put(
+                            key,
+                            tokenBudget.compactText(
+                                    String.valueOf(state.getContext().get(key)), perSectionBudget));
+        }
+        syncPlannerKnowledge(state);
+    }
+
+    private void compactObservationsToBudget(GraphState state, int budget) {
+        if (state.getObservations().isEmpty() || observationTokens(state) <= budget) {
+            return;
+        }
+        List<String> original = List.copyOf(state.getObservations());
+        state.getObservations().clear();
+        state.getObservations().add(summarizeObservations(original, Math.max(1, budget)));
+    }
+
+    private int planningTokens(GraphState state) {
+        return PLANNING_CONTEXT_KEYS.stream()
+                .map(state.getContext()::get)
+                .filter(java.util.Objects::nonNull)
+                .map(String::valueOf)
+                .mapToInt(tokenBudget::estimateTokens)
+                .sum();
+    }
+
+    private int observationTokens(GraphState state) {
+        return state.getObservations().stream()
+                .mapToInt(tokenBudget::estimateTokens)
+                .sum();
+    }
+
+    private Map<String, Object> unifiedTrace(int before, int after, int budget, boolean compacted) {
+        return Map.of(
+                "compressed", compacted,
+                "beforeTokens", before,
+                "afterTokens", after,
+                "budgetTokens", budget,
+                "countingMode", tokenBudget.countingMode());
     }
 
     private String summarizeObservations(List<String> observations, int budget) {

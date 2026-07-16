@@ -23,7 +23,7 @@ class KnowledgeChunkerTest {
         KnowledgeDocument document = new KnowledgeDocument(
                 "doc-1",
                 "Payment SOP",
-                "# Overview\nshort intro\n# Triage\ncheck logs\n# Recover\nrestart only after approval",
+                "# Overview\nshort intro\n## Signals\ncheck metrics\n# Recover\nrestart only after approval",
                 "manual",
                 Map.of("document_type", "runbook"),
                 Instant.now());
@@ -38,5 +38,8 @@ class KnowledgeChunkerTest {
         assertEquals("3", chunks.get(0).metadata().get("total_chunks"));
         assertEquals("doc-1", chunks.get(0).metadata().get("parent_document_id"));
         assertEquals("true", chunks.get(0).metadata().get("chunk_enable"));
+        assertEquals("Overview", chunks.get(0).metadata().get("heading_path"));
+        assertEquals("Overview / Signals", chunks.get(1).metadata().get("heading_path"));
+        assertEquals("Recover", chunks.get(2).metadata().get("heading_path"));
     }
 }

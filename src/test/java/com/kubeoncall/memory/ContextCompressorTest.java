@@ -55,4 +55,36 @@ class ContextCompressorTest {
                         .sum()
                 <= 80);
     }
+
+    @Test
+    void shouldApplyOneBudgetAcrossPlanningAndObservations() {
+        KubeOnCallProperties properties = new KubeOnCallProperties();
+        properties.getMemory().setContextTokenBudget(1_000);
+        properties.getMemory().setObservationTokenBudget(1_000);
+        properties.getMemory().setUnifiedContextTokenBudget(180);
+        TokenBudget tokenBudget = new TokenBudget();
+        ContextCompressor compressor = new ContextCompressor(properties, tokenBudget);
+        GraphState state = new GraphState();
+        String large = "payment-service diagnostic context ".repeat(80);
+        state.getContext().put("skillPrompt", large);
+        state.getContext().put("memoryContext", large);
+        state.getContext().put("sessionContext", large);
+        for (int index = 0; index < 20; index++) {
+            state.addObservation("observation " + index + " " + large);
+        }
+
+        compressor.compressPlanningContext(state);
+        compressor.compressRuntime(state);
+
+        int combinedTokens = state.getObservations().stream()
+                        .mapToInt(tokenBudget::estimateTokens)
+                        .sum()
+                + tokenBudget.estimateTokens(String.valueOf(state.getContext().get("skillPrompt")))
+                + tokenBudget.estimateTokens(String.valueOf(state.getContext().get("memoryContext")))
+                + tokenBudget.estimateTokens(String.valueOf(state.getContext().get("sessionContext")));
+        assertTrue(combinedTokens <= 180);
+        @SuppressWarnings("unchecked")
+        Map<String, Object> trace = (Map<String, Object>) state.getContext().get("unifiedContextBudget");
+        assertEquals(180, trace.get("budgetTokens"));
+    }
 }

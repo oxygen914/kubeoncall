@@ -9,6 +9,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import com.kubeoncall.common.config.KubeOnCallProperties;
@@ -25,6 +26,7 @@ public class KnowledgeIngestionFacade {
     private final KnowledgeObjectStorageService knowledgeObjectStorageService;
     private final EmbeddingService embeddingService;
     private final KubeOnCallProperties properties;
+    private final KnowledgeMetadataFactory metadataFactory;
 
     public KnowledgeIngestionFacade(
             KnowledgeRepository knowledgeRepository,
@@ -32,58 +34,60 @@ public class KnowledgeIngestionFacade {
             KnowledgeObjectStorageService knowledgeObjectStorageService,
             EmbeddingService embeddingService,
             KubeOnCallProperties properties) {
+        this(
+                knowledgeRepository,
+                knowledgeChunker,
+                knowledgeObjectStorageService,
+                embeddingService,
+                properties,
+                new KnowledgeMetadataFactory());
+    }
+
+    @Autowired
+    public KnowledgeIngestionFacade(
+            KnowledgeRepository knowledgeRepository,
+            KnowledgeChunker knowledgeChunker,
+            KnowledgeObjectStorageService knowledgeObjectStorageService,
+            EmbeddingService embeddingService,
+            KubeOnCallProperties properties,
+            KnowledgeMetadataFactory metadataFactory) {
         this.knowledgeRepository = knowledgeRepository;
         this.knowledgeChunker = knowledgeChunker;
         this.knowledgeObjectStorageService = knowledgeObjectStorageService;
         this.embeddingService = embeddingService;
         this.properties = properties;
+        this.metadataFactory = metadataFactory;
     }
 
     public KnowledgeDocument ingest(String title, String content, String source, Map<String, String> metadata) {
-        Map<String, String> mergedMetadata = new LinkedHashMap<>();
-        if (metadata != null) {
-            mergedMetadata.putAll(metadata);
-        }
+        return ingestWithResult(title, content, source, metadata).document();
+    }
+
+    public IngestionResult ingestWithResult(String title, String content, String source, Map<String, String> metadata) {
+        Map<String, String> mergedMetadata = metadataFactory.copy(metadata);
         String fileHash = sha256(content);
         String requestedDocumentId = normalize(mergedMetadata.get("doc_id"));
         if (requestedDocumentId.isBlank()) {
             KnowledgeDocument duplicate = findExistingByHash(fileHash);
             if (duplicate != null) {
-                return duplicate;
+                return new IngestionResult(duplicate, "duplicate", 0, false);
             }
         }
         String documentId = requestedDocumentId.isBlank() ? UUID.randomUUID().toString() : requestedDocumentId;
         List<KnowledgeDocument> existingDocuments = knowledgeRepository.findByMetadata("doc_id", documentId);
+        preserveCreatedAt(mergedMetadata, existingDocuments, documentId);
         StoredDocumentReference reference = knowledgeObjectStorageService.store(title, content, source);
-        if (reference.objectKey() != null) {
-            mergedMetadata.put("objectKey", reference.objectKey());
-        }
-        if (reference.bucket() != null) {
-            mergedMetadata.put("bucket", reference.bucket());
-        }
-        mergedMetadata.put("storageStatus", reference.stored() ? "stored" : "skipped");
-        mergedMetadata.put("storageMessage", reference.message());
-        mergedMetadata.put("doc_id", documentId);
-        mergedMetadata.put("chunk_id", documentId);
-        mergedMetadata.put("chunk_index", "-1");
-        mergedMetadata.put("total_chunks", "0");
-        mergedMetadata.put("parent_document_id", "");
-        mergedMetadata.put("parentDocumentId", "");
-        mergedMetadata.put("document_type", mergedMetadata.getOrDefault("document_type", "runbook"));
-        mergedMetadata.put(
-                "source_type", mergedMetadata.getOrDefault("source_type", source == null ? "manual" : source));
-        mergedMetadata.put("dataset_version", mergedMetadata.getOrDefault("dataset_version", "v1"));
-        mergedMetadata.put("chunk_enable", "false");
-        mergedMetadata.put("file_hash", fileHash);
-        mergedMetadata.put("updated_at", Instant.now().toString());
+        Instant now = Instant.now();
+        Map<String, String> parentMetadata =
+                metadataFactory.parentMetadata(mergedMetadata, documentId, source, fileHash, reference, now);
 
-        KnowledgeDocument document =
-                new KnowledgeDocument(documentId, title, content, source, mergedMetadata, Instant.now());
+        KnowledgeDocument document = new KnowledgeDocument(documentId, title, content, source, parentMetadata, now);
         knowledgeRepository.save(document);
         List<KnowledgeDocument> chunks = knowledgeChunker.chunk(document);
         chunks.stream().map(this::withEmbedding).forEach(knowledgeRepository::save);
         removeStaleChunks(existingDocuments, documentId, chunks);
-        return document;
+        return new IngestionResult(
+                document, existingDocuments.isEmpty() ? "created" : "updated", chunks.size(), reference.stored());
     }
 
     public LifecycleResult softDelete(String documentId, String reason) {
@@ -117,6 +121,21 @@ public class KnowledgeIngestionFacade {
                 .forEach(knowledgeRepository::deleteById);
     }
 
+    private void preserveCreatedAt(
+            Map<String, String> metadata, List<KnowledgeDocument> existingDocuments, String documentId) {
+        if (metadata.containsKey("created_at") || existingDocuments == null) {
+            return;
+        }
+        existingDocuments.stream()
+                .filter(document -> isParent(document, documentId))
+                .map(KnowledgeDocument::metadata)
+                .filter(existingMetadata -> existingMetadata != null)
+                .map(existingMetadata -> existingMetadata.get("created_at"))
+                .filter(createdAt -> createdAt != null && !createdAt.isBlank())
+                .findFirst()
+                .ifPresent(createdAt -> metadata.put("created_at", createdAt));
+    }
+
     private LifecycleResult changeAvailability(String documentId, boolean restore, String reason) {
         String normalizedDocumentId = normalize(documentId);
         if (normalizedDocumentId.isBlank()) {
@@ -128,10 +147,7 @@ public class KnowledgeIngestionFacade {
         }
         Instant now = Instant.now();
         for (KnowledgeDocument document : documents) {
-            Map<String, String> documentMetadata = new LinkedHashMap<>();
-            if (document.metadata() != null) {
-                documentMetadata.putAll(document.metadata());
-            }
+            Map<String, String> documentMetadata = metadataFactory.copy(document.metadata());
             if (restore) {
                 documentMetadata.put("chunk_enable", isParent(document, normalizedDocumentId) ? "false" : "true");
                 documentMetadata.remove("deleted_at");
@@ -232,4 +248,6 @@ public class KnowledgeIngestionFacade {
     }
 
     public record LifecycleResult(String documentId, String operation, int affected, boolean found) {}
+
+    public record IngestionResult(KnowledgeDocument document, String operation, int chunkCount, boolean sourceStored) {}
 }

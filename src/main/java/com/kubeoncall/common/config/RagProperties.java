@@ -5,6 +5,7 @@ class RagProperties {
     private int defaultTopK = 5;
     private String knowledgeIndex = "kubeoncall-knowledge";
     private String knowledgeIndexAlias = "";
+    private String activeDatasetVersion = "";
     private boolean vectorEnabled = false;
     private boolean crossEncoderEnabled = false;
     private String crossEncoderEndpoint;
@@ -55,6 +56,14 @@ class RagProperties {
 
     public void setKnowledgeIndexAlias(String knowledgeIndexAlias) {
         this.knowledgeIndexAlias = knowledgeIndexAlias;
+    }
+
+    public String getActiveDatasetVersion() {
+        return activeDatasetVersion;
+    }
+
+    public void setActiveDatasetVersion(String activeDatasetVersion) {
+        this.activeDatasetVersion = activeDatasetVersion;
     }
 
     public boolean isVectorEnabled() {

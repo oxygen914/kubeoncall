@@ -88,6 +88,8 @@ class KnowledgeIngestServiceTest {
         assertEquals("knowledge/doc.txt", document.metadata().get("objectKey"));
         assertEquals("false", document.metadata().get("chunk_enable"));
         assertEquals(document.id(), document.metadata().get("doc_id"));
+        assertTrue(document.metadata().containsKey("created_at"));
+        assertTrue(document.metadata().containsKey("updated_at"));
         verify(repository, times(4)).save(any(KnowledgeDocument.class));
     }
 
@@ -220,10 +222,24 @@ class KnowledgeIngestServiceTest {
 
         facade.ingest("CPU runbook", "x".repeat(100), "manual", Map.of("doc_id", "cpu-runbook"));
         int firstChunkCount = repository.findByMetadata("doc_id", "cpu-runbook").size();
+        String createdAt = repository.findByMetadata("doc_id", "cpu-runbook").stream()
+                .filter(document -> document.id().equals("cpu-runbook"))
+                .findFirst()
+                .orElseThrow()
+                .metadata()
+                .get("created_at");
         facade.ingest("CPU runbook", "short content", "manual", Map.of("doc_id", "cpu-runbook"));
 
         assertEquals(2, repository.findByMetadata("doc_id", "cpu-runbook").size());
         assertTrue(firstChunkCount > 2);
+        assertEquals(
+                createdAt,
+                repository.findByMetadata("doc_id", "cpu-runbook").stream()
+                        .filter(document -> document.id().equals("cpu-runbook"))
+                        .findFirst()
+                        .orElseThrow()
+                        .metadata()
+                        .get("created_at"));
         KnowledgeIngestionFacade.LifecycleResult deleted = facade.softDelete("cpu-runbook", "expired");
         assertEquals(2, deleted.affected());
         assertTrue(repository.findByMetadata("doc_id", "cpu-runbook").stream()
@@ -254,10 +270,14 @@ class KnowledgeIngestServiceTest {
                 new EmbeddingService(List.of(), properties),
                 properties);
 
-        KnowledgeDocument first = facade.ingest("CPU runbook", "same content", "manual", Map.of());
-        KnowledgeDocument repeated = facade.ingest("CPU runbook", "same content", "manual", Map.of());
+        KnowledgeIngestionFacade.IngestionResult first =
+                facade.ingestWithResult("CPU runbook", "same content", "manual", Map.of());
+        KnowledgeIngestionFacade.IngestionResult repeated =
+                facade.ingestWithResult("CPU runbook", "same content", "manual", Map.of());
 
-        assertEquals(first.id(), repeated.id());
+        assertEquals("created", first.operation());
+        assertEquals("duplicate", repeated.operation());
+        assertEquals(first.document().id(), repeated.document().id());
         verify(storageService, times(1)).store("CPU runbook", "same content", "manual");
     }
 

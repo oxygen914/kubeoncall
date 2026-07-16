@@ -1,7 +1,5 @@
 package com.kubeoncall.memory;
 
-import java.time.Instant;
-
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -19,10 +17,13 @@ public class MemoryExtractionJob {
 
     private final MemoryExtractionQueue queue;
     private final MemoryService memoryService;
+    private final MemoryExtractionPipeline extractionPipeline;
 
-    public MemoryExtractionJob(MemoryExtractionQueue queue, MemoryService memoryService) {
+    public MemoryExtractionJob(
+            MemoryExtractionQueue queue, MemoryService memoryService, MemoryExtractionPipeline extractionPipeline) {
         this.queue = queue;
         this.memoryService = memoryService;
+        this.extractionPipeline = extractionPipeline;
     }
 
     @Scheduled(fixedDelayString = "${kubeoncall.memory.extraction-poll-interval-millis:5000}")
@@ -30,19 +31,8 @@ public class MemoryExtractionJob {
         queue.claim().ifPresent(claimed -> {
             try {
                 MemoryExtractionTask task = claimed.task();
-                Instant now = Instant.now();
-                memoryService.remember(new MemoryEntry(
-                        null,
-                        task.memoryType(),
-                        task.scope(),
-                        task.subject(),
-                        task.content(),
-                        task.service(),
-                        task.resource(),
-                        task.fingerprint(),
-                        task.createdAt(),
-                        now,
-                        task.metadata()));
+                MemoryExtractionPipeline.ExtractionResult result = extractionPipeline.extract(task);
+                result.entries().forEach(memoryService::remember);
                 queue.acknowledge(claimed);
             } catch (RuntimeException ex) {
                 queue.fail(claimed, ex);

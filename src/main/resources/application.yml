@@ -38,6 +38,7 @@ kubeoncall:
   rag:
     default-top-k: 5
     knowledge-index: kubeoncall-knowledge
+    active-dataset-version: ${RAG_ACTIVE_DATASET_VERSION:}
     vector-enabled: false
     vector-backend: es
     vector-endpoint: http://localhost:18086/api/vector/search
@@ -157,6 +158,7 @@ kubeoncall:
     session-append-max-retries: 5
     session-summary-token-budget: 600
     context-token-budget: 2400
+    unified-context-token-budget: 3200
     observation-token-budget: 800
     max-observation-entries: 20
     long-term-enabled: true
@@ -171,6 +173,17 @@ kubeoncall:
     extraction-worker-enabled: true
     extraction-poll-interval-millis: 5000
     extraction-max-attempts: 3
+    llm-extraction-enabled: ${MEMORY_LLM_EXTRACTION_ENABLED:false}
+    llm-extraction-endpoint: ${MEMORY_LLM_EXTRACTION_ENDPOINT:}
+    llm-extraction-api-key: ${MEMORY_LLM_EXTRACTION_API_KEY:}
+    llm-extraction-model: ${MEMORY_LLM_EXTRACTION_MODEL:}
+    llm-extraction-timeout-millis: ${MEMORY_LLM_EXTRACTION_TIMEOUT_MILLIS:5000}
+    extraction-quality-threshold: ${MEMORY_EXTRACTION_QUALITY_THRESHOLD:0.55}
+    tokenizer-enabled: ${MEMORY_TOKENIZER_ENABLED:false}
+    tokenizer-endpoint: ${MEMORY_TOKENIZER_ENDPOINT:}
+    tokenizer-api-key: ${MEMORY_TOKENIZER_API_KEY:}
+    tokenizer-model: ${MEMORY_TOKENIZER_MODEL:}
+    tokenizer-timeout-millis: ${MEMORY_TOKENIZER_TIMEOUT_MILLIS:2000}
   skill:
     enabled: true
     location: classpath*:skills/**/*.md

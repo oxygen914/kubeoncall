@@ -10,6 +10,7 @@ class MemoryProperties {
     private int sessionAppendMaxRetries = 5;
     private int sessionSummaryTokenBudget = 600;
     private int contextTokenBudget = 2400;
+    private int unifiedContextTokenBudget = 3200;
     private int observationTokenBudget = 800;
     private int maxObservationEntries = 20;
     private boolean longTermEnabled = true;
@@ -22,6 +23,17 @@ class MemoryProperties {
     private long consolidationLockTtlSeconds = 1800;
     private double duplicateSimilarityThreshold = 0.92d;
     private int extractionMaxAttempts = 3;
+    private boolean llmExtractionEnabled = false;
+    private String llmExtractionEndpoint;
+    private String llmExtractionApiKey;
+    private String llmExtractionModel = "";
+    private int llmExtractionTimeoutMillis = 5000;
+    private double extractionQualityThreshold = 0.55d;
+    private boolean tokenizerEnabled = false;
+    private String tokenizerEndpoint;
+    private String tokenizerApiKey;
+    private String tokenizerModel = "";
+    private int tokenizerTimeoutMillis = 2000;
 
     public boolean isEnabled() {
         return enabled;
@@ -85,6 +97,14 @@ class MemoryProperties {
 
     public void setContextTokenBudget(int contextTokenBudget) {
         this.contextTokenBudget = contextTokenBudget;
+    }
+
+    public int getUnifiedContextTokenBudget() {
+        return unifiedContextTokenBudget;
+    }
+
+    public void setUnifiedContextTokenBudget(int unifiedContextTokenBudget) {
+        this.unifiedContextTokenBudget = unifiedContextTokenBudget;
     }
 
     public int getObservationTokenBudget() {
@@ -181,5 +201,93 @@ class MemoryProperties {
 
     public void setExtractionMaxAttempts(int extractionMaxAttempts) {
         this.extractionMaxAttempts = extractionMaxAttempts;
+    }
+
+    public boolean isLlmExtractionEnabled() {
+        return llmExtractionEnabled;
+    }
+
+    public void setLlmExtractionEnabled(boolean llmExtractionEnabled) {
+        this.llmExtractionEnabled = llmExtractionEnabled;
+    }
+
+    public String getLlmExtractionEndpoint() {
+        return llmExtractionEndpoint;
+    }
+
+    public void setLlmExtractionEndpoint(String llmExtractionEndpoint) {
+        this.llmExtractionEndpoint = llmExtractionEndpoint;
+    }
+
+    public String getLlmExtractionApiKey() {
+        return llmExtractionApiKey;
+    }
+
+    public void setLlmExtractionApiKey(String llmExtractionApiKey) {
+        this.llmExtractionApiKey = llmExtractionApiKey;
+    }
+
+    public String getLlmExtractionModel() {
+        return llmExtractionModel;
+    }
+
+    public void setLlmExtractionModel(String llmExtractionModel) {
+        this.llmExtractionModel = llmExtractionModel;
+    }
+
+    public int getLlmExtractionTimeoutMillis() {
+        return llmExtractionTimeoutMillis;
+    }
+
+    public void setLlmExtractionTimeoutMillis(int llmExtractionTimeoutMillis) {
+        this.llmExtractionTimeoutMillis = llmExtractionTimeoutMillis;
+    }
+
+    public double getExtractionQualityThreshold() {
+        return extractionQualityThreshold;
+    }
+
+    public void setExtractionQualityThreshold(double extractionQualityThreshold) {
+        this.extractionQualityThreshold = extractionQualityThreshold;
+    }
+
+    public boolean isTokenizerEnabled() {
+        return tokenizerEnabled;
+    }
+
+    public void setTokenizerEnabled(boolean tokenizerEnabled) {
+        this.tokenizerEnabled = tokenizerEnabled;
+    }
+
+    public String getTokenizerEndpoint() {
+        return tokenizerEndpoint;
+    }
+
+    public void setTokenizerEndpoint(String tokenizerEndpoint) {
+        this.tokenizerEndpoint = tokenizerEndpoint;
+    }
+
+    public String getTokenizerApiKey() {
+        return tokenizerApiKey;
+    }
+
+    public void setTokenizerApiKey(String tokenizerApiKey) {
+        this.tokenizerApiKey = tokenizerApiKey;
+    }
+
+    public String getTokenizerModel() {
+        return tokenizerModel;
+    }
+
+    public void setTokenizerModel(String tokenizerModel) {
+        this.tokenizerModel = tokenizerModel;
+    }
+
+    public int getTokenizerTimeoutMillis() {
+        return tokenizerTimeoutMillis;
+    }
+
+    public void setTokenizerTimeoutMillis(int tokenizerTimeoutMillis) {
+        this.tokenizerTimeoutMillis = tokenizerTimeoutMillis;
     }
 }

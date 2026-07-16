@@ -76,6 +76,10 @@ class IntelligentDiagnosisNodeTest {
         assertTrue(result.payload().get("previousHandlingCandidates") instanceof List<?> candidates
                 && candidates.get(0) instanceof Map<?, ?> first
                 && Boolean.TRUE.equals(first.get("stale")));
+        assertTrue(result.payload().get("previousHandlingCandidates") instanceof List<?> candidates
+                && candidates.get(0) instanceof Map<?, ?> first
+                && "0.85".equals(first.get("qualityScore"))
+                && "verified".equals(first.get("evidenceAttribution")));
         assertEquals(2, context.getAttribute("alertMemoryConsumed"));
         assertEquals(true, context.getAttribute("repeatIncident"));
     }
@@ -196,6 +200,10 @@ class IntelligentDiagnosisNodeTest {
                 "fp-oom",
                 updatedAt.minus(1, ChronoUnit.DAYS),
                 updatedAt,
-                Map.of());
+                Map.of(
+                        "quality_score", "0.85",
+                        "quality_reasons", "verified_evidence",
+                        "evidence_attribution", "verified",
+                        "evidence_references", "memory limit"));
     }
 }

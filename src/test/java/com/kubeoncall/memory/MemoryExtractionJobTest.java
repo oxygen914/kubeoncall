@@ -31,7 +31,9 @@ class MemoryExtractionJobTest {
                 Instant.now());
         MemoryExtractionQueue.ClaimedTask claimed = new MemoryExtractionQueue.ClaimedTask("raw", task);
         when(queue.claim()).thenReturn(Optional.of(claimed));
-        MemoryExtractionJob job = new MemoryExtractionJob(queue, memoryService);
+        MemoryExtractionPipeline pipeline = mock(MemoryExtractionPipeline.class);
+        when(pipeline.extract(task)).thenReturn(result(task));
+        MemoryExtractionJob job = new MemoryExtractionJob(queue, memoryService, pipeline);
 
         job.processNext();
 
@@ -58,10 +60,30 @@ class MemoryExtractionJobTest {
         MemoryExtractionQueue.ClaimedTask claimed = new MemoryExtractionQueue.ClaimedTask("raw", task);
         when(queue.claim()).thenReturn(Optional.of(claimed));
         when(memoryService.remember(any(MemoryEntry.class))).thenThrow(new IllegalStateException("ES unavailable"));
-        MemoryExtractionJob job = new MemoryExtractionJob(queue, memoryService);
+        MemoryExtractionPipeline pipeline = mock(MemoryExtractionPipeline.class);
+        when(pipeline.extract(task)).thenReturn(result(task));
+        MemoryExtractionJob job = new MemoryExtractionJob(queue, memoryService, pipeline);
 
         job.processNext();
 
         verify(queue).fail(any(MemoryExtractionQueue.ClaimedTask.class), any(IllegalStateException.class));
+    }
+
+    private MemoryExtractionPipeline.ExtractionResult result(MemoryExtractionTask task) {
+        return new MemoryExtractionPipeline.ExtractionResult(
+                java.util.List.of(new MemoryEntry(
+                        null,
+                        task.memoryType(),
+                        task.scope(),
+                        task.subject(),
+                        task.content(),
+                        task.service(),
+                        task.resource(),
+                        task.fingerprint(),
+                        task.createdAt(),
+                        task.createdAt(),
+                        task.metadata())),
+                "heuristic_fallback",
+                0);
     }
 }

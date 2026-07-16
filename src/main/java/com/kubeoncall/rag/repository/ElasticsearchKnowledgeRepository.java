@@ -171,9 +171,6 @@ public class ElasticsearchKnowledgeRepository implements KnowledgeRepository {
             criteria = criteria.subCriteria(titleCriteria.or(contentCriteria));
         }
         Criteria filtered = appendFilters(criteria, request);
-        if (request == null || request.filters() == null || !request.filters().containsKey("chunk_enable")) {
-            filtered = filtered.and(new Criteria("metadata.chunk_enable").is("true"));
-        }
         return filtered;
     }
 
@@ -185,24 +182,35 @@ public class ElasticsearchKnowledgeRepository implements KnowledgeRepository {
     }
 
     private Criteria appendFilters(Criteria criteria, RetrievalRequest request) {
-        if (request == null || request.filters() == null || request.filters().isEmpty()) {
-            return criteria;
-        }
         Criteria merged = criteria;
-        for (Map.Entry<String, String> entry : request.filters().entrySet()) {
+        for (Map.Entry<String, String> entry : effectiveFilters(request).entrySet()) {
             merged = merged.and(new Criteria("metadata." + entry.getKey()).is(entry.getValue()));
         }
         return merged;
     }
 
     private List<Query> vectorFilters(RetrievalRequest request) {
-        if (request == null || request.filters() == null || request.filters().isEmpty()) {
-            return List.of();
-        }
-        return request.filters().entrySet().stream()
+        return effectiveFilters(request).entrySet().stream()
                 .map(entry -> Query.of(query -> query.term(
                         term -> term.field("metadata." + entry.getKey()).value(entry.getValue()))))
                 .toList();
+    }
+
+    private Map<String, String> effectiveFilters(RetrievalRequest request) {
+        Map<String, String> filters = new LinkedHashMap<>();
+        if (request != null && request.filters() != null) {
+            request.filters().forEach((key, value) -> {
+                if (key != null && !key.isBlank() && value != null && !value.isBlank()) {
+                    filters.put(key, value);
+                }
+            });
+        }
+        filters.putIfAbsent("chunk_enable", "true");
+        String activeDatasetVersion = properties.getRag().getActiveDatasetVersion();
+        if (activeDatasetVersion != null && !activeDatasetVersion.isBlank()) {
+            filters.putIfAbsent("dataset_version", activeDatasetVersion.trim());
+        }
+        return filters;
     }
 
     private boolean shouldPrepareVectorIndex(KnowledgeDocument document) {

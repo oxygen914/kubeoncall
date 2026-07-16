@@ -23,6 +23,11 @@ public class KnowledgeIngestService {
         return ingestionFacade.ingest(title, content, source, metadata);
     }
 
+    public KnowledgeIngestionFacade.IngestionResult ingestWithResult(
+            String title, String content, String source, Map<String, String> metadata) {
+        return ingestionFacade.ingestWithResult(title, content, source, metadata);
+    }
+
     public KnowledgeIngestionFacade.LifecycleResult softDelete(String documentId, String reason) {
         return ingestionFacade.softDelete(documentId, reason);
     }

@@ -55,7 +55,9 @@ public class IntelligentDiagnosisNode implements AlertWorkflowNode {
         List<MemoryEntry> memories = supportedMemories(context);
         int maxEntries = Math.max(1, properties.getMemory().getInjectMaxEntries());
         List<MemoryEntry> selectedMemories = memories.stream().limit(maxEntries).toList();
-        int memoryBudget = Math.max(128, Math.min(800, properties.getMemory().getContextTokenBudget() / 3));
+        int sharedBudget = Math.max(128, properties.getMemory().getUnifiedContextTokenBudget());
+        int memoryBudget = Math.max(
+                64, Math.min(800, Math.min(properties.getMemory().getContextTokenBudget() / 3, sharedBudget / 3)));
         int perEntryBudget = Math.max(32, memoryBudget / Math.max(1, selectedMemories.size()));
         Instant reference = Instant.now();
 
@@ -184,6 +186,10 @@ public class IntelligentDiagnosisNode implements AlertWorkflowNode {
         evidence.put("updatedAt", updatedAt == null ? null : updatedAt.toString());
         evidence.put("ageDays", ageDays == Long.MAX_VALUE ? null : ageDays);
         evidence.put("stale", stale);
+        evidence.put("qualityScore", memory.metadata().get("quality_score"));
+        evidence.put("qualityReasons", memory.metadata().get("quality_reasons"));
+        evidence.put("evidenceAttribution", memory.metadata().get("evidence_attribution"));
+        evidence.put("evidenceReferences", memory.metadata().get("evidence_references"));
         return evidence;
     }
 

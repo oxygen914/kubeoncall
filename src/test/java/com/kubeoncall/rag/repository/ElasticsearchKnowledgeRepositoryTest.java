@@ -217,9 +217,46 @@ class ElasticsearchKnowledgeRepositoryTest {
         assertEquals(List.of(0.1f, 0.2f, 0.3f), query.getKnnQuery().queryVector());
         assertEquals(12L, query.getKnnQuery().numCandidates());
         assertEquals(3, query.getMaxResults());
-        assertEquals(1, query.getKnnQuery().filter().size());
+        assertEquals(2, query.getKnnQuery().filter().size());
         assertTrue(query.getKnnQuery().filter().get(0).isTerm());
         assertEquals("metadata.env", query.getKnnQuery().filter().get(0).term().field());
+        assertEquals(
+                "metadata.chunk_enable",
+                query.getKnnQuery().filter().get(1).term().field());
+    }
+
+    @Test
+    void shouldApplyConfiguredActiveDatasetVersionToVectorSearch() {
+        ElasticsearchTemplate template = mock(ElasticsearchTemplate.class);
+        KubeOnCallProperties properties = new KubeOnCallProperties();
+        properties.getRag().setActiveDatasetVersion("2026-07");
+        ElasticsearchKnowledgeRepository repository = repository(template, properties);
+        @SuppressWarnings("unchecked")
+        SearchHits<EsKnowledgeDocumentEntity> hits = mock(SearchHits.class);
+        when(hits.stream()).thenReturn(Stream.empty());
+        when(template.search(
+                        any(org.springframework.data.elasticsearch.core.query.Query.class),
+                        eq(EsKnowledgeDocumentEntity.class),
+                        any(org.springframework.data.elasticsearch.core.mapping.IndexCoordinates.class)))
+                .thenReturn(hits);
+
+        repository.searchVector(new RetrievalRequest("cpu", Map.of(), 1), 1, List.of(0.1, 0.2));
+
+        ArgumentCaptor<org.springframework.data.elasticsearch.core.query.Query> queryCaptor =
+                ArgumentCaptor.forClass(org.springframework.data.elasticsearch.core.query.Query.class);
+        verify(template)
+                .search(
+                        queryCaptor.capture(),
+                        eq(EsKnowledgeDocumentEntity.class),
+                        any(org.springframework.data.elasticsearch.core.mapping.IndexCoordinates.class));
+        NativeQuery query = (NativeQuery) queryCaptor.getValue();
+        assertEquals(2, query.getKnnQuery().filter().size());
+        assertEquals(
+                "metadata.chunk_enable",
+                query.getKnnQuery().filter().get(0).term().field());
+        assertEquals(
+                "metadata.dataset_version",
+                query.getKnnQuery().filter().get(1).term().field());
     }
 
     private static ElasticsearchKnowledgeRepository repository(
