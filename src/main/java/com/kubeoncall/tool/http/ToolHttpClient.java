@@ -4,6 +4,7 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.net.http.HttpTimeoutException;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.LinkedHashMap;
@@ -91,8 +92,9 @@ public class ToolHttpClient {
             result.put("status", "failed");
             result.put("httpStatus", 500);
             result.put("latencyMs", System.currentTimeMillis() - startedAt);
-            result.put("errorType", "ToolTransportError");
-            result.put("errorMessage", "Tool request failed");
+            boolean timedOut = ex instanceof HttpTimeoutException;
+            result.put("errorType", timedOut ? "TimeoutError" : "ToolTransportError");
+            result.put("errorMessage", timedOut ? "Tool request timed out" : "Tool request failed");
             return result;
         }
     }

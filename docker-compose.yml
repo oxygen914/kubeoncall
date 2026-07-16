@@ -13,8 +13,15 @@ services:
       RAG_EMBEDDING_MODEL: ${RAG_EMBEDDING_MODEL:-text-embedding-v4}
       RAG_EMBEDDING_VERSION: ${RAG_EMBEDDING_VERSION:-v1}
       RAG_EMBEDDING_DIMENSIONS: ${RAG_EMBEDDING_DIMENSIONS:-1536}
-      RAG_RERANK_ENDPOINT: ${RAG_RERANK_ENDPOINT:-http://host.docker.internal:18086/v1/rerank}
-      RAG_RERANK_MODEL: ${RAG_RERANK_MODEL:-cross-encoder}
+      RAG_EMBEDDING_TIMEOUT_MILLIS: ${RAG_EMBEDDING_TIMEOUT_MILLIS:-3000}
+      RAG_RERANK_API_KEY: ${RAG_RERANK_API_KEY:-${ALIYUN_API_KEY:-}}
+      RAG_RERANK_ENDPOINT: ${RAG_RERANK_ENDPOINT:-https://dashscope.aliyuncs.com/api/v1/services/rerank/text-rerank/text-rerank}
+      RAG_RERANK_MODEL: ${RAG_RERANK_MODEL:-qwen3-rerank}
+      RAG_RERANK_TIMEOUT_MILLIS: ${RAG_RERANK_TIMEOUT_MILLIS:-3000}
+      MEMORY_LLM_EXTRACTION_ENABLED: ${MEMORY_LLM_EXTRACTION_ENABLED:-false}
+      MEMORY_LLM_EXTRACTION_ENDPOINT: ${MEMORY_LLM_EXTRACTION_ENDPOINT:-https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions}
+      MEMORY_LLM_EXTRACTION_API_KEY: ${MEMORY_LLM_EXTRACTION_API_KEY:-${ALIYUN_API_KEY:-}}
+      MEMORY_LLM_EXTRACTION_MODEL: ${MEMORY_LLM_EXTRACTION_MODEL:-qwen-plus}
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
       MCP_ENDPOINT: ${MCP_ENDPOINT:-http://host.docker.internal:18080/mcp/call}
@@ -98,9 +105,6 @@ services:
   node-exporter:
     profiles: [alerting]
     image: prom/node-exporter:v1.8.2
-    command: ["--path.rootfs=/host"]
-    volumes:
-      - /:/host:ro,rslave
     ports:
       - "9100:9100"
 

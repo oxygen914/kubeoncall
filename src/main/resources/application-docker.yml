@@ -15,15 +15,17 @@ kubeoncall:
     es-knn-enabled: true
     embedding-enabled: true
     mock-embedding-enabled: false
-    embedding-endpoint: ${RAG_EMBEDDING_ENDPOINT:http://host.docker.internal:18086/v1/embeddings}
-    embedding-api-key: ${RAG_EMBEDDING_API_KEY:}
-    embedding-model: ${RAG_EMBEDDING_MODEL:text-embedding-3-small}
+    embedding-endpoint: ${RAG_EMBEDDING_ENDPOINT:https://dashscope.aliyuncs.com/compatible-mode/v1/embeddings}
+    embedding-api-key: ${RAG_EMBEDDING_API_KEY:${ALIYUN_API_KEY:}}
+    embedding-model: ${RAG_EMBEDDING_MODEL:text-embedding-v4}
     embedding-version: ${RAG_EMBEDDING_VERSION:v1}
     embedding-dimensions: ${RAG_EMBEDDING_DIMENSIONS:1536}
+    embedding-timeout-millis: ${RAG_EMBEDDING_TIMEOUT_MILLIS:3000}
     cross-encoder-enabled: true
-    cross-encoder-endpoint: ${RAG_RERANK_ENDPOINT:http://host.docker.internal:18086/v1/rerank}
-    cross-encoder-api-key: ${RAG_RERANK_API_KEY:}
-    cross-encoder-model: ${RAG_RERANK_MODEL:cross-encoder}
+    cross-encoder-endpoint: ${RAG_RERANK_ENDPOINT:https://dashscope.aliyuncs.com/api/v1/services/rerank/text-rerank/text-rerank}
+    cross-encoder-api-key: ${RAG_RERANK_API_KEY:${ALIYUN_API_KEY:}}
+    cross-encoder-model: ${RAG_RERANK_MODEL:qwen3-rerank}
+    cross-encoder-timeout-millis: ${RAG_RERANK_TIMEOUT_MILLIS:3000}
     runbook-bootstrap-enabled: true
   storage:
     minio:
@@ -51,3 +53,8 @@ kubeoncall:
     recovery-health-check-endpoint: ${ALARM_RECOVERY_HEALTH_CHECK_ENDPOINT:http://host.docker.internal:18088/api/health/alarm-recovery}
     recovery-health-check-timeout-millis: ${ALARM_RECOVERY_HEALTH_CHECK_TIMEOUT_MILLIS:3000}
     recovery-confirmation-timeout-seconds: ${ALARM_RECOVERY_CONFIRMATION_TIMEOUT_SECONDS:86400}
+  memory:
+    llm-extraction-enabled: ${MEMORY_LLM_EXTRACTION_ENABLED:false}
+    llm-extraction-endpoint: ${MEMORY_LLM_EXTRACTION_ENDPOINT:https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions}
+    llm-extraction-api-key: ${MEMORY_LLM_EXTRACTION_API_KEY:${ALIYUN_API_KEY:}}
+    llm-extraction-model: ${MEMORY_LLM_EXTRACTION_MODEL:qwen-plus}

@@ -44,7 +44,10 @@ public class RerankService {
                 ? List.of()
                 : documents.stream().limit(rerankTopN).toList();
         boolean crossEncoderEnabled = properties.getRag().isCrossEncoderEnabled();
-        Map<String, Double> crossEncoderScores = crossEncoderEnabled ? crossEncoderScores(query, candidates) : Map.of();
+        CrossEncoderAttempt crossEncoderAttempt = crossEncoderEnabled
+                ? crossEncoderScores(query, candidates)
+                : new CrossEncoderAttempt(Map.of(), "Cross-encoder disabled by configuration");
+        Map<String, Double> crossEncoderScores = crossEncoderAttempt.scores();
         boolean crossEncoderApplied = !crossEncoderScores.isEmpty();
 
         Map<String, Integer> scoreMap = new LinkedHashMap<>();
@@ -88,9 +91,7 @@ public class RerankService {
         diagnostics.put(
                 "crossEncoderFallbackReason",
                 crossEncoderEnabled
-                        ? (crossEncoderApplied
-                                ? null
-                                : "Cross-encoder adapter unavailable or returned no scores; preserved retrieval order")
+                        ? (crossEncoderApplied ? null : crossEncoderAttempt.fallbackReason())
                         : "Cross-encoder disabled by configuration");
         diagnostics.put(
                 "rerankStrategy",
@@ -121,7 +122,7 @@ public class RerankService {
         return trace;
     }
 
-    private Map<String, Double> crossEncoderScores(String query, List<KnowledgeDocument> documents) {
+    private CrossEncoderAttempt crossEncoderScores(String query, List<KnowledgeDocument> documents) {
         for (CrossEncoderReranker reranker : crossEncoderRerankers) {
             if (!reranker.available()) {
                 continue;
@@ -129,17 +130,22 @@ public class RerankService {
             try {
                 Map<String, Double> scores = reranker.score(query, documents);
                 if (scores != null && !scores.isEmpty()) {
-                    return scores;
+                    return new CrossEncoderAttempt(scores, null);
                 }
+                return new CrossEncoderAttempt(Map.of(), "Cross-encoder returned no scores; preserved retrieval order");
             } catch (RuntimeException ex) {
                 log.warn(
                         "Cross-encoder rerank failed; preserving retrieval order: adapter={}, errorType={}",
                         reranker.getClass().getSimpleName(),
                         ex.getClass().getSimpleName());
-                return Map.of();
+                String reason = ex instanceof RagProviderException
+                        ? ex.getMessage()
+                        : "Cross-encoder adapter failed: errorType="
+                                + ex.getClass().getSimpleName();
+                return new CrossEncoderAttempt(Map.of(), reason + "; preserved retrieval order");
             }
         }
-        return Map.of();
+        return new CrossEncoderAttempt(Map.of(), "No available cross-encoder adapter; preserved retrieval order");
     }
 
     private int score(Set<String> tokens, KnowledgeDocument document) {
@@ -172,4 +178,6 @@ public class RerankService {
     }
 
     public record RerankTrace(List<KnowledgeDocument> documents, Map<String, Object> diagnostics) {}
+
+    private record CrossEncoderAttempt(Map<String, Double> scores, String fallbackReason) {}
 }

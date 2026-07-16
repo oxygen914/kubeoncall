@@ -3,12 +3,12 @@ set -eu
 
 image="${PROMETHEUS_IMAGE:-prom/prometheus:v2.53.1}"
 
-docker run --rm \
+docker run --rm --entrypoint promtool \
   -v "$(pwd)/deploy/prometheus:/etc/prometheus:ro" \
   "$image" \
-  promtool check rules /etc/prometheus/rules/kubeoncall.yml
+  check rules /etc/prometheus/rules/kubeoncall.yml
 
-docker run --rm \
+docker run --rm --entrypoint promtool \
   -v "$(pwd)/deploy/prometheus:/etc/prometheus:ro" \
   "$image" \
-  promtool test rules /etc/prometheus/tests/kubeoncall.test.yml
+  test rules /etc/prometheus/tests/kubeoncall.test.yml

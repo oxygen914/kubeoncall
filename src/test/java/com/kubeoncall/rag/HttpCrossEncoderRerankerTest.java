@@ -1,6 +1,9 @@
 package com.kubeoncall.rag;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyMap;
 import static org.mockito.ArgumentMatchers.eq;
@@ -60,5 +63,57 @@ class HttpCrossEncoderRerankerTest {
         assertEquals(
                 List.of("A\ncontent A", "B\ncontent B"), bodyCaptor.getValue().get("documents"));
         assertEquals("Bearer rerank-key", headersCaptor.getValue().get("Authorization"));
+    }
+
+    @Test
+    void shouldReadDashScopeOutputEnvelope() {
+        ToolHttpClient httpClient = mock(ToolHttpClient.class);
+        KubeOnCallProperties properties = new KubeOnCallProperties();
+        properties.getRag().setCrossEncoderEnabled(true);
+        properties
+                .getRag()
+                .setCrossEncoderEndpoint(
+                        "https://dashscope.aliyuncs.com/api/v1/services/rerank/text-rerank/text-rerank");
+        when(httpClient.post(any(), anyMap(), anyInt(), anyMap(), anyMap()))
+                .thenReturn(Map.of(
+                        "status",
+                        "success",
+                        "response",
+                        Map.of("output", Map.of("results", List.of(Map.of("index", 0, "relevance_score", 0.8))))));
+        List<KnowledgeDocument> documents =
+                List.of(new KnowledgeDocument("doc-a", "A", "content A", "manual", Map.of(), Instant.now()));
+
+        assertEquals(
+                Map.of("doc-a", 0.8), new HttpCrossEncoderReranker(httpClient, properties).score("cpu", documents));
+
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<Map<String, Object>> bodyCaptor = ArgumentCaptor.forClass(Map.class);
+        verify(httpClient).post(any(), bodyCaptor.capture(), anyInt(), anyMap(), anyMap());
+        assertEquals("cross-encoder", bodyCaptor.getValue().get("model"));
+        assertEquals(
+                Map.of("query", "cpu", "documents", List.of("A\ncontent A")),
+                bodyCaptor.getValue().get("input"));
+        assertEquals(
+                Map.of("top_n", 1, "return_documents", false),
+                bodyCaptor.getValue().get("parameters"));
+    }
+
+    @Test
+    void shouldExposeSafeProviderFailureForFallbackAudit() {
+        ToolHttpClient httpClient = mock(ToolHttpClient.class);
+        KubeOnCallProperties properties = new KubeOnCallProperties();
+        properties.getRag().setCrossEncoderEnabled(true);
+        properties.getRag().setCrossEncoderEndpoint("http://rerank/v1/rerank");
+        when(httpClient.post(any(), anyMap(), anyInt(), anyMap(), anyMap()))
+                .thenReturn(Map.of("status", "failed", "errorType", "TimeoutError", "httpStatus", 500));
+        KnowledgeDocument document =
+                new KnowledgeDocument("doc-a", "A", "content A", "manual", Map.of(), Instant.now());
+
+        RagProviderException failure =
+                assertThrows(RagProviderException.class, () -> new HttpCrossEncoderReranker(httpClient, properties)
+                        .score("cpu", List.of(document)));
+
+        assertTrue(failure.getMessage().contains("TimeoutError"));
+        assertTrue(failure.getMessage().contains("httpStatus=500"));
     }
 }

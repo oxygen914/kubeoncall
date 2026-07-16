@@ -67,12 +67,14 @@ class AlertWorkflowFactoryTest {
     void nodeMvpWorkflowShouldExcludeRagTicketAndSilence() {
         AlertWorkflowFactory factory = factory();
 
-        List<String> nodeNames = factory.buildWorkflow("node-mvp").stream()
-                .map(AlertWorkflowDefinition::name)
-                .toList();
+        List<AlertWorkflowDefinition> workflow = factory.buildWorkflow("node-mvp");
+        List<String> nodeNames =
+                workflow.stream().map(AlertWorkflowDefinition::name).toList();
 
         assertIterableEquals(
                 List.of("deviceInfoNode", "stateCompareNode", "resultPushNode", "notificationNode"), nodeNames);
+        assertIterableEquals(List.of(), workflow.get(2).dependencies());
+        assertIterableEquals(List.of("resultPushNode"), workflow.get(3).dependencies());
     }
 
     @Test

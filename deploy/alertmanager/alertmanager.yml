@@ -4,8 +4,8 @@ global:
 route:
   receiver: kubeoncall-webhook
   group_by: [cluster, node, alertname]
-  group_wait: 30s
-  group_interval: 5m
+  group_wait: 15s
+  group_interval: 15s
   repeat_interval: 4h
 
 receivers:

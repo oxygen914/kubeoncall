@@ -1,6 +1,8 @@
 package com.kubeoncall.rag;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyMap;
 import static org.mockito.ArgumentMatchers.eq;
@@ -54,5 +56,24 @@ class HttpEmbeddingClientTest {
         assertEquals("cpu high", bodyCaptor.getValue().get("input"));
         assertEquals(3, bodyCaptor.getValue().get("dimensions"));
         assertEquals("Bearer test-key", headersCaptor.getValue().get("Authorization"));
+    }
+
+    @Test
+    void shouldRejectEmbeddingWithUnexpectedDimension() {
+        ToolHttpClient httpClient = mock(ToolHttpClient.class);
+        KubeOnCallProperties properties = new KubeOnCallProperties();
+        properties.getRag().setEmbeddingEnabled(true);
+        properties.getRag().setEmbeddingEndpoint("http://embedding/v1/embeddings");
+        properties.getRag().setEmbeddingDimensions(3);
+        when(httpClient.post(eq("http://embedding/v1/embeddings"), anyMap(), anyInt(), anyMap(), anyMap()))
+                .thenReturn(Map.of(
+                        "status",
+                        "success",
+                        "response",
+                        Map.of("data", List.of(Map.of("embedding", List.of(0.1, 0.2))))));
+
+        RagProviderException failure = assertThrows(
+                RagProviderException.class, () -> new HttpEmbeddingClient(httpClient, properties).embed("cpu high"));
+        assertTrue(failure.getMessage().contains("expected=3, actual=2"));
     }
 }

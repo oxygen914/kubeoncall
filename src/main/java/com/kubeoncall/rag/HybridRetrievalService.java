@@ -88,7 +88,8 @@ public class HybridRetrievalService {
                 reasons.add("Applied vector retrieval over content semantics");
             } catch (RuntimeException ex) {
                 vectorFallback = true;
-                vectorFallbackReason = "Vector retrieval unavailable";
+                vectorFallbackReason =
+                        ex instanceof RagProviderException ? ex.getMessage() : "Vector retrieval unavailable";
                 vectorSource = "fallback";
                 reasons.add("Vector retrieval failed and fell back to lexical");
                 log.warn(

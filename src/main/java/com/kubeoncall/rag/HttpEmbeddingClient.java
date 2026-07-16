@@ -4,6 +4,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 import com.kubeoncall.common.config.KubeOnCallProperties;
@@ -11,6 +13,8 @@ import com.kubeoncall.tool.http.ToolHttpClient;
 
 @Component
 public class HttpEmbeddingClient implements EmbeddingClient {
+
+    private static final Logger log = LoggerFactory.getLogger(HttpEmbeddingClient.class);
 
     private final ToolHttpClient toolHttpClient;
     private final KubeOnCallProperties properties;
@@ -43,15 +47,15 @@ public class HttpEmbeddingClient implements EmbeddingClient {
                 headers,
                 Map.of("targetSystem", "embedding", "tool", "embedding.embed"));
         if (!"success".equalsIgnoreCase(String.valueOf(response.get("status")))) {
-            return List.of();
+            throw RagProviderException.fromResponse("embedding", response);
         }
         Object body = response.getOrDefault("response", response);
         if (body instanceof Map<?, ?> map) {
             List<Double> openAiEmbedding = openAiEmbedding(map);
             if (!openAiEmbedding.isEmpty()) {
-                return openAiEmbedding;
+                return validateDimensions(openAiEmbedding);
             }
-            return vectorValue(map.get("embedding"));
+            return validateDimensions(vectorValue(map.get("embedding")));
         }
         return List.of();
     }
@@ -81,5 +85,18 @@ public class HttpEmbeddingClient implements EmbeddingClient {
 
     private List<Double> vectorValue(Object raw) {
         return raw instanceof List<?> list ? toDoubles(list) : List.of();
+    }
+
+    private List<Double> validateDimensions(List<Double> vector) {
+        int expected = properties.getRag().getEmbeddingDimensions();
+        if (vector.isEmpty() || expected <= 0 || vector.size() == expected) {
+            return vector;
+        }
+        log.warn(
+                "Embedding response dimension mismatch; falling back to lexical retrieval: expectedDimensions={}, actualDimensions={}",
+                expected,
+                vector.size());
+        throw new RagProviderException(
+                "embedding dimension mismatch: expected=" + expected + ", actual=" + vector.size());
     }
 }

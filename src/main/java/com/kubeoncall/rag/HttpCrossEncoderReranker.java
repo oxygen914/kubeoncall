@@ -43,34 +43,26 @@ public class HttpCrossEncoderReranker implements CrossEncoderReranker {
                         || properties.getRag().getCrossEncoderApiKey().isBlank()
                 ? Map.of()
                 : Map.of("Authorization", "Bearer " + properties.getRag().getCrossEncoderApiKey());
+        int topN = Math.min(documents.size(), Math.max(1, properties.getRag().getRerankTopN()));
         Map<String, Object> response = toolHttpClient.post(
                 properties.getRag().getCrossEncoderEndpoint(),
-                Map.of(
-                        "model",
-                        properties.getRag().getCrossEncoderModel(),
-                        "query",
-                        query == null ? "" : query,
-                        "documents",
-                        items,
-                        "top_n",
-                        Math.min(
-                                documents.size(),
-                                Math.max(1, properties.getRag().getRerankTopN()))),
+                requestBody(query, items, topN),
                 properties.getRag().getCrossEncoderTimeoutMillis(),
                 headers,
                 Map.of("targetSystem", "cross-encoder", "tool", "crossEncoder.rerank"));
         if (!"success".equalsIgnoreCase(String.valueOf(response.get("status")))) {
-            return Map.of();
+            throw RagProviderException.fromResponse("cross-encoder", response);
         }
         Object body = response.get("response");
         if (!(body instanceof Map<?, ?> bodyMap)) {
             return Map.of();
         }
-        Map<String, Double> standardResult = parseStandardResults(bodyMap.get("results"), documents);
+        Map<?, ?> resultBody = resultBody(bodyMap);
+        Map<String, Double> standardResult = parseStandardResults(resultBody.get("results"), documents);
         if (!standardResult.isEmpty()) {
             return standardResult;
         }
-        Object scores = bodyMap.get("scores");
+        Object scores = resultBody.get("scores");
         Map<String, Double> result = new LinkedHashMap<>();
         if (scores instanceof Map<?, ?> scoreMap) {
             scoreMap.forEach((key, value) -> {
@@ -80,6 +72,39 @@ public class HttpCrossEncoderReranker implements CrossEncoderReranker {
             });
         }
         return result;
+    }
+
+    private Map<String, Object> requestBody(String query, List<String> documents, int topN) {
+        String normalizedQuery = query == null ? "" : query;
+        if (isDashScopeNativeEndpoint()) {
+            return Map.of(
+                    "model",
+                    properties.getRag().getCrossEncoderModel(),
+                    "input",
+                    Map.of("query", normalizedQuery, "documents", documents),
+                    "parameters",
+                    Map.of("top_n", topN, "return_documents", false));
+        }
+        return Map.of(
+                "model",
+                properties.getRag().getCrossEncoderModel(),
+                "query",
+                normalizedQuery,
+                "documents",
+                documents,
+                "top_n",
+                topN);
+    }
+
+    private boolean isDashScopeNativeEndpoint() {
+        String endpoint = properties.getRag().getCrossEncoderEndpoint();
+        return endpoint != null && endpoint.contains("dashscope.aliyuncs.com/api/v1/services/rerank/");
+    }
+
+    /** DashScope returns the standard result list below an {@code output} object. */
+    private Map<?, ?> resultBody(Map<?, ?> response) {
+        Object output = response.get("output");
+        return output instanceof Map<?, ?> map ? map : response;
     }
 
     private Map<String, Double> parseStandardResults(Object rawResults, List<KnowledgeDocument> documents) {
