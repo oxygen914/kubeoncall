@@ -25,6 +25,7 @@ class ContextCompressorTest {
         String large = "payment-service 诊断上下文 ".repeat(120);
         state.getContext().put("skillPrompt", large);
         state.getContext().put("memoryContext", large);
+        state.getContext().put("ragContext", large);
         state.getContext().put("sessionContext", large);
         state.getContext().put("plannerKnowledge", new LinkedHashMap<>(Map.of("skillPrompt", large)));
 
@@ -33,6 +34,7 @@ class ContextCompressorTest {
         int planningTokens = tokenBudget.estimateTokens(
                         String.valueOf(state.getContext().get("skillPrompt")))
                 + tokenBudget.estimateTokens(String.valueOf(state.getContext().get("memoryContext")))
+                + tokenBudget.estimateTokens(String.valueOf(state.getContext().get("ragContext")))
                 + tokenBudget.estimateTokens(String.valueOf(state.getContext().get("sessionContext")));
         assertTrue(planningTokens <= 120);
         @SuppressWarnings("unchecked")
@@ -68,6 +70,7 @@ class ContextCompressorTest {
         String large = "payment-service diagnostic context ".repeat(80);
         state.getContext().put("skillPrompt", large);
         state.getContext().put("memoryContext", large);
+        state.getContext().put("ragContext", large);
         state.getContext().put("sessionContext", large);
         for (int index = 0; index < 20; index++) {
             state.addObservation("observation " + index + " " + large);
@@ -81,8 +84,11 @@ class ContextCompressorTest {
                         .sum()
                 + tokenBudget.estimateTokens(String.valueOf(state.getContext().get("skillPrompt")))
                 + tokenBudget.estimateTokens(String.valueOf(state.getContext().get("memoryContext")))
+                + tokenBudget.estimateTokens(String.valueOf(state.getContext().get("ragContext")))
                 + tokenBudget.estimateTokens(String.valueOf(state.getContext().get("sessionContext")));
-        assertTrue(combinedTokens <= 180);
+        assertTrue(
+                combinedTokens <= 180,
+                () -> "combined token count=" + combinedTokens + ", state=" + state.getContext());
         @SuppressWarnings("unchecked")
         Map<String, Object> trace = (Map<String, Object>) state.getContext().get("unifiedContextBudget");
         assertEquals(180, trace.get("budgetTokens"));

@@ -16,12 +16,14 @@ public class PlannerContextAssembler {
         String sessionText = contextText(state, "sessionContext");
         String memoryText = contextText(state, "memoryContext");
         String skillText = contextText(state, "skillPrompt");
-        if (sessionText.isBlank() && memoryText.isBlank() && skillText.isBlank()) {
+        String ragText = contextText(state, "ragContext");
+        if (sessionText.isBlank() && memoryText.isBlank() && skillText.isBlank() && ragText.isBlank()) {
             return currentRequest;
         }
         StringBuilder builder = new StringBuilder();
         appendContext(builder, skillText);
         appendContext(builder, memoryText);
+        appendContext(builder, ragText);
         appendContext(builder, sessionText);
         builder.append("\nCurrent user: ").append(currentRequest == null ? "" : currentRequest);
         return builder.toString();
@@ -118,6 +120,7 @@ public class PlannerContextAssembler {
         putIfPresent(knowledge, state, "activatedSkillToolWhitelist");
         putIfPresent(knowledge, state, "activatedSkillMaxRisk");
         putIfPresent(knowledge, state, "skillPrompt");
+        putIfPresent(knowledge, state, "ragContext");
     }
 
     private void putIfPresent(Map<String, Object> knowledge, GraphState state, String key) {

@@ -10,6 +10,7 @@ import org.springframework.stereotype.Service;
 
 import com.kubeoncall.common.config.KubeOnCallProperties;
 import com.kubeoncall.domain.task.RiskLevel;
+import com.kubeoncall.memory.TokenBudget;
 import com.kubeoncall.service.KubeOnCallMetricsService;
 
 @Service
@@ -19,16 +20,19 @@ public class SkillActivationService {
     private final SkillRegistry registry;
     private final SkillMatcher matcher;
     private final KubeOnCallMetricsService metricsService;
+    private final TokenBudget tokenBudget;
 
     public SkillActivationService(
             KubeOnCallProperties properties,
             SkillRegistry registry,
             SkillMatcher matcher,
-            KubeOnCallMetricsService metricsService) {
+            KubeOnCallMetricsService metricsService,
+            TokenBudget tokenBudget) {
         this.properties = properties;
         this.registry = registry;
         this.matcher = matcher;
         this.metricsService = metricsService;
+        this.tokenBudget = tokenBudget;
     }
 
     public SkillActivation activate(String request, Map<String, Object> context) {
@@ -108,11 +112,9 @@ public class SkillActivationService {
             builder.append(skill.body()).append('\n');
         }
         String prompt = builder.toString().trim();
-        int maxChars = Math.max(500, properties.getSkill().getPromptMaxChars());
-        if (prompt.length() <= maxChars) {
-            return prompt;
-        }
-        return prompt.substring(0, maxChars - 3) + "...";
+        int configured = Math.max(64, properties.getSkill().getPromptTokenBudget());
+        int unified = Math.max(128, properties.getMemory().getUnifiedContextTokenBudget());
+        return tokenBudget.compactText(prompt, Math.min(configured, Math.max(64, unified / 3)));
     }
 
     private void recordActivation(boolean active, long count) {

@@ -13,6 +13,7 @@ import org.junit.jupiter.api.Test;
 
 import com.kubeoncall.common.config.KubeOnCallProperties;
 import com.kubeoncall.domain.task.RiskLevel;
+import com.kubeoncall.memory.TokenBudget;
 import com.kubeoncall.service.KubeOnCallMetricsService;
 
 class SkillActivationServiceTest {
@@ -59,7 +60,8 @@ class SkillActivationServiceTest {
         SkillFrontmatterParser parser = new SkillFrontmatterParser();
         SkillRegistry registry = new SkillRegistry(properties, parser, enabledStateStore());
         registry.load();
-        return new SkillActivationService(properties, registry, new SkillMatcher(properties), metricsService);
+        return new SkillActivationService(
+                properties, registry, new SkillMatcher(properties), metricsService, new TokenBudget());
     }
 
     private static SkillStateStore enabledStateStore() {

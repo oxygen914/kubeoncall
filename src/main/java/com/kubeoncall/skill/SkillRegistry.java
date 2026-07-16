@@ -80,8 +80,9 @@ public class SkillRegistry {
                     String content = resource.getContentAsString(StandardCharsets.UTF_8);
                     String path = resource.getURI().toString();
                     Skill skill = parser.parse(resource.getFilename(), content, source, path);
-                    target.put(skill.id(), skill);
-                    loaded++;
+                    if (acceptSkill(target, skill, errors)) {
+                        loaded++;
+                    }
                 } catch (Exception ex) {
                     String resourceName = resource.getFilename() == null ? "unknown" : resource.getFilename();
                     errors.add(source + ":" + resourceName + ": skill load failed");
@@ -100,6 +101,72 @@ public class SkillRegistry {
                     ex.getClass().getSimpleName());
         }
         return loaded;
+    }
+
+    private boolean acceptSkill(Map<String, Skill> target, Skill candidate, List<String> errors) {
+        Skill existing = target.get(candidate.id());
+        if (existing == null) {
+            target.put(candidate.id(), candidate);
+            return true;
+        }
+        SkillVersionConflictPolicy policy =
+                SkillVersionConflictPolicy.from(properties.getSkill().getVersionConflictPolicy());
+        if (policy == SkillVersionConflictPolicy.REJECT) {
+            errors.add("CONFLICT:" + candidate.id() + ": rejected by version conflict policy");
+            return false;
+        }
+        Skill selected = policy == SkillVersionConflictPolicy.HIGHEST_VERSION
+                ? highestVersion(existing, candidate)
+                : preferProjectThenVersion(existing, candidate);
+        target.put(candidate.id(), selected);
+        return selected == candidate;
+    }
+
+    private Skill preferProjectThenVersion(Skill existing, Skill candidate) {
+        if (candidate.source() == SkillSource.PROJECT && existing.source() != SkillSource.PROJECT) {
+            return candidate;
+        }
+        if (existing.source() == SkillSource.PROJECT && candidate.source() != SkillSource.PROJECT) {
+            return existing;
+        }
+        return highestVersion(existing, candidate);
+    }
+
+    private Skill highestVersion(Skill existing, Skill candidate) {
+        int comparison = compareVersion(candidate.version(), existing.version());
+        if (comparison > 0) {
+            return candidate;
+        }
+        if (comparison < 0) {
+            return existing;
+        }
+        return candidate.source() == SkillSource.PROJECT ? candidate : existing;
+    }
+
+    private int compareVersion(String left, String right) {
+        String[] leftParts = normalizedVersion(left).split("\\.");
+        String[] rightParts = normalizedVersion(right).split("\\.");
+        int length = Math.max(leftParts.length, rightParts.length);
+        for (int index = 0; index < length; index++) {
+            int leftValue = index < leftParts.length ? parseVersionPart(leftParts[index]) : 0;
+            int rightValue = index < rightParts.length ? parseVersionPart(rightParts[index]) : 0;
+            if (leftValue != rightValue) {
+                return Integer.compare(leftValue, rightValue);
+            }
+        }
+        return 0;
+    }
+
+    private String normalizedVersion(String version) {
+        return version == null ? "0" : version.trim().replaceFirst("^[vV]", "").replaceAll("[^0-9.]", "");
+    }
+
+    private int parseVersionPart(String part) {
+        try {
+            return Integer.parseInt(part.isBlank() ? "0" : part);
+        } catch (NumberFormatException ex) {
+            return 0;
+        }
     }
 
     public List<Skill> all() {

@@ -14,7 +14,8 @@ import com.kubeoncall.domain.graph.GraphState;
 @Component
 public class ContextCompressor {
 
-    private static final List<String> PLANNING_CONTEXT_KEYS = List.of("skillPrompt", "memoryContext", "sessionContext");
+    private static final List<String> PLANNING_CONTEXT_KEYS =
+            List.of("skillPrompt", "memoryContext", "ragContext", "sessionContext");
 
     private final KubeOnCallProperties properties;
     private final TokenBudget tokenBudget;
@@ -44,7 +45,7 @@ public class ContextCompressor {
             return;
         }
 
-        int perSectionBudget = Math.max(32, budget / values.size());
+        int perSectionBudget = Math.max(1, budget / values.size());
         List<String> compressedKeys = new ArrayList<>();
         values.forEach((key, value) -> {
             String compressed = tokenBudget.compactText(value, perSectionBudget);
@@ -137,7 +138,36 @@ public class ContextCompressor {
         compactObservationsToBudget(state, remainingForObservations);
 
         int after = planningTokens(state) + observationTokens(state);
+        if (after > budget) {
+            forceCompactAllContextSections(state, budget);
+            after = planningTokens(state) + observationTokens(state);
+        }
         state.getContext().put("unifiedContextBudget", unifiedTrace(before, after, budget, true));
+    }
+
+    private void forceCompactAllContextSections(GraphState state, int budget) {
+        List<String> populatedKeys = PLANNING_CONTEXT_KEYS.stream()
+                .filter(key -> state.getContext().get(key) != null)
+                .filter(key -> !String.valueOf(state.getContext().get(key)).isBlank())
+                .toList();
+        int sectionCount = populatedKeys.size() + (state.getObservations().isEmpty() ? 0 : 1);
+        if (sectionCount == 0) {
+            return;
+        }
+        int perSectionBudget = Math.max(1, budget / sectionCount);
+        for (String key : populatedKeys) {
+            state.getContext()
+                    .put(
+                            key,
+                            tokenBudget.compactText(
+                                    String.valueOf(state.getContext().get(key)), perSectionBudget));
+        }
+        if (!state.getObservations().isEmpty()) {
+            List<String> original = List.copyOf(state.getObservations());
+            state.getObservations().clear();
+            state.getObservations().add(summarizeObservations(original, perSectionBudget));
+        }
+        syncPlannerKnowledge(state);
     }
 
     private void compactPlanningToBudget(GraphState state, int budget) {

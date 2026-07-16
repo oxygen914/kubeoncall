@@ -19,6 +19,7 @@ import com.kubeoncall.domain.task.RiskLevel;
 import com.kubeoncall.domain.task.TaskType;
 import com.kubeoncall.skill.SkillActivation;
 import com.kubeoncall.skill.SkillActivationService;
+import com.kubeoncall.skill.SkillLoadTool;
 
 @Service
 public class PlannerLlmService {
@@ -31,16 +32,19 @@ public class PlannerLlmService {
     private final ObjectMapper objectMapper;
     private final KubeOnCallProperties properties;
     private final SkillActivationService skillActivationService;
+    private final SkillLoadTool skillLoadTool;
 
     public PlannerLlmService(
             ApplicationContext applicationContext,
             ObjectMapper objectMapper,
             KubeOnCallProperties properties,
-            SkillActivationService skillActivationService) {
+            SkillActivationService skillActivationService,
+            SkillLoadTool skillLoadTool) {
         this.applicationContext = applicationContext;
         this.objectMapper = objectMapper;
         this.properties = properties;
         this.skillActivationService = skillActivationService;
+        this.skillLoadTool = skillLoadTool;
     }
 
     public Optional<PlannerLlmDecision> plan(String request, Map<String, Object> plannerKnowledge) {
@@ -76,6 +80,7 @@ public class PlannerLlmService {
                     "activatedSkillMaxRisk",
                     activation.maxRisk() == null ? null : activation.maxRisk().name());
             expandedKnowledge.put("skillPrompt", activation.prompt());
+            expandedKnowledge.put("loadedSkills", loadRequestedSkills(activation.skillIds()));
             String refinedResponse =
                     invokeChatClient(chatClient, buildSystemPrompt(), buildUserPrompt(request, expandedKnowledge));
             Optional<PlannerLlmDecision> refined = refinedResponse == null || refinedResponse.isBlank()
@@ -259,6 +264,7 @@ public class PlannerLlmService {
                 Prefer safe read-only diagnostics unless the user clearly asks for a change.
                 Skills are operational hints. Use activated skill bodies only after validating current state.
                 Set requestedSkills to registered skill ids when a listed skill is relevant; otherwise use an empty array.
+                Each requested id is resolved through the local read-only load_skill tool before refinement.
                 """ + "\n\n" + skillIndex();
     }
 
@@ -268,6 +274,18 @@ public class PlannerLlmService {
             return SkillActivation.empty();
         }
         return skillActivationService.activate(request, context, requestedSkillIds);
+    }
+
+    private List<Map<String, Object>> loadRequestedSkills(List<String> skillIds) {
+        if (skillIds == null || skillIds.isEmpty()) {
+            return List.of();
+        }
+        int perSkillBudget =
+                Math.max(32, properties.getMemory().getUnifiedContextTokenBudget() / Math.max(4, skillIds.size() + 2));
+        return skillIds.stream()
+                .map(skillId -> skillLoadTool.load(skillId, perSkillBudget))
+                .filter(result -> "success".equals(String.valueOf(result.get("status"))))
+                .toList();
     }
 
     private String buildUserPrompt(String request, Map<String, Object> plannerKnowledge) throws Exception {

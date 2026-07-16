@@ -8,6 +8,8 @@ class SkillProperties {
     private int maxActiveSkills = 3;
     private int activationThreshold = 3;
     private int promptMaxChars = 4000;
+    private int promptTokenBudget = 900;
+    private String versionConflictPolicy = "PREFER_PROJECT";
 
     public boolean isEnabled() {
         return enabled;
@@ -55,5 +57,21 @@ class SkillProperties {
 
     public void setPromptMaxChars(int promptMaxChars) {
         this.promptMaxChars = promptMaxChars;
+    }
+
+    public int getPromptTokenBudget() {
+        return promptTokenBudget;
+    }
+
+    public void setPromptTokenBudget(int promptTokenBudget) {
+        this.promptTokenBudget = promptTokenBudget;
+    }
+
+    public String getVersionConflictPolicy() {
+        return versionConflictPolicy;
+    }
+
+    public void setVersionConflictPolicy(String versionConflictPolicy) {
+        this.versionConflictPolicy = versionConflictPolicy;
     }
 }

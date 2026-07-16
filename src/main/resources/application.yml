@@ -77,6 +77,9 @@ kubeoncall:
     server-name: local-mcp
     endpoint: http://localhost:18080/mcp/call
     timeout-millis: 3000
+    discovery-enabled: ${MCP_DISCOVERY_ENABLED:false}
+    discovery-endpoint: ${MCP_DISCOVERY_ENDPOINT:}
+    discovery-cache-seconds: ${MCP_DISCOVERY_CACHE_SECONDS:60}
   integrations:
     kubernetes:
       endpoint: http://localhost:18081/api/tools/kubernetes
@@ -191,6 +194,8 @@ kubeoncall:
     max-active-skills: 3
     activation-threshold: 3
     prompt-max-chars: 4000
+    prompt-token-budget: 900
+    version-conflict-policy: ${SKILL_VERSION_CONFLICT_POLICY:PREFER_PROJECT}
   audit:
     repository: redis
     retention-hours: 168

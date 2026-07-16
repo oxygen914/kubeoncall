@@ -6,6 +6,9 @@ class McpProperties {
     private String serverName = "local-mcp";
     private String endpoint = "http://localhost:18080/mcp/call";
     private int timeoutMillis = 3000;
+    private boolean discoveryEnabled = false;
+    private String discoveryEndpoint = "";
+    private int discoveryCacheSeconds = 60;
 
     public boolean isEnabled() {
         return enabled;
@@ -37,5 +40,29 @@ class McpProperties {
 
     public void setTimeoutMillis(int timeoutMillis) {
         this.timeoutMillis = timeoutMillis;
+    }
+
+    public boolean isDiscoveryEnabled() {
+        return discoveryEnabled;
+    }
+
+    public void setDiscoveryEnabled(boolean discoveryEnabled) {
+        this.discoveryEnabled = discoveryEnabled;
+    }
+
+    public String getDiscoveryEndpoint() {
+        return discoveryEndpoint;
+    }
+
+    public void setDiscoveryEndpoint(String discoveryEndpoint) {
+        this.discoveryEndpoint = discoveryEndpoint;
+    }
+
+    public int getDiscoveryCacheSeconds() {
+        return discoveryCacheSeconds;
+    }
+
+    public void setDiscoveryCacheSeconds(int discoveryCacheSeconds) {
+        this.discoveryCacheSeconds = discoveryCacheSeconds;
     }
 }

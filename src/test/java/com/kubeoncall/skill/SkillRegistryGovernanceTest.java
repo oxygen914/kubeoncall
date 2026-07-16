@@ -81,6 +81,35 @@ class SkillRegistryGovernanceTest {
         verify(stateStore).enable("payment-oom-triage");
     }
 
+    @Test
+    void shouldRejectProjectConflictWhenPolicyRequiresIt() throws Exception {
+        Path overrideDir = Files.createDirectories(tempDir.resolve("payment-oom-triage"));
+        Files.writeString(overrideDir.resolve("SKILL.md"), """
+                ---
+                id: payment-oom-triage
+                name: Rejected Project Override
+                version: v9
+                description: must not override
+                triggers: [OOMKilled]
+                ---
+                Rejected body.
+                """);
+        KubeOnCallProperties properties = new KubeOnCallProperties();
+        properties.getSkill().setVersionConflictPolicy("REJECT");
+        properties
+                .getSkill()
+                .setProjectLocation(
+                        "file:" + tempDir.toAbsolutePath().toString().replace('\\', '/') + "/**/SKILL.md");
+        SkillRegistry registry = new SkillRegistry(properties, new SkillFrontmatterParser(), enabledStateStore());
+
+        SkillRegistry.ReloadResult result = registry.reload();
+
+        assertEquals(
+                SkillSource.BUILTIN,
+                registry.findById("payment-oom-triage").orElseThrow().source());
+        assertTrue(result.errors().contains("CONFLICT:payment-oom-triage: rejected by version conflict policy"));
+    }
+
     private static SkillStateStore enabledStateStore() {
         SkillStateStore stateStore = mock(SkillStateStore.class);
         when(stateStore.disabledIds()).thenReturn(Set.of());
