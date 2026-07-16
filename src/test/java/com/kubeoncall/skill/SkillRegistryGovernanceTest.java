@@ -9,12 +9,15 @@ import static org.mockito.Mockito.when;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import com.kubeoncall.common.config.KubeOnCallProperties;
+import com.kubeoncall.domain.task.RiskLevel;
 
 class SkillRegistryGovernanceTest {
 
@@ -108,6 +111,44 @@ class SkillRegistryGovernanceTest {
                 SkillSource.BUILTIN,
                 registry.findById("payment-oom-triage").orElseThrow().source());
         assertTrue(result.errors().contains("CONFLICT:payment-oom-triage: rejected by version conflict policy"));
+    }
+
+    @Test
+    void shouldRestoreLastValidSnapshotWhenEveryResourceFails() throws Exception {
+        Path brokenDir = Files.createDirectories(tempDir.resolve("broken"));
+        Files.writeString(brokenDir.resolve("SKILL.md"), "---\nid: [broken\n---\ninvalid");
+        KubeOnCallProperties properties = new KubeOnCallProperties();
+        properties.getSkill().setLocation("");
+        properties
+                .getSkill()
+                .setProjectLocation(
+                        "file:" + tempDir.toAbsolutePath().toString().replace('\\', '/') + "/**/SKILL.md");
+        SkillSnapshotStore snapshotStore = mock(SkillSnapshotStore.class);
+        Skill cached = new Skill(
+                "cached-skill",
+                "Cached Skill",
+                "v1",
+                SkillSource.PROJECT,
+                "file:cached/SKILL.md",
+                "cached description",
+                List.of("cached"),
+                List.of(),
+                List.of(),
+                RiskLevel.LOW,
+                List.of(),
+                "cached body",
+                Map.of());
+        when(snapshotStore.load()).thenReturn(List.of(cached));
+        SkillRegistry registry =
+                new SkillRegistry(properties, new SkillFrontmatterParser(), enabledStateStore(), snapshotStore);
+
+        SkillRegistry.ReloadResult result = registry.reload();
+
+        assertEquals(
+                "cached body", registry.findById("cached-skill").orElseThrow().body());
+        assertEquals(1, result.loaded());
+        assertEquals(1, result.errors().size());
+        verify(snapshotStore).load();
     }
 
     private static SkillStateStore enabledStateStore() {

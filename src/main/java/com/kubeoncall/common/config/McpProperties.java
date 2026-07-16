@@ -5,10 +5,13 @@ class McpProperties {
     private boolean enabled = true;
     private String serverName = "local-mcp";
     private String endpoint = "http://localhost:18080/mcp/call";
+    private String apiKey = "";
     private int timeoutMillis = 3000;
     private boolean discoveryEnabled = false;
     private String discoveryEndpoint = "";
     private int discoveryCacheSeconds = 60;
+    private boolean dynamicInvocationEnabled = false;
+    private int dynamicMaxTools = 3;
 
     public boolean isEnabled() {
         return enabled;
@@ -38,6 +41,14 @@ class McpProperties {
         return timeoutMillis;
     }
 
+    public String getApiKey() {
+        return apiKey;
+    }
+
+    public void setApiKey(String apiKey) {
+        this.apiKey = apiKey;
+    }
+
     public void setTimeoutMillis(int timeoutMillis) {
         this.timeoutMillis = timeoutMillis;
     }
@@ -64,5 +75,21 @@ class McpProperties {
 
     public void setDiscoveryCacheSeconds(int discoveryCacheSeconds) {
         this.discoveryCacheSeconds = discoveryCacheSeconds;
+    }
+
+    public boolean isDynamicInvocationEnabled() {
+        return dynamicInvocationEnabled;
+    }
+
+    public void setDynamicInvocationEnabled(boolean dynamicInvocationEnabled) {
+        this.dynamicInvocationEnabled = dynamicInvocationEnabled;
+    }
+
+    public int getDynamicMaxTools() {
+        return dynamicMaxTools;
+    }
+
+    public void setDynamicMaxTools(int dynamicMaxTools) {
+        this.dynamicMaxTools = dynamicMaxTools;
     }
 }

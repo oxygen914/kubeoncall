@@ -272,7 +272,17 @@ public class MemoryService {
     public record MemorySearchResult(List<MemoryEntry> entries, Map<String, Object> diagnostics) {
         public MemorySearchResult {
             entries = entries == null ? List.of() : List.copyOf(entries);
-            diagnostics = diagnostics == null ? Map.of() : Map.copyOf(diagnostics);
+            if (diagnostics == null || diagnostics.isEmpty()) {
+                diagnostics = Map.of();
+            } else {
+                LinkedHashMap<String, Object> safeDiagnostics = new LinkedHashMap<>();
+                diagnostics.forEach((key, value) -> {
+                    if (key != null && value != null) {
+                        safeDiagnostics.put(key, value);
+                    }
+                });
+                diagnostics = java.util.Collections.unmodifiableMap(safeDiagnostics);
+            }
         }
     }
 

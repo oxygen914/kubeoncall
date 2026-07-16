@@ -100,21 +100,22 @@ public class SkillActivationService {
         builder.append("Combined maxRisk: ")
                 .append(maxRisk == null ? "UNSPECIFIED" : maxRisk.name())
                 .append('\n');
-        for (Skill skill : skills) {
-            builder.append("\n## ")
-                    .append(skill.name())
-                    .append(" (")
-                    .append(skill.id())
-                    .append(")\n");
-            builder.append("Description: ").append(skill.description()).append('\n');
-            builder.append("Max risk: ").append(skill.maxRisk()).append('\n');
-            builder.append("Allowed tools: ").append(skill.toolWhitelist()).append('\n');
-            builder.append(skill.body()).append('\n');
+        SkillContextBuffer contextBuffer =
+                new SkillContextBuffer(properties.getSkill().getMaxActiveSkills());
+        skills.forEach(skill -> contextBuffer.push(skill.id(), renderSkill(skill)));
+        String loadedContext = contextBuffer.drain();
+        if (!loadedContext.isBlank()) {
+            builder.append('\n').append(loadedContext).append('\n');
         }
         String prompt = builder.toString().trim();
         int configured = Math.max(64, properties.getSkill().getPromptTokenBudget());
         int unified = Math.max(128, properties.getMemory().getUnifiedContextTokenBudget());
         return tokenBudget.compactText(prompt, Math.min(configured, Math.max(64, unified / 3)));
+    }
+
+    private String renderSkill(Skill skill) {
+        return "Name: " + skill.name() + "\nDescription: " + skill.description() + "\nMax risk: " + skill.maxRisk()
+                + "\nAllowed tools: " + skill.toolWhitelist() + "\n" + skill.body();
     }
 
     private void recordActivation(boolean active, long count) {

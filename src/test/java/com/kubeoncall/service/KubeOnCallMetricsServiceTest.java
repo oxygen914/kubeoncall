@@ -101,4 +101,35 @@ class KubeOnCallMetricsServiceTest {
 
         metricsService.recordGraphExecution("ask", "success", false, false);
     }
+
+    @Test
+    void shouldRecordMemoryAndSkillGovernanceMetrics() {
+        SimpleMeterRegistry registry = new SimpleMeterRegistry();
+        @SuppressWarnings("unchecked")
+        ObjectProvider<io.micrometer.core.instrument.MeterRegistry> provider = mock(ObjectProvider.class);
+        when(provider.getIfAvailable()).thenReturn(registry);
+        KubeOnCallMetricsService metricsService = new KubeOnCallMetricsService(provider);
+
+        metricsService.recordMemoryInjection("hit", 2);
+        metricsService.recordMemoryExtraction("llm_structured", "success", 1);
+        metricsService.recordSkillGovernance("whitelist_violation", "rejected");
+
+        assertEquals(
+                1.0,
+                registry.counter("kubeoncall.memory.injections", "outcome", "hit")
+                        .count());
+        assertEquals(
+                1.0,
+                registry.counter("kubeoncall.memory.extractions", "mode", "llm_structured", "outcome", "success")
+                        .count());
+        assertEquals(
+                1.0,
+                registry.counter(
+                                "kubeoncall.skill.governance",
+                                "operation",
+                                "whitelist_violation",
+                                "outcome",
+                                "rejected")
+                        .count());
+    }
 }

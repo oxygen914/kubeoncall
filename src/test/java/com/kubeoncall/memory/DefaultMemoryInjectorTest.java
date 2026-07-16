@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.time.Instant;
@@ -14,6 +15,7 @@ import java.util.Map;
 import org.junit.jupiter.api.Test;
 
 import com.kubeoncall.common.config.KubeOnCallProperties;
+import com.kubeoncall.service.KubeOnCallMetricsService;
 
 class DefaultMemoryInjectorTest {
 
@@ -22,7 +24,8 @@ class DefaultMemoryInjectorTest {
         MemoryService memoryService = mock(MemoryService.class);
         KubeOnCallProperties properties = new KubeOnCallProperties();
         properties.getMemory().setStaleAfterDays(1);
-        DefaultMemoryInjector injector = new DefaultMemoryInjector(memoryService, properties);
+        KubeOnCallMetricsService metricsService = mock(KubeOnCallMetricsService.class);
+        DefaultMemoryInjector injector = new DefaultMemoryInjector(memoryService, properties, metricsService);
         MemoryEntry fact = entry("m1", MemoryType.SERVICE_FACT, Instant.now());
         MemoryEntry pitfall =
                 entry("m2", MemoryType.KNOWN_PITFALL, Instant.now().minus(3, ChronoUnit.DAYS));
@@ -36,6 +39,7 @@ class DefaultMemoryInjectorTest {
         assertTrue(injection.prompt().contains("SERVICE_FACT"));
         assertTrue(injection.prompt().contains("stale"));
         assertFalse(injection.prompt().contains("INCIDENT_SUMMARY"));
+        verify(metricsService).recordMemoryInjection("hit", 2);
     }
 
     private MemoryEntry entry(String id, MemoryType type, Instant updatedAt) {

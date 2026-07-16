@@ -1,6 +1,7 @@
 package com.kubeoncall.memory;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -33,12 +34,13 @@ class MemoryExtractionJobTest {
         when(queue.claim()).thenReturn(Optional.of(claimed));
         MemoryExtractionPipeline pipeline = mock(MemoryExtractionPipeline.class);
         when(pipeline.extract(task)).thenReturn(result(task));
+        when(memoryService.remember(any(MemoryEntry.class))).thenAnswer(invocation -> invocation.getArgument(0));
         MemoryExtractionJob job = new MemoryExtractionJob(queue, memoryService, pipeline);
 
         job.processNext();
 
         verify(memoryService).remember(any(MemoryEntry.class));
-        verify(queue).acknowledge(claimed);
+        verify(queue).acknowledge(eq(claimed), any(MemoryExtractionPipeline.ExtractionResult.class), any());
     }
 
     @Test

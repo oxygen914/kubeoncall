@@ -76,10 +76,13 @@ kubeoncall:
     enabled: true
     server-name: local-mcp
     endpoint: http://localhost:18080/mcp/call
+    api-key: ${MCP_API_KEY:}
     timeout-millis: 3000
     discovery-enabled: ${MCP_DISCOVERY_ENABLED:false}
     discovery-endpoint: ${MCP_DISCOVERY_ENDPOINT:}
     discovery-cache-seconds: ${MCP_DISCOVERY_CACHE_SECONDS:60}
+    dynamic-invocation-enabled: ${MCP_DYNAMIC_INVOCATION_ENABLED:false}
+    dynamic-max-tools: ${MCP_DYNAMIC_MAX_TOOLS:3}
   integrations:
     kubernetes:
       endpoint: http://localhost:18081/api/tools/kubernetes
@@ -176,6 +179,7 @@ kubeoncall:
     extraction-worker-enabled: true
     extraction-poll-interval-millis: 5000
     extraction-max-attempts: 3
+    extraction-status-ttl-seconds: ${MEMORY_EXTRACTION_STATUS_TTL_SECONDS:86400}
     llm-extraction-enabled: ${MEMORY_LLM_EXTRACTION_ENABLED:false}
     llm-extraction-endpoint: ${MEMORY_LLM_EXTRACTION_ENDPOINT:}
     llm-extraction-api-key: ${MEMORY_LLM_EXTRACTION_API_KEY:}

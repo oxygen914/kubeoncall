@@ -68,6 +68,10 @@ public class McpToolRegistry {
         return discoveredTools;
     }
 
+    public List<ToolDefinition> discoveredPlannerTools() {
+        return refreshDiscoveredTools();
+    }
+
     private boolean discoveryConfigured() {
         return mcpClient != null && properties != null && properties.getMcp().isDiscoveryEnabled();
     }

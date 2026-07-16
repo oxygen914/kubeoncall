@@ -3,6 +3,7 @@
 > 目标：在现有 agent 架构（planner→verifier→executor 三段式 + 规则推断工具）上，**最小侵入**地增加一层兼容 Skill 的底座，让运维经验能以「可加载的指令包」形式沉淀复用。
 > 参照：`paicli/src/main/java/com/paicli/skill/`（同 Java 生态成熟实现）、`as-cil` skill 机制。
 > 前置分析见同目录「kubeoncall agent 架构是否具备运行 skill 基础设施」结论。
+> 实施状态（2026-07-16）：核心底座已完成。动态 MCP、`load_skill`、索引预算、LRU/drain、Redis 快照恢复、工具白名单和 maxRisk 均已落地；正文中的“现状/空壳”描述保留为最初设计背景，不代表当前代码状态。
 
 ---
 
@@ -479,7 +480,7 @@ kubeoncall:
 
 ## 10. 结论
 
-kubeoncall 当前不具备 skill 运行底座（LLM 无 tool-calling、工具是规则推断、MCP 是空壳），但**不需要先补齐这些才能上 skill**——关键取舍是把第一版 Skill 定位为「注入 LLM 的指令包 + 工具白名单」而非「LLM 自主调用的函数」，这样底座完全建立在现有架构之上：
+kubeoncall 已具备第一版 Skill 运行底座；实现仍沿用最初的关键取舍：把 Skill 定位为「注入 LLM 的指令包 + 工具白名单」，同时增加 `load_skill` 和动态 MCP 的安全只读调用闭环：
 
 - **载体**：`Skill`（frontmatter + 正文），`SKILL.md` 文件，参照 paicli。
 - **注册**：`SkillRegistry` 两层扫描（builtin + project），参照 paicli 三层覆盖。

@@ -35,6 +35,12 @@ kubeoncall:
       bucket: kubeoncall-docs
   mcp:
     endpoint: ${MCP_ENDPOINT:http://host.docker.internal:18080/mcp/call}
+    api-key: ${MCP_API_KEY:}
+    discovery-enabled: ${MCP_DISCOVERY_ENABLED:false}
+    discovery-endpoint: ${MCP_DISCOVERY_ENDPOINT:}
+    discovery-cache-seconds: ${MCP_DISCOVERY_CACHE_SECONDS:60}
+    dynamic-invocation-enabled: ${MCP_DYNAMIC_INVOCATION_ENABLED:false}
+    dynamic-max-tools: ${MCP_DYNAMIC_MAX_TOOLS:3}
   integrations:
     kubernetes:
       endpoint: ${KUBERNETES_TOOL_ENDPOINT:http://host.docker.internal:18081/api/tools/kubernetes}

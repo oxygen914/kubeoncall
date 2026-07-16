@@ -5,6 +5,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import com.kubeoncall.tool.mcp.McpClient;
@@ -14,9 +15,16 @@ import com.kubeoncall.tool.mcp.McpClient;
 public class PlannerToolEvidenceCollector {
 
     private final McpClient mcpClient;
+    private final DynamicMcpEvidenceCollector dynamicMcpEvidenceCollector;
 
     public PlannerToolEvidenceCollector(McpClient mcpClient) {
+        this(mcpClient, null);
+    }
+
+    @Autowired
+    public PlannerToolEvidenceCollector(McpClient mcpClient, DynamicMcpEvidenceCollector dynamicMcpEvidenceCollector) {
         this.mcpClient = mcpClient;
+        this.dynamicMcpEvidenceCollector = dynamicMcpEvidenceCollector;
     }
 
     public Evidence collect(String request, List<String> missingSignals) {
@@ -114,8 +122,32 @@ public class PlannerToolEvidenceCollector {
                                 10,
                                 "trend",
                                 "stable")));
+        addDynamicMcpEvidence(evidence, request, target, namespace, missingSignals);
         addSupplementalSignals(evidence, request, target, missingSignals);
         return new Evidence(target, evidence);
+    }
+
+    private void addDynamicMcpEvidence(
+            Map<String, Object> evidence,
+            String request,
+            String target,
+            String namespace,
+            List<String> missingSignals) {
+        if (dynamicMcpEvidenceCollector == null) {
+            return;
+        }
+        DynamicMcpEvidenceCollector.Result result =
+                dynamicMcpEvidenceCollector.collect(request, target, namespace, missingSignals);
+        if (!result.attempted()) {
+            return;
+        }
+        evidence.put("dynamicMcpInvocations", result.invocations());
+        evidence.put("dynamicMcpSkipped", result.skipped());
+        evidence.put(
+                "dynamicMcpTools",
+                result.invocations().stream()
+                        .map(item -> String.valueOf(item.get("tool")))
+                        .toList());
     }
 
     private void addSupplementalSignals(

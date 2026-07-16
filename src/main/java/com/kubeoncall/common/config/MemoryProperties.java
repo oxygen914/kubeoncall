@@ -23,6 +23,7 @@ class MemoryProperties {
     private long consolidationLockTtlSeconds = 1800;
     private double duplicateSimilarityThreshold = 0.92d;
     private int extractionMaxAttempts = 3;
+    private long extractionStatusTtlSeconds = 86400;
     private boolean llmExtractionEnabled = false;
     private String llmExtractionEndpoint;
     private String llmExtractionApiKey;
@@ -201,6 +202,14 @@ class MemoryProperties {
 
     public void setExtractionMaxAttempts(int extractionMaxAttempts) {
         this.extractionMaxAttempts = extractionMaxAttempts;
+    }
+
+    public long getExtractionStatusTtlSeconds() {
+        return extractionStatusTtlSeconds;
+    }
+
+    public void setExtractionStatusTtlSeconds(long extractionStatusTtlSeconds) {
+        this.extractionStatusTtlSeconds = extractionStatusTtlSeconds;
     }
 
     public boolean isLlmExtractionEnabled() {

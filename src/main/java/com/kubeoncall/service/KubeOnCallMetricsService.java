@@ -112,6 +112,22 @@ public class KubeOnCallMetricsService {
                 safe(outcome));
     }
 
+    public void recordMemoryInjection(String outcome, long entryCount) {
+        increment("kubeoncall.memory.injections", "outcome", safe(outcome));
+        recordAmount("kubeoncall.memory.injected_count", Math.max(0, entryCount), "outcome", safe(outcome));
+    }
+
+    public void recordMemoryExtraction(String mode, String outcome, long extractedCount) {
+        increment("kubeoncall.memory.extractions", "mode", safe(mode), "outcome", safe(outcome));
+        recordAmount(
+                "kubeoncall.memory.extracted_count",
+                Math.max(0, extractedCount),
+                "mode",
+                safe(mode),
+                "outcome",
+                safe(outcome));
+    }
+
     public void recordSkillActivation(boolean active, long skillCount) {
         increment("kubeoncall.skill.activations", "active", String.valueOf(active));
         recordAmount("kubeoncall.skill.activated_count", Math.max(0, skillCount), "active", String.valueOf(active));

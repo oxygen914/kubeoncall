@@ -10,6 +10,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 import com.kubeoncall.common.config.KubeOnCallProperties;
+import com.kubeoncall.service.KubeOnCallMetricsService;
 
 @Service
 public class DefaultMemoryInjector implements MemoryInjector {
@@ -18,15 +19,19 @@ public class DefaultMemoryInjector implements MemoryInjector {
 
     private final MemoryService memoryService;
     private final KubeOnCallProperties properties;
+    private final KubeOnCallMetricsService metricsService;
 
-    public DefaultMemoryInjector(MemoryService memoryService, KubeOnCallProperties properties) {
+    public DefaultMemoryInjector(
+            MemoryService memoryService, KubeOnCallProperties properties, KubeOnCallMetricsService metricsService) {
         this.memoryService = memoryService;
         this.properties = properties;
+        this.metricsService = metricsService;
     }
 
     @Override
     public MemoryInjection inject(String query, Map<String, String> filters) {
         if (!properties.getMemory().isEnabled()) {
+            metricsService.recordMemoryInjection("disabled", 0);
             return MemoryInjection.empty();
         }
         try {
@@ -41,10 +46,13 @@ public class DefaultMemoryInjector implements MemoryInjector {
                             .limit(Math.max(1, properties.getMemory().getInjectMaxEntries()))
                             .toList();
             if (entries.isEmpty()) {
+                metricsService.recordMemoryInjection("miss", 0);
                 return MemoryInjection.empty();
             }
+            metricsService.recordMemoryInjection("hit", entries.size());
             return new MemoryInjection(entries, buildPrompt(entries), "");
         } catch (RuntimeException ex) {
+            metricsService.recordMemoryInjection("failed", 0);
             log.warn(
                     "Memory injection failed; continuing without memory: errorType={}",
                     ex.getClass().getSimpleName());

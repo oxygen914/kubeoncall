@@ -5,6 +5,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import com.kubeoncall.agent.node.ThinkNode;
@@ -13,6 +14,7 @@ import com.kubeoncall.domain.graph.GraphState;
 import com.kubeoncall.domain.graph.NodeResult;
 import com.kubeoncall.domain.graph.NodeStatus;
 import com.kubeoncall.domain.task.Task;
+import com.kubeoncall.service.KubeOnCallMetricsService;
 import com.kubeoncall.tool.AgentToolCatalog;
 import com.kubeoncall.tool.ToolDefinition;
 
@@ -25,10 +27,20 @@ public class ExecutorThinkNode extends ThinkNode {
 
     private final AgentToolCatalog agentToolCatalog;
     private final ExecutorPlanFactory planFactory;
+    private final KubeOnCallMetricsService metricsService;
 
     public ExecutorThinkNode(AgentToolCatalog agentToolCatalog, ExecutorPlanFactory planFactory) {
+        this(agentToolCatalog, planFactory, null);
+    }
+
+    @Autowired
+    public ExecutorThinkNode(
+            AgentToolCatalog agentToolCatalog,
+            ExecutorPlanFactory planFactory,
+            KubeOnCallMetricsService metricsService) {
         this.agentToolCatalog = agentToolCatalog;
         this.planFactory = planFactory;
+        this.metricsService = metricsService;
     }
 
     @Override
@@ -138,6 +150,9 @@ public class ExecutorThinkNode extends ThinkNode {
                 "plannedTool", toolName,
                 "allowedTools", toolWhitelist);
         state.getContext().put("skillToolWhitelistViolation", violation);
+        if (metricsService != null) {
+            metricsService.recordSkillGovernance("whitelist_violation", "rejected");
+        }
         state.addObservation(
                 "Executor: blocked tool " + toolName + " because it is not allowed by the activated skill");
         return new NodeResult(

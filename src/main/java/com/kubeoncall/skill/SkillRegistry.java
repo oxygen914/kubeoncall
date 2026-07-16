@@ -12,6 +12,7 @@ import jakarta.annotation.PostConstruct;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.io.Resource;
 import org.springframework.core.io.support.PathMatchingResourcePatternResolver;
 import org.springframework.stereotype.Component;
@@ -26,14 +27,26 @@ public class SkillRegistry {
     private final KubeOnCallProperties properties;
     private final SkillFrontmatterParser parser;
     private final SkillStateStore stateStore;
+    private final SkillSnapshotStore snapshotStore;
+    private final SkillIndexFormatter indexFormatter = new SkillIndexFormatter();
     private final PathMatchingResourcePatternResolver resolver = new PathMatchingResourcePatternResolver();
     private volatile List<Skill> skills = List.of();
     private volatile List<String> loadErrors = List.of();
 
     public SkillRegistry(KubeOnCallProperties properties, SkillFrontmatterParser parser, SkillStateStore stateStore) {
+        this(properties, parser, stateStore, null);
+    }
+
+    @Autowired
+    public SkillRegistry(
+            KubeOnCallProperties properties,
+            SkillFrontmatterParser parser,
+            SkillStateStore stateStore,
+            SkillSnapshotStore snapshotStore) {
         this.properties = properties;
         this.parser = parser;
         this.stateStore = stateStore;
+        this.snapshotStore = snapshotStore;
     }
 
     @PostConstruct
@@ -53,15 +66,32 @@ public class SkillRegistry {
         int builtinCount = loaded.size();
         int projectLoaded =
                 loadLocation(properties.getSkill().getProjectLocation(), SkillSource.PROJECT, loaded, errors);
-        skills =
+        List<Skill> loadedSkills =
                 loaded.values().stream().sorted(Comparator.comparing(Skill::id)).toList();
+        boolean restoredFromSnapshot = false;
+        if (loadedSkills.isEmpty() && !errors.isEmpty() && snapshotStore != null) {
+            List<Skill> restored = snapshotStore.load();
+            if (!restored.isEmpty()) {
+                loadedSkills = restored.stream()
+                        .sorted(Comparator.comparing(Skill::id))
+                        .toList();
+                restoredFromSnapshot = true;
+            }
+        }
+        skills = loadedSkills;
         loadErrors = List.copyOf(errors);
+        if (!restoredFromSnapshot && !skills.isEmpty() && snapshotStore != null) {
+            snapshotStore.save(skills);
+        }
         int overrides = Math.max(0, builtinCount + projectLoaded - skills.size());
         log.info(
                 "Loaded {} KubeOnCall skills (project overrides={}, errors={})",
                 skills.size(),
                 overrides,
                 errors.size());
+        if (restoredFromSnapshot) {
+            log.warn("Restored {} KubeOnCall skills from the last valid snapshot", skills.size());
+        }
         return new ReloadResult(skills.size(), overrides, loadErrors);
     }
 
@@ -216,23 +246,7 @@ public class SkillRegistry {
     }
 
     public String indexForPrompt() {
-        List<Skill> enabledSkills = all();
-        if (enabledSkills.isEmpty()) {
-            return "No skills registered.";
-        }
-        StringBuilder builder = new StringBuilder("Registered skills:\n");
-        for (Skill skill : enabledSkills) {
-            builder.append("- ")
-                    .append(skill.id())
-                    .append(": ")
-                    .append(skill.description())
-                    .append(" triggers=")
-                    .append(skill.triggers())
-                    .append(" maxRisk=")
-                    .append(skill.maxRisk())
-                    .append('\n');
-        }
-        return builder.toString().trim();
+        return indexFormatter.format(all());
     }
 
     public List<String> loadErrors() {

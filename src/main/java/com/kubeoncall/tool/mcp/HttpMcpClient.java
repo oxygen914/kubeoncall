@@ -36,7 +36,11 @@ public class HttpMcpClient implements McpClient {
         metadata.put("tool", toolName);
 
         return toolHttpClient.post(
-                properties.getMcp().getEndpoint(), request, properties.getMcp().getTimeoutMillis(), metadata);
+                properties.getMcp().getEndpoint(),
+                request,
+                properties.getMcp().getTimeoutMillis(),
+                authorizationHeaders(),
+                metadata);
     }
 
     @Override
@@ -50,6 +54,7 @@ public class HttpMcpClient implements McpClient {
                 properties.getMcp().getDiscoveryEndpoint(),
                 Map.of("serverName", properties.getMcp().getServerName(), "method", "tools/list"),
                 properties.getMcp().getTimeoutMillis(),
+                authorizationHeaders(),
                 Map.of("targetSystem", "mcp", "tool", "tools/list"));
         if (!"success".equalsIgnoreCase(String.valueOf(response.get("status")))) {
             return List.of();
@@ -69,5 +74,10 @@ public class HttpMcpClient implements McpClient {
         Map<String, Object> converted = new LinkedHashMap<>();
         map.forEach((key, value) -> converted.put(String.valueOf(key), value));
         return Map.copyOf(converted);
+    }
+
+    private Map<String, String> authorizationHeaders() {
+        String apiKey = properties.getMcp().getApiKey();
+        return apiKey == null || apiKey.isBlank() ? Map.of() : Map.of("Authorization", "Bearer " + apiKey.trim());
     }
 }

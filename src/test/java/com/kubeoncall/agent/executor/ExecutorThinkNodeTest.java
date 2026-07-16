@@ -24,6 +24,7 @@ import com.kubeoncall.domain.task.RiskLevel;
 import com.kubeoncall.domain.task.SopReference;
 import com.kubeoncall.domain.task.Task;
 import com.kubeoncall.domain.task.TaskType;
+import com.kubeoncall.service.KubeOnCallMetricsService;
 import com.kubeoncall.tool.AgentToolCatalog;
 import com.kubeoncall.tool.ToolDefinition;
 
@@ -104,10 +105,11 @@ class ExecutorThinkNodeTest {
     @Test
     void shouldRejectWhenPlannedToolIsNotInSkillWhitelist() {
         AgentToolCatalog catalog = mock(AgentToolCatalog.class);
+        KubeOnCallMetricsService metricsService = mock(KubeOnCallMetricsService.class);
         List<String> whitelist = List.of("kubernetes.describeResource");
         when(catalog.findExecutorTool(eq("kubernetes"), eq("scaleWorkload"), eq(whitelist)))
                 .thenReturn(null);
-        ExecutorThinkNode node = new ExecutorThinkNode(catalog, new ExecutorPlanFactory());
+        ExecutorThinkNode node = new ExecutorThinkNode(catalog, new ExecutorPlanFactory(), metricsService);
 
         GraphState state = new GraphState();
         state.getContext().put("activatedSkillToolWhitelist", whitelist);
@@ -130,6 +132,7 @@ class ExecutorThinkNodeTest {
         assertFalse(state.getContext().containsKey("executorPayload"));
         assertNull(state.getContext().get("executionPlan"));
         verify(catalog, never()).findExecutorTool("kubernetes", "scaleWorkload");
+        verify(metricsService).recordSkillGovernance("whitelist_violation", "rejected");
     }
 
     @Test

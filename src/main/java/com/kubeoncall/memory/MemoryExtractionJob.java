@@ -1,5 +1,8 @@
 package com.kubeoncall.memory;
 
+import java.util.ArrayList;
+import java.util.List;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -32,8 +35,9 @@ public class MemoryExtractionJob {
             try {
                 MemoryExtractionTask task = claimed.task();
                 MemoryExtractionPipeline.ExtractionResult result = extractionPipeline.extract(task);
-                result.entries().forEach(memoryService::remember);
-                queue.acknowledge(claimed);
+                List<MemoryEntry> persistedEntries = new ArrayList<>();
+                result.entries().forEach(entry -> persistedEntries.add(memoryService.remember(entry)));
+                queue.acknowledge(claimed, result, persistedEntries);
             } catch (RuntimeException ex) {
                 queue.fail(claimed, ex);
                 log.warn(

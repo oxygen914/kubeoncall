@@ -1,12 +1,12 @@
 # KubeOnCall RAG 重构方案
 
-## 当前实施优先级（2026-07-15）
+## 当前实施优先级（2026-07-16）
 
-本方案中的历史阶段描述保留作架构参考；当前续作只按以下顺序实施：
+本方案中的历史阶段描述保留作架构参考；当前收紧范围已经完成：
 
-1. **真实模型联调**：使用真实 embedding 与 cross-encoder 服务验证认证、请求契约、超时、维度和批量吞吐。
+1. **真实模型联调（已完成）**：阿里云 `text-embedding-v4` 与 `qwen3-rerank` 已完成认证、请求契约、应用级 ES kNN/主排序、超时和维度错误降级审计。批量吞吐压测延期。
 2. **通用知识代码层（已完成代码与单测）**：稳定 `doc_id/file_hash` 幂等更新、`chunk_enable=false` 软删除与恢复、JSONL 批量导入、统一 metadata、Markdown `heading_path` 与 active dataset 自动过滤已实现。
-3. **效果与治理**：待真实模型联调稳定后，再考虑知识增强和最小效果评估基线。
+3. **效果与治理（不排期）**：知识增强、离线效果评估、model/version 与 dataset 自动绑定保留为后续 backlog。
 
 索引 alias 的 prepare/activate/rollback 代码与接口已具备，但真实 Elasticsearch 切换、旧 concrete index 迁移和回滚演练**明确延期**，演练验收进度保持 **0%**。本轮不新增 alias 能力，也不将该演练作为 RAG 主线的验收前提。
 

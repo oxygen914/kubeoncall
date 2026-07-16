@@ -1,23 +1,35 @@
 package com.kubeoncall.web;
 
 import java.time.Instant;
+import java.util.LinkedHashMap;
 import java.util.Map;
 
+import jakarta.validation.Valid;
+
+import org.springframework.http.HttpStatus;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.server.ResponseStatusException;
 
 import com.kubeoncall.memory.MemoryConsolidationService;
 import com.kubeoncall.memory.MemoryExtractionQueue;
+import com.kubeoncall.memory.MemoryExtractionStatus;
+import com.kubeoncall.memory.MemoryExtractionTask;
+import com.kubeoncall.memory.MemoryScope;
 import com.kubeoncall.memory.MemoryService;
+import com.kubeoncall.memory.MemoryType;
 import com.kubeoncall.web.dto.MemoryCleanupRequest;
 import com.kubeoncall.web.dto.MemoryCleanupResponse;
 import com.kubeoncall.web.dto.MemoryConsolidationRequest;
 import com.kubeoncall.web.dto.MemoryConsolidationResponse;
 import com.kubeoncall.web.dto.MemoryExtractionReplayRequest;
 import com.kubeoncall.web.dto.MemoryExtractionReplayResponse;
+import com.kubeoncall.web.dto.MemoryExtractionRequest;
+import com.kubeoncall.web.dto.MemoryExtractionSubmissionResponse;
 import com.kubeoncall.web.dto.MemoryRestoreResponse;
 import com.kubeoncall.web.dto.MemorySearchRequest;
 import com.kubeoncall.web.dto.MemorySearchResponse;
@@ -100,5 +112,45 @@ public class MemoryController {
             @RequestBody(required = false) MemoryExtractionReplayRequest request) {
         int limit = request == null || request.limit() == null ? 100 : request.limit();
         return new MemoryExtractionReplayResponse(extractionQueue.replayDeadLetters(limit));
+    }
+
+    @PostMapping("/extractions")
+    @org.springframework.web.bind.annotation.ResponseStatus(HttpStatus.ACCEPTED)
+    public MemoryExtractionSubmissionResponse submitExtraction(@Valid @RequestBody MemoryExtractionRequest request) {
+        MemoryType type = request.memoryType() == null ? MemoryType.SERVICE_FACT : request.memoryType();
+        MemoryScope scope = request.scope() == null ? inferScope(request) : request.scope();
+        Map<String, String> metadata = new LinkedHashMap<>(request.metadata());
+        metadata.putIfAbsent("source", "manual_api");
+        MemoryExtractionTask task = MemoryExtractionTask.create(
+                type,
+                scope,
+                request.subject(),
+                request.content(),
+                request.service(),
+                request.resource(),
+                request.fingerprint(),
+                metadata);
+        extractionQueue.enqueue(task);
+        return new MemoryExtractionSubmissionResponse(task.id(), "PENDING");
+    }
+
+    @GetMapping("/extractions/{taskId}")
+    public MemoryExtractionStatus extractionStatus(@PathVariable String taskId) {
+        return extractionQueue
+                .status(taskId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "extraction task not found"));
+    }
+
+    private MemoryScope inferScope(MemoryExtractionRequest request) {
+        if (request.fingerprint() != null && !request.fingerprint().isBlank()) {
+            return MemoryScope.FINGERPRINT;
+        }
+        if (request.resource() != null && !request.resource().isBlank()) {
+            return MemoryScope.RESOURCE;
+        }
+        if (request.service() != null && !request.service().isBlank()) {
+            return MemoryScope.SERVICE;
+        }
+        return MemoryScope.GLOBAL;
     }
 }

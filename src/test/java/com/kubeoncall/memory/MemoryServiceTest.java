@@ -29,6 +29,19 @@ import com.kubeoncall.service.KubeOnCallMetricsService;
 class MemoryServiceTest {
 
     @Test
+    void shouldDropNullDiagnosticsWithoutFailingMemoryResponse() {
+        MemoryService.MemorySearchResult result = new MemoryService.MemorySearchResult(
+                List.of(), new java.util.LinkedHashMap<>(Map.of("rankingSource", "cross_encoder")));
+        java.util.LinkedHashMap<String, Object> diagnostics = new java.util.LinkedHashMap<>(result.diagnostics());
+        diagnostics.put("crossEncoderFallbackReason", null);
+
+        MemoryService.MemorySearchResult sanitized = new MemoryService.MemorySearchResult(List.of(), diagnostics);
+
+        assertEquals("cross_encoder", sanitized.diagnostics().get("rankingSource"));
+        assertEquals(false, sanitized.diagnostics().containsKey("crossEncoderFallbackReason"));
+    }
+
+    @Test
     void shouldPersistMemoryAsIsolatedKnowledgeDocument() {
         KnowledgeRepository repository = mock(KnowledgeRepository.class);
         KubeOnCallMetricsService metricsService = mock(KubeOnCallMetricsService.class);
