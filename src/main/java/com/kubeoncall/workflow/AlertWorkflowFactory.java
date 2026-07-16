@@ -58,6 +58,7 @@ public class AlertWorkflowFactory {
     public List<AlertWorkflowDefinition> buildWorkflow(String workflowTemplate) {
         String template = workflowTemplateRegistry.normalize(workflowTemplate);
         return switch (template) {
+            case WorkflowTemplateRegistry.NODE_MVP -> nodeMvpWorkflow();
             case WorkflowTemplateRegistry.K8S_POD -> k8sPodWorkflow();
             case WorkflowTemplateRegistry.K8S_NODE -> k8sNodeWorkflow();
             case WorkflowTemplateRegistry.WORKLOAD -> workloadWorkflow();
@@ -91,6 +92,14 @@ public class AlertWorkflowFactory {
 
     private List<AlertWorkflowDefinition> hostResourceWorkflow() {
         return defaultWorkflow();
+    }
+
+    private List<AlertWorkflowDefinition> nodeMvpWorkflow() {
+        return List.of(
+                new AlertWorkflowDefinition("deviceInfoNode", true, List.of(), deviceInfoNode),
+                new AlertWorkflowDefinition("stateCompareNode", true, List.of("deviceInfoNode"), stateCompareNode),
+                new AlertWorkflowDefinition("resultPushNode", false, List.of("stateCompareNode"), resultPushNode),
+                new AlertWorkflowDefinition("notificationNode", true, List.of("resultPushNode"), notificationNode));
     }
 
     private List<AlertWorkflowDefinition> k8sPodWorkflow() {

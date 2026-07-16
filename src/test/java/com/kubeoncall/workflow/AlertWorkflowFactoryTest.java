@@ -64,6 +64,18 @@ class AlertWorkflowFactoryTest {
     }
 
     @Test
+    void nodeMvpWorkflowShouldExcludeRagTicketAndSilence() {
+        AlertWorkflowFactory factory = factory();
+
+        List<String> nodeNames = factory.buildWorkflow("node-mvp").stream()
+                .map(AlertWorkflowDefinition::name)
+                .toList();
+
+        assertIterableEquals(
+                List.of("deviceInfoNode", "stateCompareNode", "resultPushNode", "notificationNode"), nodeNames);
+    }
+
+    @Test
     void controlPlaneWorkflowShouldStartFromStateCompare() {
         AlertWorkflowFactory factory = factory();
 

@@ -36,6 +36,19 @@ class YamlAlarmPolicyRepositoryTest {
     }
 
     @Test
+    void shouldLoadOnlyNodeMonitoringMvpPolicies() {
+        YamlAlarmPolicyRepository repo =
+                AlarmPolicyRepositoryFixtures.loadFromClasspath("alarm-policies-node-mvp.yml", AlarmSeverity.P3);
+
+        assertEquals(5, repo.findAll().size());
+        assertTrue(repo.findByName("NodeDown").isPresent());
+        assertTrue(repo.findByName("NodeCPUHigh").isPresent());
+        assertTrue(repo.findByName("NodeMemoryLow").isPresent());
+        assertTrue(repo.findByName("NodeDiskHigh").isPresent());
+        assertTrue(repo.findByName("NodeInodeHigh").isPresent());
+    }
+
+    @Test
     void shouldRejectDuplicatePolicyIds() throws IOException {
         Path tmp = Files.createTempFile("policies-dup", ".yml");
         Files.writeString(tmp, """

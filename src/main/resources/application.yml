@@ -56,6 +56,7 @@ kubeoncall:
     chunk-overlap: 0
     cross-encoder-enabled: false
     cross-encoder-endpoint: http://localhost:18086/api/rerank
+    cross-encoder-api-key: ${RAG_RERANK_API_KEY:}
     cross-encoder-model: cross-encoder
     cross-encoder-timeout-millis: 3000
     lexical-candidate-top-n: 20
@@ -98,7 +99,7 @@ kubeoncall:
     alarm-dedup-ttl-seconds: 600
   alarm:
     enabled: true
-    policy-location: classpath:alarm-policies.yml
+    policy-location: classpath:alarm-policies-node-mvp.yml
     default-severity: P3
     active-ttl-seconds: 86400
     resolved-retention-seconds: 3600
@@ -126,6 +127,27 @@ kubeoncall:
     recovery-confirmation-timeout-seconds: 86400
     p0-escalation-count: 2
     p1-escalation-count: 3
+    p0-escalation-after-seconds: 600
+    p1-escalation-after-seconds: 1800
+    policy-version-history-limit: 20
+    p1-aggregation-window-seconds: 300
+    p2-aggregation-window-seconds: 900
+    p3-aggregation-window-seconds: 3600
+    alertmanager-webhook-enabled: true
+    alertmanager-webhook-auth-mode: bearer
+    alertmanager-webhook-token: ${ALERTMANAGER_WEBHOOK_TOKEN:}
+    alertmanager-webhook-token-file: ${ALERTMANAGER_WEBHOOK_TOKEN_FILE:}
+    alertmanager-webhook-max-alerts-per-request: 100
+    alertmanager-webhook-max-payload-bytes: 1048576
+    inbox-stream-key: kubeoncall:alarm:inbox
+    inbox-consumer-group: kubeoncall-alarm-workers
+    inbox-dead-letter-key: kubeoncall:alarm:dead-letter
+    inbox-max-retries: 5
+    inbox-retention-hours: 168
+    inbox-worker-enabled: true
+    inbox-worker-batch-size: 10
+    inbox-worker-block-millis: 1000
+    inbox-pending-claim-idle-millis: 60000
   memory:
     enabled: true
     session-ttl-seconds: 86400

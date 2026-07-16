@@ -1,5 +1,15 @@
 # KubeOnCall RAG 重构方案
 
+## 当前实施优先级（2026-07-15）
+
+本方案中的历史阶段描述保留作架构参考；当前续作只按以下顺序实施：
+
+1. **真实模型联调**：使用真实 embedding 与 cross-encoder 服务验证认证、请求契约、超时、维度和批量吞吐。
+2. **通用知识生命周期（已完成代码与单测）**：稳定 `doc_id/file_hash` 幂等更新、`chunk_enable=false` 软删除与恢复，以及 JSONL 批量导入已实现。
+3. **效果与治理**：待真实模型联调稳定后，再考虑知识增强和最小效果评估基线。
+
+索引 alias 的 prepare/activate/rollback 代码与接口已具备，但真实 Elasticsearch 切换、旧 concrete index 迁移和回滚演练**明确延期**。本轮不新增 alias 能力，也不将该演练作为 RAG 主线的验收前提。
+
 ## 1. 背景与目标
 
 本方案基于以下材料梳理：
@@ -587,7 +597,7 @@ kubeoncall:
 - 删除默认改 `chunk_enable=false`，必要时提供物理删除接口。
 - reindex 时同一 title 或 doc_id 只删一次，参考 `rag/6.4ragtest` 的 `removed` 去重逻辑。
 - 支持 `dataset_version` 多版本共存，查询默认只查 active version。
-- 可选引入 index alias：`kubeoncall-knowledge-active -> kubeoncall-knowledge-v2`，便于平滑切换。
+- 可选引入 index alias：`kubeoncall-knowledge-active -> kubeoncall-knowledge-v2`，便于平滑切换；真实切换与回滚演练已延期，不阻塞当前知识生命周期建设。
 
 验收：
 
@@ -637,11 +647,13 @@ kubeoncall:
 3. RRF 融合保留 rank/score。
 4. cross-encoder rerank 主路径。
 
-第三优先级，决定长期可运营：
+第三优先级，当前续作主线：
 
-1. JSONL 批量导入与 reindex。
-2. 数据增强双字段策略。
-3. MTEB/RAGAS 风格评估与 bad case 分析。
+1. 通用知识按 `doc_id/file_hash` 幂等更新、`chunk_enable=false` 软删除与恢复。
+2. JSONL 批量导入。
+3. 真实 embedding/cross-encoder 服务联调与失败边界验证。
+
+索引 alias 的真实切换、旧索引迁移和回滚演练留待上述主线稳定后单独实施。
 4. metrics 与 trace 看板。
 
 ## 9. 最小可落地版本

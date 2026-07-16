@@ -27,9 +27,10 @@ class HttpCrossEncoderRerankerTest {
         KubeOnCallProperties properties = new KubeOnCallProperties();
         properties.getRag().setCrossEncoderEnabled(true);
         properties.getRag().setCrossEncoderEndpoint("http://rerank/v1/rerank");
+        properties.getRag().setCrossEncoderApiKey("rerank-key");
         properties.getRag().setCrossEncoderModel("rerank-model-a");
         properties.getRag().setRerankTopN(2);
-        when(httpClient.post(eq("http://rerank/v1/rerank"), anyMap(), anyInt(), anyMap()))
+        when(httpClient.post(eq("http://rerank/v1/rerank"), anyMap(), anyInt(), anyMap(), anyMap()))
                 .thenReturn(Map.of(
                         "status",
                         "success",
@@ -49,11 +50,15 @@ class HttpCrossEncoderRerankerTest {
         assertEquals(Map.of("doc-b", 0.9, "doc-a", 0.2), scores);
         @SuppressWarnings("unchecked")
         ArgumentCaptor<Map<String, Object>> bodyCaptor = ArgumentCaptor.forClass(Map.class);
-        verify(httpClient).post(eq("http://rerank/v1/rerank"), bodyCaptor.capture(), anyInt(), anyMap());
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<Map<String, String>> headersCaptor = ArgumentCaptor.forClass(Map.class);
+        verify(httpClient)
+                .post(eq("http://rerank/v1/rerank"), bodyCaptor.capture(), anyInt(), headersCaptor.capture(), anyMap());
         assertEquals("rerank-model-a", bodyCaptor.getValue().get("model"));
         assertEquals("cpu", bodyCaptor.getValue().get("query"));
         assertEquals(2, bodyCaptor.getValue().get("top_n"));
         assertEquals(
                 List.of("A\ncontent A", "B\ncontent B"), bodyCaptor.getValue().get("documents"));
+        assertEquals("Bearer rerank-key", headersCaptor.getValue().get("Authorization"));
     }
 }

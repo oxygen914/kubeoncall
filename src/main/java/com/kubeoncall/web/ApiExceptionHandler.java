@@ -16,6 +16,10 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.server.ResponseStatusException;
 
+import com.kubeoncall.alarm.inbox.AlarmInboxUnavailableException;
+import com.kubeoncall.alarm.ingest.AlarmIngestionRejectedException;
+import com.kubeoncall.alarm.integration.alertmanager.WebhookAuthenticationException;
+import com.kubeoncall.alarm.integration.alertmanager.WebhookPayloadTooLargeException;
 import com.kubeoncall.common.exception.ApprovalRequiredException;
 import com.kubeoncall.common.exception.KubeOnCallException;
 import com.kubeoncall.common.exception.ReplanRequiredException;
@@ -55,6 +59,30 @@ public class ApiExceptionHandler {
             IllegalArgumentException exception, HttpServletRequest request) {
         return response(
                 HttpStatus.BAD_REQUEST, ApiErrorCode.INVALID_REQUEST, exception.getMessage(), request, Map.of());
+    }
+
+    @ExceptionHandler(WebhookAuthenticationException.class)
+    public ResponseEntity<ApiErrorResponse> handleWebhookAuthentication(
+            WebhookAuthenticationException exception, HttpServletRequest request) {
+        HttpStatus status =
+                exception.getMessage() != null && exception.getMessage().contains("authentication failed")
+                        ? HttpStatus.UNAUTHORIZED
+                        : HttpStatus.SERVICE_UNAVAILABLE;
+        return response(status, ApiErrorCode.BUSINESS_ERROR, exception.getMessage(), request, Map.of());
+    }
+
+    @ExceptionHandler(WebhookPayloadTooLargeException.class)
+    public ResponseEntity<ApiErrorResponse> handleWebhookTooLarge(
+            WebhookPayloadTooLargeException exception, HttpServletRequest request) {
+        return response(
+                HttpStatus.PAYLOAD_TOO_LARGE, ApiErrorCode.BUSINESS_ERROR, exception.getMessage(), request, Map.of());
+    }
+
+    @ExceptionHandler({AlarmInboxUnavailableException.class, AlarmIngestionRejectedException.class})
+    public ResponseEntity<ApiErrorResponse> handleAlarmInboxFailure(
+            RuntimeException exception, HttpServletRequest request) {
+        return response(
+                HttpStatus.SERVICE_UNAVAILABLE, ApiErrorCode.BUSINESS_ERROR, exception.getMessage(), request, Map.of());
     }
 
     @ExceptionHandler(HttpMessageNotReadableException.class)

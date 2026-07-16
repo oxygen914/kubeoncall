@@ -232,6 +232,13 @@ public class AlarmWorkflowAuditRecorder {
             putIfPresent(metadata, "silenceApprovalExpiresAt", context.getAttribute("silenceApprovalExpiresAt"));
             putIfPresent(metadata, "silenceApprovalKey", context.getAttribute("silenceApprovalKey"));
             putIfPresent(metadata, "silenceApprovalWarning", context.getAttribute("silenceApprovalWarning"));
+            putIfPresent(metadata, "changeCorrelations", context.getAttribute("changeCorrelations"));
+            putIfPresent(metadata, "topChangeCorrelation", context.getAttribute("topChangeCorrelation"));
+            putIfPresent(metadata, "changeCorrelationWarning", context.getAttribute("changeCorrelationWarning"));
+            putIfPresent(metadata, "aggregationKey", context.getAttribute("aggregationKey"));
+            putIfPresent(metadata, "aggregationCount", context.getAttribute("aggregationCount"));
+            putIfPresent(metadata, "aggregationWindowSeconds", context.getAttribute("aggregationWindowSeconds"));
+            putIfPresent(metadata, "aggregationRepresentative", context.getAttribute("aggregationRepresentative"));
         }
         if (results != null && !results.isEmpty()) {
             putIfPresent(metadata, "nodeResultCount", results.size());

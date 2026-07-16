@@ -15,13 +15,15 @@ import org.springframework.stereotype.Component;
 public class WorkflowTemplateRegistry {
 
     public static final String DEFAULT = "default";
+    public static final String NODE_MVP = "node-mvp";
     public static final String HOST_RESOURCE = "host-resource";
     public static final String K8S_POD = "k8s-pod";
     public static final String K8S_NODE = "k8s-node";
     public static final String WORKLOAD = "workload";
     public static final String CONTROL_PLANE = "control-plane";
 
-    private static final Set<String> KNOWN = Set.of(DEFAULT, HOST_RESOURCE, K8S_POD, K8S_NODE, WORKLOAD, CONTROL_PLANE);
+    private static final Set<String> KNOWN =
+            Set.of(DEFAULT, NODE_MVP, HOST_RESOURCE, K8S_POD, K8S_NODE, WORKLOAD, CONTROL_PLANE);
 
     public String normalize(String template) {
         if (template == null || template.isBlank()) {

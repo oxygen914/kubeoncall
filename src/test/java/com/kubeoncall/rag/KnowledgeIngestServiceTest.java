@@ -12,6 +12,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.time.Instant;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -202,6 +203,64 @@ class KnowledgeIngestServiceTest {
         assertTrue(result.retrievalReasons().stream().anyMatch(reason -> reason.contains("Excluded long-term memory")));
     }
 
+    @Test
+    void shouldUpsertByDocumentIdAndSoftDeleteThenRestoreChunks() {
+        InMemoryKnowledgeRepository repository = new InMemoryKnowledgeRepository();
+        KubeOnCallProperties properties = new KubeOnCallProperties();
+        properties.getRag().setChunkSize(32);
+        KnowledgeObjectStorageService storageService = mock(KnowledgeObjectStorageService.class);
+        when(storageService.store(anyString(), anyString(), anyString()))
+                .thenReturn(new StoredDocumentReference(null, null, false, "skip"));
+        KnowledgeIngestionFacade facade = new KnowledgeIngestionFacade(
+                repository,
+                new KnowledgeChunker(properties),
+                storageService,
+                new EmbeddingService(List.of(), properties),
+                properties);
+
+        facade.ingest("CPU runbook", "x".repeat(100), "manual", Map.of("doc_id", "cpu-runbook"));
+        int firstChunkCount = repository.findByMetadata("doc_id", "cpu-runbook").size();
+        facade.ingest("CPU runbook", "short content", "manual", Map.of("doc_id", "cpu-runbook"));
+
+        assertEquals(2, repository.findByMetadata("doc_id", "cpu-runbook").size());
+        assertTrue(firstChunkCount > 2);
+        KnowledgeIngestionFacade.LifecycleResult deleted = facade.softDelete("cpu-runbook", "expired");
+        assertEquals(2, deleted.affected());
+        assertTrue(repository.findByMetadata("doc_id", "cpu-runbook").stream()
+                .allMatch(document -> "false".equals(document.metadata().get("chunk_enable"))));
+
+        KnowledgeIngestionFacade.LifecycleResult restored = facade.restore("cpu-runbook");
+
+        assertTrue(restored.found());
+        assertEquals(
+                List.of("false", "true"),
+                repository.findByMetadata("doc_id", "cpu-runbook").stream()
+                        .map(document -> document.metadata().get("chunk_enable"))
+                        .sorted()
+                        .toList());
+    }
+
+    @Test
+    void shouldReturnExistingDocumentForRepeatedFileHashWithoutDocumentId() {
+        InMemoryKnowledgeRepository repository = new InMemoryKnowledgeRepository();
+        KubeOnCallProperties properties = new KubeOnCallProperties();
+        KnowledgeObjectStorageService storageService = mock(KnowledgeObjectStorageService.class);
+        when(storageService.store(anyString(), anyString(), anyString()))
+                .thenReturn(new StoredDocumentReference(null, null, false, "skip"));
+        KnowledgeIngestionFacade facade = new KnowledgeIngestionFacade(
+                repository,
+                new KnowledgeChunker(properties),
+                storageService,
+                new EmbeddingService(List.of(), properties),
+                properties);
+
+        KnowledgeDocument first = facade.ingest("CPU runbook", "same content", "manual", Map.of());
+        KnowledgeDocument repeated = facade.ingest("CPU runbook", "same content", "manual", Map.of());
+
+        assertEquals(first.id(), repeated.id());
+        verify(storageService, times(1)).store("CPU runbook", "same content", "manual");
+    }
+
     private static KnowledgeIngestService service(
             KnowledgeRepository repository,
             QueryRewriteService rewriteService,
@@ -216,5 +275,42 @@ class KnowledgeIngestServiceTest {
         KnowledgeRetrievalFacade retrievalFacade = new KnowledgeRetrievalFacade(
                 repository, rewriteService, ragRouter, retrievalService, rerankService, properties);
         return new KnowledgeIngestService(ingestionFacade, retrievalFacade);
+    }
+
+    private static final class InMemoryKnowledgeRepository implements KnowledgeRepository {
+
+        private final Map<String, KnowledgeDocument> documents = new LinkedHashMap<>();
+
+        @Override
+        public void save(KnowledgeDocument document) {
+            documents.put(document.id(), document);
+        }
+
+        @Override
+        public List<KnowledgeDocument> searchLexical(RetrievalRequest request, int candidateSize) {
+            return List.of();
+        }
+
+        @Override
+        public List<KnowledgeDocument> searchVector(RetrievalRequest request, int candidateSize) {
+            return List.of();
+        }
+
+        @Override
+        public Map<String, KnowledgeDocument> loadParents(List<String> parentDocumentIds) {
+            return Map.of();
+        }
+
+        @Override
+        public List<KnowledgeDocument> findByMetadata(String key, String value) {
+            return documents.values().stream()
+                    .filter(document -> value.equals(document.metadata().get(key)))
+                    .toList();
+        }
+
+        @Override
+        public void deleteById(String documentId) {
+            documents.remove(documentId);
+        }
     }
 }

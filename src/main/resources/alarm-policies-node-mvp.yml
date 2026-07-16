@@ -1,0 +1,101 @@
+# Active policy set for the Kubernetes node-monitoring MVP.
+# The broader alarm-policies.yml catalog is retained as a historical reference, but is not loaded
+# by default. NodeNotReady is intentionally absent until kube-state-metrics is deployed.
+version: 2026-07-15-node-mvp
+policies:
+  - id: node-down
+    name: NodeDown
+    category: node-monitoring
+    metricName: prometheus.up
+    resourceType: node
+    severity: P1
+    promql: up{job="node-exporter"} == 0
+    window: 5m
+    recover: up == 1
+    runbookId: runbook-node-notready
+    owner: infra
+    labels: {team: infra}
+    actions:
+      workflowTemplate: node-mvp
+      notify: oncall
+      autoSilence: false
+
+  - id: node-cpu-high
+    name: NodeCPUHigh
+    category: node-monitoring
+    metricName: node.cpu.usage_percent
+    resourceType: node
+    severity: P2
+    operator: ">"
+    threshold: 85
+    for: 5m
+    promql: 100 - (avg by (cluster, node, instance) (rate(node_cpu_seconds_total{job="node-exporter",mode="idle"}[5m])) * 100) > 85
+    window: 5m
+    recover: cpu_usage_percent < 85
+    runbookId: runbook-host-cpu-high
+    owner: infra
+    labels: {team: infra}
+    actions:
+      workflowTemplate: node-mvp
+      notify: oncall
+      autoSilence: false
+
+  - id: node-memory-low
+    name: NodeMemoryLow
+    category: node-monitoring
+    metricName: node.memory.available_percent
+    resourceType: node
+    severity: P2
+    operator: "<"
+    threshold: 15
+    for: 5m
+    promql: node_memory_MemAvailable_bytes{job="node-exporter"} / node_memory_MemTotal_bytes{job="node-exporter"} * 100 < 15
+    window: 5m
+    recover: available_percent >= 15
+    runbookId: runbook-host-memory-pressure
+    owner: infra
+    labels: {team: infra}
+    actions:
+      workflowTemplate: node-mvp
+      notify: oncall
+      autoSilence: false
+
+  - id: node-disk-high
+    name: NodeDiskHigh
+    category: node-monitoring
+    metricName: node.filesystem.usage_percent
+    resourceType: node
+    severity: P2
+    operator: ">"
+    threshold: 85
+    for: 5m
+    promql: 100 - (node_filesystem_avail_bytes{job="node-exporter",fstype!~"tmpfs|overlay"} / node_filesystem_size_bytes{job="node-exporter",fstype!~"tmpfs|overlay"} * 100) > 85
+    window: 5m
+    recover: filesystem_usage_percent < 85
+    runbookId: runbook-host-disk-usage
+    owner: infra
+    labels: {team: infra}
+    actions:
+      workflowTemplate: node-mvp
+      notify: oncall
+      autoSilence: false
+
+  - id: node-inode-high
+    name: NodeInodeHigh
+    category: node-monitoring
+    metricName: node.filesystem.inode_usage_percent
+    resourceType: node
+    severity: P2
+    operator: ">"
+    threshold: 85
+    for: 5m
+    promql: 100 - (node_filesystem_files_free{job="node-exporter",fstype!~"tmpfs|overlay"} / node_filesystem_files{job="node-exporter",fstype!~"tmpfs|overlay"} * 100) > 85
+    window: 5m
+    recover: inode_usage_percent < 85
+    runbookId: runbook-host-inode-usage
+    owner: infra
+    labels: {team: infra}
+    actions:
+      workflowTemplate: node-mvp
+      notify: oncall
+      autoSilence: false

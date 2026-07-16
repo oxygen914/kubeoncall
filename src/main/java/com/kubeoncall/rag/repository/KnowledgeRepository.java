@@ -35,6 +35,15 @@ public interface KnowledgeRepository {
         return Optional.empty();
     }
 
+    /**
+     * Finds every persisted record that belongs to a metadata value. A knowledge document and its
+     * chunks share {@code doc_id}, so callers can use this to perform document-level lifecycle
+     * operations without making retrieval queries depend on the document content.
+     */
+    default List<KnowledgeDocument> findByMetadata(String key, String value) {
+        return List.of();
+    }
+
     default void deleteById(String documentId) {}
 
     default List<KnowledgeDocument> search(RetrievalRequest request) {

@@ -8,6 +8,7 @@ class RagProperties {
     private boolean vectorEnabled = false;
     private boolean crossEncoderEnabled = false;
     private String crossEncoderEndpoint;
+    private String crossEncoderApiKey;
     private String crossEncoderModel = "cross-encoder";
     private int crossEncoderTimeoutMillis = 3000;
     private int lexicalCandidateTopN = 20;
@@ -78,6 +79,14 @@ class RagProperties {
 
     public void setCrossEncoderEndpoint(String crossEncoderEndpoint) {
         this.crossEncoderEndpoint = crossEncoderEndpoint;
+    }
+
+    public String getCrossEncoderApiKey() {
+        return crossEncoderApiKey;
+    }
+
+    public void setCrossEncoderApiKey(String crossEncoderApiKey) {
+        this.crossEncoderApiKey = crossEncoderApiKey;
     }
 
     public String getCrossEncoderModel() {

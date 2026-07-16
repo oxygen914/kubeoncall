@@ -29,6 +29,27 @@ class AlarmProperties {
     private long recoveryConfirmationTimeoutSeconds = 86400;
     private long p0EscalationCount = 2;
     private long p1EscalationCount = 3;
+    private long p0EscalationAfterSeconds = 600;
+    private long p1EscalationAfterSeconds = 1800;
+    private int policyVersionHistoryLimit = 20;
+    private long p1AggregationWindowSeconds = 300;
+    private long p2AggregationWindowSeconds = 900;
+    private long p3AggregationWindowSeconds = 3600;
+    private boolean alertmanagerWebhookEnabled = true;
+    private String alertmanagerWebhookAuthMode = "bearer";
+    private String alertmanagerWebhookToken;
+    private String alertmanagerWebhookTokenFile;
+    private int alertmanagerWebhookMaxAlertsPerRequest = 100;
+    private int alertmanagerWebhookMaxPayloadBytes = 1048576;
+    private String inboxStreamKey = "kubeoncall:alarm:inbox";
+    private String inboxConsumerGroup = "kubeoncall-alarm-workers";
+    private String inboxDeadLetterKey = "kubeoncall:alarm:dead-letter";
+    private int inboxMaxRetries = 5;
+    private long inboxRetentionHours = 168;
+    private boolean inboxWorkerEnabled = true;
+    private int inboxWorkerBatchSize = 10;
+    private long inboxWorkerBlockMillis = 1000;
+    private long inboxPendingClaimIdleMillis = 60000;
 
     public boolean isEnabled() {
         return enabled;
@@ -244,5 +265,173 @@ class AlarmProperties {
 
     public void setP1EscalationCount(long p1EscalationCount) {
         this.p1EscalationCount = p1EscalationCount;
+    }
+
+    public long getP0EscalationAfterSeconds() {
+        return p0EscalationAfterSeconds;
+    }
+
+    public void setP0EscalationAfterSeconds(long p0EscalationAfterSeconds) {
+        this.p0EscalationAfterSeconds = p0EscalationAfterSeconds;
+    }
+
+    public long getP1EscalationAfterSeconds() {
+        return p1EscalationAfterSeconds;
+    }
+
+    public void setP1EscalationAfterSeconds(long p1EscalationAfterSeconds) {
+        this.p1EscalationAfterSeconds = p1EscalationAfterSeconds;
+    }
+
+    public int getPolicyVersionHistoryLimit() {
+        return policyVersionHistoryLimit;
+    }
+
+    public void setPolicyVersionHistoryLimit(int policyVersionHistoryLimit) {
+        this.policyVersionHistoryLimit = policyVersionHistoryLimit;
+    }
+
+    public long getP1AggregationWindowSeconds() {
+        return p1AggregationWindowSeconds;
+    }
+
+    public void setP1AggregationWindowSeconds(long p1AggregationWindowSeconds) {
+        this.p1AggregationWindowSeconds = p1AggregationWindowSeconds;
+    }
+
+    public long getP2AggregationWindowSeconds() {
+        return p2AggregationWindowSeconds;
+    }
+
+    public void setP2AggregationWindowSeconds(long p2AggregationWindowSeconds) {
+        this.p2AggregationWindowSeconds = p2AggregationWindowSeconds;
+    }
+
+    public long getP3AggregationWindowSeconds() {
+        return p3AggregationWindowSeconds;
+    }
+
+    public void setP3AggregationWindowSeconds(long p3AggregationWindowSeconds) {
+        this.p3AggregationWindowSeconds = p3AggregationWindowSeconds;
+    }
+
+    public boolean isAlertmanagerWebhookEnabled() {
+        return alertmanagerWebhookEnabled;
+    }
+
+    public void setAlertmanagerWebhookEnabled(boolean alertmanagerWebhookEnabled) {
+        this.alertmanagerWebhookEnabled = alertmanagerWebhookEnabled;
+    }
+
+    public String getAlertmanagerWebhookAuthMode() {
+        return alertmanagerWebhookAuthMode;
+    }
+
+    public void setAlertmanagerWebhookAuthMode(String alertmanagerWebhookAuthMode) {
+        this.alertmanagerWebhookAuthMode = alertmanagerWebhookAuthMode;
+    }
+
+    public String getAlertmanagerWebhookToken() {
+        return alertmanagerWebhookToken;
+    }
+
+    public void setAlertmanagerWebhookToken(String alertmanagerWebhookToken) {
+        this.alertmanagerWebhookToken = alertmanagerWebhookToken;
+    }
+
+    public String getAlertmanagerWebhookTokenFile() {
+        return alertmanagerWebhookTokenFile;
+    }
+
+    public void setAlertmanagerWebhookTokenFile(String alertmanagerWebhookTokenFile) {
+        this.alertmanagerWebhookTokenFile = alertmanagerWebhookTokenFile;
+    }
+
+    public int getAlertmanagerWebhookMaxAlertsPerRequest() {
+        return alertmanagerWebhookMaxAlertsPerRequest;
+    }
+
+    public void setAlertmanagerWebhookMaxAlertsPerRequest(int alertmanagerWebhookMaxAlertsPerRequest) {
+        this.alertmanagerWebhookMaxAlertsPerRequest = alertmanagerWebhookMaxAlertsPerRequest;
+    }
+
+    public int getAlertmanagerWebhookMaxPayloadBytes() {
+        return alertmanagerWebhookMaxPayloadBytes;
+    }
+
+    public void setAlertmanagerWebhookMaxPayloadBytes(int alertmanagerWebhookMaxPayloadBytes) {
+        this.alertmanagerWebhookMaxPayloadBytes = alertmanagerWebhookMaxPayloadBytes;
+    }
+
+    public String getInboxStreamKey() {
+        return inboxStreamKey;
+    }
+
+    public void setInboxStreamKey(String inboxStreamKey) {
+        this.inboxStreamKey = inboxStreamKey;
+    }
+
+    public String getInboxConsumerGroup() {
+        return inboxConsumerGroup;
+    }
+
+    public void setInboxConsumerGroup(String inboxConsumerGroup) {
+        this.inboxConsumerGroup = inboxConsumerGroup;
+    }
+
+    public String getInboxDeadLetterKey() {
+        return inboxDeadLetterKey;
+    }
+
+    public void setInboxDeadLetterKey(String inboxDeadLetterKey) {
+        this.inboxDeadLetterKey = inboxDeadLetterKey;
+    }
+
+    public int getInboxMaxRetries() {
+        return inboxMaxRetries;
+    }
+
+    public void setInboxMaxRetries(int inboxMaxRetries) {
+        this.inboxMaxRetries = inboxMaxRetries;
+    }
+
+    public long getInboxRetentionHours() {
+        return inboxRetentionHours;
+    }
+
+    public void setInboxRetentionHours(long inboxRetentionHours) {
+        this.inboxRetentionHours = inboxRetentionHours;
+    }
+
+    public boolean isInboxWorkerEnabled() {
+        return inboxWorkerEnabled;
+    }
+
+    public void setInboxWorkerEnabled(boolean inboxWorkerEnabled) {
+        this.inboxWorkerEnabled = inboxWorkerEnabled;
+    }
+
+    public int getInboxWorkerBatchSize() {
+        return inboxWorkerBatchSize;
+    }
+
+    public void setInboxWorkerBatchSize(int inboxWorkerBatchSize) {
+        this.inboxWorkerBatchSize = inboxWorkerBatchSize;
+    }
+
+    public long getInboxWorkerBlockMillis() {
+        return inboxWorkerBlockMillis;
+    }
+
+    public void setInboxWorkerBlockMillis(long inboxWorkerBlockMillis) {
+        this.inboxWorkerBlockMillis = inboxWorkerBlockMillis;
+    }
+
+    public long getInboxPendingClaimIdleMillis() {
+        return inboxPendingClaimIdleMillis;
+    }
+
+    public void setInboxPendingClaimIdleMillis(long inboxPendingClaimIdleMillis) {
+        this.inboxPendingClaimIdleMillis = inboxPendingClaimIdleMillis;
     }
 }

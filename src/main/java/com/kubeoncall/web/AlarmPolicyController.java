@@ -8,6 +8,7 @@ import java.util.Map;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -16,12 +17,14 @@ import org.springframework.web.bind.annotation.RestController;
 import com.kubeoncall.alarm.domain.AlarmEvaluationResult;
 import com.kubeoncall.alarm.domain.NormalizedAlarmEvent;
 import com.kubeoncall.alarm.ingest.AlarmNormalizer;
+import com.kubeoncall.alarm.policy.AlarmPolicyCompiler;
 import com.kubeoncall.alarm.policy.AlarmPolicyEngine;
 import com.kubeoncall.alarm.policy.YamlAlarmPolicyRepository;
 import com.kubeoncall.service.ExecutionAuditService;
 import com.kubeoncall.web.dto.AlarmPolicyEvaluationResponse;
 import com.kubeoncall.web.dto.AlarmPolicyReplayRequest;
 import com.kubeoncall.web.dto.AlarmPolicyReplayResponse;
+import com.kubeoncall.web.dto.AlarmPolicyRollbackRequest;
 import com.kubeoncall.web.dto.AlarmRequest;
 
 @RestController
@@ -32,17 +35,30 @@ public class AlarmPolicyController {
     private final YamlAlarmPolicyRepository repository;
     private final AlarmNormalizer alarmNormalizer;
     private final AlarmPolicyEngine policyEngine;
+    private final AlarmPolicyCompiler policyCompiler;
     private final ExecutionAuditService executionAuditService;
 
+    @Autowired
+    public AlarmPolicyController(
+            YamlAlarmPolicyRepository repository,
+            AlarmNormalizer alarmNormalizer,
+            AlarmPolicyEngine policyEngine,
+            AlarmPolicyCompiler policyCompiler,
+            ExecutionAuditService executionAuditService) {
+        this.repository = repository;
+        this.alarmNormalizer = alarmNormalizer;
+        this.policyEngine = policyEngine;
+        this.policyCompiler = policyCompiler;
+        this.executionAuditService = executionAuditService;
+    }
+
+    /** Retained for controller-focused tests and callers that do not inject a compiler explicitly. */
     public AlarmPolicyController(
             YamlAlarmPolicyRepository repository,
             AlarmNormalizer alarmNormalizer,
             AlarmPolicyEngine policyEngine,
             ExecutionAuditService executionAuditService) {
-        this.repository = repository;
-        this.alarmNormalizer = alarmNormalizer;
-        this.policyEngine = policyEngine;
-        this.executionAuditService = executionAuditService;
+        this(repository, alarmNormalizer, policyEngine, new AlarmPolicyCompiler(repository), executionAuditService);
     }
 
     @PostMapping("/reload")
@@ -63,6 +79,34 @@ public class AlarmPolicyController {
                         "policyCount",
                         result.policyCount()));
         return result;
+    }
+
+    @PostMapping("/rollback")
+    public YamlAlarmPolicyRepository.PolicySnapshot rollback(@RequestBody AlarmPolicyRollbackRequest request) {
+        if (request == null || request.version() == null || request.version().isBlank()) {
+            throw new IllegalArgumentException("version is required");
+        }
+        Instant startedAt = Instant.now();
+        YamlAlarmPolicyRepository.PolicySnapshot result = repository.rollback(request.version());
+        auditPolicy(
+                "rollback",
+                "POLICY_ROLLED_BACK",
+                "Alarm policy rolled back to version " + result.version(),
+                null,
+                startedAt,
+                Map.of("previousVersion", result.previousVersion(), "activeVersion", result.version()));
+        return result;
+    }
+
+    @PostMapping("/versions")
+    public Map<String, YamlAlarmPolicyRepository.PolicySnapshot> versions() {
+        return repository.versionHistory();
+    }
+
+    /** Produces a deterministic, checksummed Prometheus rule file without mutating deployed rules. */
+    @PostMapping("/prometheus-rules/dry-run")
+    public AlarmPolicyCompiler.CompiledPrometheusRules dryRunPrometheusRules() {
+        return policyCompiler.compileActive();
     }
 
     @PostMapping("/dry-run")

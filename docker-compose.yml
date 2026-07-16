@@ -22,6 +22,7 @@ services:
       PROMETHEUS_TOOL_ENDPOINT: ${PROMETHEUS_TOOL_ENDPOINT:-http://host.docker.internal:18082/api/tools/prometheus}
       ALERTMANAGER_TOOL_ENDPOINT: ${ALERTMANAGER_TOOL_ENDPOINT:-http://host.docker.internal:18083/api/tools/alertmanager}
       INCIDENT_TOOL_ENDPOINT: ${INCIDENT_TOOL_ENDPOINT:-http://host.docker.internal:18087/api/tools/incident}
+      ALERTMANAGER_WEBHOOK_TOKEN: ${ALERTMANAGER_WEBHOOK_TOKEN:-}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     ports:
@@ -80,6 +81,28 @@ services:
     depends_on:
       kubeoncall:
         condition: service_started
+
+  alertmanager:
+    profiles: [alerting]
+    image: prom/alertmanager:v0.27.0
+    command: ["--config.file=/etc/alertmanager/alertmanager.yml"]
+    volumes:
+      - ./deploy/alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+      - ./deploy/alertmanager/secrets/kubeoncall-webhook-token:/etc/alertmanager/secrets/kubeoncall-webhook-token:ro
+    ports:
+      - "9093:9093"
+    depends_on:
+      kubeoncall:
+        condition: service_started
+
+  node-exporter:
+    profiles: [alerting]
+    image: prom/node-exporter:v1.8.2
+    command: ["--path.rootfs=/host"]
+    volumes:
+      - /:/host:ro,rslave
+    ports:
+      - "9100:9100"
 
   grafana:
     image: grafana/grafana:11.1.4

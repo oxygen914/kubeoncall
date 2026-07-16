@@ -1,0 +1,19 @@
+global:
+  resolve_timeout: 5m
+
+route:
+  receiver: kubeoncall-webhook
+  group_by: [cluster, node, alertname]
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 4h
+
+receivers:
+  - name: kubeoncall-webhook
+    webhook_configs:
+      - url: http://kubeoncall:8080/api/integrations/alertmanager/webhook
+        send_resolved: true
+        http_config:
+          authorization:
+            type: Bearer
+            credentials_file: /etc/alertmanager/secrets/kubeoncall-webhook-token

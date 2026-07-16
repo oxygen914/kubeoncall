@@ -16,6 +16,8 @@ import com.kubeoncall.domain.rag.KnowledgeDocument;
 import com.kubeoncall.domain.rag.RetrievalResult;
 import com.kubeoncall.domain.rag.RetrieveMethod;
 import com.kubeoncall.rag.KnowledgeIngestService;
+import com.kubeoncall.rag.KnowledgeIngestionFacade;
+import com.kubeoncall.rag.KnowledgeJsonlImportService;
 import com.kubeoncall.rag.repository.KnowledgeIndexAdmin;
 import com.kubeoncall.rag.runbook.RunbookImportService;
 import com.kubeoncall.service.ExecutionAuditService;
@@ -29,6 +31,7 @@ import com.kubeoncall.web.dto.RunbookImportRequest;
 public class KnowledgeController {
 
     private final KnowledgeIngestService knowledgeIngestService;
+    private final KnowledgeJsonlImportService knowledgeJsonlImportService;
     private final RunbookImportService runbookImportService;
     private final KnowledgeIndexAdmin knowledgeIndexAdmin;
     private final ExecutionAuditService executionAuditService;
@@ -36,11 +39,13 @@ public class KnowledgeController {
 
     public KnowledgeController(
             KnowledgeIngestService knowledgeIngestService,
+            KnowledgeJsonlImportService knowledgeJsonlImportService,
             RunbookImportService runbookImportService,
             KnowledgeIndexAdmin knowledgeIndexAdmin,
             ExecutionAuditService executionAuditService,
             KubeOnCallMetricsService metricsService) {
         this.knowledgeIngestService = knowledgeIngestService;
+        this.knowledgeJsonlImportService = knowledgeJsonlImportService;
         this.runbookImportService = runbookImportService;
         this.knowledgeIndexAdmin = knowledgeIndexAdmin;
         this.executionAuditService = executionAuditService;
@@ -98,6 +103,40 @@ public class KnowledgeController {
             recordKnowledgeFailure("query", startedAt, ex);
             throw ex;
         }
+    }
+
+    @PostMapping("/import/jsonl")
+    public KnowledgeJsonlImportService.ImportResult importJsonl(@RequestBody(required = false) String payload) {
+        Instant startedAt = Instant.now();
+        try {
+            KnowledgeJsonlImportService.ImportResult result = knowledgeJsonlImportService.importJsonl(payload);
+            String status = result.failed() == 0 ? "SUCCESS" : "DEGRADED";
+            recordKnowledge(
+                    "jsonl_import",
+                    status,
+                    "Knowledge JSONL import completed",
+                    startedAt,
+                    result.imported(),
+                    Map.of("scanned", result.scanned(), "imported", result.imported(), "failed", result.failed()));
+            return result;
+        } catch (RuntimeException ex) {
+            recordKnowledgeFailure("jsonl_import", startedAt, ex);
+            throw ex;
+        }
+    }
+
+    @PostMapping("/{documentId}/delete")
+    public KnowledgeIngestionFacade.LifecycleResult delete(
+            @PathVariable String documentId, @RequestBody(required = false) LifecycleRequest request) {
+        return lifecycle(
+                "delete",
+                documentId,
+                () -> knowledgeIngestService.softDelete(documentId, request == null ? null : request.reason()));
+    }
+
+    @PostMapping("/{documentId}/restore")
+    public KnowledgeIngestionFacade.LifecycleResult restore(@PathVariable String documentId) {
+        return lifecycle("restore", documentId, () -> knowledgeIngestService.restore(documentId));
     }
 
     @PostMapping("/runbooks/import")
@@ -206,9 +245,35 @@ public class KnowledgeController {
                 Map.of("errorType", ex.getClass().getSimpleName()));
     }
 
+    private KnowledgeIngestionFacade.LifecycleResult lifecycle(
+            String operation, String documentId, LifecycleOperation lifecycleOperation) {
+        Instant startedAt = Instant.now();
+        try {
+            KnowledgeIngestionFacade.LifecycleResult result = lifecycleOperation.perform();
+            recordKnowledge(
+                    operation,
+                    result.found() ? "SUCCESS" : "NOT_FOUND",
+                    "Knowledge lifecycle operation completed",
+                    startedAt,
+                    result.affected(),
+                    Map.of("documentId", safe(documentId), "affected", result.affected()));
+            return result;
+        } catch (RuntimeException ex) {
+            recordKnowledgeFailure(operation, startedAt, ex);
+            throw ex;
+        }
+    }
+
     private String safe(String value) {
         return value == null ? "" : value;
     }
 
     public record IndexPrepareRequest(String version, boolean reindex) {}
+
+    public record LifecycleRequest(String reason) {}
+
+    @FunctionalInterface
+    private interface LifecycleOperation {
+        KnowledgeIngestionFacade.LifecycleResult perform();
+    }
 }

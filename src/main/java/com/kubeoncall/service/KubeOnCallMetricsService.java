@@ -54,6 +54,10 @@ public class KubeOnCallMetricsService {
         increment("kubeoncall.alarm.acknowledgements", "outcome", safe(outcome));
     }
 
+    public void recordAlarmInbox(String outcome) {
+        increment("kubeoncall.alarm.inbox", "outcome", safe(outcome));
+    }
+
     public void recordAlarmRecovery(String outcome, String severity) {
         increment("kubeoncall.alarm.recoveries", "outcome", safe(outcome), "severity", safe(severity));
     }

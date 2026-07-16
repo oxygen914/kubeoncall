@@ -2,3 +2,4 @@
 /mianshiti/
 # Maven Wrapper downloaded jar (regenerated on demand by ./mvnw)
 /.mvn/wrapper/maven-wrapper.jar
+/deploy/alertmanager/secrets/

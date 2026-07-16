@@ -144,6 +144,16 @@ public class ElasticsearchKnowledgeRepository implements KnowledgeRepository {
     }
 
     @Override
+    public List<KnowledgeDocument> findByMetadata(String key, String value) {
+        if (key == null || key.isBlank() || value == null || value.isBlank() || !indexAdmin.indexExists()) {
+            return List.of();
+        }
+        CriteriaQuery query = new CriteriaQuery(new Criteria("metadata." + key.trim()).is(value.trim()));
+        query.setMaxResults(10_000);
+        return searchByQuery(query);
+    }
+
+    @Override
     public void deleteById(String documentId) {
         if (documentId == null || documentId.isBlank()) {
             return;

@@ -23,6 +23,14 @@ public class KnowledgeIngestService {
         return ingestionFacade.ingest(title, content, source, metadata);
     }
 
+    public KnowledgeIngestionFacade.LifecycleResult softDelete(String documentId, String reason) {
+        return ingestionFacade.softDelete(documentId, reason);
+    }
+
+    public KnowledgeIngestionFacade.LifecycleResult restore(String documentId) {
+        return ingestionFacade.restore(documentId);
+    }
+
     public RetrievalResult retrieve(String question, Map<String, String> filters) {
         // Preserve the legacy service contract: callers of this overload receive diagnostics.
         // The explicit API overload remains the opt-in trace boundary.

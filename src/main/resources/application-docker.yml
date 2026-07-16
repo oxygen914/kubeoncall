@@ -21,6 +21,7 @@ kubeoncall:
     embedding-dimensions: ${RAG_EMBEDDING_DIMENSIONS:1536}
     cross-encoder-enabled: true
     cross-encoder-endpoint: ${RAG_RERANK_ENDPOINT:http://host.docker.internal:18086/v1/rerank}
+    cross-encoder-api-key: ${RAG_RERANK_API_KEY:}
     cross-encoder-model: ${RAG_RERANK_MODEL:cross-encoder}
     runbook-bootstrap-enabled: true
   storage:

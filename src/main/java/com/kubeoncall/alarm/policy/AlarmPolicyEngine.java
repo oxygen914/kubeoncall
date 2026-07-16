@@ -88,7 +88,9 @@ public class AlarmPolicyEngine {
     }
 
     private List<AlarmPolicy> findCandidates(NormalizedAlarmEvent event) {
-        List<AlarmPolicy> all = policyRepository.findAll();
+        List<AlarmPolicy> all = policyRepository instanceof YamlAlarmPolicyRepository yaml
+                ? yaml.findAll(yaml.resolveVersion(event))
+                : policyRepository.findAll();
         if (event.alertName() != null && !event.alertName().isBlank()) {
             // Include exact alertName matches, but also include sibling policies for the same
             // metric/resource so a P1 upstream alert can still escalate to the P0 policy when the

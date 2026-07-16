@@ -39,6 +39,10 @@ public class HttpCrossEncoderReranker implements CrossEncoderReranker {
                         + "\n"
                         + (document.content() == null ? "" : document.content()))
                 .toList();
+        Map<String, String> headers = properties.getRag().getCrossEncoderApiKey() == null
+                        || properties.getRag().getCrossEncoderApiKey().isBlank()
+                ? Map.of()
+                : Map.of("Authorization", "Bearer " + properties.getRag().getCrossEncoderApiKey());
         Map<String, Object> response = toolHttpClient.post(
                 properties.getRag().getCrossEncoderEndpoint(),
                 Map.of(
@@ -53,6 +57,7 @@ public class HttpCrossEncoderReranker implements CrossEncoderReranker {
                                 documents.size(),
                                 Math.max(1, properties.getRag().getRerankTopN()))),
                 properties.getRag().getCrossEncoderTimeoutMillis(),
+                headers,
                 Map.of("targetSystem", "cross-encoder", "tool", "crossEncoder.rerank"));
         if (!"success".equalsIgnoreCase(String.valueOf(response.get("status")))) {
             return Map.of();

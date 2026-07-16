@@ -98,6 +98,37 @@ class ElasticsearchKnowledgeRepositoryTest {
     }
 
     @Test
+    void shouldFindDocumentsByMetadataForDocumentLifecycle() {
+        ElasticsearchTemplate template = mock(ElasticsearchTemplate.class);
+        KubeOnCallProperties properties = new KubeOnCallProperties();
+        ElasticsearchKnowledgeRepository repository = repository(template, properties);
+        @SuppressWarnings("unchecked")
+        SearchHits<EsKnowledgeDocumentEntity> hits = mock(SearchHits.class);
+        @SuppressWarnings("unchecked")
+        SearchHit<EsKnowledgeDocumentEntity> hit = mock(SearchHit.class);
+        when(hit.getContent())
+                .thenReturn(new EsKnowledgeDocumentEntity(
+                        "doc-1#chunk-1",
+                        "title",
+                        "content",
+                        "manual",
+                        Map.of("doc_id", "doc-1"),
+                        Instant.now().toEpochMilli()));
+        when(hits.stream()).thenReturn(Stream.of(hit));
+        when(template.search(
+                        any(org.springframework.data.elasticsearch.core.query.Query.class),
+                        eq(EsKnowledgeDocumentEntity.class),
+                        any(org.springframework.data.elasticsearch.core.mapping.IndexCoordinates.class)))
+                .thenReturn(hits);
+
+        List<KnowledgeDocument> result = repository.findByMetadata("doc_id", "doc-1");
+
+        assertEquals(
+                List.of("doc-1#chunk-1"),
+                result.stream().map(KnowledgeDocument::id).toList());
+    }
+
+    @Test
     void shouldPreserveElasticsearchHitOrderInsteadOfSortingByCreatedAt() {
         ElasticsearchTemplate template = mock(ElasticsearchTemplate.class);
         KubeOnCallProperties properties = new KubeOnCallProperties();

@@ -1,25 +1,33 @@
 groups:
-  - name: kubeoncall
+  - name: node-monitoring
     rules:
-      - alert: KubeOnCallDown
-        expr: up{job="kubeoncall"} == 0
+      - alert: NodeDown
+        expr: up{job="node-exporter"} == 0
         for: 2m
-        labels: {severity: P0}
+        labels: {severity: P1}
         annotations:
-          summary: KubeOnCall is unavailable
-      - alert: KubeOnCallAlarmDegraded
-        expr: increase(kubeoncall_alarm_executions_total{degraded="true"}[10m]) > 5
+          summary: Node Exporter is unreachable
+      - alert: NodeCPUHigh
+        expr: 100 - (avg by (cluster, node, instance) (rate(node_cpu_seconds_total{job="node-exporter",mode="idle"}[5m])) * 100) > 85
         for: 5m
-        labels: {severity: P1}
+        labels: {severity: P2}
         annotations:
-          summary: Alarm workflows are repeatedly degraded
-      - alert: KubeOnCallMemoryExtractionDeadLetters
-        expr: increase(kubeoncall_memory_operations_total{operation="extract_dead_letter"}[15m]) > 0
-        labels: {severity: P1}
+          summary: Node CPU usage is above 85%
+      - alert: NodeMemoryLow
+        expr: node_memory_MemAvailable_bytes{job="node-exporter"} / node_memory_MemTotal_bytes{job="node-exporter"} * 100 < 15
+        for: 5m
+        labels: {severity: P2}
         annotations:
-          summary: Memory extraction tasks entered the dead-letter queue
-      - alert: KubeOnCallRecoveryFinalizationFailures
-        expr: increase(kubeoncall_alarm_recoveries_total{outcome="finalization_failed"}[15m]) > 0
-        labels: {severity: P1}
+          summary: Node available memory is below 15%
+      - alert: NodeDiskHigh
+        expr: 100 - (node_filesystem_avail_bytes{job="node-exporter",fstype!~"tmpfs|overlay"} / node_filesystem_size_bytes{job="node-exporter",fstype!~"tmpfs|overlay"} * 100) > 85
+        for: 5m
+        labels: {severity: P2}
         annotations:
-          summary: Alarm recovery external finalization failed
+          summary: Node filesystem usage is above 85%
+      - alert: NodeInodeHigh
+        expr: 100 - (node_filesystem_files_free{job="node-exporter",fstype!~"tmpfs|overlay"} / node_filesystem_files{job="node-exporter",fstype!~"tmpfs|overlay"} * 100) > 85
+        for: 5m
+        labels: {severity: P2}
+        annotations:
+          summary: Node filesystem inode usage is above 85%

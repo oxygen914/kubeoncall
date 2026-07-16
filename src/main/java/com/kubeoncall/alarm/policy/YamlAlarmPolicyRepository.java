@@ -3,6 +3,7 @@ package com.kubeoncall.alarm.policy;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -42,10 +43,12 @@ public class YamlAlarmPolicyRepository implements AlarmPolicyRepository {
     private final String policyLocation;
     private final boolean enabled;
     private final AlarmSeverity defaultSeverity;
+    private final int versionHistoryLimit;
     private volatile List<AlarmPolicy> policies = List.of();
     private volatile Map<String, AlarmPolicy> byId = Map.of();
     private volatile Map<String, AlarmPolicy> byName = Map.of();
     private volatile String activeVersion = "unversioned";
+    private volatile Map<String, PolicySnapshot> versionHistory = Map.of();
 
     public YamlAlarmPolicyRepository(KubeOnCallProperties properties) {
         KubeOnCallProperties.Alarm alarm = properties.getAlarm();
@@ -53,6 +56,7 @@ public class YamlAlarmPolicyRepository implements AlarmPolicyRepository {
         this.enabled = alarm.isEnabled();
         AlarmSeverity parsed = AlarmSeverity.fromRaw(alarm.getDefaultSeverity());
         this.defaultSeverity = parsed == null ? AlarmSeverity.P3 : parsed;
+        this.versionHistoryLimit = Math.max(1, alarm.getPolicyVersionHistoryLimit());
     }
 
     @PostConstruct
@@ -100,6 +104,7 @@ public class YamlAlarmPolicyRepository implements AlarmPolicyRepository {
         this.byId = Map.copyOf(nextById);
         this.byName = Map.copyOf(nextByName);
         this.activeVersion = file.version() == null || file.version().isBlank() ? "unversioned" : file.version();
+        retainVersion(this.activeVersion, this.policies);
         log.info("Loaded {} alarm policies from {}", loaded.size(), policyLocation);
     }
 
@@ -130,6 +135,63 @@ public class YamlAlarmPolicyRepository implements AlarmPolicyRepository {
 
     public String activeVersion() {
         return activeVersion;
+    }
+
+    /** Immutable in-process policy snapshots support audited dry runs and immediate rollback. */
+    public Map<String, PolicySnapshot> versionHistory() {
+        return Map.copyOf(versionHistory);
+    }
+
+    public List<AlarmPolicy> findAll(String version) {
+        PolicySnapshot snapshot = versionHistory.get(version);
+        return snapshot == null ? List.of() : snapshot.policies();
+    }
+
+    public synchronized PolicySnapshot rollback(String version) {
+        PolicySnapshot snapshot = versionHistory.get(version);
+        if (snapshot == null) {
+            throw new IllegalArgumentException("Unknown alarm policy version: " + version);
+        }
+        String previousVersion = activeVersion;
+        this.policies = snapshot.policies();
+        this.byId = indexById(snapshot.policies());
+        this.byName = indexByName(snapshot.policies());
+        this.activeVersion = snapshot.version();
+        return new PolicySnapshot(snapshot.version(), previousVersion, snapshot.loadedAt(), snapshot.policies());
+    }
+
+    /**
+     * Allows an upstream canary route to pin an alarm to a loaded version with the
+     * {@code kubeoncall_policy_version} label (or metadata {@code policyVersion}).
+     */
+    public String resolveVersion(com.kubeoncall.alarm.domain.NormalizedAlarmEvent event) {
+        String requested = event.labels().get("kubeoncall_policy_version");
+        if (requested == null || requested.isBlank()) {
+            Object metadataVersion = event.metadata().get("policyVersion");
+            requested = metadataVersion == null ? null : String.valueOf(metadataVersion);
+        }
+        return requested != null && versionHistory.containsKey(requested) ? requested : activeVersion;
+    }
+
+    private synchronized void retainVersion(String version, List<AlarmPolicy> snapshotPolicies) {
+        LinkedHashMap<String, PolicySnapshot> next = new LinkedHashMap<>(versionHistory);
+        next.put(version, new PolicySnapshot(version, null, java.time.Instant.now(), List.copyOf(snapshotPolicies)));
+        while (next.size() > versionHistoryLimit) {
+            next.remove(next.keySet().iterator().next());
+        }
+        versionHistory = Map.copyOf(next);
+    }
+
+    private Map<String, AlarmPolicy> indexById(List<AlarmPolicy> source) {
+        Map<String, AlarmPolicy> index = new ConcurrentHashMap<>();
+        source.forEach(policy -> index.put(policy.id(), policy));
+        return Map.copyOf(index);
+    }
+
+    private Map<String, AlarmPolicy> indexByName(List<AlarmPolicy> source) {
+        Map<String, AlarmPolicy> index = new ConcurrentHashMap<>();
+        source.forEach(policy -> index.put(policy.name(), policy));
+        return Map.copyOf(index);
     }
 
     private AlarmPolicy toPolicy(PolicyDto dto, String version) {
@@ -272,4 +334,7 @@ public class YamlAlarmPolicyRepository implements AlarmPolicyRepository {
     }
 
     public record ReloadResult(String previousVersion, String activeVersion, int policyCount) {}
+
+    public record PolicySnapshot(
+            String version, String previousVersion, java.time.Instant loadedAt, List<AlarmPolicy> policies) {}
 }

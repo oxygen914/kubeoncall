@@ -41,7 +41,17 @@ public class AlarmWorkflowEscalation {
         long threshold = severity == AlarmSeverity.P0
                 ? properties.getAlarm().getP0EscalationCount()
                 : properties.getAlarm().getP1EscalationCount();
-        if (activeState == null || activeState.count() < Math.max(1, threshold)) {
+        long minimumDurationSeconds = severity == AlarmSeverity.P0
+                ? properties.getAlarm().getP0EscalationAfterSeconds()
+                : properties.getAlarm().getP1EscalationAfterSeconds();
+        boolean countReached = activeState != null && activeState.count() >= Math.max(1, threshold);
+        boolean durationReached = activeState != null
+                && activeState.firstSeen() != null
+                && !activeState
+                        .firstSeen()
+                        .plusSeconds(Math.max(0, minimumDurationSeconds))
+                        .isAfter(java.time.Instant.now());
+        if (!countReached && !durationReached) {
             return;
         }
         if (Boolean.TRUE.equals(redisTemplate.hasKey("alarm-ack:" + fingerprint))) {

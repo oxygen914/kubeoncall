@@ -18,6 +18,7 @@ import org.mockito.ArgumentCaptor;
 
 import com.kubeoncall.domain.rag.KnowledgeDocument;
 import com.kubeoncall.rag.KnowledgeIngestService;
+import com.kubeoncall.rag.KnowledgeJsonlImportService;
 import com.kubeoncall.rag.repository.KnowledgeIndexAdmin;
 import com.kubeoncall.rag.runbook.RunbookImportService;
 import com.kubeoncall.service.ExecutionAuditService;
@@ -36,6 +37,7 @@ class KnowledgeControllerTest {
         when(runbookImportService.importAll(true)).thenReturn(expected);
         KnowledgeController controller = new KnowledgeController(
                 knowledgeIngestService,
+                mock(KnowledgeJsonlImportService.class),
                 runbookImportService,
                 mock(KnowledgeIndexAdmin.class),
                 mock(ExecutionAuditService.class),
@@ -59,6 +61,7 @@ class KnowledgeControllerTest {
                 .thenReturn(document);
         KnowledgeController controller = new KnowledgeController(
                 knowledgeIngestService,
+                mock(KnowledgeJsonlImportService.class),
                 runbookImportService,
                 mock(KnowledgeIndexAdmin.class),
                 auditService,
@@ -84,6 +87,7 @@ class KnowledgeControllerTest {
                 .thenThrow(failure);
         KnowledgeController controller = new KnowledgeController(
                 knowledgeIngestService,
+                mock(KnowledgeJsonlImportService.class),
                 runbookImportService,
                 mock(KnowledgeIndexAdmin.class),
                 auditService,

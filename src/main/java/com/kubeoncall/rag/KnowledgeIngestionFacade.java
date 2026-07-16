@@ -40,11 +40,20 @@ public class KnowledgeIngestionFacade {
     }
 
     public KnowledgeDocument ingest(String title, String content, String source, Map<String, String> metadata) {
-        String documentId = UUID.randomUUID().toString();
         Map<String, String> mergedMetadata = new LinkedHashMap<>();
         if (metadata != null) {
             mergedMetadata.putAll(metadata);
         }
+        String fileHash = sha256(content);
+        String requestedDocumentId = normalize(mergedMetadata.get("doc_id"));
+        if (requestedDocumentId.isBlank()) {
+            KnowledgeDocument duplicate = findExistingByHash(fileHash);
+            if (duplicate != null) {
+                return duplicate;
+            }
+        }
+        String documentId = requestedDocumentId.isBlank() ? UUID.randomUUID().toString() : requestedDocumentId;
+        List<KnowledgeDocument> existingDocuments = knowledgeRepository.findByMetadata("doc_id", documentId);
         StoredDocumentReference reference = knowledgeObjectStorageService.store(title, content, source);
         if (reference.objectKey() != null) {
             mergedMetadata.put("objectKey", reference.objectKey());
@@ -65,14 +74,100 @@ public class KnowledgeIngestionFacade {
                 "source_type", mergedMetadata.getOrDefault("source_type", source == null ? "manual" : source));
         mergedMetadata.put("dataset_version", mergedMetadata.getOrDefault("dataset_version", "v1"));
         mergedMetadata.put("chunk_enable", "false");
-        mergedMetadata.put("file_hash", sha256(content));
+        mergedMetadata.put("file_hash", fileHash);
+        mergedMetadata.put("updated_at", Instant.now().toString());
 
         KnowledgeDocument document =
                 new KnowledgeDocument(documentId, title, content, source, mergedMetadata, Instant.now());
         knowledgeRepository.save(document);
         List<KnowledgeDocument> chunks = knowledgeChunker.chunk(document);
         chunks.stream().map(this::withEmbedding).forEach(knowledgeRepository::save);
+        removeStaleChunks(existingDocuments, documentId, chunks);
         return document;
+    }
+
+    public LifecycleResult softDelete(String documentId, String reason) {
+        return changeAvailability(documentId, false, reason);
+    }
+
+    public LifecycleResult restore(String documentId) {
+        return changeAvailability(documentId, true, null);
+    }
+
+    private KnowledgeDocument findExistingByHash(String fileHash) {
+        return knowledgeRepository.findByMetadata("file_hash", fileHash).stream()
+                .filter(document -> isParent(
+                        document,
+                        document.metadata() == null ? "" : document.metadata().get("doc_id")))
+                .findFirst()
+                .orElse(null);
+    }
+
+    private void removeStaleChunks(
+            List<KnowledgeDocument> existingDocuments, String documentId, List<KnowledgeDocument> chunks) {
+        if (existingDocuments == null || existingDocuments.isEmpty()) {
+            return;
+        }
+        java.util.Set<String> currentIds = new java.util.HashSet<>();
+        currentIds.add(documentId);
+        chunks.forEach(chunk -> currentIds.add(chunk.id()));
+        existingDocuments.stream()
+                .map(KnowledgeDocument::id)
+                .filter(id -> id != null && !currentIds.contains(id))
+                .forEach(knowledgeRepository::deleteById);
+    }
+
+    private LifecycleResult changeAvailability(String documentId, boolean restore, String reason) {
+        String normalizedDocumentId = normalize(documentId);
+        if (normalizedDocumentId.isBlank()) {
+            throw new IllegalArgumentException("documentId must not be blank");
+        }
+        List<KnowledgeDocument> documents = knowledgeRepository.findByMetadata("doc_id", normalizedDocumentId);
+        if (documents.isEmpty()) {
+            return new LifecycleResult(normalizedDocumentId, restore ? "restored" : "deleted", 0, false);
+        }
+        Instant now = Instant.now();
+        for (KnowledgeDocument document : documents) {
+            Map<String, String> documentMetadata = new LinkedHashMap<>();
+            if (document.metadata() != null) {
+                documentMetadata.putAll(document.metadata());
+            }
+            if (restore) {
+                documentMetadata.put("chunk_enable", isParent(document, normalizedDocumentId) ? "false" : "true");
+                documentMetadata.remove("deleted_at");
+                documentMetadata.remove("delete_reason");
+            } else {
+                documentMetadata.put("chunk_enable", "false");
+                documentMetadata.put("deleted_at", now.toString());
+                documentMetadata.put("delete_reason", normalize(reason).isBlank() ? "manual" : normalize(reason));
+            }
+            documentMetadata.put("updated_at", now.toString());
+            knowledgeRepository.save(new KnowledgeDocument(
+                    document.id(),
+                    document.title(),
+                    document.content(),
+                    document.source(),
+                    documentMetadata,
+                    document.createdAt(),
+                    document.embeddingText(),
+                    document.embedding()));
+        }
+        return new LifecycleResult(normalizedDocumentId, restore ? "restored" : "deleted", documents.size(), true);
+    }
+
+    private boolean isParent(KnowledgeDocument document, String documentId) {
+        if (document == null) {
+            return false;
+        }
+        if (documentId != null && documentId.equals(document.id())) {
+            return true;
+        }
+        Map<String, String> documentMetadata = document.metadata();
+        return documentMetadata != null && "-1".equals(documentMetadata.get("chunk_index"));
+    }
+
+    private String normalize(String value) {
+        return value == null ? "" : value.trim();
     }
 
     private KnowledgeDocument withEmbedding(KnowledgeDocument chunk) {
@@ -135,4 +230,6 @@ public class KnowledgeIngestionFacade {
             throw new IllegalStateException("Failed to hash knowledge content", ex);
         }
     }
+
+    public record LifecycleResult(String documentId, String operation, int affected, boolean found) {}
 }

@@ -1,0 +1,22 @@
+rule_files:
+  - /etc/prometheus/rules/kubeoncall.yml
+
+evaluation_interval: 1m
+
+tests:
+  - interval: 1m
+    input_series:
+      - series: 'up{cluster="local",instance="node-exporter:9100",job="node-exporter",node="docker-host"}'
+        values: '0 0 0 0'
+    alert_rule_test:
+      - eval_time: 2m
+        alertname: NodeDown
+        exp_alerts:
+          - exp_labels:
+              cluster: local
+              instance: node-exporter:9100
+              job: node-exporter
+              node: docker-host
+              severity: P1
+            exp_annotations:
+              summary: Node Exporter is unreachable
