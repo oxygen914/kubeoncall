@@ -112,30 +112,211 @@ public class DynamicMcpEvidenceCollector {
             ToolDefinition tool, String request, String target, String namespace, List<String> missingSignals) {
         Map<String, Object> resolved = new LinkedHashMap<>();
         List<String> missing = new ArrayList<>();
+        Map<String, Object> schemas = propertySchemas(tool);
         for (String parameter : safe(tool.requiredParameters())) {
-            Object value = parameterValue(parameter, request, target, namespace, missingSignals);
-            if (value == null) {
+            Object value = parameterValue(tool, parameter, request, target, namespace, missingSignals);
+            Object normalized = normalizeSchemaValue(value, schemas.get(parameter));
+            if (normalized == null) {
                 missing.add(parameter);
             } else {
-                resolved.put(parameter, value);
+                resolved.put(parameter, normalized);
             }
         }
+        schemas.forEach((parameter, schema) -> {
+            if (resolved.containsKey(parameter) || !hasAutomaticValue(schema)) {
+                return;
+            }
+            Object value = schemaValue(schema, request);
+            Object normalized = normalizeSchemaValue(value, schema);
+            if (normalized != null) {
+                resolved.put(parameter, normalized);
+            }
+        });
         return new ParameterResolution(resolved, missing);
     }
 
+    private boolean hasAutomaticValue(Object rawSchema) {
+        if (!(rawSchema instanceof Map<?, ?> schema)) {
+            return false;
+        }
+        return schema.get("default") != null
+                || schema.get("const") != null
+                || schema.get("enum") instanceof List<?> values && values.size() == 1;
+    }
+
     private Object parameterValue(
-            String parameter, String request, String target, String namespace, List<String> missingSignals) {
+            ToolDefinition tool,
+            String parameter,
+            String request,
+            String target,
+            String namespace,
+            List<String> missingSignals) {
         String normalized = parameter == null ? "" : parameter.replace("_", "").toLowerCase(Locale.ROOT);
-        return switch (normalized) {
-            case "query", "question", "text", "request" -> request;
-            case "servicename", "service", "target", "resourcename", "resource" -> knownTarget(target);
-            case "namespace" -> namespace;
-            case "environment" -> "prod".equals(namespace) ? "production" : namespace;
-            case "windowminutes" -> 10;
-            case "limit", "topk" -> 5;
-            case "missingsignals" -> safe(missingSignals);
-            default -> null;
-        };
+        Object known =
+                switch (normalized) {
+                    case "query", "question", "text", "request" -> request;
+                    case "servicename", "service", "target", "resourcename", "resource" -> knownTarget(target);
+                    case "namespace" -> namespace;
+                    case "environment" -> "prod".equals(namespace) ? "production" : namespace;
+                    case "windowminutes" -> 10;
+                    case "limit", "topk" -> 5;
+                    case "missingsignals" -> safe(missingSignals);
+                    default -> null;
+                };
+        Object schema = propertySchemas(tool).get(parameter);
+        return known == null ? schemaValue(schema, request) : normalizeSchemaValue(known, schema);
+    }
+
+    private Map<String, Object> propertySchemas(ToolDefinition tool) {
+        Object properties = tool.inputSchema().get("properties");
+        if (!(properties instanceof Map<?, ?> propertyMap)) {
+            return Map.of();
+        }
+        Map<String, Object> schemas = new LinkedHashMap<>();
+        propertyMap.forEach((key, value) -> schemas.put(String.valueOf(key), value));
+        return schemas;
+    }
+
+    private Object schemaValue(Object rawSchema, String request) {
+        if (!(rawSchema instanceof Map<?, ?> schema)) {
+            return null;
+        }
+        if (schema.get("default") != null) {
+            return schema.get("default");
+        }
+        if (schema.get("const") != null) {
+            return schema.get("const");
+        }
+        if (schema.get("enum") instanceof List<?> values && !values.isEmpty()) {
+            if (values.size() == 1) {
+                return values.get(0);
+            }
+            String context = normalize(request);
+            for (Object value : values) {
+                if (!String.valueOf(value).isBlank() && context.contains(normalize(String.valueOf(value)))) {
+                    return value;
+                }
+            }
+        }
+        Object alternatives = schema.get("oneOf") == null ? schema.get("anyOf") : schema.get("oneOf");
+        if (alternatives instanceof List<?> schemas) {
+            for (Object alternative : schemas) {
+                Object value = schemaValue(alternative, request);
+                if (value != null) {
+                    return value;
+                }
+            }
+        }
+        Object rawType = schema.get("type");
+        String type = rawType == null ? "" : String.valueOf(rawType);
+        if ("object".equalsIgnoreCase(type)) {
+            return objectSchemaValue(schema, request);
+        }
+        if ("array".equalsIgnoreCase(type)) {
+            Object item = schemaValue(schema.get("items"), request);
+            return item == null ? null : List.of(item);
+        }
+        if ("boolean".equalsIgnoreCase(type) && request != null) {
+            String normalizedRequest = normalize(request);
+            if (normalizedRequest.contains(" true") || normalizedRequest.contains(" enabled")) {
+                return true;
+            }
+            if (normalizedRequest.contains(" false") || normalizedRequest.contains(" disabled")) {
+                return false;
+            }
+        }
+        if ("string".equalsIgnoreCase(type) && request != null && !request.isBlank()) {
+            int maxLength = integer(schema.get("maxLength"), 2000);
+            return request.length() <= maxLength ? request : request.substring(0, maxLength);
+        }
+        return null;
+    }
+
+    private Object objectSchemaValue(Map<?, ?> schema, String request) {
+        if (!(schema.get("properties") instanceof Map<?, ?> properties)) {
+            return null;
+        }
+        Set<String> required = new LinkedHashSet<>();
+        if (schema.get("required") instanceof List<?> values) {
+            values.forEach(value -> required.add(String.valueOf(value)));
+        }
+        Map<String, Object> result = new LinkedHashMap<>();
+        for (Map.Entry<?, ?> entry : properties.entrySet()) {
+            String name = String.valueOf(entry.getKey());
+            Object value = schemaValue(entry.getValue(), request);
+            value = normalizeSchemaValue(value, entry.getValue());
+            if (value != null) {
+                result.put(name, value);
+            } else if (required.contains(name)) {
+                return null;
+            }
+        }
+        return result.isEmpty() ? null : result;
+    }
+
+    private Object normalizeSchemaValue(Object value, Object rawSchema) {
+        if (value == null || !(rawSchema instanceof Map<?, ?> schema)) {
+            return value;
+        }
+        if (schema.get("enum") instanceof List<?> values && !values.contains(value)) {
+            return null;
+        }
+        String type = schema.get("type") == null ? "" : String.valueOf(schema.get("type"));
+        try {
+            return switch (type.toLowerCase(Locale.ROOT)) {
+                case "string" -> boundedString(String.valueOf(value), schema);
+                case "integer" -> boundedNumber(value, schema, true);
+                case "number" -> boundedNumber(value, schema, false);
+                case "boolean" -> booleanValue(value);
+                case "array" -> value instanceof List<?> ? value : List.of(value);
+                case "object" -> value instanceof Map<?, ?> ? value : null;
+                default -> value;
+            };
+        } catch (NumberFormatException ignored) {
+            return null;
+        }
+    }
+
+    private String boundedString(String value, Map<?, ?> schema) {
+        int maxLength = integer(schema.get("maxLength"), 2000);
+        if (value.length() > maxLength) {
+            return value.substring(0, maxLength);
+        }
+        int minLength = integer(schema.get("minLength"), 0);
+        return value.length() < minLength ? null : value;
+    }
+
+    private Boolean booleanValue(Object value) {
+        if (value instanceof Boolean bool) {
+            return bool;
+        }
+        String normalized = String.valueOf(value).trim();
+        if ("true".equalsIgnoreCase(normalized)) {
+            return true;
+        }
+        if ("false".equalsIgnoreCase(normalized)) {
+            return false;
+        }
+        return null;
+    }
+
+    private Number boundedNumber(Object value, Map<?, ?> schema, boolean integer) {
+        double parsed =
+                value instanceof Number number ? number.doubleValue() : Double.parseDouble(String.valueOf(value));
+        if (schema.get("minimum") instanceof Number minimum) {
+            parsed = Math.max(parsed, minimum.doubleValue());
+        }
+        if (schema.get("maximum") instanceof Number maximum) {
+            parsed = Math.min(parsed, maximum.doubleValue());
+        }
+        if (integer) {
+            return (int) Math.round(parsed);
+        }
+        return parsed;
+    }
+
+    private int integer(Object value, int fallback) {
+        return value instanceof Number number ? Math.max(0, number.intValue()) : fallback;
     }
 
     private Map<String, Object> invocation(

@@ -60,6 +60,19 @@ public class OperationAuditRecordFactory {
                 ExecutionRequestType.SKILL, "skill", "skillOperation", operation, status, summary, startedAt, metadata);
     }
 
+    public ExecutionAuditRecord changeEvent(
+            String operation, String status, String summary, Instant startedAt, Map<String, Object> metadata) {
+        return operation(
+                ExecutionRequestType.CHANGE_EVENT,
+                "change-event",
+                "changeEventOperation",
+                operation,
+                status,
+                summary,
+                startedAt,
+                metadata);
+    }
+
     private ExecutionAuditRecord operation(
             ExecutionRequestType requestType,
             String idPrefix,

@@ -21,10 +21,14 @@ public class ChangeCorrelationService {
     }
 
     public void record(ChangeEvent event) {
+        recordIfAbsent(event);
+    }
+
+    public boolean recordIfAbsent(ChangeEvent event) {
         if (event == null || event.changeId() == null || event.changeId().isBlank()) {
             throw new IllegalArgumentException("changeId is required");
         }
-        changeEventRepository.save(event);
+        return changeEventRepository.saveIfAbsent(event);
     }
 
     public List<ChangeCorrelation> findRelatedChanges(NormalizedAlarmEvent alarm) {

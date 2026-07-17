@@ -1,5 +1,6 @@
 package com.kubeoncall.rag;
 
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -9,6 +10,7 @@ import org.springframework.stereotype.Service;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.kubeoncall.common.config.KubeOnCallProperties;
 import com.kubeoncall.domain.rag.KnowledgeDocument;
 
 /** Imports one generic knowledge document per non-blank JSONL line. */
@@ -19,13 +21,17 @@ public class KnowledgeJsonlImportService {
 
     private final ObjectMapper objectMapper;
     private final KnowledgeIngestService knowledgeIngestService;
+    private final KubeOnCallProperties properties;
 
-    public KnowledgeJsonlImportService(ObjectMapper objectMapper, KnowledgeIngestService knowledgeIngestService) {
+    public KnowledgeJsonlImportService(
+            ObjectMapper objectMapper, KnowledgeIngestService knowledgeIngestService, KubeOnCallProperties properties) {
         this.objectMapper = objectMapper;
         this.knowledgeIngestService = knowledgeIngestService;
+        this.properties = properties;
     }
 
     public ImportResult importJsonl(String payload) {
+        validatePayload(payload);
         List<LineResult> lines = new ArrayList<>();
         int scanned = 0;
         int imported = 0;
@@ -40,6 +46,7 @@ public class KnowledgeJsonlImportService {
                 Map<String, Object> item = objectMapper.readValue(rawLine, MAP_TYPE);
                 String title = requiredText(item, "title");
                 String content = requiredText(item, "content");
+                validateContent(content);
                 String source = text(item.get("source"));
                 KnowledgeDocument document = knowledgeIngestService.ingest(
                         title, content, source.isBlank() ? "jsonl" : source, metadata(item));
@@ -50,6 +57,28 @@ public class KnowledgeJsonlImportService {
             }
         }
         return new ImportResult(scanned, imported, scanned - imported, List.copyOf(lines));
+    }
+
+    private void validatePayload(String payload) {
+        if (payload == null) {
+            return;
+        }
+        int maxPayloadBytes = Math.max(1, properties.getRag().getJsonlMaxPayloadBytes());
+        if (payload.getBytes(StandardCharsets.UTF_8).length > maxPayloadBytes) {
+            throw new IllegalArgumentException("JSONL payload exceeds the configured byte limit");
+        }
+        int maxLines = Math.max(1, properties.getRag().getJsonlMaxLines());
+        long lineCount = payload.lines().limit((long) maxLines + 1).count();
+        if (lineCount > maxLines) {
+            throw new IllegalArgumentException("JSONL payload exceeds the configured line limit");
+        }
+    }
+
+    private void validateContent(String content) {
+        int maxContentBytes = Math.max(1, properties.getRag().getDocumentMaxContentBytes());
+        if (content.getBytes(StandardCharsets.UTF_8).length > maxContentBytes) {
+            throw new IllegalArgumentException("Knowledge document content exceeds the configured byte limit");
+        }
     }
 
     private Map<String, String> metadata(Map<String, Object> item) {

@@ -5,6 +5,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -16,6 +17,8 @@ import com.kubeoncall.alarm.domain.NormalizedAlarmEvent;
 import com.kubeoncall.alarm.ingest.AlarmNormalizer;
 import com.kubeoncall.alarm.recovery.AlarmRecoveryService;
 import com.kubeoncall.alarm.recovery.AlarmRecoveryState;
+import com.kubeoncall.alarm.state.ActiveAlarmState;
+import com.kubeoncall.alarm.state.ActiveAlarmStore;
 import com.kubeoncall.alarm.state.AlarmAcknowledgementStore;
 import com.kubeoncall.alarm.state.AlarmSilenceApprovalStore;
 import com.kubeoncall.common.config.KubeOnCallProperties;
@@ -43,6 +46,7 @@ public class AlarmController {
     private final KubeOnCallMetricsService metricsService;
     private final ExecutionAuditService executionAuditService;
     private final AlarmRecoveryService alarmRecoveryService;
+    private final ActiveAlarmStore activeAlarmStore;
 
     public AlarmController(
             AlarmNormalizer alarmNormalizer,
@@ -53,6 +57,29 @@ public class AlarmController {
             KubeOnCallMetricsService metricsService,
             ExecutionAuditService executionAuditService,
             AlarmRecoveryService alarmRecoveryService) {
+        this(
+                alarmNormalizer,
+                alertWorkflowService,
+                silenceApprovalStore,
+                acknowledgementStore,
+                properties,
+                metricsService,
+                executionAuditService,
+                alarmRecoveryService,
+                null);
+    }
+
+    @Autowired
+    public AlarmController(
+            AlarmNormalizer alarmNormalizer,
+            AlertWorkflowService alertWorkflowService,
+            AlarmSilenceApprovalStore silenceApprovalStore,
+            AlarmAcknowledgementStore acknowledgementStore,
+            KubeOnCallProperties properties,
+            KubeOnCallMetricsService metricsService,
+            ExecutionAuditService executionAuditService,
+            AlarmRecoveryService alarmRecoveryService,
+            ActiveAlarmStore activeAlarmStore) {
         this.alarmNormalizer = alarmNormalizer;
         this.alertWorkflowService = alertWorkflowService;
         this.silenceApprovalStore = silenceApprovalStore;
@@ -61,6 +88,7 @@ public class AlarmController {
         this.metricsService = metricsService;
         this.executionAuditService = executionAuditService;
         this.alarmRecoveryService = alarmRecoveryService;
+        this.activeAlarmStore = activeAlarmStore;
     }
 
     @PostMapping
@@ -92,6 +120,7 @@ public class AlarmController {
                     request.reason(),
                     Duration.ofSeconds(Math.max(60, ttlSeconds)));
             metricsService.recordAlarmAcknowledgement("acknowledged");
+            recordMtta(acknowledgement.fingerprint(), acknowledgement.acknowledgedAt());
             executionAuditService.recordAlarmExecution(
                     "alarm-ack-" + acknowledgement.fingerprint(),
                     "ACKNOWLEDGED",
@@ -119,6 +148,22 @@ public class AlarmController {
             metricsService.recordAlarmAcknowledgement("failed");
             throw ex;
         }
+    }
+
+    private void recordMtta(String fingerprint, Instant acknowledgedAt) {
+        if (activeAlarmStore == null || acknowledgedAt == null) {
+            return;
+        }
+        ActiveAlarmState active = activeAlarmStore.find(fingerprint).orElse(null);
+        if (active == null || active.firstSeen() == null) {
+            return;
+        }
+        long durationMs =
+                Math.max(0, Duration.between(active.firstSeen(), acknowledgedAt).toMillis());
+        metricsService.recordAlarmDuration(
+                "mtta",
+                active.severity() == null ? "unknown" : active.severity().name(),
+                durationMs);
     }
 
     @PostMapping("/recovery-confirmations")

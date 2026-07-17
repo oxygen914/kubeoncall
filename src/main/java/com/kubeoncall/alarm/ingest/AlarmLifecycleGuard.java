@@ -37,7 +37,13 @@ public class AlarmLifecycleGuard {
             }
             LifecycleState state = objectMapper.readValue(raw, LifecycleState.class);
             Instant occurredAt = event.occurredAt() == null ? Instant.now() : event.occurredAt();
-            return !occurredAt.isBefore(state.occurredAt());
+            if (occurredAt.isAfter(state.occurredAt())) {
+                return true;
+            }
+            if (occurredAt.isBefore(state.occurredAt())) {
+                return false;
+            }
+            return statusRank(event.status()) > statusRank(state.status());
         } catch (Exception ex) {
             throw new AlarmInboxUnavailableException("Unable to read alarm lifecycle state", ex);
         }
@@ -61,6 +67,17 @@ public class AlarmLifecycleGuard {
 
     private String key(String fingerprint) {
         return KEY_PREFIX + fingerprint;
+    }
+
+    private int statusRank(AlarmStatus status) {
+        if (status == null) {
+            return 0;
+        }
+        return switch (status) {
+            case FIRING -> 0;
+            case SUPPRESSED -> 1;
+            case RESOLVED -> 2;
+        };
     }
 
     record LifecycleState(AlarmStatus status, Instant occurredAt) {}

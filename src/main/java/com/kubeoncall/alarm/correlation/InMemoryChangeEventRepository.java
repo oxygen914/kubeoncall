@@ -3,6 +3,7 @@ package com.kubeoncall.alarm.correlation;
 import java.time.Instant;
 import java.util.Comparator;
 import java.util.List;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 
 import org.springframework.stereotype.Repository;
@@ -13,13 +14,26 @@ public class InMemoryChangeEventRepository implements ChangeEventRepository {
 
     private static final int MAX_EVENTS = 10_000;
     private final CopyOnWriteArrayList<ChangeEvent> events = new CopyOnWriteArrayList<>();
+    private final java.util.Set<String> changeIds = ConcurrentHashMap.newKeySet();
 
     @Override
     public void save(ChangeEvent event) {
+        saveIfAbsent(event);
+    }
+
+    @Override
+    public boolean saveIfAbsent(ChangeEvent event) {
+        if (event == null || !changeIds.add(event.changeId())) {
+            return false;
+        }
         events.add(event);
         if (events.size() > MAX_EVENTS) {
-            events.stream().min(Comparator.comparing(ChangeEvent::changedAt)).ifPresent(events::remove);
+            events.stream().min(Comparator.comparing(ChangeEvent::changedAt)).ifPresent(oldest -> {
+                events.remove(oldest);
+                changeIds.remove(oldest.changeId());
+            });
         }
+        return true;
     }
 
     @Override

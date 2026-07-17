@@ -9,14 +9,44 @@ public record SkillIndexEntry(
         String description,
         List<String> triggers,
         List<String> services,
+        List<String> applicableTasks,
+        List<String> tags,
         String maxRisk,
         String version,
         String source,
         String skillPath,
         boolean enabled) {
 
+    public SkillIndexEntry(
+            String id,
+            String name,
+            String description,
+            List<String> triggers,
+            List<String> services,
+            String maxRisk,
+            String version,
+            String source,
+            String skillPath,
+            boolean enabled) {
+        this(
+                id,
+                name,
+                description,
+                triggers,
+                services,
+                List.of(),
+                List.of(),
+                maxRisk,
+                version,
+                source,
+                skillPath,
+                enabled);
+    }
+
     public SkillIndexEntry {
         triggers = triggers == null ? List.of() : List.copyOf(triggers);
         services = services == null ? List.of() : List.copyOf(services);
+        applicableTasks = applicableTasks == null ? List.of() : List.copyOf(applicableTasks);
+        tags = tags == null ? List.of() : List.copyOf(tags);
     }
 }

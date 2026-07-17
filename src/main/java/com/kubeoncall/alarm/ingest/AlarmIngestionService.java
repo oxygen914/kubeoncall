@@ -50,11 +50,14 @@ public class AlarmIngestionService {
             if (result.duplicate()) {
                 duplicates++;
                 metricsService.recordAlarmInbox("duplicate");
+                metricsService.recordAlarmQuality("duplicate");
             } else if (result.accepted()) {
                 accepted++;
                 metricsService.recordAlarmInbox("accepted");
+                metricsService.recordAlarmQuality("accepted");
             } else {
                 metricsService.recordAlarmInbox("rejected");
+                metricsService.recordAlarmQuality("rejected");
                 throw new AlarmIngestionRejectedException("Alarm inbox did not accept event");
             }
         }

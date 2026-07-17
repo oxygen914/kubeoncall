@@ -71,10 +71,9 @@ class AlertWorkflowFactoryTest {
         List<String> nodeNames =
                 workflow.stream().map(AlertWorkflowDefinition::name).toList();
 
-        assertIterableEquals(
-                List.of("deviceInfoNode", "stateCompareNode", "resultPushNode", "notificationNode"), nodeNames);
-        assertIterableEquals(List.of(), workflow.get(2).dependencies());
-        assertIterableEquals(List.of("resultPushNode"), workflow.get(3).dependencies());
+        assertIterableEquals(List.of("stateCompareNode", "resultPushNode", "notificationNode"), nodeNames);
+        assertIterableEquals(List.of(), workflow.get(1).dependencies());
+        assertIterableEquals(List.of("resultPushNode"), workflow.get(2).dependencies());
     }
 
     @Test

@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
@@ -30,6 +31,7 @@ import com.kubeoncall.domain.alarm.AlarmEvent;
 import com.kubeoncall.domain.graph.NodeResult;
 import com.kubeoncall.domain.graph.NodeStatus;
 import com.kubeoncall.tool.ToolExecutor;
+import com.kubeoncall.tool.http.ToolHttpClient;
 import com.kubeoncall.workflow.node.NotificationNode;
 import com.kubeoncall.workflow.node.ResultPushNode;
 import com.kubeoncall.workflow.node.SilenceNode;
@@ -133,6 +135,58 @@ class ResultPushNodeTest {
         assertEquals(NodeStatus.SUCCESS, result.status());
         verify(alertmanager).execute(eq("sendAlertEvent"), any());
         verify(alertmanager, never()).execute(eq("createSilence"), any());
+    }
+
+    @Test
+    void notificationNodeShouldSendDirectWebhookWithoutAdapter() {
+        ToolHttpClient httpClient = mock(ToolHttpClient.class);
+        KubeOnCallProperties properties = new KubeOnCallProperties();
+        properties.getIntegrations().getNotification().setEndpoint("https://notifications.example.test/alerts");
+        when(httpClient.post(eq("https://notifications.example.test/alerts"), any(), anyInt(), any(), any()))
+                .thenReturn(Map.of("status", "success", "httpStatus", 202));
+        NotificationNode node = new NotificationNode(List.of(), httpClient, properties);
+
+        NodeResult result = node.execute(contextWithPolicy(AlarmSeverity.P1, false));
+
+        assertEquals(NodeStatus.SUCCESS, result.status());
+        assertEquals("sendWebhook", result.payload().get("action"));
+        verify(httpClient).post(eq("https://notifications.example.test/alerts"), any(), anyInt(), any(), any());
+    }
+
+    @Test
+    void resultPushShouldIncludeBoundedNodeMetricDiagnosis() {
+        ResultPushNode node = new ResultPushNode(List.of(), new KubeOnCallProperties());
+        AlertWorkflowContext context = contextWithPolicy(AlarmSeverity.P1, false);
+        context.putAttribute(
+                "stateCompareResult",
+                Map.of(
+                        "status",
+                        "success",
+                        "httpStatus",
+                        200,
+                        "query",
+                        "up",
+                        "response",
+                        Map.of(
+                                "status",
+                                "success",
+                                "data",
+                                Map.of(
+                                        "result",
+                                        List.of(Map.of(
+                                                "metric",
+                                                Map.of("instance", "node-a:9100"),
+                                                "values",
+                                                List.of(List.of(1, "1"))))))));
+
+        NodeResult result = node.execute(context);
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> diagnosis = (Map<String, Object>) result.payload().get("diagnosis");
+        @SuppressWarnings("unchecked")
+        Map<String, Object> state = (Map<String, Object>) diagnosis.get("state");
+        assertEquals("NODE_MVP_EVIDENCE", diagnosis.get("strategy"));
+        assertEquals(1, state.get("seriesCount"));
     }
 
     @Test

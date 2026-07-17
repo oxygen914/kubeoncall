@@ -24,20 +24,160 @@ spec:
           env:
             - name: SPRING_PROFILES_ACTIVE
               value: docker
+            - name: KUBEONCALL_API_AUTH_ENABLED
+              value: {{ .Values.config.apiAuthEnabled | quote }}
+            - name: KUBEONCALL_API_VIEWER_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secrets.existingSecret }}
+                  key: {{ .Values.secrets.apiViewerTokenKey }}
+                  optional: true
+            - name: KUBEONCALL_API_OPERATOR_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secrets.existingSecret }}
+                  key: {{ .Values.secrets.apiOperatorTokenKey }}
+                  optional: true
+            - name: KUBEONCALL_API_ADMIN_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secrets.existingSecret }}
+                  key: {{ .Values.secrets.apiAdminTokenKey }}
+                  optional: {{ not .Values.config.apiAuthEnabled }}
+            - name: APPROVAL_RESUME_LEASE_SECONDS
+              value: {{ .Values.config.approvalResumeLeaseSeconds | quote }}
             - name: SPRING_DATA_REDIS_HOST
               value: {{ .Values.config.redisHost | quote }}
             - name: SPRING_ELASTICSEARCH_URIS
               value: {{ .Values.config.elasticsearchUri | quote }}
             - name: KUBEONCALL_STORAGE_MINIO_ENDPOINT
               value: {{ .Values.config.minioEndpoint | quote }}
+            - name: SPRING_AI_OPENAI_BASE_URL
+              value: {{ .Values.config.springAiBaseUrl | quote }}
+            - name: SPRING_AI_OPENAI_CHAT_OPTIONS_MODEL
+              value: {{ .Values.config.springAiChatModel | quote }}
             - name: RAG_EMBEDDING_ENDPOINT
               value: {{ .Values.config.embeddingEndpoint | quote }}
+            - name: RAG_EMBEDDING_MODEL
+              value: {{ .Values.config.embeddingModel | quote }}
+            - name: RAG_EMBEDDING_VERSION
+              value: {{ .Values.config.embeddingVersion | quote }}
+            - name: RAG_EMBEDDING_DIMENSIONS
+              value: {{ .Values.config.embeddingDimensions | quote }}
+            - name: RAG_EMBEDDING_BATCH_SIZE
+              value: {{ .Values.config.embeddingBatchSize | quote }}
+            - name: RAG_EMBEDDING_TIMEOUT_MILLIS
+              value: {{ .Values.config.embeddingTimeoutMillis | quote }}
             - name: RAG_RERANK_ENDPOINT
               value: {{ .Values.config.rerankEndpoint | quote }}
+            - name: RAG_RERANK_MODEL
+              value: {{ .Values.config.rerankModel | quote }}
+            - name: RAG_RERANK_TIMEOUT_MILLIS
+              value: {{ .Values.config.rerankTimeoutMillis | quote }}
+            - name: RAG_AUGMENTATION_ENABLED
+              value: {{ .Values.config.augmentationEnabled | quote }}
+            - name: RAG_AUGMENTATION_ENDPOINT
+              value: {{ .Values.config.augmentationEndpoint | quote }}
+            - name: RAG_AUGMENTATION_MODEL
+              value: {{ .Values.config.augmentationModel | quote }}
+            - name: RAG_AUGMENTATION_VERSION
+              value: {{ .Values.config.augmentationVersion | quote }}
+            - name: RAG_AUGMENTATION_CONCURRENCY
+              value: {{ .Values.config.augmentationConcurrency | quote }}
+            - name: RAG_AUGMENTATION_TIMEOUT_MILLIS
+              value: {{ .Values.config.augmentationTimeoutMillis | quote }}
+            - name: RAG_AUTO_BIND_DATASET_VERSION
+              value: {{ .Values.config.autoBindDatasetVersion | quote }}
+            - name: RAG_JSONL_MAX_PAYLOAD_BYTES
+              value: {{ .Values.config.ragJsonlMaxPayloadBytes | quote }}
+            - name: RAG_JSONL_MAX_LINES
+              value: {{ .Values.config.ragJsonlMaxLines | quote }}
+            - name: RAG_DOCUMENT_MAX_CONTENT_BYTES
+              value: {{ .Values.config.ragDocumentMaxContentBytes | quote }}
+            - name: MEMORY_LLM_EXTRACTION_ENABLED
+              value: {{ .Values.config.memoryLlmExtractionEnabled | quote }}
+            - name: MEMORY_LLM_EXTRACTION_ENDPOINT
+              value: {{ .Values.config.memoryLlmExtractionEndpoint | quote }}
+            - name: MEMORY_LLM_EXTRACTION_MODEL
+              value: {{ .Values.config.memoryLlmExtractionModel | quote }}
+            - name: MEMORY_SEMANTIC_DUPLICATE_ENABLED
+              value: {{ .Values.config.memorySemanticDuplicateEnabled | quote }}
+            - name: MEMORY_SEMANTIC_DUPLICATE_WEIGHT
+              value: {{ .Values.config.memorySemanticDuplicateWeight | quote }}
+            - name: MEMORY_TOKENIZER_ENABLED
+              value: {{ .Values.config.memoryTokenizerEnabled | quote }}
+            - name: MEMORY_TOKENIZER_ENDPOINT
+              value: {{ .Values.config.memoryTokenizerEndpoint | quote }}
+            - name: MEMORY_TOKENIZER_MODEL
+              value: {{ .Values.config.memoryTokenizerModel | quote }}
+            - name: MEMORY_TOKENIZER_MODE
+              value: {{ .Values.config.memoryTokenizerMode | quote }}
+            - name: MEMORY_TOKENIZER_CHAT_OVERHEAD_TOKENS
+              value: {{ .Values.config.memoryTokenizerChatOverheadTokens | quote }}
+            - name: MCP_ENDPOINT
+              value: {{ .Values.config.mcpEndpoint | quote }}
+            - name: MCP_AUTH_MODE
+              value: {{ .Values.config.mcpAuthMode | quote }}
+            - name: MCP_OAUTH_TOKEN_ENDPOINT
+              value: {{ .Values.config.mcpOauthTokenEndpoint | quote }}
+            - name: MCP_OAUTH_CLIENT_ID
+              value: {{ .Values.config.mcpOauthClientId | quote }}
+            - name: MCP_OAUTH_CLIENT_AUTH_METHOD
+              value: {{ .Values.config.mcpOauthClientAuthMethod | quote }}
+            - name: MCP_OAUTH_SCOPE
+              value: {{ .Values.config.mcpOauthScope | quote }}
+            - name: MCP_OAUTH_RESOURCE
+              value: {{ .Values.config.mcpOauthResource | quote }}
+            - name: MCP_OAUTH_REFRESH_SKEW_SECONDS
+              value: {{ .Values.config.mcpOauthRefreshSkewSeconds | quote }}
+            - name: MCP_PROTOCOL
+              value: {{ .Values.config.mcpProtocol | quote }}
+            - name: MCP_PROTOCOL_VERSION
+              value: {{ .Values.config.mcpProtocolVersion | quote }}
+            - name: MCP_CLIENT_NAME
+              value: {{ .Values.config.mcpClientName | quote }}
+            - name: MCP_CLIENT_VERSION
+              value: {{ .Values.config.mcpClientVersion | quote }}
+            - name: MCP_DISCOVERY_ENABLED
+              value: {{ .Values.config.mcpDiscoveryEnabled | quote }}
+            - name: MCP_DISCOVERY_ENDPOINT
+              value: {{ .Values.config.mcpDiscoveryEndpoint | quote }}
+            - name: MCP_DISCOVERY_CACHE_SECONDS
+              value: {{ .Values.config.mcpDiscoveryCacheSeconds | quote }}
+            - name: MCP_DISCOVERY_MAX_PAGES
+              value: {{ .Values.config.mcpDiscoveryMaxPages | quote }}
+            - name: MCP_DISCOVERY_REFRESH_MILLIS
+              value: {{ .Values.config.mcpDiscoveryRefreshMillis | quote }}
+            - name: MCP_DYNAMIC_INVOCATION_ENABLED
+              value: {{ .Values.config.mcpDynamicInvocationEnabled | quote }}
+            - name: MCP_DYNAMIC_MAX_TOOLS
+              value: {{ .Values.config.mcpDynamicMaxTools | quote }}
+            - name: MCP_MAX_RESPONSE_BYTES
+              value: {{ .Values.config.mcpMaxResponseBytes | quote }}
+            - name: MCP_ALLOWED_TOOLS
+              value: {{ .Values.config.mcpAllowedTools | quote }}
+            - name: CHANGE_EVENT_WEBHOOK_ENABLED
+              value: {{ .Values.config.changeEventWebhookEnabled | quote }}
+            - name: CHANGE_EVENT_WEBHOOK_AUTH_MODE
+              value: {{ .Values.config.changeEventWebhookAuthMode | quote }}
+            - name: CHANGE_EVENT_WEBHOOK_MAX_PAYLOAD_BYTES
+              value: {{ .Values.config.changeEventWebhookMaxPayloadBytes | quote }}
+            - name: KUBERNETES_TOOL_ENDPOINT
+              value: {{ .Values.config.kubernetesToolEndpoint | quote }}
+            - name: PROMETHEUS_TOOL_ENDPOINT
+              value: {{ .Values.config.prometheusToolEndpoint | quote }}
             - name: ALERTMANAGER_TOOL_ENDPOINT
               value: {{ .Values.config.alertmanagerToolEndpoint | quote }}
+            - name: ALERT_NOTIFICATION_WEBHOOK_ENDPOINT
+              value: {{ .Values.config.alertNotificationWebhookEndpoint | quote }}
+            - name: ALERT_NOTIFICATION_WEBHOOK_TIMEOUT_MILLIS
+              value: {{ .Values.config.alertNotificationWebhookTimeoutMillis | quote }}
             - name: INCIDENT_TOOL_ENDPOINT
               value: {{ .Values.config.incidentToolEndpoint | quote }}
+            - name: DEVICE_TOOL_ENDPOINT
+              value: {{ .Values.config.deviceToolEndpoint | quote }}
+            - name: DATABASE_TOOL_ENDPOINT
+              value: {{ .Values.config.databaseToolEndpoint | quote }}
             - name: MINIO_ROOT_USER
               valueFrom:
                 secretKeyRef:
@@ -48,6 +188,66 @@ spec:
                 secretKeyRef:
                   name: {{ .Values.secrets.existingSecret }}
                   key: {{ .Values.secrets.minioSecretKeyKey }}
+            - name: ALIYUN_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secrets.existingSecret }}
+                  key: {{ .Values.secrets.aliyunApiKeyKey }}
+                  optional: {{ not (or .Values.config.augmentationEnabled .Values.config.memoryLlmExtractionEnabled .Values.config.memoryTokenizerEnabled) }}
+            - name: SPRING_AI_OPENAI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secrets.existingSecret }}
+                  key: {{ .Values.secrets.aliyunApiKeyKey }}
+                  optional: {{ not (or .Values.config.augmentationEnabled .Values.config.memoryLlmExtractionEnabled .Values.config.memoryTokenizerEnabled) }}
+            - name: MCP_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secrets.existingSecret }}
+                  key: {{ .Values.secrets.mcpApiKeyKey }}
+                  optional: {{ not (and (or .Values.config.mcpDiscoveryEnabled .Values.config.mcpDynamicInvocationEnabled) (eq .Values.config.mcpAuthMode "static_bearer")) }}
+            - name: MCP_OAUTH_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secrets.existingSecret }}
+                  key: {{ .Values.secrets.mcpOauthClientSecretKey }}
+                  optional: {{ not (and (or .Values.config.mcpDiscoveryEnabled .Values.config.mcpDynamicInvocationEnabled) (eq .Values.config.mcpAuthMode "oauth_client_credentials")) }}
+            - name: ALERTMANAGER_WEBHOOK_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secrets.existingSecret }}
+                  key: {{ .Values.secrets.alertmanagerWebhookTokenKey }}
+                  optional: true
+            - name: CHANGE_EVENT_WEBHOOK_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secrets.existingSecret }}
+                  key: {{ .Values.secrets.changeEventWebhookTokenKey }}
+                  optional: {{ not .Values.config.changeEventWebhookEnabled }}
+            - name: CHANGE_EVENT_GITHUB_WEBHOOK_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secrets.existingSecret }}
+                  key: {{ .Values.secrets.changeEventGithubWebhookSecretKey }}
+                  optional: true
+            - name: CHANGE_EVENT_GITLAB_WEBHOOK_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secrets.existingSecret }}
+                  key: {{ .Values.secrets.changeEventGitlabWebhookTokenKey }}
+                  optional: true
+            - name: CHANGE_EVENT_JENKINS_WEBHOOK_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secrets.existingSecret }}
+                  key: {{ .Values.secrets.changeEventJenkinsWebhookTokenKey }}
+                  optional: true
+            - name: CHANGE_EVENT_ARGOCD_WEBHOOK_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secrets.existingSecret }}
+                  key: {{ .Values.secrets.changeEventArgocdWebhookTokenKey }}
+                  optional: true
           readinessProbe:
             httpGet: {path: /actuator/health/readiness, port: http}
             initialDelaySeconds: 20

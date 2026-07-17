@@ -1,0 +1,12 @@
+{{- if .Values.grafanaDashboard.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "kubeoncall.fullname" . }}-grafana-dashboard
+  labels:
+    {{- include "kubeoncall.labels" . | nindent 4 }}
+    {{ .Values.grafanaDashboard.labelKey }}: {{ .Values.grafanaDashboard.labelValue | quote }}
+data:
+  kubeoncall-overview.json: |-
+{{ .Files.Get "dashboards/kubeoncall-overview.json" | indent 4 }}
+{{- end }}

@@ -12,6 +12,7 @@ import com.kubeoncall.common.config.KubeOnCallProperties;
 
 import io.minio.MinioClient;
 import io.minio.PutObjectArgs;
+import io.minio.RemoveObjectArgs;
 
 @Service
 public class KnowledgeObjectStorageService {
@@ -47,6 +48,29 @@ public class KnowledgeObjectStorageService {
                     bucket,
                     ex.getClass().getSimpleName());
             return new StoredDocumentReference(objectKey, bucket, false, "MinIO store failed");
+        }
+    }
+
+    public void remove(StoredDocumentReference reference) {
+        if (reference == null
+                || !reference.stored()
+                || reference.bucket() == null
+                || reference.bucket().isBlank()
+                || reference.objectKey() == null
+                || reference.objectKey().isBlank()) {
+            return;
+        }
+        try {
+            minioClient.removeObject(RemoveObjectArgs.builder()
+                    .bucket(reference.bucket())
+                    .object(reference.objectKey())
+                    .build());
+        } catch (Exception ex) {
+            log.warn(
+                    "Knowledge source rollback failed: bucket={}, objectKey={}, errorType={}",
+                    reference.bucket(),
+                    reference.objectKey(),
+                    ex.getClass().getSimpleName());
         }
     }
 }

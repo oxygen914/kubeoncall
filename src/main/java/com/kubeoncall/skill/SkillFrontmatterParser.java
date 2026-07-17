@@ -12,6 +12,7 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
 import com.kubeoncall.domain.task.RiskLevel;
+import com.kubeoncall.domain.task.TaskType;
 
 @Component
 public class SkillFrontmatterParser {
@@ -45,6 +46,8 @@ public class SkillFrontmatterParser {
                 stringList(metadata.get("triggers")),
                 stringList(metadata.get("services")),
                 stringList(metadata.get("resourceTypes")),
+                taskTypes(metadata.get("applicableTasks")),
+                stringList(metadata.get("tags")),
                 riskLevel(text(metadata, "maxRisk")),
                 stringList(metadata.get("toolWhitelist")),
                 parsed.body().trim(),
@@ -111,6 +114,18 @@ public class SkillFrontmatterParser {
             return RiskLevel.valueOf(value.trim().toUpperCase(Locale.ROOT));
         } catch (IllegalArgumentException ignored) {
             return RiskLevel.MEDIUM;
+        }
+    }
+
+    private List<TaskType> taskTypes(Object value) {
+        return stringList(value).stream().map(this::taskType).distinct().toList();
+    }
+
+    private TaskType taskType(String value) {
+        try {
+            return TaskType.valueOf(value.trim().toUpperCase(Locale.ROOT));
+        } catch (IllegalArgumentException ex) {
+            throw new IllegalArgumentException("Invalid applicableTasks value: " + value, ex);
         }
     }
 

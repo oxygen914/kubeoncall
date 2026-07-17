@@ -87,7 +87,7 @@ public class StateCompareNode implements AlertWorkflowNode {
                 && !evaluation.promql().isBlank()) {
             int windowMinutes = parseWindowMinutes(evaluation.window(), 15);
             return new QueryPlan(
-                    evaluation.promql().trim(),
+                    scopeToAlarm(evaluation.promql().trim(), context.getNormalizedAlarm()),
                     windowMinutes,
                     evaluation.runbookId() == null ? "policy" : evaluation.runbookId(),
                     "policy");
@@ -113,6 +113,25 @@ public class StateCompareNode implements AlertWorkflowNode {
             return new QueryPlan(String.valueOf(query), 15, baseline, "metadata");
         }
         return new QueryPlan("up{instance=\"" + context.getAlarmEvent().nodeName() + "\"}", 15, baseline, "fallback");
+    }
+
+    private String scopeToAlarm(String query, NormalizedAlarmEvent event) {
+        if (event == null || event.labels() == null) {
+            return query;
+        }
+        String instance = event.labels().get("instance");
+        if (instance != null && !instance.isBlank()) {
+            return "(" + query + ") and on(instance) up{instance=\"" + escapeLabel(instance) + "\"}";
+        }
+        String node = event.labels().get("node");
+        if (node != null && !node.isBlank()) {
+            return "(" + query + ") and on(node) up{node=\"" + escapeLabel(node) + "\"}";
+        }
+        return query;
+    }
+
+    private String escapeLabel(String value) {
+        return value.replace("\\", "\\\\").replace("\"", "\\\"");
     }
 
     private static int parseWindowMinutes(String window, int fallback) {

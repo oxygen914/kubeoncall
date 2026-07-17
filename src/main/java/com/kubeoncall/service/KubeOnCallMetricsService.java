@@ -62,6 +62,24 @@ public class KubeOnCallMetricsService {
         increment("kubeoncall.alarm.recoveries", "outcome", safe(outcome), "severity", safe(severity));
     }
 
+    public void recordAlarmQuality(String outcome) {
+        increment("kubeoncall.alarm.quality", "outcome", safe(outcome));
+    }
+
+    public void recordAlarmDuration(String phase, String severity, long durationMs) {
+        recordAmount(
+                "kubeoncall.alarm.lifecycle_duration_ms",
+                Math.max(0, durationMs),
+                "phase",
+                safe(phase),
+                "severity",
+                safe(severity));
+    }
+
+    public void recordChangeEvent(String outcome, String source) {
+        increment("kubeoncall.change_events", "outcome", safe(outcome), "source", safe(source));
+    }
+
     public void recordRagRetrieval(
             String method, String vectorSource, boolean vectorFallback, long resultCount, long latencyMs) {
         increment(

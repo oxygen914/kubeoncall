@@ -21,8 +21,22 @@ public class EmbeddingService {
     }
 
     public EmbeddingResult embed(String text) {
+        List<EmbeddingResult> batch = embedBatch(List.of(text == null ? "" : text));
+        if (batch.isEmpty()) {
+            throw new IllegalStateException("Embedding provider returned no result");
+        }
+        return batch.get(0);
+    }
+
+    public List<EmbeddingResult> embedBatch(List<String> texts) {
+        if (texts == null || texts.isEmpty()) {
+            return List.of();
+        }
         if (properties.getRag().isMockEmbeddingEnabled()) {
-            return validated(deterministicEmbedding(text), "deterministic_mock", true);
+            return texts.stream()
+                    .map(this::deterministicEmbedding)
+                    .map(vector -> validated(vector, "deterministic_mock", true))
+                    .toList();
         }
         if (!properties.getRag().isEmbeddingEnabled()) {
             throw new IllegalStateException("Embedding is disabled");
@@ -31,12 +45,28 @@ public class EmbeddingService {
             if (!client.available()) {
                 continue;
             }
-            List<Double> vector = client.embed(text);
-            if (vector != null && !vector.isEmpty()) {
-                return validated(vector, client.provider(), false);
+            List<EmbeddingResult> results = embedBatches(client, texts);
+            if (results.size() == texts.size()) {
+                return results;
             }
         }
         throw new IllegalStateException("No available embedding client");
+    }
+
+    private List<EmbeddingResult> embedBatches(EmbeddingClient client, List<String> texts) {
+        int batchSize = Math.max(1, properties.getRag().getEmbeddingBatchSize());
+        List<EmbeddingResult> results = new ArrayList<>(texts.size());
+        for (int start = 0; start < texts.size(); start += batchSize) {
+            int end = Math.min(texts.size(), start + batchSize);
+            List<List<Double>> vectors = client.embedBatch(texts.subList(start, end));
+            if (vectors == null || vectors.size() != end - start) {
+                return List.of();
+            }
+            vectors.stream()
+                    .map(vector -> validated(vector, client.provider(), false))
+                    .forEach(results::add);
+        }
+        return List.copyOf(results);
     }
 
     private EmbeddingResult validated(List<Double> vector, String provider, boolean mock) {

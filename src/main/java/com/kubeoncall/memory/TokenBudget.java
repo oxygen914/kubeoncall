@@ -1,5 +1,7 @@
 package com.kubeoncall.memory;
 
+import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.OptionalInt;
@@ -17,6 +19,20 @@ public class TokenBudget {
 
     private final KubeOnCallProperties properties;
     private final ToolHttpClient toolHttpClient;
+    private final Map<String, Integer> exactCountCache =
+            Collections.synchronizedMap(new LinkedHashMap<>(256, 0.75f, true) {
+                @Override
+                protected boolean removeEldestEntry(Map.Entry<String, Integer> eldest) {
+                    return size() > 2048;
+                }
+            });
+    private final Map<String, Integer> chatOverheadCache =
+            Collections.synchronizedMap(new LinkedHashMap<>(16, 0.75f, true) {
+                @Override
+                protected boolean removeEldestEntry(Map.Entry<String, Integer> eldest) {
+                    return size() > 32;
+                }
+            });
 
     public TokenBudget() {
         this(null, null);
@@ -37,7 +53,9 @@ public class TokenBudget {
     }
 
     public String countingMode() {
-        return tokenizerConfigured() ? "exact_http_with_heuristic_fallback" : "heuristic";
+        return tokenizerConfigured()
+                ? properties.getMemory().getTokenizerMode() + "_with_heuristic_fallback"
+                : "heuristic";
     }
 
     private int estimateHeuristic(String text) {
@@ -62,13 +80,36 @@ public class TokenBudget {
         if (!tokenizerConfigured()) {
             return OptionalInt.empty();
         }
+        String cacheKey = String.join(
+                ":",
+                properties.getMemory().getTokenizerMode(),
+                String.valueOf(properties.getMemory().getTokenizerEndpoint()),
+                properties.getMemory().getTokenizerModel(),
+                String.valueOf(properties.getMemory().getTokenizerChatOverheadTokens()),
+                text);
+        Integer cached = exactCountCache.get(cacheKey);
+        if (cached != null) {
+            return OptionalInt.of(cached);
+        }
         Map<String, String> headers = properties.getMemory().getTokenizerApiKey() == null
                         || properties.getMemory().getTokenizerApiKey().isBlank()
                 ? Map.of()
                 : Map.of("Authorization", "Bearer " + properties.getMemory().getTokenizerApiKey());
+        boolean chatUsage = "chat_usage".equalsIgnoreCase(properties.getMemory().getTokenizerMode());
+        Map<String, Object> request = chatUsage
+                ? Map.of(
+                        "model",
+                        properties.getMemory().getTokenizerModel(),
+                        "max_tokens",
+                        1,
+                        "temperature",
+                        0,
+                        "messages",
+                        List.of(Map.of("role", "user", "content", text)))
+                : Map.of("model", properties.getMemory().getTokenizerModel(), "text", text);
         Map<String, Object> response = toolHttpClient.post(
                 properties.getMemory().getTokenizerEndpoint(),
-                Map.of("model", properties.getMemory().getTokenizerModel(), "text", text),
+                request,
                 properties.getMemory().getTokenizerTimeoutMillis(),
                 headers,
                 Map.of("targetSystem", "tokenizer", "tool", "memory.tokenCount"));
@@ -81,10 +122,71 @@ public class TokenBudget {
         }
         Object count = map.get("count");
         if (count instanceof Number number && number.intValue() >= 0) {
-            return OptionalInt.of(number.intValue());
+            return cached(cacheKey, number.intValue());
         }
         Object tokens = map.get("tokens");
-        return tokens instanceof List<?> list ? OptionalInt.of(list.size()) : OptionalInt.empty();
+        if (tokens instanceof List<?> list) {
+            return cached(cacheKey, list.size());
+        }
+        Object usage = map.get("usage");
+        if (usage instanceof Map<?, ?> usageMap && usageMap.get("prompt_tokens") instanceof Number promptTokens) {
+            int configuredOverhead = properties.getMemory().getTokenizerChatOverheadTokens();
+            int overhead = configuredOverhead >= 0 ? configuredOverhead : calibratedChatOverhead();
+            return cached(cacheKey, Math.max(0, promptTokens.intValue() - overhead));
+        }
+        return OptionalInt.empty();
+    }
+
+    private int calibratedChatOverhead() {
+        String key = properties.getMemory().getTokenizerEndpoint() + ":"
+                + properties.getMemory().getTokenizerModel();
+        Integer cached = chatOverheadCache.get(key);
+        if (cached != null) {
+            return cached;
+        }
+        Map<String, String> headers = properties.getMemory().getTokenizerApiKey() == null
+                        || properties.getMemory().getTokenizerApiKey().isBlank()
+                ? Map.of()
+                : Map.of("Authorization", "Bearer " + properties.getMemory().getTokenizerApiKey());
+        Map<String, Object> response = toolHttpClient.post(
+                properties.getMemory().getTokenizerEndpoint(),
+                Map.of(
+                        "model",
+                        properties.getMemory().getTokenizerModel(),
+                        "max_tokens",
+                        1,
+                        "temperature",
+                        0,
+                        "messages",
+                        List.of(Map.of("role", "user", "content", ""))),
+                properties.getMemory().getTokenizerTimeoutMillis(),
+                headers,
+                Map.of("targetSystem", "tokenizer", "tool", "memory.tokenCount.calibrate"));
+        OptionalInt measured = promptTokens(response);
+        if (measured.isEmpty()) {
+            return 0;
+        }
+        int overhead = measured.getAsInt();
+        chatOverheadCache.put(key, overhead);
+        return overhead;
+    }
+
+    private OptionalInt promptTokens(Map<String, Object> response) {
+        if (!"success".equalsIgnoreCase(String.valueOf(response.get("status")))) {
+            return OptionalInt.empty();
+        }
+        Object body = response.get("response");
+        if (body instanceof Map<?, ?> map
+                && map.get("usage") instanceof Map<?, ?> usage
+                && usage.get("prompt_tokens") instanceof Number value) {
+            return OptionalInt.of(Math.max(0, value.intValue()));
+        }
+        return OptionalInt.empty();
+    }
+
+    private OptionalInt cached(String key, int count) {
+        exactCountCache.put(key, count);
+        return OptionalInt.of(count);
     }
 
     private boolean tokenizerConfigured() {

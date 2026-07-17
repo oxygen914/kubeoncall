@@ -14,19 +14,97 @@ resources:
   limits: {cpu: "2", memory: 2Gi}
 
 config:
+  apiAuthEnabled: false
+  approvalResumeLeaseSeconds: 300
   redisHost: redis
   elasticsearchUri: http://elasticsearch:9200
   minioEndpoint: http://minio:9000
-  embeddingEndpoint: http://rag-model:8080/v1/embeddings
-  rerankEndpoint: http://rag-model:8080/v1/rerank
+  springAiBaseUrl: https://dashscope.aliyuncs.com/compatible-mode
+  springAiChatModel: qwen-plus
+  embeddingEndpoint: https://dashscope.aliyuncs.com/compatible-mode/v1/embeddings
+  embeddingModel: text-embedding-v4
+  embeddingVersion: v1
+  embeddingDimensions: 1536
+  embeddingBatchSize: 32
+  embeddingTimeoutMillis: 3000
+  rerankEndpoint: https://dashscope.aliyuncs.com/api/v1/services/rerank/text-rerank/text-rerank
+  rerankModel: qwen3-rerank
+  rerankTimeoutMillis: 3000
+  augmentationEnabled: false
+  augmentationEndpoint: https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions
+  augmentationModel: qwen-plus
+  augmentationVersion: v1
+  augmentationConcurrency: 2
+  augmentationTimeoutMillis: 10000
+  autoBindDatasetVersion: false
+  ragJsonlMaxPayloadBytes: 5242880
+  ragJsonlMaxLines: 10000
+  ragDocumentMaxContentBytes: 2097152
+  memoryLlmExtractionEnabled: false
+  memoryLlmExtractionEndpoint: https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions
+  memoryLlmExtractionModel: qwen-plus
+  memorySemanticDuplicateEnabled: false
+  memorySemanticDuplicateWeight: 0.75
+  memoryTokenizerEnabled: false
+  memoryTokenizerEndpoint: https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions
+  memoryTokenizerModel: qwen-plus
+  memoryTokenizerMode: chat_usage
+  memoryTokenizerChatOverheadTokens: -1
+  mcpEndpoint: http://mcp-server:8080/mcp
+  mcpAuthMode: static_bearer
+  mcpOauthTokenEndpoint: ""
+  mcpOauthClientId: ""
+  mcpOauthClientAuthMethod: client_secret_post
+  mcpOauthScope: ""
+  mcpOauthResource: ""
+  mcpOauthRefreshSkewSeconds: 30
+  mcpProtocol: jsonrpc
+  mcpProtocolVersion: 2025-11-25
+  mcpClientName: kubeoncall
+  mcpClientVersion: 1.0.0
+  mcpDiscoveryEnabled: false
+  mcpDiscoveryEndpoint: ""
+  mcpDiscoveryCacheSeconds: 60
+  mcpDiscoveryMaxPages: 20
+  mcpDiscoveryRefreshMillis: 60000
+  mcpDynamicInvocationEnabled: false
+  mcpDynamicMaxTools: 3
+  mcpMaxResponseBytes: 262144
+  mcpAllowedTools: knowledge.searchSop,topology.getServiceTopology,cmdb.getServiceMetadata,kubernetes.describeResource,prometheus.queryRange,alerts.getActiveAlerts,inventory.*,metrics.*
+  changeEventWebhookEnabled: false
+  changeEventWebhookAuthMode: bearer
+  changeEventWebhookMaxPayloadBytes: 1048576
+  kubernetesToolEndpoint: http://kubernetes-adapter:8080/api/tools/kubernetes
+  prometheusToolEndpoint: http://prometheus:9090
   alertmanagerToolEndpoint: http://alertmanager-adapter:8080/api/tools/alertmanager
+  alertNotificationWebhookEndpoint: ""
+  alertNotificationWebhookTimeoutMillis: 3000
   incidentToolEndpoint: http://incident-adapter:8080/api/tools/incident
+  deviceToolEndpoint: http://device-adapter:8080/api/tools/device
+  databaseToolEndpoint: http://database-adapter:8080/api/tools/database
 
 secrets:
   existingSecret: kubeoncall-secrets
+  apiViewerTokenKey: api-viewer-token
+  apiOperatorTokenKey: api-operator-token
+  apiAdminTokenKey: api-admin-token
   minioAccessKeyKey: minio-access-key
   minioSecretKeyKey: minio-secret-key
+  aliyunApiKeyKey: aliyun-api-key
+  mcpApiKeyKey: mcp-api-key
+  mcpOauthClientSecretKey: mcp-oauth-client-secret
+  alertmanagerWebhookTokenKey: alertmanager-webhook-token
+  changeEventWebhookTokenKey: change-event-webhook-token
+  changeEventGithubWebhookSecretKey: change-event-github-webhook-secret
+  changeEventGitlabWebhookTokenKey: change-event-gitlab-webhook-token
+  changeEventJenkinsWebhookTokenKey: change-event-jenkins-webhook-token
+  changeEventArgocdWebhookTokenKey: change-event-argocd-webhook-token
 
 serviceMonitor:
   enabled: false
   interval: 30s
+
+grafanaDashboard:
+  enabled: true
+  labelKey: grafana_dashboard
+  labelValue: "1"

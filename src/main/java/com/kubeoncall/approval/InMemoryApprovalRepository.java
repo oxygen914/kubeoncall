@@ -24,4 +24,12 @@ public class InMemoryApprovalRepository implements ApprovalRepository {
     public Optional<ApprovalRequest> findByExecutionId(String executionId) {
         return Optional.ofNullable(store.get(executionId));
     }
+
+    @Override
+    public boolean compareAndSet(ApprovalRequest expected, ApprovalRequest updated) {
+        if (expected == null || updated == null || expected.executionId() == null) {
+            return false;
+        }
+        return store.replace(expected.executionId(), expected, updated);
+    }
 }

@@ -14,8 +14,10 @@ public class KubeOnCallProperties {
     private final Audit audit = new Audit();
     private final Integrations integrations = new Integrations();
     private final Alarm alarm = new Alarm();
+    private final ChangeEvents changeEvents = new ChangeEvents();
     private final Memory memory = new Memory();
     private final Skill skill = new Skill();
+    private final ApiSecurity apiSecurity = new ApiSecurity();
 
     public Agent getAgent() {
         return agent;
@@ -57,8 +59,16 @@ public class KubeOnCallProperties {
         return memory;
     }
 
+    public ChangeEvents getChangeEvents() {
+        return changeEvents;
+    }
+
     public Skill getSkill() {
         return skill;
+    }
+
+    public ApiSecurity getApiSecurity() {
+        return apiSecurity;
     }
 
     public static class Agent extends AgentProperties {}
@@ -82,7 +92,11 @@ public class KubeOnCallProperties {
 
     public static class Memory extends MemoryProperties {}
 
+    public static class ChangeEvents extends ChangeEventProperties {}
+
     public static class Skill extends SkillProperties {}
+
+    public static class ApiSecurity extends ApiSecurityProperties {}
 
     public static class Integrations extends IntegrationsProperties {}
 

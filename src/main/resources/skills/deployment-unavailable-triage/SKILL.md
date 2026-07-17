@@ -5,6 +5,8 @@ version: v1
 description: Diagnose unavailable replicas, rollout stalls, and CrashLoop propagation.
 triggers: [deployment unavailable, unavailable replicas, rollout stuck, crashloop]
 resourceTypes: [deployment, pod]
+applicableTasks: [QUERY_LOGS, QUERY_METRICS]
+tags: [kubernetes, deployment, rollout, availability]
 maxRisk: MEDIUM
 toolWhitelist:
   - kubernetes.describeResource

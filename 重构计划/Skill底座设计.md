@@ -3,7 +3,7 @@
 > 目标：在现有 agent 架构（planner→verifier→executor 三段式 + 规则推断工具）上，**最小侵入**地增加一层兼容 Skill 的底座，让运维经验能以「可加载的指令包」形式沉淀复用。
 > 参照：`paicli/src/main/java/com/paicli/skill/`（同 Java 生态成熟实现）、`as-cil` skill 机制。
 > 前置分析见同目录「kubeoncall agent 架构是否具备运行 skill 基础设施」结论。
-> 实施状态（2026-07-16）：核心底座已完成。动态 MCP、`load_skill`、索引预算、LRU/drain、Redis 快照恢复、工具白名单和 maxRisk 均已落地；正文中的“现状/空壳”描述保留为最初设计背景，不代表当前代码状态。
+> 实施状态（2026-07-16）：核心底座已完成。动态 MCP、`load_skill`、索引预算、LRU/drain、Redis 快照恢复、工具白名单、maxRisk、强类型 `applicableTasks` 和规范化 `tags` 均已落地；正文中的“现状/空壳”描述保留为最初设计背景，不代表当前代码状态。
 
 ---
 

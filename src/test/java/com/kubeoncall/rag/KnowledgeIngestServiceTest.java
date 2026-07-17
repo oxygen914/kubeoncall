@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -279,6 +280,32 @@ class KnowledgeIngestServiceTest {
         assertEquals("duplicate", repeated.operation());
         assertEquals(first.document().id(), repeated.document().id());
         verify(storageService, times(1)).store("CPU runbook", "same content", "manual");
+    }
+
+    @Test
+    void shouldCompensateRepositoryAndObjectStorageWhenChunkPersistenceFails() {
+        KnowledgeRepository repository = mock(KnowledgeRepository.class);
+        KubeOnCallProperties properties = new KubeOnCallProperties();
+        properties.getRag().setChunkSize(32);
+        KnowledgeObjectStorageService storageService = mock(KnowledgeObjectStorageService.class);
+        StoredDocumentReference reference = new StoredDocumentReference("knowledge/doc.txt", "bucket-a", true, "ok");
+        when(storageService.store(anyString(), anyString(), anyString())).thenReturn(reference);
+        doThrow(new IllegalStateException("repository unavailable"))
+                .when(repository)
+                .save(org.mockito.ArgumentMatchers.argThat(
+                        (KnowledgeDocument document) -> document.id().contains("#chunk-")));
+        KnowledgeIngestionFacade facade = new KnowledgeIngestionFacade(
+                repository,
+                new KnowledgeChunker(properties),
+                storageService,
+                new EmbeddingService(List.of(), properties),
+                properties);
+
+        org.junit.jupiter.api.Assertions.assertThrows(
+                IllegalStateException.class, () -> facade.ingest("CPU runbook", "x".repeat(100), "manual", Map.of()));
+
+        verify(repository, org.mockito.Mockito.atLeast(2)).deleteById(anyString());
+        verify(storageService).remove(reference);
     }
 
     private static KnowledgeIngestService service(

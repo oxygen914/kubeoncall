@@ -47,12 +47,26 @@ class SkillActivationServiceTest {
     void shouldActivateEnabledSkillExplicitlyRequestedByPlanner() {
         KubeOnCallMetricsService metricsService = mock(KubeOnCallMetricsService.class);
 
-        SkillActivation activation =
-                service(metricsService).activate("unrelated wording", Map.of(), List.of("payment-oom-triage"));
+        SkillActivation activation = service(metricsService)
+                .activate(
+                        "inspect the current pod state",
+                        Map.of("taskType", "QUERY_METRICS", "service", "payment-service"),
+                        List.of("payment-oom-triage"));
 
         assertTrue(activation.active());
         assertEquals(List.of("payment-oom-triage"), activation.skillIds());
         assertTrue(activation.prompt().contains("Payment OOM"));
+    }
+
+    @Test
+    void shouldRejectRequestedSkillOutsideItsTaskAndDomain() {
+        KubeOnCallMetricsService metricsService = mock(KubeOnCallMetricsService.class);
+
+        SkillActivation activation =
+                service(metricsService).activate("clean data", Map.of(), List.of("payment-oom-triage"));
+
+        assertFalse(activation.active());
+        assertTrue(activation.skillIds().isEmpty());
     }
 
     private SkillActivationService service(KubeOnCallMetricsService metricsService) {

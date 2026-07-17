@@ -5,6 +5,8 @@ version: v1
 description: Diagnose disk and inode pressure without unsafe automatic deletion.
 triggers: [disk full, disk usage, inode, filesystem, readonly]
 resourceTypes: [node, pod]
+applicableTasks: [QUERY_LOGS, QUERY_METRICS]
+tags: [kubernetes, disk, filesystem, inode]
 maxRisk: MEDIUM
 toolWhitelist:
   - kubernetes.describeResource

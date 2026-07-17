@@ -14,6 +14,7 @@ import java.util.Set;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import com.kubeoncall.common.config.KubeOnCallProperties;
@@ -33,6 +34,7 @@ public class MemoryConsolidationService {
     private final KubeOnCallMetricsService metricsService;
     private final ExecutionAuditService auditService;
     private final MemoryTemporalNormalizer temporalNormalizer;
+    private final MemorySimilarityService similarityService;
 
     public MemoryConsolidationService(
             KnowledgeRepository knowledgeRepository,
@@ -40,11 +42,23 @@ public class MemoryConsolidationService {
             KubeOnCallMetricsService metricsService,
             ExecutionAuditService auditService,
             MemoryTemporalNormalizer temporalNormalizer) {
+        this(knowledgeRepository, properties, metricsService, auditService, temporalNormalizer, null);
+    }
+
+    @Autowired
+    public MemoryConsolidationService(
+            KnowledgeRepository knowledgeRepository,
+            KubeOnCallProperties properties,
+            KubeOnCallMetricsService metricsService,
+            ExecutionAuditService auditService,
+            MemoryTemporalNormalizer temporalNormalizer,
+            MemorySimilarityService similarityService) {
         this.knowledgeRepository = Objects.requireNonNull(knowledgeRepository, "knowledgeRepository");
         this.properties = Objects.requireNonNull(properties, "properties");
         this.metricsService = Objects.requireNonNull(metricsService, "metricsService");
         this.auditService = Objects.requireNonNull(auditService, "auditService");
         this.temporalNormalizer = Objects.requireNonNull(temporalNormalizer, "temporalNormalizer");
+        this.similarityService = similarityService;
     }
 
     public ConsolidationResult consolidate(Instant now, int scanLimit, boolean dryRun) {
@@ -77,7 +91,7 @@ public class MemoryConsolidationService {
             String group = groupKey(candidate);
             List<KnowledgeDocument> canonicals = canonicalByGroup.computeIfAbsent(group, ignored -> new ArrayList<>());
             KnowledgeDocument canonical = canonicals.stream()
-                    .filter(existing -> similarity(existing.content(), candidate.content()) >= threshold)
+                    .filter(existing -> combinedSimilarity(existing, candidate) >= threshold)
                     .findFirst()
                     .orElse(null);
             if (canonical == null) {
@@ -125,6 +139,11 @@ public class MemoryConsolidationService {
                 dryRun);
         audit(result, startedAt);
         return result;
+    }
+
+    private double combinedSimilarity(KnowledgeDocument left, KnowledgeDocument right) {
+        double lexical = similarity(left.content(), right.content());
+        return similarityService == null ? lexical : similarityService.similarity(left, right, lexical);
     }
 
     private KnowledgeDocument softDeletedDuplicate(KnowledgeDocument duplicate, String canonicalId, Instant deletedAt) {

@@ -13,7 +13,7 @@ import com.kubeoncall.domain.rag.KnowledgeDocument;
 @Component
 public class KnowledgeChunker {
 
-    private static final int DEFAULT_CHUNK_SIZE = 280;
+    private static final int DEFAULT_CHUNK_SIZE = 1000;
 
     private final KubeOnCallProperties properties;
     private final KnowledgeMetadataFactory metadataFactory;

@@ -7,7 +7,10 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 import com.kubeoncall.common.config.KubeOnCallProperties;
@@ -17,8 +20,11 @@ import com.kubeoncall.tool.ToolDefinition;
 @Component
 public class McpToolRegistry {
 
+    private static final Logger log = LoggerFactory.getLogger(McpToolRegistry.class);
+
     private final McpClient mcpClient;
     private final KubeOnCallProperties properties;
+    private final McpToolPolicy toolPolicy;
     private volatile List<ToolDefinition> discoveredTools = List.of();
     private volatile Instant discoveredAt = Instant.EPOCH;
 
@@ -30,6 +36,7 @@ public class McpToolRegistry {
     public McpToolRegistry(McpClient mcpClient, KubeOnCallProperties properties) {
         this.mcpClient = mcpClient;
         this.properties = properties;
+        this.toolPolicy = properties == null ? null : new McpToolPolicy(properties);
     }
 
     public List<ToolDefinition> listPlannerTools() {
@@ -58,11 +65,13 @@ public class McpToolRegistry {
                     .flatMap(java.util.Optional::stream)
                     .filter(ToolDefinition::readOnly)
                     .toList();
-            if (!parsed.isEmpty()) {
-                discoveredTools = List.copyOf(parsed);
-            }
-        } catch (RuntimeException ignored) {
+            discoveredTools = List.copyOf(parsed);
+        } catch (RuntimeException ex) {
             // Preserve the last known discovered set, then fall back to static tools if absent.
+            log.warn(
+                    "MCP tool discovery failed; preserving last successful snapshot: lastKnownCount={}, errorType={}",
+                    discoveredTools.size(),
+                    ex.getClass().getSimpleName());
         }
         discoveredAt = now;
         return discoveredTools;
@@ -70,6 +79,14 @@ public class McpToolRegistry {
 
     public List<ToolDefinition> discoveredPlannerTools() {
         return refreshDiscoveredTools();
+    }
+
+    @Scheduled(fixedDelayString = "${kubeoncall.mcp.discovery-refresh-millis:60000}")
+    public void scheduledRefresh() {
+        if (discoveryConfigured()) {
+            discoveredAt = Instant.EPOCH;
+            refreshDiscoveredTools();
+        }
     }
 
     private boolean discoveryConfigured() {
@@ -148,8 +165,16 @@ public class McpToolRegistry {
         if (name.isBlank()) {
             return java.util.Optional.empty();
         }
-        boolean readOnly = bool(raw, "readOnly", true);
-        boolean requiresApproval = bool(raw, "requiresApproval", false);
+        if (toolPolicy == null || !toolPolicy.allowed(name)) {
+            return java.util.Optional.empty();
+        }
+        boolean standardJsonRpc = properties != null
+                && "jsonrpc".equalsIgnoreCase(properties.getMcp().getProtocol());
+        Map<String, Object> annotations = stringMap(raw.get("annotations"));
+        boolean readOnly = standardJsonRpc ? bool(annotations, "readOnlyHint", false) : bool(raw, "readOnly", true);
+        boolean requiresApproval = standardJsonRpc
+                ? bool(annotations, "destructiveHint", false) || !readOnly
+                : bool(raw, "requiresApproval", false);
         if (!readOnly || requiresApproval) {
             return java.util.Optional.empty();
         }
@@ -160,8 +185,27 @@ public class McpToolRegistry {
                 true,
                 false,
                 taskTypes(raw.get("supportedTaskTypes")),
-                stringList(raw.get("requiredParameters")),
-                stringList(raw.get("targetSystems"))));
+                requiredParameters(raw),
+                stringList(raw.get("targetSystems")),
+                stringMap(raw.get("inputSchema"))));
+    }
+
+    private List<String> requiredParameters(Map<String, Object> raw) {
+        List<String> explicit = stringList(raw.get("requiredParameters"));
+        if (!explicit.isEmpty()) {
+            return explicit;
+        }
+        Map<String, Object> inputSchema = stringMap(raw.get("inputSchema"));
+        return stringList(inputSchema.get("required"));
+    }
+
+    private Map<String, Object> stringMap(Object value) {
+        if (!(value instanceof Map<?, ?> values)) {
+            return Map.of();
+        }
+        Map<String, Object> converted = new LinkedHashMap<>();
+        values.forEach((key, item) -> converted.put(String.valueOf(key), item));
+        return converted;
     }
 
     private String text(Map<String, Object> raw, String key) {

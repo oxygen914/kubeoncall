@@ -6,6 +6,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import com.kubeoncall.alarm.maintenance.AlarmMaintenanceWindow;
@@ -13,6 +14,7 @@ import com.kubeoncall.alarm.maintenance.AlarmMaintenanceWindowService;
 import com.kubeoncall.alarm.suppression.AlarmSuppressionService;
 import com.kubeoncall.domain.graph.NodeResult;
 import com.kubeoncall.domain.graph.NodeStatus;
+import com.kubeoncall.service.KubeOnCallMetricsService;
 
 /** Evaluates the maintenance, configured-rule, and node-noise suppression branches. */
 @Service
@@ -22,16 +24,28 @@ public class AlarmWorkflowSuppressionHandler {
     private final AlarmSuppressionService alarmSuppressionService;
     private final AlarmNodeNoiseSuppression nodeNoiseSuppression;
     private final AlarmWorkflowAuditRecorder auditRecorder;
+    private final KubeOnCallMetricsService metricsService;
 
     public AlarmWorkflowSuppressionHandler(
             AlarmMaintenanceWindowService maintenanceWindowService,
             AlarmSuppressionService alarmSuppressionService,
             AlarmNodeNoiseSuppression nodeNoiseSuppression,
             AlarmWorkflowAuditRecorder auditRecorder) {
+        this(maintenanceWindowService, alarmSuppressionService, nodeNoiseSuppression, auditRecorder, null);
+    }
+
+    @Autowired
+    public AlarmWorkflowSuppressionHandler(
+            AlarmMaintenanceWindowService maintenanceWindowService,
+            AlarmSuppressionService alarmSuppressionService,
+            AlarmNodeNoiseSuppression nodeNoiseSuppression,
+            AlarmWorkflowAuditRecorder auditRecorder,
+            KubeOnCallMetricsService metricsService) {
         this.maintenanceWindowService = maintenanceWindowService;
         this.alarmSuppressionService = alarmSuppressionService;
         this.nodeNoiseSuppression = nodeNoiseSuppression;
         this.auditRecorder = auditRecorder;
+        this.metricsService = metricsService;
     }
 
     public void recordSources(com.kubeoncall.alarm.domain.NormalizedAlarmEvent event) {
@@ -90,7 +104,7 @@ public class AlarmWorkflowSuppressionHandler {
                         maintenanceWindow.id(),
                         "maintenanceApprovalReference",
                         maintenanceWindow.approvalReference()));
-        return Optional.of(List.of(result));
+        return suppressed(result);
     }
 
     private Optional<List<NodeResult>> handleConfiguredRule(
@@ -134,7 +148,7 @@ public class AlarmWorkflowSuppressionHandler {
                         suppression.suppressionKey(),
                         "suppressionSourceFingerprint",
                         suppression.sourceFingerprint()));
-        return Optional.of(List.of(result));
+        return suppressed(result);
     }
 
     private Optional<List<NodeResult>> handleNodeNoise(
@@ -168,6 +182,13 @@ public class AlarmWorkflowSuppressionHandler {
                         "node_not_ready",
                         "suppressionKey",
                         suppression.suppressionKey()));
+        return suppressed(result);
+    }
+
+    private Optional<List<NodeResult>> suppressed(NodeResult result) {
+        if (metricsService != null) {
+            metricsService.recordAlarmQuality("suppressed");
+        }
         return Optional.of(List.of(result));
     }
 

@@ -1,0 +1,18 @@
+config:
+  apiAuthEnabled: true
+  augmentationEnabled: true
+  autoBindDatasetVersion: true
+  memoryLlmExtractionEnabled: true
+  memorySemanticDuplicateEnabled: true
+  memoryTokenizerEnabled: true
+  # Enable only after mcpEndpoint/auth has been replaced with a reachable production service.
+  mcpDiscoveryEnabled: false
+  mcpDynamicInvocationEnabled: false
+  mcpAllowedTools: knowledge.searchSop,topology.getServiceTopology,cmdb.getServiceMetadata,kubernetes.describeResource,prometheus.queryRange,alerts.getActiveAlerts,inventory.*,logs.*,metrics.*
+  changeEventWebhookEnabled: true
+
+serviceMonitor:
+  enabled: true
+
+grafanaDashboard:
+  enabled: true

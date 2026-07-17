@@ -57,7 +57,7 @@ public class MemoryService {
             return entry;
         }
         try {
-            MemoryEntry normalized = normalizeTemporal(entry);
+            MemoryEntry normalized = documentMapper.withDerivedFields(normalizeTemporal(entry));
             knowledgeRepository.save(documentMapper.toKnowledgeDocument(normalized));
             operationObserver.recordMetric("remember", "success", 1);
             operationObserver.recordAudit(

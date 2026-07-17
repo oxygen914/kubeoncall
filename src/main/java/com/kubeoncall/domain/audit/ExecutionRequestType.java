@@ -6,5 +6,6 @@ public enum ExecutionRequestType {
     APPROVAL_RESUME,
     MEMORY,
     KNOWLEDGE,
-    SKILL
+    SKILL,
+    CHANGE_EVENT
 }

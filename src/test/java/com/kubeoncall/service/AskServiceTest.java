@@ -291,6 +291,7 @@ class AskServiceTest {
                 plannerAgent, verifierAgent, executorAgent, approvalService, responseComposer, executionAuditService);
 
         GraphState state = approvedRunnableState("exec-1");
+        when(approvalService.acquireResumeLease("exec-1")).thenReturn("lease-1");
         when(approvalService.loadState("exec-1")).thenReturn(state);
         when(responseComposer.compose(state)).thenReturn("ok");
         doAnswer(invocation -> {
@@ -307,6 +308,7 @@ class AskServiceTest {
         verify(executorAgent).executePrepared(state);
         verify(approvalService).clearState("exec-1");
         verify(executionAuditService).recordGraphExecution(any(), any(), any());
+        verify(approvalService).releaseResumeLease("exec-1", "lease-1");
     }
 
     @Test
@@ -323,10 +325,12 @@ class AskServiceTest {
 
         GraphState state = approvedRunnableState("exec-2");
         state.setFinalApprovalDecision(ApprovalDecision.PENDING);
+        when(approvalService.acquireResumeLease("exec-2")).thenReturn("lease-2");
         when(approvalService.loadState("exec-2")).thenReturn(state);
 
         assertThrows(IllegalStateException.class, () -> service.resumeAfterApproval("exec-2"));
         verify(executorAgent, never()).executePrepared(any());
+        verify(approvalService).releaseResumeLease("exec-2", "lease-2");
     }
 
     @Test
@@ -356,6 +360,7 @@ class AskServiceTest {
                 List.of("high-risk"));
         when(approvalService.decide("exec-3", ApprovalDecision.APPROVED, "ok", "tester"))
                 .thenReturn(approvalRequest);
+        when(approvalService.acquireResumeLease("exec-3")).thenReturn("lease-3");
         when(approvalService.loadState("exec-3")).thenReturn(state);
         when(responseComposer.compose(state)).thenReturn("resumed");
         doAnswer(invocation -> {

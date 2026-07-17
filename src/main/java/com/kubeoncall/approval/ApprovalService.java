@@ -85,8 +85,6 @@ public class ApprovalService {
                 decidedBy,
                 true,
                 existing.riskReasons());
-        approvalRepository.save(updated);
-
         String auditSuffix = (comment == null || comment.isBlank() ? "" : ", comment=" + comment)
                 + (decidedBy == null || decidedBy.isBlank() ? "" : ", decidedBy=" + decidedBy);
         state.addObservation("Approval decision=" + decision + auditSuffix);
@@ -100,7 +98,15 @@ public class ApprovalService {
             state.setStatus(GraphStatus.REJECTED);
             state.setPauseMetadata(null);
         }
-        graphStateStore.save(state, ttl());
+        if (!approvalRepository.compareAndSet(existing, updated)) {
+            throw new IllegalStateException("Approval request was concurrently processed: " + executionId);
+        }
+        try {
+            graphStateStore.save(state, ttl());
+        } catch (RuntimeException ex) {
+            approvalRepository.compareAndSet(updated, existing);
+            throw ex;
+        }
         return updated;
     }
 
@@ -118,6 +124,19 @@ public class ApprovalService {
 
     public void clearState(String executionId) {
         graphStateStore.delete(executionId);
+    }
+
+    public String acquireResumeLease(String executionId) {
+        Duration leaseTtl =
+                Duration.ofSeconds(Math.max(1, properties.getApproval().getResumeLeaseSeconds()));
+        return graphStateStore
+                .tryAcquireResumeLease(executionId, leaseTtl)
+                .orElseThrow(
+                        () -> new IllegalStateException("Execution resume is already in progress: " + executionId));
+    }
+
+    public void releaseResumeLease(String executionId, String token) {
+        graphStateStore.releaseResumeLease(executionId, token);
     }
 
     private Duration ttl() {

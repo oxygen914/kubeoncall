@@ -5,6 +5,8 @@ version: v1
 description: Diagnose Kubernetes NodeNotReady and distinguish node root cause from derived pod noise.
 triggers: [nodenotready, node not ready, kubelet, node pressure]
 resourceTypes: [node]
+applicableTasks: [QUERY_LOGS, QUERY_METRICS]
+tags: [kubernetes, node, notready, kubelet]
 maxRisk: MEDIUM
 toolWhitelist:
   - kubernetes.describeResource

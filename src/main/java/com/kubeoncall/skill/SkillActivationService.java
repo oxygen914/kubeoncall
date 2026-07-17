@@ -51,6 +51,7 @@ public class SkillActivationService {
                     .filter(id -> id != null && !id.isBlank())
                     .map(registry::findById)
                     .flatMap(java.util.Optional::stream)
+                    .filter(skill -> matcher.canActivateRequested(request, context, skill))
                     .forEach(skill -> selected.putIfAbsent(skill.id(), skill));
         }
         List<Skill> matched = selected.values().stream()

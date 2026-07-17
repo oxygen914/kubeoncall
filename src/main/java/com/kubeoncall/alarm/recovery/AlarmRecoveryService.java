@@ -177,12 +177,23 @@ public class AlarmRecoveryService {
         redisTemplate.delete("alarm-ack:" + state.fingerprint());
         redisTemplate.delete("alarm-escalation:" + state.fingerprint());
         metricsService.recordAlarmRecovery("confirmed", severityName(state.severity()));
+        recordMttr(state, now);
         AlarmRecoveryFinalizer.RecoveryActions recoveryActions = recoveryFinalizer.finalizeRecovery(state, actor, note);
         if (!recoveryActions.success()) {
             metricsService.recordAlarmRecovery("finalization_failed", severityName(state.severity()));
         }
         auditRecorder.recordConfirmation(state, actor, healthCheckPassed, now, healthResult, recoveryActions);
         return confirmed;
+    }
+
+    private void recordMttr(AlarmRecoveryState state, Instant recoveredAt) {
+        ActiveAlarmState active = activeAlarmStore.find(state.fingerprint()).orElse(null);
+        if (active == null || active.firstSeen() == null || recoveredAt == null) {
+            return;
+        }
+        long durationMs =
+                Math.max(0, Duration.between(active.firstSeen(), recoveredAt).toMillis());
+        metricsService.recordAlarmDuration("mttr", severityName(state.severity()), durationMs);
     }
 
     private AlarmRecoveryHealthChecker.HealthCheckResult runHealthCheck(AlarmRecoveryState state) {

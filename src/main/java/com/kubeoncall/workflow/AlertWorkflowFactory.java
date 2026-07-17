@@ -96,8 +96,7 @@ public class AlertWorkflowFactory {
 
     private List<AlertWorkflowDefinition> nodeMvpWorkflow() {
         return List.of(
-                new AlertWorkflowDefinition("deviceInfoNode", true, List.of(), deviceInfoNode),
-                new AlertWorkflowDefinition("stateCompareNode", true, List.of("deviceInfoNode"), stateCompareNode),
+                new AlertWorkflowDefinition("stateCompareNode", true, List.of(), stateCompareNode),
                 // The node-monitoring MVP must still record a diagnosis and notify when optional
                 // infrastructure adapters are unavailable during an exporter outage.
                 new AlertWorkflowDefinition("resultPushNode", false, List.of(), resultPushNode),

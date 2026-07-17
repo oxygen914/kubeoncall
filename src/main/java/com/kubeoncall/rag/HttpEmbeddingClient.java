@@ -33,6 +33,19 @@ public class HttpEmbeddingClient implements EmbeddingClient {
 
     @Override
     public List<Double> embed(String text) {
+        List<List<Double>> batch = request(text == null ? "" : text, 1);
+        return batch.isEmpty() ? List.of() : batch.get(0);
+    }
+
+    @Override
+    public List<List<Double>> embedBatch(List<String> texts) {
+        if (texts == null || texts.isEmpty()) {
+            return List.of();
+        }
+        return request(texts, texts.size());
+    }
+
+    private List<List<Double>> request(Object input, int expectedCount) {
         Map<String, String> headers = properties.getRag().getEmbeddingApiKey() == null
                         || properties.getRag().getEmbeddingApiKey().isBlank()
                 ? Map.of()
@@ -41,7 +54,7 @@ public class HttpEmbeddingClient implements EmbeddingClient {
                 properties.getRag().getEmbeddingEndpoint(),
                 Map.of(
                         "model", properties.getRag().getEmbeddingModel(),
-                        "input", text == null ? "" : text,
+                        "input", input,
                         "dimensions", properties.getRag().getEmbeddingDimensions()),
                 properties.getRag().getEmbeddingTimeoutMillis(),
                 headers,
@@ -51,11 +64,12 @@ public class HttpEmbeddingClient implements EmbeddingClient {
         }
         Object body = response.getOrDefault("response", response);
         if (body instanceof Map<?, ?> map) {
-            List<Double> openAiEmbedding = openAiEmbedding(map);
-            if (!openAiEmbedding.isEmpty()) {
-                return validateDimensions(openAiEmbedding);
+            List<List<Double>> openAiEmbeddings = openAiEmbeddings(map, expectedCount);
+            if (!openAiEmbeddings.isEmpty()) {
+                return openAiEmbeddings.stream().map(this::validateDimensions).toList();
             }
-            return validateDimensions(vectorValue(map.get("embedding")));
+            List<Double> legacy = validateDimensions(vectorValue(map.get("embedding")));
+            return legacy.isEmpty() ? List.of() : List.of(legacy);
         }
         return List.of();
     }
@@ -75,12 +89,24 @@ public class HttpEmbeddingClient implements EmbeddingClient {
         return values;
     }
 
-    private List<Double> openAiEmbedding(Map<?, ?> body) {
+    private List<List<Double>> openAiEmbeddings(Map<?, ?> body, int expectedCount) {
         Object data = body.get("data");
-        if (!(data instanceof List<?> list) || list.isEmpty() || !(list.get(0) instanceof Map<?, ?> first)) {
+        if (!(data instanceof List<?> list) || list.isEmpty()) {
             return List.of();
         }
-        return vectorValue(first.get("embedding"));
+        List<List<Double>> ordered = new ArrayList<>(java.util.Collections.nCopies(expectedCount, List.of()));
+        int fallbackIndex = 0;
+        for (Object item : list) {
+            if (!(item instanceof Map<?, ?> embeddingItem)) {
+                continue;
+            }
+            int index = embeddingItem.get("index") instanceof Number number ? number.intValue() : fallbackIndex;
+            fallbackIndex++;
+            if (index >= 0 && index < ordered.size()) {
+                ordered.set(index, vectorValue(embeddingItem.get("embedding")));
+            }
+        }
+        return ordered.stream().allMatch(vector -> !vector.isEmpty()) ? List.copyOf(ordered) : List.of();
     }
 
     private List<Double> vectorValue(Object raw) {

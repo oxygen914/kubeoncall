@@ -6,6 +6,8 @@ description: Triage payment-service OOMKilled or container out-of-memory inciden
 triggers: [oom, oomkilled, out of memory, memory pressure, payment]
 services: [payment-service, payment]
 resourceTypes: [pod, deployment]
+applicableTasks: [QUERY_LOGS, QUERY_METRICS]
+tags: [kubernetes, oom, memory, payment]
 maxRisk: MEDIUM
 toolWhitelist:
   - kubernetes.describeResource

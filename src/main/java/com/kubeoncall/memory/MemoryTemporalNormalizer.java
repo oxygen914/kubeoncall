@@ -56,6 +56,8 @@ public class MemoryTemporalNormalizer {
         if (entry.content().equals(result.content()) && metadata.equals(entry.metadata())) {
             return entry;
         }
+        Map<String, String> normalizedEntryMetadata = new LinkedHashMap<>(metadata);
+        normalizedEntryMetadata.remove("token_count");
         return new MemoryEntry(
                 entry.id(),
                 entry.type(),
@@ -67,7 +69,9 @@ public class MemoryTemporalNormalizer {
                 entry.fingerprint(),
                 entry.createdAt(),
                 entry.updatedAt(),
-                metadata);
+                normalizedEntryMetadata,
+                null,
+                entry.enabled());
     }
 
     public DocumentNormalization normalize(KnowledgeDocument document, Instant normalizedAt) {

@@ -134,6 +134,11 @@ public class ExecutionAuditService {
         record(operationAuditRecordFactory.skill(operation, status, summary, startedAt, metadata));
     }
 
+    public void recordChangeEventOperation(
+            String operation, String status, String summary, Instant startedAt, Map<String, Object> metadata) {
+        record(operationAuditRecordFactory.changeEvent(operation, status, summary, startedAt, metadata));
+    }
+
     public ExecutionStats stats() {
         return auditStatistics.calculate(repository.findAll(), repository.findRecent(20));
     }

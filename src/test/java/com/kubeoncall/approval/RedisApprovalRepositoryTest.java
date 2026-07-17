@@ -16,6 +16,7 @@ import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.ValueOperations;
+import org.springframework.data.redis.core.script.RedisScript;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
@@ -63,5 +64,34 @@ class RedisApprovalRepositoryTest {
         assertTrue(loaded.isPresent());
         assertEquals("exec-1", loaded.get().executionId());
         assertEquals("task-1", loaded.get().taskId());
+    }
+
+    @Test
+    void shouldCompareAndSetApprovalAtomically() {
+        StringRedisTemplate redisTemplate = mock(StringRedisTemplate.class);
+        ObjectMapper objectMapper = new ObjectMapper().registerModule(new JavaTimeModule());
+        KubeOnCallProperties properties = new KubeOnCallProperties();
+        when(redisTemplate.execute(any(RedisScript.class), any(java.util.List.class), any(Object[].class)))
+                .thenReturn(1L);
+        RedisApprovalRepository repository = new RedisApprovalRepository(redisTemplate, objectMapper, properties);
+        ApprovalRequest pending = request(ApprovalDecision.PENDING, false);
+        ApprovalRequest approved = request(ApprovalDecision.APPROVED, true);
+
+        assertTrue(repository.compareAndSet(pending, approved));
+    }
+
+    private ApprovalRequest request(ApprovalDecision decision, boolean processed) {
+        return new ApprovalRequest(
+                "exec-1",
+                new TaskPlan("exec-1", "q", List.of(), Instant.parse("2026-07-17T00:00:00Z"), true),
+                "task-1",
+                "tester",
+                decision,
+                Instant.parse("2026-07-17T00:00:00Z"),
+                processed ? Instant.parse("2026-07-17T00:01:00Z") : null,
+                "comment",
+                processed ? "operator" : null,
+                processed,
+                List.of("risk"));
     }
 }

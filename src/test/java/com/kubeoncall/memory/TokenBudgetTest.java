@@ -40,7 +40,7 @@ class TokenBudgetTest {
         TokenBudget budget = new TokenBudget(properties, httpClient);
 
         assertEquals(5, budget.estimateTokens("a tokenizer-backed sentence"));
-        assertEquals("exact_http_with_heuristic_fallback", budget.countingMode());
+        assertEquals("count_endpoint_with_heuristic_fallback", budget.countingMode());
 
         when(httpClient.post(any(), any(), any(Integer.class), any(), any())).thenReturn(Map.of("status", "failed"));
         assertTrue(budget.estimateTokens("中文测试") >= 4);

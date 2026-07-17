@@ -1,6 +1,7 @@
 package com.kubeoncall.tool.mcp;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyMap;
 import static org.mockito.ArgumentMatchers.eq;
@@ -27,9 +28,9 @@ class HttpMcpClientTest {
         properties.getMcp().setDiscoveryEnabled(true);
         properties.getMcp().setDiscoveryEndpoint("http://mcp/tools/list");
         ToolHttpClient httpClient = mock(ToolHttpClient.class);
-        when(httpClient.post(eq("http://mcp/call"), anyMap(), anyInt(), anyMap(), anyMap()))
+        when(httpClient.post(eq("http://mcp/call"), anyMap(), anyInt(), anyMap(), anyMap(), anyInt()))
                 .thenReturn(Map.of("status", "success", "response", Map.of("owner", "payments")));
-        when(httpClient.post(eq("http://mcp/tools/list"), anyMap(), anyInt(), anyMap(), anyMap()))
+        when(httpClient.post(eq("http://mcp/tools/list"), anyMap(), anyInt(), anyMap(), anyMap(), anyInt()))
                 .thenReturn(Map.of(
                         "status",
                         "success",
@@ -44,9 +45,25 @@ class HttpMcpClientTest {
         ArgumentCaptor<Map<String, String>> invocationHeaders = ArgumentCaptor.forClass(Map.class);
         @SuppressWarnings("unchecked")
         ArgumentCaptor<Map<String, String>> discoveryHeaders = ArgumentCaptor.forClass(Map.class);
-        verify(httpClient).post(eq("http://mcp/call"), anyMap(), anyInt(), invocationHeaders.capture(), anyMap());
-        verify(httpClient).post(eq("http://mcp/tools/list"), anyMap(), anyInt(), discoveryHeaders.capture(), anyMap());
+        verify(httpClient)
+                .post(eq("http://mcp/call"), anyMap(), anyInt(), invocationHeaders.capture(), anyMap(), anyInt());
+        verify(httpClient)
+                .post(eq("http://mcp/tools/list"), anyMap(), anyInt(), discoveryHeaders.capture(), anyMap(), anyInt());
         assertEquals("Bearer mcp-secret", invocationHeaders.getValue().get("Authorization"));
         assertEquals("Bearer mcp-secret", discoveryHeaders.getValue().get("Authorization"));
+    }
+
+    @Test
+    void shouldDistinguishDiscoveryFailureFromAnEmptySuccessfulToolSet() {
+        KubeOnCallProperties properties = new KubeOnCallProperties();
+        properties.getMcp().setDiscoveryEnabled(true);
+        properties.getMcp().setDiscoveryEndpoint("http://mcp/tools/list");
+        ToolHttpClient httpClient = mock(ToolHttpClient.class);
+        when(httpClient.post(eq("http://mcp/tools/list"), anyMap(), anyInt(), anyMap(), anyMap(), anyInt()))
+                .thenReturn(Map.of("status", "failed", "errorType", "Timeout"));
+
+        HttpMcpClient client = new HttpMcpClient(httpClient, properties);
+
+        assertThrows(IllegalStateException.class, client::listTools);
     }
 }

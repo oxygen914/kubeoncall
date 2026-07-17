@@ -3,7 +3,6 @@ package com.kubeoncall.alarm.inbox;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 
 import org.springframework.data.domain.Range;
 import org.springframework.data.redis.connection.stream.Consumer;
@@ -36,6 +35,14 @@ public class RedisAlarmEventInbox implements AlarmEventInbox {
                     + "  return redis.error_reply(write.err)\n"
                     + "end\n"
                     + "return 1",
+            Long.class);
+    private static final DefaultRedisScript<Long> RETRY_SCRIPT = new DefaultRedisScript<>(
+            "redis.call('XADD', KEYS[1], '*', 'event', ARGV[1])\n"
+                    + "return redis.call('XACK', KEYS[1], ARGV[2], ARGV[3])",
+            Long.class);
+    private static final DefaultRedisScript<Long> DEAD_LETTER_SCRIPT = new DefaultRedisScript<>(
+            "redis.call('XADD', KEYS[2], '*', 'event', ARGV[1], 'reason', ARGV[2])\n"
+                    + "return redis.call('XACK', KEYS[1], ARGV[3], ARGV[4])",
             Long.class);
 
     private final StringRedisTemplate redisTemplate;
@@ -110,8 +117,13 @@ public class RedisAlarmEventInbox implements AlarmEventInbox {
     @Override
     public void retry(ClaimedAlarmEvent event, String reason) {
         try {
-            appendToStream(event.event().nextAttempt());
-            acknowledge(event);
+            Long acknowledged = redisTemplate.execute(
+                    RETRY_SCRIPT,
+                    List.of(properties.getAlarm().getInboxStreamKey()),
+                    objectMapper.writeValueAsString(event.event().nextAttempt()),
+                    properties.getAlarm().getInboxConsumerGroup(),
+                    event.recordId());
+            requireAcknowledged(acknowledged, "retry");
         } catch (Exception ex) {
             throw new AlarmInboxUnavailableException("Unable to retry alarm inbox event", ex);
         }
@@ -120,15 +132,16 @@ public class RedisAlarmEventInbox implements AlarmEventInbox {
     @Override
     public void deadLetter(ClaimedAlarmEvent event, String reason) {
         try {
-            streamOperations()
-                    .add(org.springframework.data.redis.connection.stream.StreamRecords.newRecord()
-                            .ofMap(Map.of(
-                                    "event",
-                                    objectMapper.writeValueAsString(event.event()),
-                                    "reason",
-                                    reason == null ? "processing failed" : reason))
-                            .withStreamKey(properties.getAlarm().getInboxDeadLetterKey()));
-            acknowledge(event);
+            Long acknowledged = redisTemplate.execute(
+                    DEAD_LETTER_SCRIPT,
+                    List.of(
+                            properties.getAlarm().getInboxStreamKey(),
+                            properties.getAlarm().getInboxDeadLetterKey()),
+                    objectMapper.writeValueAsString(event.event()),
+                    reason == null ? "processing failed" : reason,
+                    properties.getAlarm().getInboxConsumerGroup(),
+                    event.recordId());
+            requireAcknowledged(acknowledged, "dead-letter");
         } catch (Exception ex) {
             throw new AlarmInboxUnavailableException("Unable to dead-letter alarm inbox event", ex);
         }
@@ -144,11 +157,10 @@ public class RedisAlarmEventInbox implements AlarmEventInbox {
         }
     }
 
-    private void appendToStream(InboundAlarmEvent event) throws Exception {
-        streamOperations()
-                .add(org.springframework.data.redis.connection.stream.StreamRecords.newRecord()
-                        .ofMap(Map.of("event", objectMapper.writeValueAsString(event)))
-                        .withStreamKey(properties.getAlarm().getInboxStreamKey()));
+    private void requireAcknowledged(Long acknowledged, String operation) {
+        if (!Long.valueOf(1).equals(acknowledged)) {
+            throw new IllegalStateException("Alarm inbox record is no longer owned for " + operation);
+        }
     }
 
     private void ensureConsumerGroup() {
@@ -156,11 +168,26 @@ public class RedisAlarmEventInbox implements AlarmEventInbox {
             streamOperations()
                     .createGroup(
                             properties.getAlarm().getInboxStreamKey(),
-                            ReadOffset.latest(),
+                            ReadOffset.from("0-0"),
                             properties.getAlarm().getInboxConsumerGroup());
-        } catch (RuntimeException ignored) {
+        } catch (RuntimeException ex) {
+            if (!isBusyGroup(ex)) {
+                throw ex;
+            }
             // Redis reports BUSYGROUP after the first creator; no action is required.
         }
+    }
+
+    private boolean isBusyGroup(Throwable failure) {
+        Throwable current = failure;
+        while (current != null) {
+            String message = current.getMessage();
+            if (message != null && message.toUpperCase(java.util.Locale.ROOT).contains("BUSYGROUP")) {
+                return true;
+            }
+            current = current.getCause();
+        }
+        return false;
     }
 
     private List<MapRecord<String, String, String>> reclaimPending(String consumer, int batchSize) {

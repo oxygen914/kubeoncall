@@ -22,7 +22,8 @@ public final class SkillIndexFormatter {
 
     private String line(Skill skill) {
         return "- " + skill.id() + ": " + truncate(skill.description(), MAX_DESCRIPTION_CHARS) + " triggers="
-                + skill.triggers() + " maxRisk=" + skill.maxRisk() + "\n";
+                + skill.triggers() + " tags=" + skill.tags() + " applicableTasks=" + skill.applicableTasks()
+                + " maxRisk=" + skill.maxRisk() + "\n";
     }
 
     private void appendIfFits(StringBuilder result, String value) {

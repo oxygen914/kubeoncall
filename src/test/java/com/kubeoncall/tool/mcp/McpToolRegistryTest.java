@@ -1,5 +1,6 @@
 package com.kubeoncall.tool.mcp;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
@@ -36,5 +37,22 @@ class McpToolRegistryTest {
 
         assertTrue(registry.listPlannerTools().stream().anyMatch(tool -> "metrics.query".equals(tool.name())));
         assertTrue(registry.listPlannerTools().stream().allMatch(tool -> tool.readOnly()));
+    }
+
+    @Test
+    void shouldPreserveLastSuccessfulDiscoveryWhenRefreshFails() {
+        KubeOnCallProperties properties = new KubeOnCallProperties();
+        properties.getMcp().setDiscoveryEnabled(true);
+        properties.getMcp().setDiscoveryCacheSeconds(1);
+        McpClient client = mock(McpClient.class);
+        when(client.listTools())
+                .thenReturn(List.of(Map.of("name", "metrics.query", "readOnly", true)))
+                .thenThrow(new IllegalStateException("timeout"));
+        McpToolRegistry registry = new McpToolRegistry(client, properties);
+
+        assertEquals(1, registry.refreshDiscoveredTools().size());
+        registry.scheduledRefresh();
+
+        assertEquals("metrics.query", registry.refreshDiscoveredTools().get(0).name());
     }
 }

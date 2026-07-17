@@ -22,7 +22,11 @@ class MemoryProperties {
     private int consolidationScanLimit = 500;
     private long consolidationLockTtlSeconds = 1800;
     private double duplicateSimilarityThreshold = 0.92d;
+    private boolean semanticDuplicateEnabled = false;
+    private double semanticDuplicateWeight = 0.75d;
     private int extractionMaxAttempts = 3;
+    private long extractionProcessingTimeoutSeconds = 300;
+    private int extractionReclaimLimit = 100;
     private long extractionStatusTtlSeconds = 86400;
     private boolean llmExtractionEnabled = false;
     private String llmExtractionEndpoint;
@@ -35,6 +39,8 @@ class MemoryProperties {
     private String tokenizerApiKey;
     private String tokenizerModel = "";
     private int tokenizerTimeoutMillis = 2000;
+    private String tokenizerMode = "count_endpoint";
+    private int tokenizerChatOverheadTokens = -1;
 
     public boolean isEnabled() {
         return enabled;
@@ -196,12 +202,44 @@ class MemoryProperties {
         this.duplicateSimilarityThreshold = duplicateSimilarityThreshold;
     }
 
+    public boolean isSemanticDuplicateEnabled() {
+        return semanticDuplicateEnabled;
+    }
+
+    public void setSemanticDuplicateEnabled(boolean semanticDuplicateEnabled) {
+        this.semanticDuplicateEnabled = semanticDuplicateEnabled;
+    }
+
+    public double getSemanticDuplicateWeight() {
+        return semanticDuplicateWeight;
+    }
+
+    public void setSemanticDuplicateWeight(double semanticDuplicateWeight) {
+        this.semanticDuplicateWeight = semanticDuplicateWeight;
+    }
+
     public int getExtractionMaxAttempts() {
         return extractionMaxAttempts;
     }
 
     public void setExtractionMaxAttempts(int extractionMaxAttempts) {
         this.extractionMaxAttempts = extractionMaxAttempts;
+    }
+
+    public long getExtractionProcessingTimeoutSeconds() {
+        return extractionProcessingTimeoutSeconds;
+    }
+
+    public void setExtractionProcessingTimeoutSeconds(long extractionProcessingTimeoutSeconds) {
+        this.extractionProcessingTimeoutSeconds = extractionProcessingTimeoutSeconds;
+    }
+
+    public int getExtractionReclaimLimit() {
+        return extractionReclaimLimit;
+    }
+
+    public void setExtractionReclaimLimit(int extractionReclaimLimit) {
+        this.extractionReclaimLimit = extractionReclaimLimit;
     }
 
     public long getExtractionStatusTtlSeconds() {
@@ -298,5 +336,21 @@ class MemoryProperties {
 
     public void setTokenizerTimeoutMillis(int tokenizerTimeoutMillis) {
         this.tokenizerTimeoutMillis = tokenizerTimeoutMillis;
+    }
+
+    public String getTokenizerMode() {
+        return tokenizerMode;
+    }
+
+    public void setTokenizerMode(String tokenizerMode) {
+        this.tokenizerMode = tokenizerMode;
+    }
+
+    public int getTokenizerChatOverheadTokens() {
+        return tokenizerChatOverheadTokens;
+    }
+
+    public void setTokenizerChatOverheadTokens(int tokenizerChatOverheadTokens) {
+        this.tokenizerChatOverheadTokens = tokenizerChatOverheadTokens;
     }
 }

@@ -4,11 +4,13 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import com.kubeoncall.alarm.domain.NormalizedAlarmEvent;
 import com.kubeoncall.domain.alarm.AlarmEvent;
 import com.kubeoncall.domain.graph.NodeResult;
+import com.kubeoncall.service.KubeOnCallMetricsService;
 
 /** Coordinates the public alarm workflow entry points without owning individual workflow branches. */
 @Service
@@ -17,14 +19,25 @@ public class AlertWorkflowService {
     private final AlarmEventPreparationService eventPreparationService;
     private final AlertWorkflowPreflight workflowPreflight;
     private final AlertWorkflowCoordinator workflowCoordinator;
+    private final KubeOnCallMetricsService metricsService;
 
     public AlertWorkflowService(
             AlarmEventPreparationService eventPreparationService,
             AlertWorkflowPreflight workflowPreflight,
             AlertWorkflowCoordinator workflowCoordinator) {
+        this(eventPreparationService, workflowPreflight, workflowCoordinator, null);
+    }
+
+    @Autowired
+    public AlertWorkflowService(
+            AlarmEventPreparationService eventPreparationService,
+            AlertWorkflowPreflight workflowPreflight,
+            AlertWorkflowCoordinator workflowCoordinator,
+            KubeOnCallMetricsService metricsService) {
         this.eventPreparationService = eventPreparationService;
         this.workflowPreflight = workflowPreflight;
         this.workflowCoordinator = workflowCoordinator;
+        this.metricsService = metricsService;
     }
 
     /**
@@ -43,6 +56,9 @@ public class AlertWorkflowService {
         AlertWorkflowPreflight.Result preflightResult = workflowPreflight.process(preparedAlarm, startedAt);
         if (preflightResult.hasTerminalResult()) {
             return preflightResult.terminalResults();
+        }
+        if (metricsService != null) {
+            metricsService.recordAlarmQuality("actionable");
         }
         return workflowCoordinator.run(preflightResult, startedAt);
     }

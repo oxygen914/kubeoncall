@@ -6,7 +6,7 @@
 
 1. **真实模型联调（已完成）**：阿里云 `text-embedding-v4` 与 `qwen3-rerank` 已完成认证、请求契约、应用级 ES kNN/主排序、超时和维度错误降级审计。批量吞吐压测延期。
 2. **通用知识代码层（已完成代码与单测）**：稳定 `doc_id/file_hash` 幂等更新、`chunk_enable=false` 软删除与恢复、JSONL 批量导入、统一 metadata、Markdown `heading_path` 与 active dataset 自动过滤已实现。
-3. **效果与治理（不排期）**：知识增强、离线效果评估、model/version 与 dataset 自动绑定保留为后续 backlog。
+3. **效果与治理**：知识双字段增强、受控并发、批量 embedding 和 model/version 与 dataset 自动绑定代码已完成；离线效果评估与真实吞吐基线按当前要求暂缓。
 
 索引 alias 的 prepare/activate/rollback 代码与接口已具备，但真实 Elasticsearch 切换、旧 concrete index 迁移和回滚演练**明确延期**，演练验收进度保持 **0%**。本轮不新增 alias 能力，也不将该演练作为 RAG 主线的验收前提。
 
@@ -570,16 +570,19 @@ kubeoncall:
 
 ### 阶段 6：数据增强与双字段策略
 
+实施状态（2026-07-16）：代码已完成，离线效果对比暂缓。
+
 目标：借鉴参考项目的摘要/潜在问题/标签，但避免污染 BM25。
 
 任务：
 
-- 新增 `KnowledgeAugmentationService`，可配置开启。
+- 已新增 `KnowledgeAugmentationService`，可配置开启。
 - 增强输出结构化 JSON：`summary`、`questions`、`topics`、`difficulty`、`content_type`。
 - `content` 保留原文 chunk。
 - `embedding_text` 使用原文 + 摘要 + 可能用户提问 + 标签。
 - topics 等字段写 metadata，用于过滤和 trace 展示。
-- 增强失败不阻断入库，记录 warning。
+- 增强失败不阻断入库，通过 `augmentation_status/error` 记录降级原因。
+- augmentation 按配置并发且保持 chunk 顺序；embedding 使用多 input 请求并按 batch size 分批，失败时逐条降级。
 
 验收：
 

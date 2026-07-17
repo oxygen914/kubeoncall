@@ -13,6 +13,7 @@ import jakarta.annotation.PostConstruct;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.core.io.Resource;
 import org.springframework.stereotype.Component;
@@ -44,6 +45,7 @@ public class YamlAlarmPolicyRepository implements AlarmPolicyRepository {
     private final boolean enabled;
     private final AlarmSeverity defaultSeverity;
     private final int versionHistoryLimit;
+    private final AlarmPolicySnapshotStore snapshotStore;
     private volatile List<AlarmPolicy> policies = List.of();
     private volatile Map<String, AlarmPolicy> byId = Map.of();
     private volatile Map<String, AlarmPolicy> byName = Map.of();
@@ -51,12 +53,18 @@ public class YamlAlarmPolicyRepository implements AlarmPolicyRepository {
     private volatile Map<String, PolicySnapshot> versionHistory = Map.of();
 
     public YamlAlarmPolicyRepository(KubeOnCallProperties properties) {
+        this(properties, null);
+    }
+
+    @Autowired
+    public YamlAlarmPolicyRepository(KubeOnCallProperties properties, AlarmPolicySnapshotStore snapshotStore) {
         KubeOnCallProperties.Alarm alarm = properties.getAlarm();
         this.policyLocation = alarm.getPolicyLocation();
         this.enabled = alarm.isEnabled();
         AlarmSeverity parsed = AlarmSeverity.fromRaw(alarm.getDefaultSeverity());
         this.defaultSeverity = parsed == null ? AlarmSeverity.P3 : parsed;
         this.versionHistoryLimit = Math.max(1, alarm.getPolicyVersionHistoryLimit());
+        this.snapshotStore = snapshotStore;
     }
 
     @PostConstruct
@@ -104,6 +112,7 @@ public class YamlAlarmPolicyRepository implements AlarmPolicyRepository {
         this.byId = Map.copyOf(nextById);
         this.byName = Map.copyOf(nextByName);
         this.activeVersion = file.version() == null || file.version().isBlank() ? "unversioned" : file.version();
+        restoreHistory();
         retainVersion(this.activeVersion, this.policies);
         log.info("Loaded {} alarm policies from {}", loaded.size(), policyLocation);
     }
@@ -157,6 +166,7 @@ public class YamlAlarmPolicyRepository implements AlarmPolicyRepository {
         this.byId = indexById(snapshot.policies());
         this.byName = indexByName(snapshot.policies());
         this.activeVersion = snapshot.version();
+        persistHistory();
         return new PolicySnapshot(snapshot.version(), previousVersion, snapshot.loadedAt(), snapshot.policies());
     }
 
@@ -180,6 +190,23 @@ public class YamlAlarmPolicyRepository implements AlarmPolicyRepository {
             next.remove(next.keySet().iterator().next());
         }
         versionHistory = Map.copyOf(next);
+        persistHistory();
+    }
+
+    private void restoreHistory() {
+        if (snapshotStore == null || !versionHistory.isEmpty()) {
+            return;
+        }
+        Map<String, PolicySnapshot> restored = snapshotStore.load();
+        if (restored != null && !restored.isEmpty()) {
+            versionHistory = Map.copyOf(restored);
+        }
+    }
+
+    private void persistHistory() {
+        if (snapshotStore != null && !versionHistory.isEmpty()) {
+            snapshotStore.save(versionHistory);
+        }
     }
 
     private Map<String, AlarmPolicy> indexById(List<AlarmPolicy> source) {

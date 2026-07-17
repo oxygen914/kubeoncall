@@ -53,7 +53,7 @@ public class ResultPushNode implements AlertWorkflowNode {
                         .map(result -> result.nodeName() + ":" + result.status())
                         .toList());
         summary.put("knowledgeHints", context.getAttribute("knowledgeHints"));
-        summary.put("diagnosis", context.getAttribute("diagnosis"));
+        summary.put("diagnosis", diagnosis(context));
         if (normalized != null) {
             summary.put("fingerprint", normalized.fingerprint());
             summary.put("alertName", normalized.alertName());
@@ -73,6 +73,72 @@ public class ResultPushNode implements AlertWorkflowNode {
             summary.put("silenceCreated", false);
         }
         return summary;
+    }
+
+    private Map<String, Object> diagnosis(AlertWorkflowContext context) {
+        Object existing = context.getAttribute("diagnosis");
+        if (existing instanceof Map<?, ?> map) {
+            Map<String, Object> diagnosis = new LinkedHashMap<>();
+            map.forEach((key, value) -> diagnosis.put(String.valueOf(key), value));
+            return Map.copyOf(diagnosis);
+        }
+        Map<String, Object> diagnosis = new LinkedHashMap<>();
+        diagnosis.put("strategy", "NODE_MVP_EVIDENCE");
+        diagnosis.put("state", summarizeToolResult(context.getAttribute("stateCompareResult")));
+        diagnosis.put("device", summarizeToolResult(context.getAttribute("deviceInfoResult")));
+        diagnosis.put(
+                "conclusion",
+                context.isDegraded()
+                        ? "Diagnosis is degraded because one or more optional evidence sources failed"
+                        : "Node evidence was collected; review the metric series and current alert state");
+        return Map.copyOf(diagnosis);
+    }
+
+    private Map<String, Object> summarizeToolResult(Object raw) {
+        if (!(raw instanceof Map<?, ?> result)) {
+            return Map.of("available", false);
+        }
+        Map<String, Object> summary = new LinkedHashMap<>();
+        summary.put("available", true);
+        copyScalar(result, summary, "status");
+        copyScalar(result, summary, "httpStatus");
+        copyScalar(result, summary, "latencyMs");
+        copyScalar(result, summary, "query");
+        Object response = result.get("response");
+        if (response instanceof Map<?, ?> responseMap
+                && responseMap.get("data") instanceof Map<?, ?> data
+                && data.get("result") instanceof List<?> series) {
+            summary.put("seriesCount", series.size());
+            summary.put(
+                    "samples", series.stream().limit(5).map(this::sampleSummary).toList());
+        }
+        return Map.copyOf(summary);
+    }
+
+    private Map<String, Object> sampleSummary(Object raw) {
+        if (!(raw instanceof Map<?, ?> sample)) {
+            return Map.of();
+        }
+        Map<String, Object> summary = new LinkedHashMap<>();
+        if (sample.get("metric") instanceof Map<?, ?> metric) {
+            Map<String, Object> labels = new LinkedHashMap<>();
+            metric.forEach((key, value) -> labels.put(String.valueOf(key), value));
+            summary.put("metric", Map.copyOf(labels));
+        }
+        if (sample.get("value") != null) {
+            summary.put("value", sample.get("value"));
+        }
+        if (sample.get("values") instanceof List<?> values && !values.isEmpty()) {
+            summary.put("latestValue", values.get(values.size() - 1));
+        }
+        return Map.copyOf(summary);
+    }
+
+    private void copyScalar(Map<?, ?> source, Map<String, Object> target, String key) {
+        Object value = source.get(key);
+        if (value instanceof String || value instanceof Number || value instanceof Boolean) {
+            target.put(key, value);
+        }
     }
 
     private static String severity(AlertWorkflowContext context) {

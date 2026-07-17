@@ -237,6 +237,8 @@ public class SkillRegistry {
                         skill.description(),
                         skill.triggers(),
                         skill.services(),
+                        skill.applicableTasks().stream().map(Enum::name).toList(),
+                        skill.tags(),
                         skill.maxRisk() == null ? null : skill.maxRisk().name(),
                         skill.version(),
                         skill.source() == null ? null : skill.source().name(),

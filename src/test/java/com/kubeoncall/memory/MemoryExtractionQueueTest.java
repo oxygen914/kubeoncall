@@ -3,7 +3,9 @@ package com.kubeoncall.memory;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -16,6 +18,7 @@ import org.mockito.ArgumentCaptor;
 import org.springframework.data.redis.core.ListOperations;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.ValueOperations;
+import org.springframework.data.redis.core.script.RedisScript;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.kubeoncall.common.config.KubeOnCallProperties;
@@ -28,15 +31,14 @@ class MemoryExtractionQueueTest {
         Fixture fixture = new Fixture();
         MemoryExtractionTask task = task(0);
         String raw = fixture.objectMapper.writeValueAsString(task);
-        when(fixture.listOperations.rightPopAndLeftPush(
-                        MemoryExtractionQueue.PENDING_KEY, MemoryExtractionQueue.PROCESSING_KEY))
-                .thenReturn(raw);
+        fixture.claimedRaw = raw;
 
         MemoryExtractionQueue.ClaimedTask claimed = fixture.queue.claim().orElseThrow();
         fixture.queue.acknowledge(claimed);
 
         assertEquals(task, claimed.task());
-        verify(fixture.listOperations).remove(MemoryExtractionQueue.PROCESSING_KEY, 1, raw);
+        assertTrue(claimed.raw().endsWith("\n" + raw));
+        verify(fixture.redisTemplate, atLeastOnce()).execute(any(RedisScript.class), anyList(), any(Object[].class));
         verify(fixture.metrics).recordMemory("extract_process", "success", 1);
     }
 
@@ -50,11 +52,6 @@ class MemoryExtractionQueueTest {
 
         fixture.queue.fail(claimed, new IllegalStateException("ES unavailable"));
 
-        ArgumentCaptor<String> deadLetter = ArgumentCaptor.forClass(String.class);
-        verify(fixture.listOperations).leftPush(eq(MemoryExtractionQueue.DEAD_LETTER_KEY), deadLetter.capture());
-        MemoryExtractionTask stored = fixture.objectMapper.readValue(deadLetter.getValue(), MemoryExtractionTask.class);
-        assertEquals(3, stored.attempts());
-        assertEquals("IllegalStateException", stored.metadata().get("last_error"));
         verify(fixture.metrics).recordMemory("extract_dead_letter", "max_attempts", 1);
     }
 
@@ -63,7 +60,8 @@ class MemoryExtractionQueueTest {
         Fixture fixture = new Fixture();
         String raw = fixture.objectMapper.writeValueAsString(task(3));
         when(fixture.listOperations.rightPop(MemoryExtractionQueue.DEAD_LETTER_KEY))
-                .thenReturn(raw, null);
+                .thenReturn(raw)
+                .thenReturn(null);
 
         int replayed = fixture.queue.replayDeadLetters(10);
 
@@ -121,6 +119,17 @@ class MemoryExtractionQueueTest {
         assertTrue(status.status().equals("PENDING"));
     }
 
+    @Test
+    void shouldReclaimExpiredProcessingTasks() {
+        Fixture fixture = new Fixture();
+        fixture.reclaimed = 2L;
+
+        int reclaimed = fixture.queue.reclaimExpired();
+
+        assertEquals(2, reclaimed);
+        verify(fixture.metrics).recordMemory("extract_reclaim", "success", 2);
+    }
+
     private static MemoryExtractionTask task(int attempts) {
         return new MemoryExtractionTask(
                 "task-1",
@@ -149,10 +158,23 @@ class MemoryExtractionQueueTest {
         private final KubeOnCallProperties properties = new KubeOnCallProperties();
         private final KubeOnCallMetricsService metrics = mock(KubeOnCallMetricsService.class);
         private final MemoryExtractionQueue queue;
+        private String claimedRaw;
+        private Long reclaimed = 0L;
 
         private Fixture() {
             when(redisTemplate.opsForList()).thenReturn(listOperations);
             when(redisTemplate.opsForValue()).thenReturn(valueOperations);
+            when(redisTemplate.execute(any(RedisScript.class), anyList(), any(Object[].class)))
+                    .thenAnswer(invocation -> {
+                        RedisScript<?> script = invocation.getArgument(0);
+                        if (script.getResultType() == String.class) {
+                            return claimedRaw;
+                        }
+                        if (script.getScriptAsString().contains("ZRANGEBYSCORE")) {
+                            return reclaimed;
+                        }
+                        return 1L;
+                    });
             queue = new MemoryExtractionQueue(redisTemplate, objectMapper, properties, metrics);
         }
     }

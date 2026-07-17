@@ -27,6 +27,8 @@ public class KnowledgeIngestionFacade {
     private final EmbeddingService embeddingService;
     private final KubeOnCallProperties properties;
     private final KnowledgeMetadataFactory metadataFactory;
+    private final KnowledgeAugmentationService augmentationService;
+    private final KnowledgeDatasetVersionBinder datasetVersionBinder;
 
     public KnowledgeIngestionFacade(
             KnowledgeRepository knowledgeRepository,
@@ -40,7 +42,9 @@ public class KnowledgeIngestionFacade {
                 knowledgeObjectStorageService,
                 embeddingService,
                 properties,
-                new KnowledgeMetadataFactory());
+                new KnowledgeMetadataFactory(),
+                null,
+                new KnowledgeDatasetVersionBinder(properties));
     }
 
     @Autowired
@@ -50,13 +54,17 @@ public class KnowledgeIngestionFacade {
             KnowledgeObjectStorageService knowledgeObjectStorageService,
             EmbeddingService embeddingService,
             KubeOnCallProperties properties,
-            KnowledgeMetadataFactory metadataFactory) {
+            KnowledgeMetadataFactory metadataFactory,
+            KnowledgeAugmentationService augmentationService,
+            KnowledgeDatasetVersionBinder datasetVersionBinder) {
         this.knowledgeRepository = knowledgeRepository;
         this.knowledgeChunker = knowledgeChunker;
         this.knowledgeObjectStorageService = knowledgeObjectStorageService;
         this.embeddingService = embeddingService;
         this.properties = properties;
         this.metadataFactory = metadataFactory;
+        this.augmentationService = augmentationService;
+        this.datasetVersionBinder = datasetVersionBinder;
     }
 
     public KnowledgeDocument ingest(String title, String content, String source, Map<String, String> metadata) {
@@ -65,10 +73,11 @@ public class KnowledgeIngestionFacade {
 
     public IngestionResult ingestWithResult(String title, String content, String source, Map<String, String> metadata) {
         Map<String, String> mergedMetadata = metadataFactory.copy(metadata);
+        datasetVersionBinder.bind(mergedMetadata);
         String fileHash = sha256(content);
         String requestedDocumentId = normalize(mergedMetadata.get("doc_id"));
         if (requestedDocumentId.isBlank()) {
-            KnowledgeDocument duplicate = findExistingByHash(fileHash);
+            KnowledgeDocument duplicate = findExistingByHash(fileHash, mergedMetadata.get("dataset_version"));
             if (duplicate != null) {
                 return new IngestionResult(duplicate, "duplicate", 0, false);
             }
@@ -77,17 +86,57 @@ public class KnowledgeIngestionFacade {
         List<KnowledgeDocument> existingDocuments = knowledgeRepository.findByMetadata("doc_id", documentId);
         preserveCreatedAt(mergedMetadata, existingDocuments, documentId);
         StoredDocumentReference reference = knowledgeObjectStorageService.store(title, content, source);
-        Instant now = Instant.now();
-        Map<String, String> parentMetadata =
-                metadataFactory.parentMetadata(mergedMetadata, documentId, source, fileHash, reference, now);
+        List<String> attemptedDocumentIds = new java.util.ArrayList<>();
+        try {
+            Instant now = Instant.now();
+            Map<String, String> parentMetadata =
+                    metadataFactory.parentMetadata(mergedMetadata, documentId, source, fileHash, reference, now);
 
-        KnowledgeDocument document = new KnowledgeDocument(documentId, title, content, source, parentMetadata, now);
+            KnowledgeDocument document = new KnowledgeDocument(documentId, title, content, source, parentMetadata, now);
+            saveForIngestion(document, attemptedDocumentIds);
+            List<KnowledgeDocument> chunks = knowledgeChunker.chunk(document);
+            if (augmentationService != null) {
+                chunks = augmentationService.augmentAll(chunks);
+            }
+            chunks = withEmbeddings(chunks);
+            for (KnowledgeDocument chunk : chunks) {
+                saveForIngestion(chunk, attemptedDocumentIds);
+            }
+            removeStaleChunks(existingDocuments, documentId, chunks);
+            return new IngestionResult(
+                    document, existingDocuments.isEmpty() ? "created" : "updated", chunks.size(), reference.stored());
+        } catch (RuntimeException ex) {
+            rollbackIngestion(attemptedDocumentIds, existingDocuments, reference);
+            throw ex;
+        }
+    }
+
+    private void saveForIngestion(KnowledgeDocument document, List<String> attemptedDocumentIds) {
+        attemptedDocumentIds.add(document.id());
         knowledgeRepository.save(document);
-        List<KnowledgeDocument> chunks = knowledgeChunker.chunk(document);
-        chunks.stream().map(this::withEmbedding).forEach(knowledgeRepository::save);
-        removeStaleChunks(existingDocuments, documentId, chunks);
-        return new IngestionResult(
-                document, existingDocuments.isEmpty() ? "created" : "updated", chunks.size(), reference.stored());
+    }
+
+    private void rollbackIngestion(
+            List<String> attemptedDocumentIds,
+            List<KnowledgeDocument> existingDocuments,
+            StoredDocumentReference reference) {
+        for (int index = attemptedDocumentIds.size() - 1; index >= 0; index--) {
+            try {
+                knowledgeRepository.deleteById(attemptedDocumentIds.get(index));
+            } catch (RuntimeException ignored) {
+                // Continue restoring the previous snapshot even if one compensation step fails.
+            }
+        }
+        if (existingDocuments != null) {
+            for (KnowledgeDocument existingDocument : existingDocuments) {
+                try {
+                    knowledgeRepository.save(existingDocument);
+                } catch (RuntimeException ignored) {
+                    // The original ingestion exception remains the primary failure.
+                }
+            }
+        }
+        knowledgeObjectStorageService.remove(reference);
     }
 
     public LifecycleResult softDelete(String documentId, String reason) {
@@ -98,13 +147,22 @@ public class KnowledgeIngestionFacade {
         return changeAvailability(documentId, true, null);
     }
 
-    private KnowledgeDocument findExistingByHash(String fileHash) {
+    private KnowledgeDocument findExistingByHash(String fileHash, String datasetVersion) {
         return knowledgeRepository.findByMetadata("file_hash", fileHash).stream()
                 .filter(document -> isParent(
                         document,
                         document.metadata() == null ? "" : document.metadata().get("doc_id")))
+                .filter(document -> sameDataset(document, datasetVersion))
                 .findFirst()
                 .orElse(null);
+    }
+
+    private boolean sameDataset(KnowledgeDocument document, String datasetVersion) {
+        if (datasetVersion == null || datasetVersion.isBlank()) {
+            return true;
+        }
+        return document.metadata() != null
+                && datasetVersion.equals(document.metadata().get("dataset_version"));
     }
 
     private void removeStaleChunks(
@@ -195,7 +253,11 @@ public class KnowledgeIngestionFacade {
             metadata.putAll(chunk.metadata());
         }
         try {
-            EmbeddingService.EmbeddingResult result = embeddingService.embed(chunk.content());
+            String embeddingText =
+                    chunk.embeddingText() == null || chunk.embeddingText().isBlank()
+                            ? chunk.content()
+                            : chunk.embeddingText();
+            EmbeddingService.EmbeddingResult result = embeddingService.embed(embeddingText);
             int configuredDimensions = Math.max(1, properties.getRag().getEmbeddingDimensions());
             if (result.vector().size() != configuredDimensions) {
                 throw new IllegalStateException("Embedding dimensions "
@@ -214,7 +276,7 @@ public class KnowledgeIngestionFacade {
                     chunk.source(),
                     metadata,
                     chunk.createdAt(),
-                    chunk.content(),
+                    embeddingText,
                     result.vector());
         } catch (RuntimeException ex) {
             metadata.put("embedding_status", "failed");
@@ -222,7 +284,59 @@ public class KnowledgeIngestionFacade {
             metadata.put("embedding_version", properties.getRag().getEmbeddingVersion());
             metadata.put("embedding_error", ex.getClass().getSimpleName());
             return new KnowledgeDocument(
-                    chunk.id(), chunk.title(), chunk.content(), chunk.source(), metadata, chunk.createdAt());
+                    chunk.id(),
+                    chunk.title(),
+                    chunk.content(),
+                    chunk.source(),
+                    metadata,
+                    chunk.createdAt(),
+                    chunk.embeddingText(),
+                    List.of());
+        }
+    }
+
+    private List<KnowledgeDocument> withEmbeddings(List<KnowledgeDocument> chunks) {
+        if (!embeddingConfigured() || chunks == null || chunks.isEmpty()) {
+            return chunks == null ? List.of() : List.copyOf(chunks);
+        }
+        try {
+            List<String> texts = chunks.stream()
+                    .map(chunk -> chunk.embeddingText() == null
+                                    || chunk.embeddingText().isBlank()
+                            ? chunk.content()
+                            : chunk.embeddingText())
+                    .toList();
+            List<EmbeddingService.EmbeddingResult> embeddings = embeddingService.embedBatch(texts);
+            if (embeddings.size() != chunks.size()) {
+                throw new IllegalStateException("Embedding batch result count mismatch");
+            }
+            List<KnowledgeDocument> results = new java.util.ArrayList<>(chunks.size());
+            for (int index = 0; index < chunks.size(); index++) {
+                KnowledgeDocument chunk = chunks.get(index);
+                EmbeddingService.EmbeddingResult embedding = embeddings.get(index);
+                Map<String, String> metadata = new LinkedHashMap<>(chunk.metadata());
+                metadata.put("embedding_status", "ready");
+                metadata.put("embedding_model", properties.getRag().getEmbeddingModel());
+                metadata.put("embedding_version", properties.getRag().getEmbeddingVersion());
+                metadata.put("embedding_provider", embedding.provider());
+                metadata.put(
+                        "embedding_dimensions",
+                        String.valueOf(embedding.vector().size()));
+                metadata.put("embedding_mock", String.valueOf(embedding.mock()));
+                metadata.put("embedding_batch", "true");
+                results.add(new KnowledgeDocument(
+                        chunk.id(),
+                        chunk.title(),
+                        chunk.content(),
+                        chunk.source(),
+                        metadata,
+                        chunk.createdAt(),
+                        texts.get(index),
+                        embedding.vector()));
+            }
+            return List.copyOf(results);
+        } catch (RuntimeException ex) {
+            return chunks.stream().map(this::withEmbedding).toList();
         }
     }
 

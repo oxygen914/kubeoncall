@@ -69,44 +69,49 @@ public class AskService {
 
     public AskExecutionResult resumeAfterApproval(String executionId) {
         Instant startedAt = Instant.now();
-        GraphState state = approvalService.loadState(executionId);
-        String sessionId = contextLifecycle.sessionId(state);
-        if (state.getStatus() == GraphStatus.REJECTED) {
-            state.addApprovalAudit("Execution terminated after rejection");
+        String resumeLease = approvalService.acquireResumeLease(executionId);
+        try {
+            GraphState state = approvalService.loadState(executionId);
+            String sessionId = contextLifecycle.sessionId(state);
+            if (state.getStatus() == GraphStatus.REJECTED) {
+                state.addApprovalAudit("Execution terminated after rejection");
+                contextLifecycle.compressRuntime(state);
+                String message = responseComposer.compose(state);
+                AskExecutionResult result = new AskExecutionResult(
+                        state.getExecutionId(), state.getStatus().name(), message, sessionId, structuredDetails(state));
+                contextLifecycle.complete(sessionId, state, message);
+                executionAuditService.recordGraphExecution(ExecutionRequestType.APPROVAL_RESUME, state, startedAt);
+                approvalService.clearState(executionId);
+                return result;
+            }
+            if (state.getStatus() != GraphStatus.RUNNING) {
+                throw new IllegalStateException("Execution is not ready to resume: " + executionId);
+            }
+            if (state.getFinalApprovalDecision() != ApprovalDecision.APPROVED) {
+                throw new IllegalStateException("Execution has not been approved: " + executionId);
+            }
+
+            state.addObservation("Resuming execution after approval");
+            state.addApprovalAudit("Execution resumed after approval");
+            state.setPauseMetadata(null);
+            state.setCurrentLoop(0);
+            executorAgent.executePrepared(state);
+            if (state.getStatus() == GraphStatus.SUCCESS) {
+                runPlannedTasks(state, state.getCurrentTaskIndex() + 1);
+            }
             contextLifecycle.compressRuntime(state);
             String message = responseComposer.compose(state);
             AskExecutionResult result = new AskExecutionResult(
                     state.getExecutionId(), state.getStatus().name(), message, sessionId, structuredDetails(state));
             contextLifecycle.complete(sessionId, state, message);
             executionAuditService.recordGraphExecution(ExecutionRequestType.APPROVAL_RESUME, state, startedAt);
-            approvalService.clearState(executionId);
+            if (state.getStatus() != GraphStatus.PAUSED) {
+                approvalService.clearState(executionId);
+            }
             return result;
+        } finally {
+            approvalService.releaseResumeLease(executionId, resumeLease);
         }
-        if (state.getStatus() != GraphStatus.RUNNING) {
-            throw new IllegalStateException("Execution is not ready to resume: " + executionId);
-        }
-        if (state.getFinalApprovalDecision() != ApprovalDecision.APPROVED) {
-            throw new IllegalStateException("Execution has not been approved: " + executionId);
-        }
-
-        state.addObservation("Resuming execution after approval");
-        state.addApprovalAudit("Execution resumed after approval");
-        state.setPauseMetadata(null);
-        state.setCurrentLoop(0);
-        executorAgent.executePrepared(state);
-        if (state.getStatus() == GraphStatus.SUCCESS) {
-            runPlannedTasks(state, state.getCurrentTaskIndex() + 1);
-        }
-        contextLifecycle.compressRuntime(state);
-        String message = responseComposer.compose(state);
-        AskExecutionResult result = new AskExecutionResult(
-                state.getExecutionId(), state.getStatus().name(), message, sessionId, structuredDetails(state));
-        contextLifecycle.complete(sessionId, state, message);
-        executionAuditService.recordGraphExecution(ExecutionRequestType.APPROVAL_RESUME, state, startedAt);
-        if (state.getStatus() != GraphStatus.PAUSED) {
-            approvalService.clearState(executionId);
-        }
-        return result;
     }
 
     public ApprovalExecutionResult decideAndResume(

@@ -4,12 +4,24 @@ import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import com.kubeoncall.domain.rag.KnowledgeDocument;
 
 @Component
 public class MemoryDocumentMapper {
+
+    private final TokenBudget tokenBudget;
+
+    public MemoryDocumentMapper() {
+        this(null);
+    }
+
+    @Autowired
+    public MemoryDocumentMapper(TokenBudget tokenBudget) {
+        this.tokenBudget = tokenBudget;
+    }
 
     public KnowledgeDocument toKnowledgeDocument(MemoryEntry entry) {
         Map<String, String> metadata = new LinkedHashMap<>(entry.metadata());
@@ -22,13 +34,42 @@ public class MemoryDocumentMapper {
         putIfPresent(metadata, "fingerprint", entry.fingerprint());
         metadata.put("created_at", entry.createdAt().toString());
         metadata.put("updated_at", entry.updatedAt().toString());
-        metadata.put("memory_enabled", "true");
-        metadata.put("chunk_enable", "true");
+        int tokenCount = entry.tokenCount() != null && entry.tokenCount() > 0
+                ? entry.tokenCount()
+                : tokenBudget == null ? 0 : tokenBudget.estimateTokens(entry.content());
+        boolean enabled = !Boolean.FALSE.equals(entry.enabled());
+        metadata.put("token_count", String.valueOf(tokenCount));
+        metadata.put("memory_enabled", String.valueOf(enabled));
+        metadata.put("chunk_enable", String.valueOf(enabled));
 
         String title = entry.subject() == null || entry.subject().isBlank()
                 ? entry.type().name() + " memory"
                 : entry.subject();
         return new KnowledgeDocument(entry.id(), title, entry.content(), "memory", metadata, entry.createdAt());
+    }
+
+    public MemoryEntry withDerivedFields(MemoryEntry entry) {
+        int tokenCount = entry.tokenCount() != null && entry.tokenCount() > 0
+                ? entry.tokenCount()
+                : tokenBudget == null ? 0 : tokenBudget.estimateTokens(entry.content());
+        boolean enabled = !Boolean.FALSE.equals(entry.enabled());
+        Map<String, String> metadata = new LinkedHashMap<>(entry.metadata());
+        metadata.put("token_count", String.valueOf(tokenCount));
+        metadata.put("memory_enabled", String.valueOf(enabled));
+        return new MemoryEntry(
+                entry.id(),
+                entry.type(),
+                entry.scope(),
+                entry.subject(),
+                entry.content(),
+                entry.service(),
+                entry.resource(),
+                entry.fingerprint(),
+                entry.createdAt(),
+                entry.updatedAt(),
+                metadata,
+                tokenCount,
+                enabled);
     }
 
     public MemoryEntry toMemoryEntry(KnowledgeDocument document) {
@@ -44,7 +85,9 @@ public class MemoryDocumentMapper {
                 metadata.get("fingerprint"),
                 instant(metadata.get("created_at"), document.createdAt()),
                 instant(metadata.get("updated_at"), document.createdAt()),
-                metadata);
+                metadata,
+                integer(metadata.get("token_count"), 0),
+                !"false".equalsIgnoreCase(metadata.get("memory_enabled")));
     }
 
     public boolean isMemoryDocument(KnowledgeDocument document) {
@@ -113,6 +156,14 @@ public class MemoryDocumentMapper {
     private void putIfPresent(Map<String, String> metadata, String key, String value) {
         if (value != null && !value.isBlank()) {
             metadata.put(key, value);
+        }
+    }
+
+    private int integer(String value, int fallback) {
+        try {
+            return value == null ? fallback : Integer.parseInt(value);
+        } catch (NumberFormatException ignored) {
+            return fallback;
         }
     }
 }

@@ -26,6 +26,7 @@ class RagProperties {
     private String embeddingVersion = "v1";
     private int embeddingTimeoutMillis = 3000;
     private int embeddingDimensions = 1536;
+    private int embeddingBatchSize = 32;
     private String chunkStrategy = "recursive";
     private int chunkSize = 280;
     private int chunkOverlap = 0;
@@ -33,6 +34,17 @@ class RagProperties {
     private int rerankTopN = 30;
     private String runbookLocation = "classpath*:runbooks/*.md";
     private boolean runbookBootstrapEnabled = false;
+    private boolean augmentationEnabled = false;
+    private String augmentationEndpoint = "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions";
+    private String augmentationApiKey = "";
+    private String augmentationModel = "qwen-plus";
+    private String augmentationVersion = "v1";
+    private int augmentationTimeoutMillis = 10000;
+    private int augmentationConcurrency = 2;
+    private boolean autoBindDatasetVersion = false;
+    private int jsonlMaxPayloadBytes = 5 * 1024 * 1024;
+    private int jsonlMaxLines = 10_000;
+    private int documentMaxContentBytes = 2 * 1024 * 1024;
 
     public int getDefaultTopK() {
         return defaultTopK;
@@ -222,6 +234,14 @@ class RagProperties {
         return embeddingDimensions;
     }
 
+    public int getEmbeddingBatchSize() {
+        return embeddingBatchSize;
+    }
+
+    public void setEmbeddingBatchSize(int embeddingBatchSize) {
+        this.embeddingBatchSize = embeddingBatchSize;
+    }
+
     public void setEmbeddingDimensions(int embeddingDimensions) {
         this.embeddingDimensions = embeddingDimensions;
     }
@@ -278,7 +298,95 @@ class RagProperties {
         return runbookBootstrapEnabled;
     }
 
+    public boolean isAugmentationEnabled() {
+        return augmentationEnabled;
+    }
+
+    public void setAugmentationEnabled(boolean augmentationEnabled) {
+        this.augmentationEnabled = augmentationEnabled;
+    }
+
+    public String getAugmentationEndpoint() {
+        return augmentationEndpoint;
+    }
+
+    public void setAugmentationEndpoint(String augmentationEndpoint) {
+        this.augmentationEndpoint = augmentationEndpoint;
+    }
+
+    public String getAugmentationApiKey() {
+        return augmentationApiKey;
+    }
+
+    public void setAugmentationApiKey(String augmentationApiKey) {
+        this.augmentationApiKey = augmentationApiKey;
+    }
+
+    public String getAugmentationModel() {
+        return augmentationModel;
+    }
+
+    public void setAugmentationModel(String augmentationModel) {
+        this.augmentationModel = augmentationModel;
+    }
+
+    public String getAugmentationVersion() {
+        return augmentationVersion;
+    }
+
+    public void setAugmentationVersion(String augmentationVersion) {
+        this.augmentationVersion = augmentationVersion;
+    }
+
+    public int getAugmentationTimeoutMillis() {
+        return augmentationTimeoutMillis;
+    }
+
+    public int getAugmentationConcurrency() {
+        return augmentationConcurrency;
+    }
+
+    public void setAugmentationConcurrency(int augmentationConcurrency) {
+        this.augmentationConcurrency = augmentationConcurrency;
+    }
+
+    public void setAugmentationTimeoutMillis(int augmentationTimeoutMillis) {
+        this.augmentationTimeoutMillis = augmentationTimeoutMillis;
+    }
+
+    public boolean isAutoBindDatasetVersion() {
+        return autoBindDatasetVersion;
+    }
+
+    public void setAutoBindDatasetVersion(boolean autoBindDatasetVersion) {
+        this.autoBindDatasetVersion = autoBindDatasetVersion;
+    }
+
     public void setRunbookBootstrapEnabled(boolean runbookBootstrapEnabled) {
         this.runbookBootstrapEnabled = runbookBootstrapEnabled;
+    }
+
+    public int getJsonlMaxPayloadBytes() {
+        return jsonlMaxPayloadBytes;
+    }
+
+    public void setJsonlMaxPayloadBytes(int jsonlMaxPayloadBytes) {
+        this.jsonlMaxPayloadBytes = jsonlMaxPayloadBytes;
+    }
+
+    public int getJsonlMaxLines() {
+        return jsonlMaxLines;
+    }
+
+    public void setJsonlMaxLines(int jsonlMaxLines) {
+        this.jsonlMaxLines = jsonlMaxLines;
+    }
+
+    public int getDocumentMaxContentBytes() {
+        return documentMaxContentBytes;
+    }
+
+    public void setDocumentMaxContentBytes(int documentMaxContentBytes) {
+        this.documentMaxContentBytes = documentMaxContentBytes;
     }
 }

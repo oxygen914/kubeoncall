@@ -1,6 +1,7 @@
 package com.kubeoncall.rag;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
@@ -13,6 +14,7 @@ import java.util.Map;
 import org.junit.jupiter.api.Test;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.kubeoncall.common.config.KubeOnCallProperties;
 import com.kubeoncall.domain.rag.KnowledgeDocument;
 
 class KnowledgeJsonlImportServiceTest {
@@ -24,7 +26,7 @@ class KnowledgeJsonlImportServiceTest {
                 .thenReturn(new KnowledgeDocument(
                         "cpu-runbook", "CPU runbook", "check cpu", "jsonl", Map.of(), Instant.now()));
         KnowledgeJsonlImportService service =
-                new KnowledgeJsonlImportService(new ObjectMapper(), knowledgeIngestService);
+                new KnowledgeJsonlImportService(new ObjectMapper(), knowledgeIngestService, new KubeOnCallProperties());
 
         KnowledgeJsonlImportService.ImportResult result = service.importJsonl(
                 "{\"id\":\"cpu-runbook\",\"title\":\"CPU runbook\",\"content\":\"check cpu\",\"metadata\":{\"env\":\"prod\"}}\n"
@@ -37,5 +39,22 @@ class KnowledgeJsonlImportServiceTest {
         assertEquals("failed", result.lines().get(1).status());
         verify(knowledgeIngestService)
                 .ingest("CPU runbook", "check cpu", "jsonl", Map.of("doc_id", "cpu-runbook", "env", "prod"));
+    }
+
+    @Test
+    void shouldRejectPayloadAndLineCountBeyondConfiguredLimits() {
+        KubeOnCallProperties properties = new KubeOnCallProperties();
+        properties.getRag().setJsonlMaxPayloadBytes(32);
+        properties.getRag().setJsonlMaxLines(1);
+        KnowledgeJsonlImportService service =
+                new KnowledgeJsonlImportService(new ObjectMapper(), mock(KnowledgeIngestService.class), properties);
+
+        assertThrows(IllegalArgumentException.class, () -> service.importJsonl("x".repeat(33)));
+
+        properties.getRag().setJsonlMaxPayloadBytes(1024);
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> service.importJsonl(
+                        "{\"title\":\"one\",\"content\":\"one\"}\n{\"title\":\"two\",\"content\":\"two\"}"));
     }
 }

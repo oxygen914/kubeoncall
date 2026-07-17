@@ -41,13 +41,14 @@ public class MemoryExtractionPipeline {
         List<MemoryExtractionCandidate> candidates = llmCandidates.orElseGet(() -> List.of(fallback(task)));
         List<MemoryEntry> entries = new ArrayList<>();
         int discarded = 0;
-        for (MemoryExtractionCandidate candidate : candidates) {
+        for (int index = 0; index < candidates.size(); index++) {
+            MemoryExtractionCandidate candidate = candidates.get(index);
             MemoryQualityScorer.QualityScore quality = qualityScorer.score(candidate, task);
             if (quality.value() < properties.getMemory().getExtractionQualityThreshold()) {
                 discarded++;
                 continue;
             }
-            entries.add(toMemoryEntry(task, candidate, quality, mode));
+            entries.add(toMemoryEntry(task, candidate, quality, mode, index));
         }
         return new ExtractionResult(List.copyOf(entries), mode, discarded);
     }
@@ -69,10 +70,12 @@ public class MemoryExtractionPipeline {
             MemoryExtractionTask task,
             MemoryExtractionCandidate candidate,
             MemoryQualityScorer.QualityScore quality,
-            String mode) {
+            String mode,
+            int candidateIndex) {
         Map<String, String> metadata = new LinkedHashMap<>(task.metadata());
         metadata.put("extraction_mode", mode);
         metadata.put("extraction_task_id", task.id());
+        metadata.put("extraction_candidate_index", String.valueOf(candidateIndex));
         metadata.put("quality_score", String.format(java.util.Locale.ROOT, "%.2f", quality.value()));
         metadata.put("quality_reasons", String.join(",", quality.reasons()));
         metadata.put("evidence_source", task.metadata().getOrDefault("source", "unknown"));
@@ -86,7 +89,7 @@ public class MemoryExtractionPipeline {
         }
         Instant now = Instant.now();
         return new MemoryEntry(
-                null,
+                deterministicMemoryId(task.id(), candidateIndex),
                 candidate.memoryType(),
                 candidate.scope(),
                 firstNonBlank(candidate.subject(), task.subject()),
@@ -97,6 +100,11 @@ public class MemoryExtractionPipeline {
                 task.createdAt(),
                 now,
                 metadata);
+    }
+
+    private String deterministicMemoryId(String taskId, int candidateIndex) {
+        String normalizedTaskId = taskId == null || taskId.isBlank() ? "unknown" : taskId.trim();
+        return "memory-extraction-" + normalizedTaskId + "-" + candidateIndex;
     }
 
     private boolean hasVerifiedEvidence(List<String> evidence, String source) {

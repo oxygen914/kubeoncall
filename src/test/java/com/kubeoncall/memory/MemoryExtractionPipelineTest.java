@@ -43,6 +43,7 @@ class MemoryExtractionPipelineTest {
 
         assertEquals("llm_structured", result.mode());
         assertEquals(1, result.entries().size());
+        assertEquals("memory-extraction-task-1-0", result.entries().get(0).id());
         Map<String, String> metadata = result.entries().get(0).metadata();
         assertEquals("verified", metadata.get("evidence_attribution"));
         assertEquals("memory limit | metrics", metadata.get("evidence_references"));
