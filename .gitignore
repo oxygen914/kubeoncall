@@ -3,3 +3,10 @@
 # Maven Wrapper downloaded jar (regenerated on demand by ./mvnw)
 /.mvn/wrapper/maven-wrapper.jar
 /deploy/alertmanager/secrets/
+/.env
+
+# Personal interview notes and refactor tracking documents
+/面试问题/
+/新面试问题/
+/代码风格重构.md
+/代码风格重构进度.md
