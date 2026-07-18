@@ -62,8 +62,26 @@ class RedisAlarmEventInboxTest {
 
         ArgumentCaptor<RedisScript<Long>> script = ArgumentCaptor.forClass(RedisScript.class);
         verify(redisTemplate).execute(script.capture(), anyList(), any(Object[].class));
+        assertTrue(script.getValue().getScriptAsString().contains("XPENDING"));
         assertTrue(script.getValue().getScriptAsString().contains("XADD"));
         assertTrue(script.getValue().getScriptAsString().contains("XACK"));
+    }
+
+    @Test
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    void shouldRenewOnlyTheCurrentConsumerClaim() {
+        StringRedisTemplate redisTemplate = mock(StringRedisTemplate.class);
+        when(redisTemplate.execute(any(RedisScript.class), anyList(), any(Object[].class)))
+                .thenReturn(1L);
+        RedisAlarmEventInbox inbox = new RedisAlarmEventInbox(
+                redisTemplate, new ObjectMapper().findAndRegisterModules(), new KubeOnCallProperties());
+
+        assertTrue(inbox.renew(new AlarmEventInbox.ClaimedAlarmEvent("1-0", event(), "worker-a")));
+
+        ArgumentCaptor<RedisScript<Long>> script = ArgumentCaptor.forClass(RedisScript.class);
+        verify(redisTemplate).execute(script.capture(), anyList(), any(Object[].class));
+        assertTrue(script.getValue().getScriptAsString().contains("XPENDING"));
+        assertTrue(script.getValue().getScriptAsString().contains("XCLAIM"));
     }
 
     @Test

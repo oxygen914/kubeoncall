@@ -103,6 +103,7 @@ public class KnowledgeIngestionFacade {
                 saveForIngestion(chunk, attemptedDocumentIds);
             }
             removeStaleChunks(existingDocuments, documentId, chunks);
+            removeSupersededObjects(existingDocuments, reference);
             return new IngestionResult(
                     document, existingDocuments.isEmpty() ? "created" : "updated", chunks.size(), reference.stored());
         } catch (RuntimeException ex) {
@@ -137,6 +138,29 @@ public class KnowledgeIngestionFacade {
             }
         }
         knowledgeObjectStorageService.remove(reference);
+    }
+
+    private void removeSupersededObjects(
+            List<KnowledgeDocument> existingDocuments, StoredDocumentReference currentReference) {
+        if (existingDocuments == null || existingDocuments.isEmpty()) {
+            return;
+        }
+        existingDocuments.stream()
+                .filter(document -> document != null
+                        && document.id().equals(document.metadata().get("doc_id")))
+                .map(KnowledgeDocument::metadata)
+                .filter(metadata -> "stored".equalsIgnoreCase(metadata.get("storageStatus")))
+                .map(metadata -> new StoredDocumentReference(
+                        metadata.get("objectKey"), metadata.get("bucket"), true, "Superseded knowledge source"))
+                .filter(reference -> !sameObject(reference, currentReference))
+                .distinct()
+                .forEach(knowledgeObjectStorageService::remove);
+    }
+
+    private boolean sameObject(StoredDocumentReference left, StoredDocumentReference right) {
+        return right != null
+                && java.util.Objects.equals(left.bucket(), right.bucket())
+                && java.util.Objects.equals(left.objectKey(), right.objectKey());
     }
 
     public LifecycleResult softDelete(String documentId, String reason) {

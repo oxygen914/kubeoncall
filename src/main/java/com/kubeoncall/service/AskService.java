@@ -1,5 +1,6 @@
 package com.kubeoncall.service;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -13,6 +14,7 @@ import com.kubeoncall.agent.executor.ExecutorAgent;
 import com.kubeoncall.agent.planner.PlannerAgent;
 import com.kubeoncall.agent.verifier.VerifierAgent;
 import com.kubeoncall.approval.ApprovalService;
+import com.kubeoncall.common.concurrent.LeaseHeartbeat;
 import com.kubeoncall.domain.approval.ApprovalDecision;
 import com.kubeoncall.domain.approval.ApprovalRequest;
 import com.kubeoncall.domain.audit.ExecutionRequestType;
@@ -70,7 +72,11 @@ public class AskService {
     public AskExecutionResult resumeAfterApproval(String executionId) {
         Instant startedAt = Instant.now();
         String resumeLease = approvalService.acquireResumeLease(executionId);
-        try {
+        Duration resumeLeaseTtl = approvalService.resumeLeaseTtl();
+        try (LeaseHeartbeat heartbeat = LeaseHeartbeat.start(
+                resumeLeaseTtl,
+                () -> approvalService.renewResumeLease(executionId, resumeLease),
+                "approval-resume-lease-heartbeat")) {
             GraphState state = approvalService.loadState(executionId);
             String sessionId = contextLifecycle.sessionId(state);
             if (state.getStatus() == GraphStatus.REJECTED) {
@@ -79,6 +85,7 @@ public class AskService {
                 String message = responseComposer.compose(state);
                 AskExecutionResult result = new AskExecutionResult(
                         state.getExecutionId(), state.getStatus().name(), message, sessionId, structuredDetails(state));
+                heartbeat.requireValid("Approval resume lease was lost while finalizing rejection");
                 contextLifecycle.complete(sessionId, state, message);
                 executionAuditService.recordGraphExecution(ExecutionRequestType.APPROVAL_RESUME, state, startedAt);
                 approvalService.clearState(executionId);
@@ -99,6 +106,7 @@ public class AskService {
             if (state.getStatus() == GraphStatus.SUCCESS) {
                 runPlannedTasks(state, state.getCurrentTaskIndex() + 1);
             }
+            heartbeat.requireValid("Approval resume lease was lost while executing");
             contextLifecycle.compressRuntime(state);
             String message = responseComposer.compose(state);
             AskExecutionResult result = new AskExecutionResult(

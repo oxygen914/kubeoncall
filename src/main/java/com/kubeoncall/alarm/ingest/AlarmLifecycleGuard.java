@@ -2,8 +2,12 @@ package com.kubeoncall.alarm.ingest;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
 
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.stereotype.Service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -17,6 +21,13 @@ import com.kubeoncall.common.config.KubeOnCallProperties;
 public class AlarmLifecycleGuard {
 
     private static final String KEY_PREFIX = "alarm-lifecycle:";
+    private static final String RESERVATION_KEY_PREFIX = "alarm-lifecycle-reservation:";
+    private static final DefaultRedisScript<Long> RELEASE_RESERVATION_SCRIPT = new DefaultRedisScript<>(
+            "if redis.call('GET', KEYS[1]) == ARGV[1] then return redis.call('DEL', KEYS[1]) end return 0", Long.class);
+    private static final DefaultRedisScript<Long> RENEW_RESERVATION_SCRIPT = new DefaultRedisScript<>(
+            "if redis.call('GET', KEYS[1]) == ARGV[1] then "
+                    + "return redis.call('PEXPIRE', KEYS[1], ARGV[2]) end return 0",
+            Long.class);
 
     private final StringRedisTemplate redisTemplate;
     private final ObjectMapper objectMapper;
@@ -49,6 +60,55 @@ public class AlarmLifecycleGuard {
         }
     }
 
+    public Optional<Reservation> reserve(NormalizedAlarmEvent event) {
+        String token = UUID.randomUUID().toString();
+        Duration ttl = reservationTtl();
+        try {
+            Boolean acquired = redisTemplate.opsForValue().setIfAbsent(reservationKey(event.fingerprint()), token, ttl);
+            if (!Boolean.TRUE.equals(acquired)) {
+                throw new AlarmInboxUnavailableException("Alarm lifecycle transition is already in progress");
+            }
+            if (!shouldProcess(event)) {
+                release(new Reservation(event.fingerprint(), token, ttl));
+                return Optional.empty();
+            }
+            return Optional.of(new Reservation(event.fingerprint(), token, ttl));
+        } catch (AlarmInboxUnavailableException ex) {
+            throw ex;
+        } catch (RuntimeException ex) {
+            release(new Reservation(event.fingerprint(), token, ttl));
+            throw new AlarmInboxUnavailableException("Unable to reserve alarm lifecycle transition", ex);
+        }
+    }
+
+    public boolean renew(Reservation reservation) {
+        if (reservation == null) {
+            return false;
+        }
+        Long renewed = redisTemplate.execute(
+                RENEW_RESERVATION_SCRIPT,
+                List.of(reservationKey(reservation.fingerprint())),
+                reservation.token(),
+                String.valueOf(Math.max(1L, reservation.ttl().toMillis())));
+        return Long.valueOf(1).equals(renewed);
+    }
+
+    public void complete(Reservation reservation, NormalizedAlarmEvent event) {
+        recordProcessed(event);
+        if (!release(reservation)) {
+            throw new AlarmInboxUnavailableException("Alarm lifecycle reservation is no longer owned");
+        }
+    }
+
+    public boolean release(Reservation reservation) {
+        if (reservation == null) {
+            return false;
+        }
+        Long released = redisTemplate.execute(
+                RELEASE_RESERVATION_SCRIPT, List.of(reservationKey(reservation.fingerprint())), reservation.token());
+        return Long.valueOf(1).equals(released);
+    }
+
     public void recordProcessed(NormalizedAlarmEvent event) {
         try {
             Instant occurredAt = event.occurredAt() == null ? Instant.now() : event.occurredAt();
@@ -65,8 +125,16 @@ public class AlarmLifecycleGuard {
         return Duration.ofHours(Math.max(1, properties.getAlarm().getInboxRetentionHours()));
     }
 
+    private Duration reservationTtl() {
+        return Duration.ofMillis(Math.max(5000L, properties.getAlarm().getInboxPendingClaimIdleMillis() * 2L));
+    }
+
     private String key(String fingerprint) {
         return KEY_PREFIX + fingerprint;
+    }
+
+    private String reservationKey(String fingerprint) {
+        return RESERVATION_KEY_PREFIX + fingerprint;
     }
 
     private int statusRank(AlarmStatus status) {
@@ -81,4 +149,6 @@ public class AlarmLifecycleGuard {
     }
 
     record LifecycleState(AlarmStatus status, Instant occurredAt) {}
+
+    public record Reservation(String fingerprint, String token, Duration ttl) {}
 }

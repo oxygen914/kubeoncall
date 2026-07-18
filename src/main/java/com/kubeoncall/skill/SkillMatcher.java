@@ -46,11 +46,11 @@ public class SkillMatcher {
                 && !skill.applicableTasks().contains(taskType)) {
             return false;
         }
+        // A planner-selected Skill still needs a domain-specific signal. Generic tags and
+        // resource types only constrain/rank a Skill and cannot activate it by themselves.
         return contains(haystack, skill.name())
                 || skill.triggers().stream().anyMatch(value -> contains(haystack, value))
-                || skill.services().stream().anyMatch(value -> contains(haystack, value))
-                || skill.resourceTypes().stream().anyMatch(value -> contains(haystack, value))
-                || skill.tags().stream().anyMatch(value -> contains(haystack, value));
+                || skill.services().stream().anyMatch(value -> contains(haystack, value));
     }
 
     private int score(Skill skill, String haystack, TaskType taskType) {

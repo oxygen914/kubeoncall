@@ -18,6 +18,10 @@ public class GraphStateStore {
 
     private static final DefaultRedisScript<Long> RELEASE_LEASE_SCRIPT = new DefaultRedisScript<>(
             "if redis.call('GET', KEYS[1]) == ARGV[1] then return redis.call('DEL', KEYS[1]) end return 0", Long.class);
+    private static final DefaultRedisScript<Long> RENEW_LEASE_SCRIPT = new DefaultRedisScript<>(
+            "if redis.call('GET', KEYS[1]) == ARGV[1] then "
+                    + "return redis.call('PEXPIRE', KEYS[1], ARGV[2]) end return 0",
+            Long.class);
 
     private final StringRedisTemplate redisTemplate;
     private final ObjectMapper objectMapper;
@@ -62,6 +66,18 @@ public class GraphStateStore {
             return;
         }
         redisTemplate.execute(RELEASE_LEASE_SCRIPT, List.of(resumeLeaseKey(executionId)), token);
+    }
+
+    public boolean renewResumeLease(String executionId, String token, Duration ttl) {
+        if (token == null || token.isBlank()) {
+            return false;
+        }
+        Long renewed = redisTemplate.execute(
+                RENEW_LEASE_SCRIPT,
+                List.of(resumeLeaseKey(executionId)),
+                token,
+                String.valueOf(Math.max(1L, ttl.toMillis())));
+        return Long.valueOf(1).equals(renewed);
     }
 
     private String key(String executionId) {

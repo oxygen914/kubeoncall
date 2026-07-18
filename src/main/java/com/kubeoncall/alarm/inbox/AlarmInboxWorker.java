@@ -9,6 +9,7 @@ import org.springframework.stereotype.Service;
 import com.kubeoncall.alarm.domain.NormalizedAlarmEvent;
 import com.kubeoncall.alarm.ingest.AlarmLifecycleGuard;
 import com.kubeoncall.alarm.ingest.AlarmNormalizer;
+import com.kubeoncall.common.concurrent.LeaseHeartbeat;
 import com.kubeoncall.common.config.KubeOnCallProperties;
 import com.kubeoncall.service.KubeOnCallMetricsService;
 import com.kubeoncall.workflow.AlertWorkflowService;
@@ -60,16 +61,29 @@ public class AlarmInboxWorker {
     }
 
     void process(AlarmEventInbox.ClaimedAlarmEvent claimed) {
+        AlarmLifecycleGuard.Reservation reservation = null;
+        LeaseHeartbeat heartbeat = null;
         try {
             NormalizedAlarmEvent event =
                     alarmNormalizer.normalize(claimed.event().alarm());
-            if (!lifecycleGuard.shouldProcess(event)) {
+            reservation = lifecycleGuard.reserve(event).orElse(null);
+            if (reservation == null) {
                 inbox.acknowledge(claimed);
                 metricsService.recordAlarmInbox("out_of_order");
                 return;
             }
+            AlarmLifecycleGuard.Reservation activeReservation = reservation;
+            heartbeat = LeaseHeartbeat.start(
+                    claimLeaseTtl(),
+                    () -> inbox.renew(claimed) && lifecycleGuard.renew(activeReservation),
+                    "alarm-inbox-lease-heartbeat");
             alertWorkflowService.process(event);
-            lifecycleGuard.recordProcessed(event);
+            if (!heartbeat.isValid() || !inbox.renew(claimed) || !lifecycleGuard.renew(reservation)) {
+                metricsService.recordAlarmInbox("claim_lost");
+                return;
+            }
+            lifecycleGuard.complete(reservation, event);
+            reservation = null;
             inbox.acknowledge(claimed);
             metricsService.recordAlarmInbox("processed");
         } catch (RuntimeException ex) {
@@ -80,7 +94,18 @@ public class AlarmInboxWorker {
             }
             inbox.retry(claimed, safeMessage(ex));
             metricsService.recordAlarmInbox("retry");
+        } finally {
+            if (heartbeat != null) {
+                heartbeat.close();
+            }
+            if (reservation != null) {
+                lifecycleGuard.release(reservation);
+            }
         }
+    }
+
+    private Duration claimLeaseTtl() {
+        return Duration.ofMillis(Math.max(1000L, properties.getAlarm().getInboxPendingClaimIdleMillis()));
     }
 
     private String safeMessage(RuntimeException exception) {

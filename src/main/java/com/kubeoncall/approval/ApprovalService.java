@@ -127,8 +127,7 @@ public class ApprovalService {
     }
 
     public String acquireResumeLease(String executionId) {
-        Duration leaseTtl =
-                Duration.ofSeconds(Math.max(1, properties.getApproval().getResumeLeaseSeconds()));
+        Duration leaseTtl = resumeLeaseTtl();
         return graphStateStore
                 .tryAcquireResumeLease(executionId, leaseTtl)
                 .orElseThrow(
@@ -137,6 +136,14 @@ public class ApprovalService {
 
     public void releaseResumeLease(String executionId, String token) {
         graphStateStore.releaseResumeLease(executionId, token);
+    }
+
+    public boolean renewResumeLease(String executionId, String token) {
+        return graphStateStore.renewResumeLease(executionId, token, resumeLeaseTtl());
+    }
+
+    public Duration resumeLeaseTtl() {
+        return Duration.ofSeconds(Math.max(1, properties.getApproval().getResumeLeaseSeconds()));
     }
 
     private Duration ttl() {

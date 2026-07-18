@@ -37,12 +37,28 @@ public class RedisAlarmEventInbox implements AlarmEventInbox {
                     + "return 1",
             Long.class);
     private static final DefaultRedisScript<Long> RETRY_SCRIPT = new DefaultRedisScript<>(
-            "redis.call('XADD', KEYS[1], '*', 'event', ARGV[1])\n"
+            "local pending = redis.call('XPENDING', KEYS[1], ARGV[2], ARGV[3], ARGV[3], 1)\n"
+                    + "if #pending == 0 or pending[1][2] ~= ARGV[4] then return 0 end\n"
+                    + "redis.call('XADD', KEYS[1], '*', 'event', ARGV[1])\n"
                     + "return redis.call('XACK', KEYS[1], ARGV[2], ARGV[3])",
             Long.class);
     private static final DefaultRedisScript<Long> DEAD_LETTER_SCRIPT = new DefaultRedisScript<>(
-            "redis.call('XADD', KEYS[2], '*', 'event', ARGV[1], 'reason', ARGV[2])\n"
+            "local pending = redis.call('XPENDING', KEYS[1], ARGV[3], ARGV[4], ARGV[4], 1)\n"
+                    + "if #pending == 0 or pending[1][2] ~= ARGV[5] then return 0 end\n"
+                    + "redis.call('XADD', KEYS[2], '*', 'event', ARGV[1], 'reason', ARGV[2])\n"
                     + "return redis.call('XACK', KEYS[1], ARGV[3], ARGV[4])",
+            Long.class);
+    private static final DefaultRedisScript<Long> ACK_SCRIPT = new DefaultRedisScript<>(
+            "local pending = redis.call('XPENDING', KEYS[1], ARGV[1], ARGV[2], ARGV[2], 1)\n"
+                    + "if #pending == 0 or pending[1][2] ~= ARGV[3] then return 0 end\n"
+                    + "return redis.call('XACK', KEYS[1], ARGV[1], ARGV[2])",
+            Long.class);
+    private static final DefaultRedisScript<Long> RENEW_SCRIPT = new DefaultRedisScript<>(
+            "local pending = redis.call('XPENDING', KEYS[1], ARGV[1], ARGV[2], ARGV[2], 1)\n"
+                    + "if #pending == 0 or pending[1][2] ~= ARGV[3] then return 0 end\n"
+                    + "local claimed = redis.call('XCLAIM', KEYS[1], ARGV[1], ARGV[3], 0, ARGV[2], 'JUSTID')\n"
+                    + "if #claimed == 0 then return 0 end\n"
+                    + "return 1",
             Long.class);
 
     private final StringRedisTemplate redisTemplate;
@@ -83,7 +99,9 @@ public class RedisAlarmEventInbox implements AlarmEventInbox {
             ensureConsumerGroup();
             List<MapRecord<String, String, String>> reclaimed = reclaimPending(consumer, batchSize);
             if (!reclaimed.isEmpty()) {
-                return reclaimed.stream().map(this::toClaimed).toList();
+                return reclaimed.stream()
+                        .map(record -> toClaimed(record, consumer))
+                        .toList();
             }
             List<MapRecord<String, String, String>> records = streamOperations()
                     .read(
@@ -95,20 +113,37 @@ public class RedisAlarmEventInbox implements AlarmEventInbox {
             if (records == null || records.isEmpty()) {
                 return List.of();
             }
-            return records.stream().map(this::toClaimed).toList();
+            return records.stream().map(record -> toClaimed(record, consumer)).toList();
         } catch (RuntimeException ex) {
             throw new AlarmInboxUnavailableException("Unable to claim alarm inbox events", ex);
         }
     }
 
     @Override
+    public boolean renew(ClaimedAlarmEvent event) {
+        try {
+            Long renewed = redisTemplate.execute(
+                    RENEW_SCRIPT,
+                    List.of(properties.getAlarm().getInboxStreamKey()),
+                    properties.getAlarm().getInboxConsumerGroup(),
+                    event.recordId(),
+                    event.consumer());
+            return Long.valueOf(1).equals(renewed);
+        } catch (RuntimeException ex) {
+            throw new AlarmInboxUnavailableException("Unable to renew alarm inbox claim", ex);
+        }
+    }
+
+    @Override
     public void acknowledge(ClaimedAlarmEvent event) {
         try {
-            streamOperations()
-                    .acknowledge(
-                            properties.getAlarm().getInboxStreamKey(),
-                            properties.getAlarm().getInboxConsumerGroup(),
-                            event.recordId());
+            Long acknowledged = redisTemplate.execute(
+                    ACK_SCRIPT,
+                    List.of(properties.getAlarm().getInboxStreamKey()),
+                    properties.getAlarm().getInboxConsumerGroup(),
+                    event.recordId(),
+                    event.consumer());
+            requireAcknowledged(acknowledged, "acknowledge");
         } catch (RuntimeException ex) {
             throw new AlarmInboxUnavailableException("Unable to acknowledge alarm inbox event", ex);
         }
@@ -122,7 +157,8 @@ public class RedisAlarmEventInbox implements AlarmEventInbox {
                     List.of(properties.getAlarm().getInboxStreamKey()),
                     objectMapper.writeValueAsString(event.event().nextAttempt()),
                     properties.getAlarm().getInboxConsumerGroup(),
-                    event.recordId());
+                    event.recordId(),
+                    event.consumer());
             requireAcknowledged(acknowledged, "retry");
         } catch (Exception ex) {
             throw new AlarmInboxUnavailableException("Unable to retry alarm inbox event", ex);
@@ -140,18 +176,19 @@ public class RedisAlarmEventInbox implements AlarmEventInbox {
                     objectMapper.writeValueAsString(event.event()),
                     reason == null ? "processing failed" : reason,
                     properties.getAlarm().getInboxConsumerGroup(),
-                    event.recordId());
+                    event.recordId(),
+                    event.consumer());
             requireAcknowledged(acknowledged, "dead-letter");
         } catch (Exception ex) {
             throw new AlarmInboxUnavailableException("Unable to dead-letter alarm inbox event", ex);
         }
     }
 
-    private ClaimedAlarmEvent toClaimed(MapRecord<String, String, String> record) {
+    private ClaimedAlarmEvent toClaimed(MapRecord<String, String, String> record, String consumer) {
         try {
             String payload = record.getValue().get("event");
             return new ClaimedAlarmEvent(
-                    record.getId().getValue(), objectMapper.readValue(payload, InboundAlarmEvent.class));
+                    record.getId().getValue(), objectMapper.readValue(payload, InboundAlarmEvent.class), consumer);
         } catch (Exception ex) {
             throw new AlarmInboxUnavailableException("Unable to decode alarm inbox event", ex);
         }

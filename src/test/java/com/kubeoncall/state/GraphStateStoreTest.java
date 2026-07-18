@@ -49,4 +49,21 @@ class GraphStateStoreTest {
 
         assertTrue(store.tryAcquireResumeLease("exec-1", Duration.ofSeconds(30)).isEmpty());
     }
+
+    @Test
+    void shouldRenewResumeLeaseOnlyForItsOwnershipToken() {
+        StringRedisTemplate redisTemplate = mock(StringRedisTemplate.class);
+        when(redisTemplate.execute(any(RedisScript.class), any(), any(Object[].class)))
+                .thenReturn(1L);
+        GraphStateStore store = new GraphStateStore(redisTemplate, new ObjectMapper());
+
+        assertTrue(store.renewResumeLease("exec-1", "lease-1", Duration.ofSeconds(30)));
+
+        verify(redisTemplate)
+                .execute(
+                        any(RedisScript.class),
+                        eq(java.util.List.of("graph-state-resume-lease:exec-1")),
+                        eq("lease-1"),
+                        eq("30000"));
+    }
 }

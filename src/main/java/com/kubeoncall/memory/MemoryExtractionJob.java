@@ -9,6 +9,8 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
+import com.kubeoncall.common.concurrent.LeaseHeartbeat;
+
 @Component
 @ConditionalOnProperty(
         name = "kubeoncall.memory.extraction-worker-enabled",
@@ -32,11 +34,16 @@ public class MemoryExtractionJob {
     @Scheduled(fixedDelayString = "${kubeoncall.memory.extraction-poll-interval-millis:5000}")
     public void processNext() {
         queue.claim().ifPresent(claimed -> {
-            try {
+            try (LeaseHeartbeat heartbeat = LeaseHeartbeat.start(
+                    queue.processingLeaseTtl(), () -> queue.renew(claimed), "memory-extraction-lease-heartbeat")) {
                 MemoryExtractionTask task = claimed.task();
                 MemoryExtractionPipeline.ExtractionResult result = extractionPipeline.extract(task);
                 List<MemoryEntry> persistedEntries = new ArrayList<>();
                 result.entries().forEach(entry -> persistedEntries.add(memoryService.remember(entry)));
+                if (!heartbeat.isValid() || !queue.renew(claimed)) {
+                    log.warn("Memory extraction claim lost before acknowledgement: taskId={}", task.id());
+                    return;
+                }
                 queue.acknowledge(claimed, result, persistedEntries);
             } catch (RuntimeException ex) {
                 queue.fail(claimed, ex);

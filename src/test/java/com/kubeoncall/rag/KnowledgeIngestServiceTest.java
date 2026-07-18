@@ -308,6 +308,44 @@ class KnowledgeIngestServiceTest {
         verify(storageService).remove(reference);
     }
 
+    @Test
+    void shouldRemoveSupersededSourceObjectAfterSuccessfulUpdate() {
+        KnowledgeRepository repository = mock(KnowledgeRepository.class);
+        KubeOnCallProperties properties = new KubeOnCallProperties();
+        KnowledgeObjectStorageService storageService = mock(KnowledgeObjectStorageService.class);
+        StoredDocumentReference current = new StoredDocumentReference("knowledge/new.txt", "bucket-a", true, "ok");
+        StoredDocumentReference previous =
+                new StoredDocumentReference("knowledge/old.txt", "bucket-a", true, "Superseded knowledge source");
+        KnowledgeDocument existing = new KnowledgeDocument(
+                "cpu-runbook",
+                "CPU runbook",
+                "old content",
+                "manual",
+                Map.of(
+                        "doc_id",
+                        "cpu-runbook",
+                        "storageStatus",
+                        "stored",
+                        "objectKey",
+                        previous.objectKey(),
+                        "bucket",
+                        previous.bucket()),
+                Instant.now());
+        when(repository.findByMetadata("doc_id", "cpu-runbook")).thenReturn(List.of(existing));
+        when(storageService.store(anyString(), anyString(), anyString())).thenReturn(current);
+        KnowledgeIngestionFacade facade = new KnowledgeIngestionFacade(
+                repository,
+                new KnowledgeChunker(properties),
+                storageService,
+                new EmbeddingService(List.of(), properties),
+                properties);
+
+        facade.ingest("CPU runbook", "new content", "manual", Map.of("doc_id", "cpu-runbook"));
+
+        verify(storageService).remove(previous);
+        verify(storageService, never()).remove(current);
+    }
+
     private static KnowledgeIngestService service(
             KnowledgeRepository repository,
             QueryRewriteService rewriteService,

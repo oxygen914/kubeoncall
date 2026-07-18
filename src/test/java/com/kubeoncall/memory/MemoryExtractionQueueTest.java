@@ -130,6 +130,19 @@ class MemoryExtractionQueueTest {
         verify(fixture.metrics).recordMemory("extract_reclaim", "success", 2);
     }
 
+    @Test
+    void shouldRenewOwnedProcessingLease() {
+        Fixture fixture = new Fixture();
+        MemoryExtractionQueue.ClaimedTask claimed = new MemoryExtractionQueue.ClaimedTask("token\nraw", task(0));
+
+        assertTrue(fixture.queue.renew(claimed));
+
+        ArgumentCaptor<RedisScript<Long>> script = ArgumentCaptor.forClass(RedisScript.class);
+        verify(fixture.redisTemplate).execute(script.capture(), anyList(), any(Object[].class));
+        assertTrue(script.getValue().getScriptAsString().contains("ZSCORE"));
+        assertTrue(script.getValue().getScriptAsString().contains("ZADD"));
+    }
+
     private static MemoryExtractionTask task(int attempts) {
         return new MemoryExtractionTask(
                 "task-1",

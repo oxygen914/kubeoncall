@@ -57,6 +57,11 @@ public class MemoryExtractionQueue {
                     + "end\n"
                     + "return reclaimed",
             Long.class);
+    private static final DefaultRedisScript<Long> RENEW_SCRIPT = new DefaultRedisScript<>(
+            "if not redis.call('ZSCORE', KEYS[1], ARGV[1]) then return 0 end\n"
+                    + "redis.call('ZADD', KEYS[1], ARGV[2], ARGV[1])\n"
+                    + "return 1",
+            Long.class);
 
     private final StringRedisTemplate redisTemplate;
     private final ObjectMapper objectMapper;
@@ -112,6 +117,24 @@ public class MemoryExtractionQueue {
         acknowledge(claimedTask, null, java.util.List.of());
     }
 
+    public boolean renew(ClaimedTask claimedTask) {
+        if (claimedTask == null
+                || claimedTask.raw() == null
+                || claimedTask.raw().isBlank()) {
+            return false;
+        }
+        Long renewed = redisTemplate.execute(
+                RENEW_SCRIPT,
+                java.util.List.of(PROCESSING_LEASES_KEY),
+                claimedTask.raw(),
+                String.valueOf(System.currentTimeMillis()));
+        return Long.valueOf(1).equals(renewed);
+    }
+
+    public Duration processingLeaseTtl() {
+        return Duration.ofSeconds(Math.max(1, properties.getMemory().getExtractionProcessingTimeoutSeconds()));
+    }
+
     public void acknowledge(
             ClaimedTask claimedTask,
             MemoryExtractionPipeline.ExtractionResult result,
@@ -145,7 +168,7 @@ public class MemoryExtractionQueue {
     }
 
     public int reclaimExpired() {
-        long timeoutMillis = Math.max(1, properties.getMemory().getExtractionProcessingTimeoutSeconds()) * 1000L;
+        long timeoutMillis = processingLeaseTtl().toMillis();
         int limit = Math.max(1, properties.getMemory().getExtractionReclaimLimit());
         Long reclaimed = redisTemplate.execute(
                 RECLAIM_SCRIPT,

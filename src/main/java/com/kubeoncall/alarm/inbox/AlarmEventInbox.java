@@ -12,6 +12,8 @@ public interface AlarmEventInbox {
 
     List<ClaimedAlarmEvent> claim(String consumer, int batchSize, Duration block);
 
+    boolean renew(ClaimedAlarmEvent event);
+
     void acknowledge(ClaimedAlarmEvent event);
 
     void retry(ClaimedAlarmEvent event, String reason);
@@ -20,5 +22,10 @@ public interface AlarmEventInbox {
 
     record EnqueueResult(boolean accepted, boolean duplicate, String eventId) {}
 
-    record ClaimedAlarmEvent(String recordId, InboundAlarmEvent event) {}
+    record ClaimedAlarmEvent(String recordId, InboundAlarmEvent event, String consumer) {
+
+        public ClaimedAlarmEvent(String recordId, InboundAlarmEvent event) {
+            this(recordId, event, "");
+        }
+    }
 }

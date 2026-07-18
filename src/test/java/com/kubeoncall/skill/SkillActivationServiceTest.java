@@ -69,6 +69,18 @@ class SkillActivationServiceTest {
         assertTrue(activation.skillIds().isEmpty());
     }
 
+    @Test
+    void shouldNotActivateRequestedSkillFromGenericTagOrResourceTypeAlone() {
+        KubeOnCallMetricsService metricsService = mock(KubeOnCallMetricsService.class);
+
+        SkillActivation activation = service(metricsService)
+                .activate(
+                        "inspect a kubernetes pod", Map.of("taskType", "QUERY_METRICS"), List.of("payment-oom-triage"));
+
+        assertFalse(activation.active());
+        assertTrue(activation.skillIds().isEmpty());
+    }
+
     private SkillActivationService service(KubeOnCallMetricsService metricsService) {
         KubeOnCallProperties properties = new KubeOnCallProperties();
         SkillFrontmatterParser parser = new SkillFrontmatterParser();
