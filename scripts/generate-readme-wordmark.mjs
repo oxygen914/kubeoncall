@@ -7,171 +7,355 @@ const repositoryRoot = resolve(scriptDirectory, "..");
 const outputDirectory = join(repositoryRoot, "assets", "readme", "kubeoncall");
 const playerSceneDirectory = process.env.LOTTIE_PLAYER_SCENE_DIR;
 
-const width = 1280;
+const width = 1320;
 const height = 240;
 const frameRate = 60;
 const outPoint = 120;
-const letterSpacing = 124;
-const firstLetterX = 82;
 const centerY = 120;
-const barThickness = 16;
+const firstLetterX = 102;
+const letterSpacing = 124;
+const strokeWidth = 11;
 
-const letters = [
-    {name: "K", color: "#0E7490", bars: [[-30, -66, -30, 66], [-24, 0, 30, -66], [-24, 0, 30, 66]]},
-    {name: "U", color: "#0891B2", bars: [[-30, -66, -30, 58], [30, -66, 30, 58], [-30, 66, 30, 66]]},
+const zero = [0, 0];
+const line = (vertices) => ({
+    v: vertices,
+    i: vertices.map(() => zero),
+    o: vertices.map(() => zero),
+    c: false,
+});
+const curve = (vertices, inTangents, outTangents, closed = false) => ({
+    v: vertices,
+    i: inTangents,
+    o: outTangents,
+    c: closed,
+});
+
+const glyphs = [
     {
-        name: "B",
-        color: "#0284C7",
-        bars: [
-            [-30, -66, -30, 66],
-            [-30, -66, 18, -66],
-            [-30, 0, 18, 0],
-            [-30, 66, 18, 66],
-            [26, -58, 26, -8],
-            [26, 8, 26, 58],
+        name: "K",
+        paths: [
+            line([
+                [-32, -68],
+                [-32, 68],
+            ]),
+            line([
+                [-27, 0],
+                [34, -68],
+            ]),
+            line([
+                [-27, 0],
+                [34, 68],
+            ]),
         ],
     },
-    {name: "E", color: "#2563EB", bars: [[-30, -66, -30, 66], [-30, -66, 30, -66], [-30, 0, 20, 0], [-30, 66, 30, 66]]},
-    {name: "O", color: "#3B82F6", bars: [[-30, -66, 30, -66], [-30, 66, 30, 66], [-30, -58, -30, 58], [30, -58, 30, 58]]},
-    {name: "N", color: "#4F46E5", bars: [[-30, -66, -30, 66], [30, -66, 30, 66], [-26, -62, 26, 62]]},
-    {name: "C", color: "#6366F1", bars: [[-30, -66, 30, -66], [-30, 66, 30, 66], [-30, -58, -30, 58]]},
-    {name: "A", color: "#7C3AED", bars: [[-32, 66, 0, -66], [0, -66, 32, 66], [-18, 18, 18, 18]]},
-    {name: "L", color: "#7E22CE", bars: [[-30, -66, -30, 66], [-30, 66, 30, 66]]},
-    {name: "L", color: "#6D28D9", bars: [[-30, -66, -30, 66], [-30, 66, 30, 66]]},
+    {
+        name: "U",
+        paths: [
+            curve(
+                [
+                    [-36, -68],
+                    [-36, 28],
+                    [0, 68],
+                    [36, 28],
+                    [36, -68],
+                ],
+                [zero, zero, [-36, 0], [0, 26], zero],
+                [zero, [0, 26], [36, 0], zero, zero],
+            ),
+        ],
+    },
+    {
+        name: "B",
+        paths: [
+            line([
+                [-32, -68],
+                [-32, 68],
+            ]),
+            curve(
+                [
+                    [-32, -68],
+                    [-32, 0],
+                ],
+                [zero, [65, -10]],
+                [[65, 0], zero],
+            ),
+            curve(
+                [
+                    [-32, 0],
+                    [-32, 68],
+                ],
+                [zero, [70, 0]],
+                [[70, 0], zero],
+            ),
+        ],
+    },
+    {
+        name: "E",
+        paths: [
+            line([
+                [-32, -68],
+                [-32, 68],
+            ]),
+            line([
+                [-27, -68],
+                [34, -68],
+            ]),
+            line([
+                [-27, 0],
+                [24, 0],
+            ]),
+            line([
+                [-27, 68],
+                [34, 68],
+            ]),
+        ],
+    },
+    {
+        name: "O",
+        paths: [
+            curve(
+                [
+                    [0, -68],
+                    [38, 0],
+                    [0, 68],
+                    [-38, 0],
+                ],
+                [
+                    [-21, 0],
+                    [0, -37.5],
+                    [21, 0],
+                    [0, 37.5],
+                ],
+                [
+                    [21, 0],
+                    [0, 37.5],
+                    [-21, 0],
+                    [0, -37.5],
+                ],
+                true,
+            ),
+        ],
+    },
+    {
+        name: "N",
+        paths: [
+            line([
+                [-34, 68],
+                [-34, -68],
+                [34, 68],
+                [34, -68],
+            ]),
+        ],
+    },
+    {
+        name: "C",
+        paths: [
+            curve(
+                [
+                    [32, -52],
+                    [0, -68],
+                    [-38, 0],
+                    [0, 68],
+                    [32, 52],
+                ],
+                [zero, [14, 0], [0, -42], [-24, 0], [-10, 10]],
+                [[-10, -10], [-24, 0], [0, 42], [14, 0], zero],
+            ),
+        ],
+    },
+    {
+        name: "A",
+        paths: [
+            line([
+                [-38, 68],
+                [0, -68],
+                [38, 68],
+            ]),
+            line([
+                [-22, 22],
+                [22, 22],
+            ]),
+        ],
+    },
+    {
+        name: "L",
+        paths: [
+            line([
+                [-32, -68],
+                [-32, 68],
+                [36, 68],
+            ]),
+        ],
+    },
+    {
+        name: "L",
+        paths: [
+            line([
+                [-32, -68],
+                [-32, 68],
+                [36, 68],
+            ]),
+        ],
+    },
 ];
 
-function barGeometry([x1, y1, x2, y2]) {
-    const dx = x2 - x1;
-    const dy = y2 - y1;
-    return {
-        x: (x1 + x2) / 2,
-        y: (y1 + y2) / 2,
-        length: Math.hypot(dx, dy) + barThickness,
-        rotation: (Math.atan2(dy, dx) * 180) / Math.PI,
-    };
-}
+const palette = [
+    {at: 0, color: "#00B8F5"},
+    {at: 0.36, color: "#427BFF"},
+    {at: 0.68, color: "#7D5CFF"},
+    {at: 1, color: "#C45BEF"},
+];
 
-function lottieTransform(position = [0, 0], rotation = 0) {
-    return {
-        ty: "tr",
-        p: {a: 0, k: position},
-        a: {a: 0, k: [0, 0]},
-        s: {a: 0, k: [100, 100]},
-        r: {a: 0, k: rotation},
-        o: {a: 0, k: 100},
-    };
-}
-
-function lottieBar(bar, index) {
-    const geometry = barGeometry(bar);
-    return {
-        ty: "gr",
-        nm: `stroke-${index + 1}`,
-        it: [
-            {
-                ty: "rc",
-                nm: `bar-${index + 1}`,
-                p: {a: 0, k: [0, 0]},
-                s: {a: 0, k: [geometry.length, barThickness]},
-                r: {a: 0, k: barThickness / 2},
-            },
-            lottieTransform([geometry.x, geometry.y], geometry.rotation),
-        ],
-    };
-}
-
-function colorToLottie(hex) {
+function hexToRgb(hex) {
     const value = hex.replace("#", "");
     return [
         Number.parseInt(value.slice(0, 2), 16) / 255,
         Number.parseInt(value.slice(2, 4), 16) / 255,
         Number.parseInt(value.slice(4, 6), 16) / 255,
-        1,
     ];
 }
 
-function easing(start, end, startValue, endValue, curve = [0.2, 0.75, 0.34, 0.94]) {
+function rgbToHex(rgb) {
+    return `#${rgb
+        .map((value) => Math.round(value * 255).toString(16).padStart(2, "0"))
+        .join("")
+        .toUpperCase()}`;
+}
+
+function colorAt(position) {
+    const rightIndex = palette.findIndex((stop) => stop.at >= position);
+    if (rightIndex <= 0) {
+        return hexToRgb(palette[0].color);
+    }
+    const left = palette[rightIndex - 1];
+    const right = palette[rightIndex];
+    const amount = (position - left.at) / (right.at - left.at);
+    const leftRgb = hexToRgb(left.color);
+    const rightRgb = hexToRgb(right.color);
+    return leftRgb.map((value, index) => value + (rightRgb[index] - value) * amount);
+}
+
+function pathLength(path) {
+    let length = 0;
+    for (let index = 1; index < path.v.length; index += 1) {
+        length += Math.hypot(
+            path.v[index][0] - path.v[index - 1][0],
+            path.v[index][1] - path.v[index - 1][1],
+        );
+    }
+    if (path.c) {
+        length += Math.hypot(
+            path.v[0][0] - path.v.at(-1)[0],
+            path.v[0][1] - path.v.at(-1)[1],
+        );
+    }
+    return length;
+}
+
+function easeInOut(start, end) {
     return [
         {
             t: start,
-            s: startValue,
-            e: endValue,
-            o: {x: [curve[0]], y: [curve[1]]},
+            s: [0],
+            e: [100],
+            o: {x: [0.65], y: [0]},
         },
         {
             t: end,
-            s: endValue,
-            i: {x: [curve[2]], y: [curve[3]]},
+            s: [100],
+            i: {x: [0.35], y: [1]},
         },
     ];
 }
 
-function layerForLetter(letter, index) {
-    const start = 4 + index * 5;
-    const end = start + 18;
-    const x = firstLetterX + index * letterSpacing;
-    const isFocalO = index === 4;
-    const scale = isFocalO
-        ? [
-              {
-                  t: start,
-                  s: [82, 82, 100],
-                  e: [103, 103, 100],
-                  o: {x: [0.2], y: [0.75]},
-              },
-              {
-                  t: end,
-                  s: [103, 103, 100],
-                  e: [100, 100, 100],
-                  i: {x: [0.34], y: [0.94]},
-                  o: {x: [0], y: [0.65]},
-              },
-              {
-                  t: end + 8,
-                  s: [100, 100, 100],
-                  i: {x: [0.51], y: [0.99]},
-              },
-          ]
-        : easing(start, end + 4, [94, 94, 100], [100, 100, 100], [0, 0.65, 0.51, 0.99]);
+function transform(position = [0, 0]) {
+    return {
+        ty: "tr",
+        p: {a: 0, k: position},
+        a: {a: 0, k: [0, 0]},
+        s: {a: 0, k: [100, 100]},
+        r: {a: 0, k: 0},
+        o: {a: 0, k: 100},
+    };
+}
+
+function gradientStroke(startColor, endColor) {
+    return {
+        ty: "gs",
+        nm: "continuous-spectrum",
+        o: {a: 0, k: 100},
+        w: {a: 0, k: strokeWidth},
+        g: {
+            p: 2,
+            k: {
+                a: 0,
+                k: [0, ...startColor, 1, ...endColor],
+            },
+        },
+        s: {a: 0, k: [-44, 0]},
+        e: {a: 0, k: [44, 0]},
+        t: 1,
+        lc: 2,
+        lj: 2,
+        ml: 4,
+    };
+}
+
+function layerForGlyph(glyph, glyphIndex) {
+    const totalLength = glyph.paths.reduce((sum, path) => sum + pathLength(path), 0);
+    const glyphStart = 4 + glyphIndex * 6;
+    const revealDuration = 30;
+    let elapsed = 0;
+    const colorStart = colorAt(glyphIndex / glyphs.length);
+    const colorEnd = colorAt((glyphIndex + 1) / glyphs.length);
+
+    const pathGroups = glyph.paths.map((path, pathIndex) => {
+        const duration = Math.max(6, Math.round((pathLength(path) / totalLength) * revealDuration));
+        const start = glyphStart + elapsed;
+        const end = start + duration;
+        elapsed += duration;
+        return {
+            ty: "gr",
+            nm: `${glyph.name}-stroke-${pathIndex + 1}`,
+            it: [
+                {
+                    ty: "sh",
+                    nm: `${glyph.name}-path-${pathIndex + 1}`,
+                    ks: {a: 0, k: path},
+                },
+                gradientStroke(colorStart, colorEnd),
+                {
+                    ty: "tm",
+                    nm: "natural-path-reveal",
+                    s: {a: 0, k: 0},
+                    e: {a: 1, k: easeInOut(start, end)},
+                    o: {a: 0, k: 0},
+                    m: 1,
+                },
+                transform(),
+            ],
+        };
+    });
 
     return {
         ddd: 0,
-        ind: index + 1,
+        ind: glyphIndex + 1,
         ty: 4,
-        nm: `glyph-${index + 1}-${letter.name}`,
+        nm: `glyph-${glyphIndex + 1}-${glyph.name}`,
         sr: 1,
         ks: {
-            o: {a: 1, k: easing(start + 2, end - 2, [0], [100])},
+            o: {a: 0, k: 100},
             r: {a: 0, k: 0},
-            p: {a: 1, k: easing(start, end + 4, [x - 10, centerY + 10, 0], [x, centerY, 0])},
+            p: {a: 0, k: [firstLetterX + glyphIndex * letterSpacing, centerY, 0]},
             a: {a: 0, k: [0, 0, 0]},
-            s: {a: 1, k: scale},
+            s: {a: 0, k: [100, 100, 100]},
         },
         ao: 0,
         shapes: [
             {
                 ty: "gr",
-                nm: `${letter.name}-geometry`,
-                it: [
-                    ...letter.bars.map(lottieBar),
-                    {
-                        ty: "fl",
-                        nm: `${letter.name}-fill`,
-                        c: {a: 0, k: colorToLottie(letter.color)},
-                        o: {a: 0, k: 100},
-                        r: 1,
-                    },
-                    {
-                        ty: "st",
-                        nm: `${letter.name}-edge`,
-                        c: {a: 0, k: [0.047, 0.071, 0.133, 1]},
-                        o: {a: 0, k: 45},
-                        w: {a: 0, k: 2.5},
-                        lc: 2,
-                        lj: 2,
-                    },
-                    lottieTransform(),
-                ],
+                nm: `${glyph.name}-vector-strokes`,
+                it: [...pathGroups, transform()],
             },
         ],
         ip: 0,
@@ -181,28 +365,70 @@ function layerForLetter(letter, index) {
     };
 }
 
-function svgBar(bar) {
-    const geometry = barGeometry(bar);
-    return `<rect x="${-geometry.length / 2}" y="${-barThickness / 2}" width="${geometry.length}" height="${barThickness}" rx="${barThickness / 2}" transform="translate(${geometry.x} ${geometry.y}) rotate(${geometry.rotation})" />`;
+function formatNumber(value) {
+    return Number(value.toFixed(3));
+}
+
+function svgPathData(path, offsetX, offsetY) {
+    const point = ([x, y]) => `${formatNumber(x + offsetX)} ${formatNumber(y + offsetY)}`;
+    let data = `M ${point(path.v[0])}`;
+    const appendSegment = (fromIndex, toIndex) => {
+        const from = path.v[fromIndex];
+        const to = path.v[toIndex];
+        const outgoing = path.o[fromIndex];
+        const incoming = path.i[toIndex];
+        const isLine =
+            outgoing[0] === 0 &&
+            outgoing[1] === 0 &&
+            incoming[0] === 0 &&
+            incoming[1] === 0;
+        if (isLine) {
+            data += ` L ${point(to)}`;
+            return;
+        }
+        data += ` C ${point([from[0] + outgoing[0], from[1] + outgoing[1]])}`;
+        data += ` ${point([to[0] + incoming[0], to[1] + incoming[1]])}`;
+        data += ` ${point(to)}`;
+    };
+
+    for (let index = 1; index < path.v.length; index += 1) {
+        appendSegment(index - 1, index);
+    }
+    if (path.c) {
+        appendSegment(path.v.length - 1, 0);
+        data += " Z";
+    }
+    return data;
 }
 
 function buildSvg() {
-    const groups = letters
-        .map((letter, index) => {
-            const x = firstLetterX + index * letterSpacing;
-            return [
-                `  <g id="glyph-${index + 1}-${letter.name}" transform="translate(${x} ${centerY})" fill="${letter.color}" stroke="#0C1222" stroke-opacity=".45" stroke-width="2.5">`,
-                ...letter.bars.map((bar) => `    ${svgBar(bar)}`),
-                "  </g>",
-            ].join("\n");
-        })
+    const gradientStops = palette
+        .map(
+            (stop) =>
+                `      <stop offset="${formatNumber(stop.at * 100)}%" stop-color="${rgbToHex(hexToRgb(stop.color))}" />`,
+        )
+        .join("\n");
+    const paths = glyphs
+        .flatMap((glyph, glyphIndex) =>
+            glyph.paths.map(
+                (path, pathIndex) =>
+                    `  <path id="glyph-${glyphIndex + 1}-${glyph.name}-${pathIndex + 1}" d="${svgPathData(path, firstLetterX + glyphIndex * letterSpacing, centerY)}" />`,
+            ),
+        )
         .join("\n");
 
     return [
         `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" role="img" aria-labelledby="title desc">`,
-        "  <title id=\"title\">KUBEONCALL wordmark</title>",
-        "  <desc id=\"desc\">A geometric blue, teal, and violet KUBEONCALL wordmark on a transparent background.</desc>",
-        groups,
+        "  <title id=\"title\">KUBEONCALL gradient path wordmark</title>",
+        "  <desc id=\"desc\">A light, rounded KUBEONCALL wordmark drawn with a cyan-to-violet gradient on a transparent background.</desc>",
+        "  <defs>",
+        `    <linearGradient id="wordmark-gradient" x1="50" y1="0" x2="${width - 50}" y2="0" gradientUnits="userSpaceOnUse">`,
+        gradientStops,
+        "    </linearGradient>",
+        "  </defs>",
+        `  <g fill="none" stroke="url(#wordmark-gradient)" stroke-width="${strokeWidth}" stroke-linecap="round" stroke-linejoin="round">`,
+        paths,
+        "  </g>",
         "</svg>",
         "",
     ].join("\n");
@@ -215,10 +441,10 @@ const lottie = {
     op: outPoint,
     w: width,
     h: height,
-    nm: "KUBEONCALL technical wordmark",
+    nm: "KUBEONCALL natural gradient path reveal",
     ddd: 0,
     assets: [],
-    layers: letters.map(layerForLetter).reverse(),
+    layers: glyphs.map(layerForGlyph).reverse(),
 };
 
 mkdirSync(outputDirectory, {recursive: true});
