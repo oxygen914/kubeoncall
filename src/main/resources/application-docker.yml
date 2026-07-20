@@ -41,8 +41,9 @@ kubeoncall:
       endpoint: http://minio:9000
       access-key: ${MINIO_ROOT_USER:minioadmin}
       secret-key: ${MINIO_ROOT_PASSWORD:minioadmin}
-      bucket: kubeoncall-docs
+      bucket: ${MINIO_BUCKET:kubeoncall-docs}
   mcp:
+    enabled: ${MCP_ENABLED:false}
     endpoint: ${MCP_ENDPOINT:http://host.docker.internal:18080/mcp/call}
     api-key: ${MCP_API_KEY:}
     auth-mode: ${MCP_AUTH_MODE:static_bearer}

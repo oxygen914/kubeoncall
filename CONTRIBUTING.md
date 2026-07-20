@@ -25,7 +25,7 @@
 运行真实依赖集成测试：
 
 ```bash
-docker compose up -d redis elasticsearch minio
+docker compose up -d redis elasticsearch minio minio-init
 ./mvnw -Pintegration-test verify
 ```
 
@@ -38,4 +38,4 @@ docker compose up -d redis elasticsearch minio
 - Controller 只处理 HTTP 协议和参数校验；业务编排位于 application service。
 - 将格式化、包迁移和业务逻辑修改拆为独立提交。
 
-更多重构原则、分阶段任务和验收标准见 [代码风格重构.md](代码风格重构.md)。
+安装与配置入口见[文档索引](docs/README.md)，模块边界见[项目架构](项目架构.md)，当前重构范围和验收状态见[当前重构进度](重构计划/当前重构进度.md)。

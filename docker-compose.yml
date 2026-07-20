@@ -51,6 +51,8 @@ services:
       MEMORY_TOKENIZER_CHAT_OVERHEAD_TOKENS: ${MEMORY_TOKENIZER_CHAT_OVERHEAD_TOKENS:--1}
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
+      MINIO_BUCKET: ${MINIO_BUCKET:-kubeoncall-docs}
+      MCP_ENABLED: ${MCP_ENABLED:-false}
       MCP_ENDPOINT: ${MCP_ENDPOINT:-http://host.docker.internal:18080/mcp/call}
       MCP_API_KEY: ${MCP_API_KEY:-}
       MCP_AUTH_MODE: ${MCP_AUTH_MODE:-static_bearer}
@@ -92,7 +94,7 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
     ports:
-      - "8080:8080"
+      - "${KUBEONCALL_BIND_ADDRESS:-127.0.0.1}:8080:8080"
     depends_on:
       redis:
         condition: service_healthy
@@ -100,17 +102,22 @@ services:
         condition: service_healthy
       minio:
         condition: service_started
+      minio-init:
+        condition: service_completed_successfully
     restart: unless-stopped
 
   redis:
     image: redis:7
     ports:
-      - "6379:6379"
+      - "${INFRA_BIND_ADDRESS:-127.0.0.1}:6379:6379"
+    volumes:
+      - redis-data:/data
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
       timeout: 3s
       retries: 20
+    restart: unless-stopped
 
   elasticsearch:
     image: docker.elastic.co/elasticsearch/elasticsearch:8.14.3
@@ -119,22 +126,47 @@ services:
       - xpack.security.enabled=false
       - ES_JAVA_OPTS=-Xms512m -Xmx512m
     ports:
-      - "9200:9200"
+      - "${INFRA_BIND_ADDRESS:-127.0.0.1}:9200:9200"
+    volumes:
+      - elasticsearch-data:/usr/share/elasticsearch/data
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://localhost:9200/_cluster/health >/dev/null || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 30
+    restart: unless-stopped
 
   minio:
     image: minio/minio:RELEASE.2024-08-03T04-33-23Z
     command: server /data --console-address ":9001"
     environment:
-      MINIO_ROOT_USER: minioadmin
-      MINIO_ROOT_PASSWORD: minioadmin
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
     ports:
-      - "9000:9000"
-      - "9001:9001"
+      - "${INFRA_BIND_ADDRESS:-127.0.0.1}:9000:9000"
+      - "${INFRA_BIND_ADDRESS:-127.0.0.1}:9001:9001"
+    volumes:
+      - minio-data:/data
+    restart: unless-stopped
+
+  minio-init:
+    image: minio/mc:RELEASE.2024-07-31T15-58-33Z
+    depends_on:
+      minio:
+        condition: service_started
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
+      MINIO_BUCKET: ${MINIO_BUCKET:-kubeoncall-docs}
+    entrypoint:
+      - /bin/sh
+      - -ec
+    command:
+      - |
+        until mc alias set local http://minio:9000 "$${MINIO_ROOT_USER}" "$${MINIO_ROOT_PASSWORD}"; do
+          sleep 2
+        done
+        mc mb --ignore-existing "local/$${MINIO_BUCKET}"
 
   prometheus:
     image: prom/prometheus:v2.53.1
@@ -142,11 +174,13 @@ services:
     volumes:
       - ./deploy/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - ./deploy/prometheus/rules:/etc/prometheus/rules:ro
+      - prometheus-data:/prometheus
     ports:
-      - "9090:9090"
+      - "${OBSERVABILITY_BIND_ADDRESS:-127.0.0.1}:9090:9090"
     depends_on:
       kubeoncall:
         condition: service_started
+    restart: unless-stopped
 
   alertmanager:
     profiles: [alerting]
@@ -155,17 +189,20 @@ services:
     volumes:
       - ./deploy/alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
       - ./deploy/alertmanager/secrets/kubeoncall-webhook-token:/etc/alertmanager/secrets/kubeoncall-webhook-token:ro
+      - alertmanager-data:/alertmanager
     ports:
-      - "9093:9093"
+      - "${OBSERVABILITY_BIND_ADDRESS:-127.0.0.1}:9093:9093"
     depends_on:
       kubeoncall:
         condition: service_started
+    restart: unless-stopped
 
   node-exporter:
     profiles: [alerting]
     image: prom/node-exporter:v1.8.2
     ports:
-      - "9100:9100"
+      - "${OBSERVABILITY_BIND_ADDRESS:-127.0.0.1}:9100:9100"
+    restart: unless-stopped
 
   grafana:
     image: grafana/grafana:11.1.4
@@ -175,8 +212,18 @@ services:
     volumes:
       - ./deploy/grafana/provisioning:/etc/grafana/provisioning:ro
       - ./deploy/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana-data:/var/lib/grafana
     ports:
-      - "3000:3000"
+      - "${OBSERVABILITY_BIND_ADDRESS:-127.0.0.1}:3000:3000"
     depends_on:
       prometheus:
         condition: service_started
+    restart: unless-stopped
+
+volumes:
+  redis-data:
+  elasticsearch-data:
+  minio-data:
+  prometheus-data:
+  alertmanager-data:
+  grafana-data:
