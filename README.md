@@ -1,5 +1,12 @@
 # KubeOnCall
 
+<p align="center">
+  <picture>
+    <source media="(prefers-reduced-motion: reduce)" srcset="assets/readme/kubeoncall/wordmark.svg">
+    <img src="assets/readme/kubeoncall/wordmark.webp" alt="KUBEONCALL animated wordmark" width="720">
+  </picture>
+</p>
+
 [![CI](https://github.com/oxygen914/kubeoncall/actions/workflows/ci.yml/badge.svg)](https://github.com/oxygen914/kubeoncall/actions/workflows/ci.yml)
 
 KubeOnCall 是一个面向 Kubernetes 和云基础设施运维的多智能体服务，把告警接入、诊断编排、RAG、长期记忆、Skill、MCP/HTTP 工具、审批与审计连接成可追踪的工作流。
