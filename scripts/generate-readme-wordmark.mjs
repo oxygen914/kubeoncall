@@ -10,7 +10,10 @@ const playerSceneDirectory = process.env.LOTTIE_PLAYER_SCENE_DIR;
 const width = 1320;
 const height = 240;
 const frameRate = 60;
-const outPoint = 120;
+const durationSeconds = 10;
+const outPoint = frameRate * durationSeconds;
+const motionTimelineSeconds = 2;
+const motionTimeScale = (frameRate * motionTimelineSeconds) / 120;
 const centerY = 120;
 const firstLetterX = 102;
 const letterSpacing = 124;
@@ -303,14 +306,17 @@ function gradientStroke(startColor, endColor) {
 
 function layerForGlyph(glyph, glyphIndex) {
     const totalLength = glyph.paths.reduce((sum, path) => sum + pathLength(path), 0);
-    const glyphStart = 4 + glyphIndex * 6;
-    const revealDuration = 30;
+    const glyphStart = (4 + glyphIndex * 6) * motionTimeScale;
+    const revealDuration = 30 * motionTimeScale;
     let elapsed = 0;
     const colorStart = colorAt(glyphIndex / glyphs.length);
     const colorEnd = colorAt((glyphIndex + 1) / glyphs.length);
 
     const pathGroups = glyph.paths.map((path, pathIndex) => {
-        const duration = Math.max(6, Math.round((pathLength(path) / totalLength) * revealDuration));
+        const duration = Math.max(
+            6 * motionTimeScale,
+            Math.round((pathLength(path) / totalLength) * revealDuration),
+        );
         const start = glyphStart + elapsed;
         const end = start + duration;
         elapsed += duration;
