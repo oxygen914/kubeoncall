@@ -3,7 +3,8 @@
 ## 环境要求
 
 - JDK 17
-- Maven Wrapper（使用 `./mvnw`，不依赖系统 Maven 版本）
+- Node.js 20+
+- Maven Wrapper（使用 `./backend/mvnw`，不依赖系统 Maven 版本）
 - Docker Compose（仅运行真实依赖集成测试时需要）
 
 ## 提交前检查
@@ -11,13 +12,13 @@
 先自动修复格式：
 
 ```bash
-./mvnw spotless:apply
+make backend-format
 ```
 
 再执行完整的本地门禁：
 
 ```bash
-./mvnw verify
+make test
 ```
 
 该命令会校验 JDK、Maven 版本、Java 和文本格式、基础 Checkstyle 规则，并运行默认单元测试。
@@ -26,7 +27,7 @@
 
 ```bash
 docker compose up -d redis elasticsearch minio minio-init
-./mvnw -Pintegration-test verify
+(cd backend && ./mvnw -Pintegration-test verify)
 ```
 
 ## 代码约定
@@ -36,6 +37,8 @@ docker compose up -d redis elasticsearch minio minio-init
 - 不返回 `null` 集合；必需依赖不以 `null` 表达未启用状态。
 - 不新增通配符 import、无用 import 或无说明的异常吞噬。
 - Controller 只处理 HTTP 协议和参数校验；业务编排位于 application service。
+- 前端不得持久化 API Token；接口选择器变化必须同步更新 `frontend/test/` 契约测试。
+- 后端代码只放在 `backend/`，Web Console 代码只放在 `frontend/`，跨服务部署资产留在根目录。
 - 将格式化、包迁移和业务逻辑修改拆为独立提交。
 
-安装与配置入口见[文档索引](docs/README.md)，模块边界见[项目架构](项目架构.md)，当前重构范围和验收状态见[当前重构进度](重构计划/当前重构进度.md)。
+安装与配置入口见[文档索引](docs/README.md)，模块边界见[项目架构](项目架构.md)。

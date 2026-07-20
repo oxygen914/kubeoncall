@@ -1,6 +1,6 @@
 # KubeOnCall 配置参考
 
-KubeOnCall 使用 Spring Boot 配置体系。默认值位于 `src/main/resources/application.yml`，本地和容器覆盖分别位于 `application-local.yml`、`application-docker.yml`。Docker Compose 从根目录 `.env` 读取变量；Kubernetes/Helm 应通过 Secret 和 values 注入。
+KubeOnCall 后端使用 Spring Boot 配置体系。默认值位于 `backend/src/main/resources/application.yml`，本地和容器覆盖分别位于 `application-local.yml`、`application-docker.yml`。Docker Compose 从根目录 `.env` 读取变量；Kubernetes/Helm 应通过 Secret 和 values 注入。
 
 不要提交 `.env`、API Key、Webhook Secret、生产地址或真实业务数据。仓库只提交不含凭据的 `.env.example`。
 
@@ -31,10 +31,21 @@ Compose 已设置 `SPRING_PROFILES_ACTIVE=docker`，无需在 `.env` 重复配�
 | 变量 | 默认值 | 控制范围 |
 | --- | --- | --- |
 | `KUBEONCALL_BIND_ADDRESS` | `127.0.0.1` | KubeOnCall `8080` |
+| `CONSOLE_BIND_ADDRESS` | `127.0.0.1` | Web Console `8081` |
+| `CONSOLE_PORT` | `8081` | Console 宿主机端口 |
 | `INFRA_BIND_ADDRESS` | `127.0.0.1` | Redis、Elasticsearch、MinIO |
 | `OBSERVABILITY_BIND_ADDRESS` | `127.0.0.1` | Prometheus、Alertmanager、Node Exporter、Grafana |
 
 服务之间通过 Compose 内部网络通信，通常不需要把基础设施端口监听到公网。生产入口建议使用 Nginx、Traefik 或云负载均衡器终止 TLS。
+
+独立托管 Console 时，后端只允许显式配置的浏览器来源：
+
+```dotenv
+KUBEONCALL_CORS_ENABLED=true
+KUBEONCALL_CORS_ALLOWED_ORIGINS=https://console.example.com
+```
+
+不要配置通配来源；Compose 内置 Console 默认通过同源 Nginx 代理访问 API。
 
 ## 4. 模型与 RAG
 

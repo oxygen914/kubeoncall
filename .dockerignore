@@ -1,9 +1,0 @@
-target/*
-!target/kubeoncall-*.jar
-target/*.jar.original
-.git
-.idea
-.vscode
-.claude
-*.log
-cp.txt

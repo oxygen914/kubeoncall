@@ -1,8 +1,0 @@
-{
-  "permissions": {
-    "allow": [
-      "Bash(powershell -NoProfile -Command \"Get-ChildItem -Path 'd:\\\\桌面\\\\code\\\\java\\\\KubeOnCall\\\\src\\\\main\\\\java\\\\com\\\\kubeoncall' -Recurse -Filter '*.java' | Select-Object -ExpandProperty FullName\")",
-      "Bash(mvn -f \"d:\\\\桌面\\\\code\\\\java\\\\KubeOnCall\\\\pom.xml\" -DskipTests -q help:evaluate -Dexpression=project.build.sourceEncoding)"
-    ]
-  }
-}

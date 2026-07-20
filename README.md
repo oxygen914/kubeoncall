@@ -11,7 +11,7 @@
 
 KubeOnCall 是一个面向 Kubernetes 和云基础设施运维的多智能体服务，把告警接入、诊断编排、RAG、长期记忆、Skill、MCP/HTTP 工具、审批与审计连接成可追踪的工作流。
 
-项目当前以 Spring Boot 单体服务承载核心能力，适合源码评估、单机 Docker Compose 演练和 Kubernetes 集成验证。
+项目采用前后端分离的单仓库结构：Spring Boot 后端承载核心能力，独立 Web Console 用于数据调试，根目录负责 Docker Compose、部署和文档。
 
 > [!IMPORTANT]
 > 当前版本为 `0.0.1-SNAPSHOT`，仓库没有正式发布镜像和独立 `LICENSE`。Compose 默认是单机部署，不代表高可用生产架构；对外发布或生产使用前需要补充许可证、TLS、Secret 管理、备份和容量评估。
@@ -29,7 +29,8 @@ KubeOnCall 是一个面向 Kubernetes 和云基础设施运维的多智能体服
 
 ```mermaid
 flowchart LR
-    C["客户端 / ChatOps / Webhook"] --> API["KubeOnCall Web API"]
+    C["Web Console"] --> API["KubeOnCall Backend API"]
+    W["ChatOps / Alertmanager / CI-CD"] --> API
     API --> Agent["Planner → Executor → Verifier"]
     API --> Alarm["告警治理与工作流"]
     API --> RAG["RAG 与 Runbook"]
@@ -94,7 +95,8 @@ docker compose up -d --build
 
 Compose 会启动：
 
-- KubeOnCall
+- KubeOnCall Backend
+- KubeOnCall Console
 - Redis 7
 - Elasticsearch 8.14
 - MinIO 和一次性 bucket 初始化任务
@@ -113,6 +115,7 @@ docker compose --profile alerting up -d --build
 docker compose ps
 docker compose logs --tail=200 kubeoncall
 curl --fail http://127.0.0.1:8080/actuator/health
+curl --fail http://127.0.0.1:8081/healthz
 ```
 
 使用 Viewer Token 验证 API：
@@ -166,7 +169,7 @@ Compose 默认把所有端口绑定到 `127.0.0.1`，并使用命名卷保存数
 
 配置来源：
 
-1. `src/main/resources/application.yml`：公共默认值。
+1. `backend/src/main/resources/application.yml`：公共默认值。
 2. `application-local.yml` / `application-docker.yml`：运行环境覆盖。
 3. `.env`：Docker Compose 的本地 Secret 和开关，不提交 Git。
 4. Helm values 与 Kubernetes Secret：集群部署配置。
@@ -176,6 +179,7 @@ Compose 默认把所有端口绑定到 `127.0.0.1`，并使用命名卷保存数
 | 组 | 关键变量 | 默认策略 |
 | --- | --- | --- |
 | API 鉴权 | `KUBEONCALL_API_*_TOKEN` | Compose 示例启用三角色 Bearer |
+| Console/CORS | `CONSOLE_*`、`KUBEONCALL_CORS_*` | Console 监听 `8081`，仅允许显式来源 |
 | 模型 | `ALIYUN_API_KEY`、`SPRING_AI_*` | `qwen-plus` |
 | RAG | `RAG_EMBEDDING_*`、`RAG_RERANK_*` | `text-embedding-v4` + `qwen3-rerank` |
 | 记忆 | `MEMORY_*` | 外部 LLM/Tokenizer 默认关闭 |
@@ -222,6 +226,17 @@ Compose 中的 Node Exporter 用于容器化演练；生产 Kubernetes 节点应
 
 启用通用 API 鉴权后，查询使用 Viewer，告警/审批等操作使用 Operator，管理写操作使用 Admin。Alertmanager 和 ChangeEvent Webhook 使用各自的签名或 Token。
 
+### 本地调试控制台
+
+应用启动后访问 [http://127.0.0.1:8081](http://127.0.0.1:8081)，可直接查看服务状态、执行统计、Tool/Skill 数量，并调试问答、审批和任意 JSON API。
+
+- Compose 中 Console 通过 Nginx 将同源 `/api` 请求转发到后端，也可切换到其他 KubeOnCall 实例。
+- Bearer Token 只保存在当前页面内存中，刷新即清除，不会写入浏览器存储。
+- 查询和问答使用 Viewer Token；审批写操作使用 Operator 或 Admin Token。
+- 每次请求展示 HTTP 状态、耗时和原始响应，最近记录也只保留在当前页面内存中。
+
+该页面是面向开发调试的轻量 Demo，不包含生产控制台所需的用户体系、权限菜单和 Secret 托管能力。
+
 ## 文档
 
 - [文档索引](docs/README.md)
@@ -229,6 +244,8 @@ Compose 中的 Node Exporter 用于容器化演练；生产 Kubernetes 节点应
 - [配置参考](docs/configuration.md)
 - [后端运行手册](docs/后端运行手册.md)
 - [阿里云模型联调](docs/阿里云模型联调.md)
+- [后端开发说明](backend/README.md)
+- [前端控制台说明](frontend/README.md)
 - [项目架构](项目架构.md)
 - [贡献指南](CONTRIBUTING.md)
 
@@ -237,37 +254,35 @@ Compose 中的 Node Exporter 用于容器化演练；生产 Kubernetes 节点应
 ```text
 kubeoncall/
 ├── .github/workflows/       # CI
-├── config/                  # Checkstyle 等构建规则
+├── backend/                 # Spring Boot、Maven Wrapper、后端测试与镜像
+├── frontend/                # 独立静态控制台、契约测试与 Nginx 镜像
 ├── deploy/                  # Compose 配套资源、Kubernetes、Helm、监控
 ├── docs/                    # 安装、配置、运行和模型联调文档
 ├── scripts/                 # 告警、模型、MCP、Helm 验证脚本
-├── src/main/                # Spring Boot 业务代码与资源
-├── src/test/                # 单元、架构和集成测试
 ├── .env.example             # 不含真实 Secret 的配置模板
 ├── docker-compose.yml       # 单机编排
-├── Dockerfile               # Java 17 多阶段镜像构建
-└── pom.xml                  # Maven 构建
+└── Makefile                 # 前后端验证和 Compose 快捷入口
 ```
 
 ## 开发
 
-要求 JDK 17，使用 Maven Wrapper：
+要求 JDK 17 和 Node.js 20+。一次验证前后端：
 
 ```bash
-./mvnw verify
+make test
 ```
 
 运行真实依赖集成测试：
 
 ```bash
 docker compose up -d redis elasticsearch minio minio-init
-./mvnw -Pintegration-test verify
+(cd backend && ./mvnw -Pintegration-test verify)
 ```
 
-CI 会执行 Maven 校验、Compose 静态渲染和 Docker 镜像构建。代码规范、提交前检查和架构边界见[贡献指南](CONTRIBUTING.md)。
+CI 会执行 Maven、前端契约测试、静态资源构建、Compose 渲染以及前后端镜像构建。代码规范、提交前检查和架构边界见[贡献指南](CONTRIBUTING.md)。
 
 ## 项目状态与许可证
 
-项目仍在持续重构和验证中，已实现的能力、待补测试和延期项以[当前重构进度](重构计划/当前重构进度.md)为准。
+项目仍在持续重构和验证中。公开仓库只保留使用、架构、部署和贡献文档；个人计划、IDE/Agent 状态及本地实验记录由 `.gitignore` 排除。
 
 仓库当前没有独立 `LICENSE` 文件。这意味着代码尚未以明确的开源许可证对外授权；公开分发、二次使用或接受外部贡献前，应由维护者选择并添加许可证。

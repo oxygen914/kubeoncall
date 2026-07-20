@@ -15,7 +15,14 @@ jobs:
           distribution: temurin
           java-version: "17"
           cache: maven
+          cache-dependency-path: backend/pom.xml
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
       - run: ./mvnw --batch-mode --no-transfer-progress verify
+        working-directory: backend
+      - run: npm --prefix frontend test
+      - run: npm --prefix frontend run build
       - run: docker compose config
 
   package:
@@ -26,6 +33,11 @@ jobs:
       - uses: docker/setup-buildx-action@v3
       - uses: docker/build-push-action@v6
         with:
-          context: .
+          context: ./backend
           push: false
-          tags: kubeoncall:ci
+          tags: kubeoncall-backend:ci
+      - uses: docker/build-push-action@v6
+        with:
+          context: ./frontend
+          push: false
+          tags: kubeoncall-console:ci

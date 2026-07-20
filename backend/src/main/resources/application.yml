@@ -1,0 +1,260 @@
+spring:
+  application:
+    name: kubeoncall
+  profiles:
+    active: local
+  data:
+    redis:
+      host: localhost
+      port: 6379
+      repositories:
+        enabled: false
+    elasticsearch:
+      repositories:
+        enabled: false
+  elasticsearch:
+    uris: http://localhost:9200
+  jackson:
+    serialization:
+      write-dates-as-timestamps: false
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+
+server:
+  port: 8080
+
+kubeoncall:
+  api-security:
+    enabled: ${KUBEONCALL_API_AUTH_ENABLED:false}
+    viewer-token: ${KUBEONCALL_API_VIEWER_TOKEN:}
+    operator-token: ${KUBEONCALL_API_OPERATOR_TOKEN:}
+    admin-token: ${KUBEONCALL_API_ADMIN_TOKEN:}
+  cors:
+    enabled: ${KUBEONCALL_CORS_ENABLED:true}
+    allowed-origins: ${KUBEONCALL_CORS_ALLOWED_ORIGINS:http://127.0.0.1:8081,http://localhost:8081}
+  agent:
+    max-loops: 3
+    planner-llm-enabled: true
+  approval:
+    enabled: true
+    callback-timeout-seconds: 1800
+    resume-lease-seconds: ${APPROVAL_RESUME_LEASE_SECONDS:300}
+    repository: redis
+  rag:
+    default-top-k: 5
+    knowledge-index: kubeoncall-knowledge
+    active-dataset-version: ${RAG_ACTIVE_DATASET_VERSION:}
+    vector-enabled: false
+    vector-backend: es
+    vector-endpoint: http://localhost:18086/api/vector/search
+    vector-timeout-millis: 3000
+    es-knn-enabled: false
+    embedding-enabled: false
+    mock-embedding-enabled: false
+    embedding-endpoint: http://localhost:18086/api/embedding
+    embedding-api-key: ${RAG_EMBEDDING_API_KEY:}
+    embedding-model: text-embedding-3-small
+    embedding-version: v1
+    embedding-timeout-millis: 3000
+    embedding-dimensions: 1536
+    embedding-batch-size: ${RAG_EMBEDDING_BATCH_SIZE:32}
+    chunk-strategy: recursive
+    chunk-size: 1000
+    chunk-overlap: 200
+    cross-encoder-enabled: false
+    cross-encoder-endpoint: http://localhost:18086/api/rerank
+    cross-encoder-api-key: ${RAG_RERANK_API_KEY:}
+    cross-encoder-model: cross-encoder
+    cross-encoder-timeout-millis: 3000
+    lexical-candidate-top-n: 20
+    vector-candidate-top-n: 20
+    rrf-k: 60
+    rerank-top-n: 30
+    runbook-location: classpath*:runbooks/*.md
+    runbook-bootstrap-enabled: false
+    augmentation-enabled: ${RAG_AUGMENTATION_ENABLED:false}
+    augmentation-endpoint: ${RAG_AUGMENTATION_ENDPOINT:https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions}
+    augmentation-api-key: ${RAG_AUGMENTATION_API_KEY:${ALIYUN_API_KEY:}}
+    augmentation-model: ${RAG_AUGMENTATION_MODEL:qwen-plus}
+    augmentation-version: ${RAG_AUGMENTATION_VERSION:v1}
+    augmentation-timeout-millis: ${RAG_AUGMENTATION_TIMEOUT_MILLIS:10000}
+    augmentation-concurrency: ${RAG_AUGMENTATION_CONCURRENCY:2}
+    auto-bind-dataset-version: ${RAG_AUTO_BIND_DATASET_VERSION:false}
+    jsonl-max-payload-bytes: ${RAG_JSONL_MAX_PAYLOAD_BYTES:5242880}
+    jsonl-max-lines: ${RAG_JSONL_MAX_LINES:10000}
+    document-max-content-bytes: ${RAG_DOCUMENT_MAX_CONTENT_BYTES:2097152}
+  storage:
+    minio:
+      endpoint: http://localhost:9000
+      access-key: minioadmin
+      secret-key: minioadmin
+      bucket: kubeoncall-docs
+  mcp:
+    enabled: true
+    server-name: local-mcp
+    endpoint: http://localhost:18080/mcp/call
+    api-key: ${MCP_API_KEY:}
+    auth-mode: ${MCP_AUTH_MODE:static_bearer}
+    oauth-token-endpoint: ${MCP_OAUTH_TOKEN_ENDPOINT:}
+    oauth-client-id: ${MCP_OAUTH_CLIENT_ID:}
+    oauth-client-secret: ${MCP_OAUTH_CLIENT_SECRET:}
+    oauth-client-auth-method: ${MCP_OAUTH_CLIENT_AUTH_METHOD:client_secret_post}
+    oauth-scope: ${MCP_OAUTH_SCOPE:}
+    oauth-resource: ${MCP_OAUTH_RESOURCE:}
+    oauth-refresh-skew-seconds: ${MCP_OAUTH_REFRESH_SKEW_SECONDS:30}
+    timeout-millis: 3000
+    protocol: ${MCP_PROTOCOL:custom}
+    protocol-version: ${MCP_PROTOCOL_VERSION:2025-11-25}
+    client-name: ${MCP_CLIENT_NAME:kubeoncall}
+    client-version: ${MCP_CLIENT_VERSION:1.0.0}
+    discovery-enabled: ${MCP_DISCOVERY_ENABLED:false}
+    discovery-endpoint: ${MCP_DISCOVERY_ENDPOINT:}
+    discovery-cache-seconds: ${MCP_DISCOVERY_CACHE_SECONDS:60}
+    discovery-max-pages: ${MCP_DISCOVERY_MAX_PAGES:20}
+    discovery-refresh-millis: ${MCP_DISCOVERY_REFRESH_MILLIS:60000}
+    dynamic-invocation-enabled: ${MCP_DYNAMIC_INVOCATION_ENABLED:false}
+    dynamic-max-tools: ${MCP_DYNAMIC_MAX_TOOLS:3}
+    max-response-bytes: ${MCP_MAX_RESPONSE_BYTES:262144}
+    allowed-tools: ${MCP_ALLOWED_TOOLS:knowledge.searchSop,topology.getServiceTopology,cmdb.getServiceMetadata,kubernetes.describeResource,prometheus.queryRange,alerts.getActiveAlerts,inventory.*,metrics.*}
+  change-events:
+    webhook-enabled: ${CHANGE_EVENT_WEBHOOK_ENABLED:false}
+    webhook-auth-mode: ${CHANGE_EVENT_WEBHOOK_AUTH_MODE:bearer}
+    webhook-token: ${CHANGE_EVENT_WEBHOOK_TOKEN:}
+    webhook-max-payload-bytes: ${CHANGE_EVENT_WEBHOOK_MAX_PAYLOAD_BYTES:1048576}
+    github-webhook-secret: ${CHANGE_EVENT_GITHUB_WEBHOOK_SECRET:}
+    gitlab-webhook-token: ${CHANGE_EVENT_GITLAB_WEBHOOK_TOKEN:}
+    jenkins-webhook-token: ${CHANGE_EVENT_JENKINS_WEBHOOK_TOKEN:}
+    argocd-webhook-token: ${CHANGE_EVENT_ARGOCD_WEBHOOK_TOKEN:}
+  integrations:
+    kubernetes:
+      endpoint: http://localhost:18081/api/tools/kubernetes
+      timeout-millis: 3000
+    prometheus:
+      endpoint: http://localhost:18082/api/tools/prometheus
+      timeout-millis: 3000
+    alertmanager:
+      endpoint: http://localhost:18083/api/tools/alertmanager
+      timeout-millis: 3000
+    notification:
+      endpoint: ${ALERT_NOTIFICATION_WEBHOOK_ENDPOINT:}
+      timeout-millis: ${ALERT_NOTIFICATION_WEBHOOK_TIMEOUT_MILLIS:3000}
+    incident:
+      endpoint: http://localhost:18087/api/tools/incident
+      timeout-millis: 3000
+    device:
+      endpoint: http://localhost:18084/api/tools/device
+      timeout-millis: 3000
+    database:
+      endpoint: http://localhost:18085/api/tools/database
+      timeout-millis: 3000
+  workflow:
+    alarm-dedup-ttl-seconds: 600
+  alarm:
+    enabled: true
+    policy-location: classpath:alarm-policies-node-mvp.yml
+    default-severity: P3
+    active-ttl-seconds: 86400
+    resolved-retention-seconds: 3600
+    p0-dedup-ttl-seconds: 1800
+    p1-dedup-ttl-seconds: 1200
+    p2-dedup-ttl-seconds: 600
+    p3-dedup-ttl-seconds: 300
+    info-dedup-ttl-seconds: 120
+    node-not-ready-suppression-ttl-seconds: 1800
+    escalation-ttl-seconds: 3600
+    acknowledgement-ttl-seconds: 86400
+    silence-approval-ttl-seconds: 1800
+    p0-recovery-window-seconds: 900
+    p1-recovery-window-seconds: 600
+    p2-recovery-window-seconds: 300
+    p3-recovery-window-seconds: 120
+    info-recovery-window-seconds: 0
+    recovery-state-ttl-seconds: 259200
+    recovery-scheduler-enabled: true
+    recovery-check-interval-millis: 30000
+    recovery-batch-size: 100
+    recovery-health-check-required: true
+    recovery-health-check-endpoint: ${ALARM_RECOVERY_HEALTH_CHECK_ENDPOINT:}
+    recovery-health-check-timeout-millis: 3000
+    recovery-confirmation-timeout-seconds: 86400
+    p0-escalation-count: 2
+    p1-escalation-count: 3
+    p0-escalation-after-seconds: 600
+    p1-escalation-after-seconds: 1800
+    policy-version-history-limit: 20
+    p1-aggregation-window-seconds: 300
+    p2-aggregation-window-seconds: 900
+    p3-aggregation-window-seconds: 3600
+    alertmanager-webhook-enabled: true
+    alertmanager-webhook-auth-mode: bearer
+    alertmanager-webhook-token: ${ALERTMANAGER_WEBHOOK_TOKEN:}
+    alertmanager-webhook-token-file: ${ALERTMANAGER_WEBHOOK_TOKEN_FILE:}
+    alertmanager-webhook-max-alerts-per-request: 100
+    alertmanager-webhook-max-payload-bytes: 1048576
+    inbox-stream-key: kubeoncall:alarm:inbox
+    inbox-consumer-group: kubeoncall-alarm-workers
+    inbox-dead-letter-key: kubeoncall:alarm:dead-letter
+    inbox-max-retries: 5
+    inbox-retention-hours: 168
+    inbox-worker-enabled: true
+    inbox-worker-batch-size: 10
+    inbox-worker-block-millis: 1000
+    inbox-pending-claim-idle-millis: 60000
+  memory:
+    enabled: true
+    session-ttl-seconds: 86400
+    max-session-turns: 12
+    session-recent-turns: 6
+    session-token-budget: 1200
+    session-append-max-retries: 5
+    session-summary-token-budget: 600
+    context-token-budget: 2400
+    unified-context-token-budget: 3200
+    observation-token-budget: 800
+    max-observation-entries: 20
+    long-term-enabled: true
+    inject-max-entries: 5
+    stale-after-days: 30
+    temporal-normalization-zone: Asia/Shanghai
+    consolidation-enabled: false
+    consolidation-cron: "0 0 3 * * *"
+    consolidation-scan-limit: 500
+    consolidation-lock-ttl-seconds: 1800
+    duplicate-similarity-threshold: 0.92
+    semantic-duplicate-enabled: ${MEMORY_SEMANTIC_DUPLICATE_ENABLED:false}
+    semantic-duplicate-weight: ${MEMORY_SEMANTIC_DUPLICATE_WEIGHT:0.75}
+    extraction-worker-enabled: true
+    extraction-poll-interval-millis: 5000
+    extraction-max-attempts: 3
+    extraction-processing-timeout-seconds: ${MEMORY_EXTRACTION_PROCESSING_TIMEOUT_SECONDS:300}
+    extraction-reclaim-limit: ${MEMORY_EXTRACTION_RECLAIM_LIMIT:100}
+    extraction-status-ttl-seconds: ${MEMORY_EXTRACTION_STATUS_TTL_SECONDS:86400}
+    llm-extraction-enabled: ${MEMORY_LLM_EXTRACTION_ENABLED:false}
+    llm-extraction-endpoint: ${MEMORY_LLM_EXTRACTION_ENDPOINT:}
+    llm-extraction-api-key: ${MEMORY_LLM_EXTRACTION_API_KEY:}
+    llm-extraction-model: ${MEMORY_LLM_EXTRACTION_MODEL:}
+    llm-extraction-timeout-millis: ${MEMORY_LLM_EXTRACTION_TIMEOUT_MILLIS:5000}
+    extraction-quality-threshold: ${MEMORY_EXTRACTION_QUALITY_THRESHOLD:0.55}
+    tokenizer-enabled: ${MEMORY_TOKENIZER_ENABLED:false}
+    tokenizer-endpoint: ${MEMORY_TOKENIZER_ENDPOINT:}
+    tokenizer-api-key: ${MEMORY_TOKENIZER_API_KEY:}
+    tokenizer-model: ${MEMORY_TOKENIZER_MODEL:}
+    tokenizer-timeout-millis: ${MEMORY_TOKENIZER_TIMEOUT_MILLIS:2000}
+    tokenizer-mode: ${MEMORY_TOKENIZER_MODE:count_endpoint}
+    tokenizer-chat-overhead-tokens: ${MEMORY_TOKENIZER_CHAT_OVERHEAD_TOKENS:-1}
+  skill:
+    enabled: true
+    location: classpath*:skills/**/*.md
+    project-location: file:./skills/**/SKILL.md
+    max-active-skills: 3
+    activation-threshold: 3
+    prompt-max-chars: 4000
+    prompt-token-budget: 900
+    version-conflict-policy: ${SKILL_VERSION_CONFLICT_POLICY:PREFER_PROJECT}
+  audit:
+    repository: redis
+    retention-hours: 168

@@ -1,7 +1,7 @@
 services:
   kubeoncall:
     build:
-      context: .
+      context: ./backend
       dockerfile: Dockerfile
     environment:
       SPRING_PROFILES_ACTIVE: docker
@@ -9,6 +9,8 @@ services:
       KUBEONCALL_API_VIEWER_TOKEN: ${KUBEONCALL_API_VIEWER_TOKEN:-}
       KUBEONCALL_API_OPERATOR_TOKEN: ${KUBEONCALL_API_OPERATOR_TOKEN:-}
       KUBEONCALL_API_ADMIN_TOKEN: ${KUBEONCALL_API_ADMIN_TOKEN:-}
+      KUBEONCALL_CORS_ENABLED: ${KUBEONCALL_CORS_ENABLED:-true}
+      KUBEONCALL_CORS_ALLOWED_ORIGINS: ${KUBEONCALL_CORS_ALLOWED_ORIGINS:-http://127.0.0.1:8081,http://localhost:8081}
       APPROVAL_RESUME_LEASE_SECONDS: ${APPROVAL_RESUME_LEASE_SECONDS:-300}
       SPRING_AI_OPENAI_API_KEY: ${ALIYUN_API_KEY:-}
       SPRING_AI_OPENAI_BASE_URL: ${SPRING_AI_OPENAI_BASE_URL:-https://dashscope.aliyuncs.com/compatible-mode}
@@ -104,6 +106,17 @@ services:
         condition: service_started
       minio-init:
         condition: service_completed_successfully
+    restart: unless-stopped
+
+  console:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "${CONSOLE_BIND_ADDRESS:-127.0.0.1}:${CONSOLE_PORT:-8081}:80"
+    depends_on:
+      kubeoncall:
+        condition: service_started
     restart: unless-stopped
 
   redis:

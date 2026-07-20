@@ -75,7 +75,7 @@ docker compose config --quiet
 
 ### 2.3 启动
 
-启动应用、Redis、Elasticsearch、MinIO、Prometheus 和 Grafana：
+启动后端、Web Console、Redis、Elasticsearch、MinIO、Prometheus 和 Grafana：
 
 ```bash
 docker compose up -d --build
@@ -93,6 +93,7 @@ docker compose --profile alerting up -d --build
 docker compose ps
 docker compose logs --tail=200 kubeoncall
 curl --fail http://127.0.0.1:8080/actuator/health
+curl --fail http://127.0.0.1:8081/healthz
 ```
 
 读取 Viewer Token 并验证 API：
@@ -119,14 +120,18 @@ Compose 默认只监听 `127.0.0.1`。远程演练可使用 SSH 隧道：
 
 ```bash
 ssh -L 8080:127.0.0.1:8080 \
+    -L 8081:127.0.0.1:8081 \
     -L 3000:127.0.0.1:3000 \
     user@linux-host
 ```
+
+浏览器访问 `http://127.0.0.1:8081` 使用数据调试控制台。
 
 需要由反向代理直接连接时，可在 `.env` 中设置：
 
 ```dotenv
 KUBEONCALL_BIND_ADDRESS=0.0.0.0
+CONSOLE_BIND_ADDRESS=0.0.0.0
 OBSERVABILITY_BIND_ADDRESS=127.0.0.1
 INFRA_BIND_ADDRESS=127.0.0.1
 ```
@@ -155,6 +160,7 @@ docker compose down -v
 
 ```bash
 export OPENAI_API_KEY=YOUR_API_KEY
+cd backend
 ./mvnw spring-boot:run
 ```
 
