@@ -1,6 +1,7 @@
 package com.kubeoncall.storage;
 
 import java.io.ByteArrayInputStream;
+import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 
@@ -10,6 +11,7 @@ import org.springframework.stereotype.Service;
 
 import com.kubeoncall.common.config.KubeOnCallProperties;
 
+import io.minio.GetObjectArgs;
 import io.minio.MinioClient;
 import io.minio.PutObjectArgs;
 import io.minio.RemoveObjectArgs;
@@ -51,6 +53,54 @@ public class KnowledgeObjectStorageService {
         }
     }
 
+    /**
+     * Stores an uploaded JSONL source under a deterministic import prefix.
+     *
+     * <p>Unlike the legacy best-effort {@link #store} path, command callers need a durable source
+     * reference before creating the MySQL import task, so failures are propagated.
+     */
+    public StoredDocumentReference storeJsonl(String importPublicId, String originalFilename, byte[] content) {
+        String filename = safeFilename(originalFilename, "knowledge.jsonl");
+        return storeStrict(
+                "knowledge/imports/" + importPublicId + "/" + filename, content, "application/x-ndjson; charset=UTF-8");
+    }
+
+    /** Reads a source object for a retryable async import handler. */
+    public String readText(String bucket, String objectKey) {
+        requireReference(bucket, objectKey);
+        try (InputStream input = minioClient.getObject(
+                GetObjectArgs.builder().bucket(bucket).object(objectKey).build())) {
+            return new String(input.readAllBytes(), StandardCharsets.UTF_8);
+        } catch (Exception ex) {
+            throw new IllegalStateException("Failed to read knowledge object from MinIO", ex);
+        }
+    }
+
+    /** Stores a line-oriented error report; a retry overwrites the same object key. */
+    public StoredDocumentReference storeErrorReport(String importPublicId, String report) {
+        return storeStrict(
+                "knowledge/imports/" + importPublicId + "/errors.jsonl",
+                report == null ? new byte[0] : report.getBytes(StandardCharsets.UTF_8),
+                "application/x-ndjson; charset=UTF-8");
+    }
+
+    private StoredDocumentReference storeStrict(String objectKey, byte[] content, String contentType) {
+        String bucket = properties.getStorage().getMinio().getBucket();
+        if (bucket == null || bucket.isBlank()) {
+            throw new IllegalStateException("MinIO bucket is not configured");
+        }
+        byte[] bytes = content == null ? new byte[0] : content;
+        try {
+            minioClient.putObject(PutObjectArgs.builder().bucket(bucket).object(objectKey).stream(
+                            new ByteArrayInputStream(bytes), bytes.length, -1)
+                    .contentType(contentType)
+                    .build());
+            return new StoredDocumentReference(objectKey, bucket, true, "Stored knowledge object");
+        } catch (Exception ex) {
+            throw new IllegalStateException("Failed to store knowledge object in MinIO", ex);
+        }
+    }
+
     public void remove(StoredDocumentReference reference) {
         if (reference == null
                 || !reference.stored()
@@ -71,6 +121,21 @@ public class KnowledgeObjectStorageService {
                     reference.bucket(),
                     reference.objectKey(),
                     ex.getClass().getSimpleName());
+        }
+    }
+
+    private static String safeFilename(String originalFilename, String fallback) {
+        String candidate =
+                originalFilename == null || originalFilename.isBlank() ? fallback : originalFilename.replace('\\', '/');
+        int slash = candidate.lastIndexOf('/');
+        String basename = slash >= 0 ? candidate.substring(slash + 1) : candidate;
+        String normalized = basename.replaceAll("[^a-zA-Z0-9._-]+", "-");
+        return normalized.isBlank() ? fallback : normalized;
+    }
+
+    private static void requireReference(String bucket, String objectKey) {
+        if (bucket == null || bucket.isBlank() || objectKey == null || objectKey.isBlank()) {
+            throw new IllegalArgumentException("Knowledge object bucket and key are required");
         }
     }
 }

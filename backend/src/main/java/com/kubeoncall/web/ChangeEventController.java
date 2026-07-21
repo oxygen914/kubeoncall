@@ -17,6 +17,7 @@ import com.kubeoncall.common.config.KubeOnCallProperties;
 import com.kubeoncall.web.dto.AlarmRequest;
 
 /** Records deployment changes and exposes deterministic correlation for troubleshooting and replay. */
+@LegacyApiController
 @RestController
 @RequestMapping("/api/change-events")
 public class ChangeEventController {

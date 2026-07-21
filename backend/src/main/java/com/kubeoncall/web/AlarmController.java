@@ -34,6 +34,7 @@ import com.kubeoncall.web.dto.AlarmSilenceApprovalRequest;
 import com.kubeoncall.web.dto.AlarmSilenceApprovalResponse;
 import com.kubeoncall.workflow.AlertWorkflowService;
 
+@LegacyApiController
 @RestController
 @RequestMapping("/api/alarms")
 public class AlarmController {

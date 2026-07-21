@@ -122,6 +122,20 @@ public class ApprovalService {
                 .orElseThrow(() -> new IllegalArgumentException("Graph state not found: " + executionId));
     }
 
+    /**
+     * Persists a checkpoint after asynchronous resume work but before the durable MySQL task is
+     * finalized. Keeping the terminal checkpoint closes the crash window where Redis state was
+     * deleted before the worker could commit its execution/task result.
+     */
+    public void saveState(GraphState state) {
+        if (state == null
+                || state.getExecutionId() == null
+                || state.getExecutionId().isBlank()) {
+            throw new IllegalArgumentException("Execution state with an id is required");
+        }
+        graphStateStore.save(state, ttl());
+    }
+
     public void clearState(String executionId) {
         graphStateStore.delete(executionId);
     }

@@ -8,6 +8,24 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    services:
+      # MySQL service container so the Testcontainers ITs (and any JDBC-path tests) can run without
+      # pulling an image at runtime. The backend ITs create their own databases via Testcontainers,
+      # but having MySQL available lets the default gate also exercise the integration-test profile.
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: ci-root
+          MYSQL_DATABASE: kubeoncall
+          MYSQL_USER: kubeoncall
+          MYSQL_PASSWORD: ci-password
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h localhost -u root -pci-root"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=30
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
@@ -19,11 +37,56 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
-      - run: ./mvnw --batch-mode --no-transfer-progress verify
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      # Backend: default unit tests + the integration-test profile (Testcontainers ITs). The profile
+      # runs Failsafe *IT classes; Testcontainers reuses the Docker daemon available on the runner.
+      - name: Backend verify (unit + integration-test profile)
+        run: ./mvnw --batch-mode --no-transfer-progress verify -Pintegration-test
         working-directory: backend
-      - run: npm --prefix frontend test
-      - run: npm --prefix frontend run build
-      - run: docker compose config
+      # Frontend: install, typecheck, lint, unit tests, production build — the full quality gate the
+      # plan requires, in dependency order so a failure stops the job early.
+      - name: Frontend install
+        run: npm ci
+        working-directory: frontend
+      - name: Frontend typecheck
+        run: npm run typecheck
+        working-directory: frontend
+      - name: Frontend lint
+        run: npm run lint
+        working-directory: frontend
+      - name: Frontend unit tests
+        run: npm run test
+        working-directory: frontend
+      - name: Frontend production build
+        run: npm run build
+        working-directory: frontend
+      - name: Compose config validation
+        run: docker compose config --quiet
+
+  e2e:
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install Playwright browsers
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+        working-directory: frontend
+      - name: Run Playwright smoke
+        run: npm run e2e
+        working-directory: frontend
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: playwright-report
+          path: frontend/playwright-report
 
   package:
     runs-on: ubuntu-latest
@@ -31,13 +94,84 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: docker/setup-buildx-action@v3
-      - uses: docker/build-push-action@v6
+      - name: Build backend image
+        uses: docker/build-push-action@v6
         with:
           context: ./backend
           push: false
+          load: true
           tags: kubeoncall-backend:ci
-      - uses: docker/build-push-action@v6
+      - name: Build console image
+        uses: docker/build-push-action@v6
         with:
           context: ./frontend
           push: false
+          load: true
           tags: kubeoncall-console:ci
+      # Record image digests. `load: true` makes the image available locally so `docker inspect`
+      # resolves the digest; without it `RepoDigests` is empty and the step would fail (P1-3 fix).
+      - name: Record image digests
+        run: |
+          {
+            echo "backend image id: $(docker inspect --format='{{.Id}}' kubeoncall-backend:ci)"
+            echo "console image id: $(docker inspect --format='{{.Id}}' kubeoncall-console:ci)"
+          } >> digests.txt
+          cat digests.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: image-digests
+          path: digests.txt
+
+  scan:
+    runs-on: ubuntu-latest
+    needs: package
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: Rebuild backend for scanning
+        uses: docker/build-push-action@v6
+        with:
+          context: ./backend
+          push: false
+          load: true
+          tags: kubeoncall-backend:ci
+      - name: Rebuild console for scanning
+        uses: docker/build-push-action@v6
+        with:
+          context: ./frontend
+          push: false
+          load: true
+          tags: kubeoncall-console:ci
+      # Trivy scans both images for known CVEs. HIGH/CRITICAL fail the gate (WBS-12 §4 security).
+      - name: Trivy scan backend
+        uses: aquasecurity/trivy-action@0.24.0
+        with:
+          image-ref: kubeoncall-backend:ci
+          severity: HIGH,CRITICAL
+          exit-code: "1"
+          ignore-unfixed: true
+      - name: Trivy scan console
+        uses: aquasecurity/trivy-action@0.24.0
+        with:
+          image-ref: kubeoncall-console:ci
+          severity: HIGH,CRITICAL
+          exit-code: "1"
+          ignore-unfixed: true
+      # SBOM for the backend image so releases are traceable to their dependency set.
+      - name: Generate backend SBOM
+        uses: aquasecurity/trivy-action@0.24.0
+        with:
+          image-ref: kubeoncall-backend:ci
+          format: json
+          output: backend-sbom.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: backend-sbom
+          path: backend-sbom.json
+
+  release-gate:
+    runs-on: ubuntu-latest
+    needs: [test, e2e, package, scan]
+    steps:
+      - run: |
+          echo "All quality gates passed: unit+IT, e2e, package+digest, security scan+SBOM"

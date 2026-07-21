@@ -1,8 +1,10 @@
 FROM node:22-alpine AS build
 WORKDIR /workspace
-COPY package.json ./
-COPY scripts ./scripts
+COPY package.json package-lock.json* ./
+RUN npm ci
+COPY tsconfig.json tsconfig.node.json vite.config.ts index.html ./
 COPY src ./src
+COPY public ./public
 RUN npm run build
 
 FROM nginx:1.27-alpine

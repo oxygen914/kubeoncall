@@ -6,6 +6,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.kubeoncall.web.dto.ServiceStatusResponse;
 
+@LegacyApiController
 @RestController
 @RequestMapping("/api/status")
 public class StatusController {

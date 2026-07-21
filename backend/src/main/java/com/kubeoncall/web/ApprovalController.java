@@ -15,6 +15,7 @@ import com.kubeoncall.web.dto.ApprovalDecisionRequest;
 import com.kubeoncall.web.dto.ApprovalDetailResponse;
 import com.kubeoncall.web.dto.AskResponse;
 
+@LegacyApiController
 @RestController
 @RequestMapping("/api/approvals")
 public class ApprovalController {

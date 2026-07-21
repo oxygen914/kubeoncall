@@ -1,0 +1,15 @@
+# Activate with SPRING_PROFILES_ACTIVE=mysql (or active: local,mysql).
+# Enables the MySQL datasource, Flyway migration and the identity/RBAC stack. Without this profile
+# the application runs without a database and the /api/v1 auth surface reports unavailable, falling
+# back to the legacy static-token compatibility path.
+
+spring:
+  autoconfigure:
+    exclude: []
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    baseline-on-migrate: true
+
+kubeoncall:
+  mysql-enabled: true

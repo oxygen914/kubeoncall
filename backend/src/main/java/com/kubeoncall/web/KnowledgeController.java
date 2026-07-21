@@ -26,6 +26,7 @@ import com.kubeoncall.web.dto.KnowledgeIngestRequest;
 import com.kubeoncall.web.dto.KnowledgeQueryRequest;
 import com.kubeoncall.web.dto.RunbookImportRequest;
 
+@LegacyApiController
 @RestController
 @RequestMapping("/api/knowledge")
 public class KnowledgeController {

@@ -7,6 +7,7 @@ import org.springframework.web.bind.annotation.RestController;
 import com.kubeoncall.domain.audit.ExecutionStats;
 import com.kubeoncall.service.ExecutionAuditService;
 
+@LegacyApiController
 @RestController
 @RequestMapping("/api/stats")
 public class StatsController {

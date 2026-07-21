@@ -12,6 +12,7 @@ import com.kubeoncall.tool.VerifierCapability;
 import com.kubeoncall.web.dto.ToolCatalogResponse;
 import com.kubeoncall.web.dto.ToolDefinitionResponse;
 
+@LegacyApiController
 @RestController
 @RequestMapping("/api/tools")
 public class ToolController {

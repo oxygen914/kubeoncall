@@ -13,6 +13,7 @@ import com.kubeoncall.alarm.suppression.AlarmSuppressionRuleRepository;
 import com.kubeoncall.service.ExecutionAuditService;
 import com.kubeoncall.web.dto.AlarmSuppressionRuleListResponse;
 
+@LegacyApiController
 @RestController
 @RequestMapping("/api/alarm-suppression-rules")
 public class AlarmSuppressionRuleController {

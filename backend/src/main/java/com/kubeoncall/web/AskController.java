@@ -11,6 +11,7 @@ import com.kubeoncall.service.AskService;
 import com.kubeoncall.web.dto.AskRequest;
 import com.kubeoncall.web.dto.AskResponse;
 
+@LegacyApiController
 @RestController
 @RequestMapping("/api/ask")
 public class AskController {

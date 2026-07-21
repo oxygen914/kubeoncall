@@ -10,6 +10,7 @@ import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -118,6 +119,86 @@ class AskServiceTest {
         verify(verifierAgent).run(any());
         verify(executorAgent).executePrepared(any());
         verify(executionAuditService).recordGraphExecution(any(), any(), any());
+    }
+
+    @Test
+    void shouldPreserveCallerAssignedDurableExecutionId() {
+        PlannerAgent plannerAgent = mock(PlannerAgent.class);
+        VerifierAgent verifierAgent = mock(VerifierAgent.class);
+        ExecutorAgent executorAgent = mock(ExecutorAgent.class);
+        ApprovalService approvalService = mock(ApprovalService.class);
+        ResponseComposer responseComposer = mock(ResponseComposer.class);
+        ExecutionAuditService executionAuditService = mock(ExecutionAuditService.class);
+        AskService service = askService(
+                plannerAgent, verifierAgent, executorAgent, approvalService, responseComposer, executionAuditService);
+
+        when(responseComposer.compose(any())).thenReturn("done");
+        doAnswer(invocation -> {
+                    GraphState state = invocation.getArgument(0);
+                    assertEquals("exe_durable", state.getExecutionId());
+                    Task task = restartTask();
+                    state.setTaskPlan(
+                            new TaskPlan("exe_durable", "restart payment-service", List.of(task), Instant.now(), true));
+                    state.setStatus(GraphStatus.SUCCESS);
+                    return null;
+                })
+                .when(plannerAgent)
+                .run(any(GraphState.class));
+        doAnswer(invocation -> {
+                    GraphState state = invocation.getArgument(0);
+                    state.setStatus(GraphStatus.SUCCESS);
+                    return null;
+                })
+                .when(executorAgent)
+                .plan(any(GraphState.class));
+        doAnswer(invocation -> {
+                    GraphState state = invocation.getArgument(0);
+                    state.setStatus(GraphStatus.SUCCESS);
+                    return null;
+                })
+                .when(verifierAgent)
+                .run(any(GraphState.class));
+        doAnswer(invocation -> {
+                    GraphState state = invocation.getArgument(0);
+                    state.setStatus(GraphStatus.SUCCESS);
+                    return null;
+                })
+                .when(executorAgent)
+                .executePrepared(any(GraphState.class));
+
+        AskService.AskExecutionResult result = service.handle("请重启 payment-service", "session-1", "exe_durable");
+
+        assertEquals("exe_durable", result.executionId());
+        assertEquals("SUCCESS", result.status());
+    }
+
+    @Test
+    void shouldRetainDurableAskCheckpointForWorkerCommit() {
+        PlannerAgent plannerAgent = mock(PlannerAgent.class);
+        VerifierAgent verifierAgent = mock(VerifierAgent.class);
+        ExecutorAgent executorAgent = mock(ExecutorAgent.class);
+        ApprovalService approvalService = mock(ApprovalService.class);
+        ResponseComposer responseComposer = mock(ResponseComposer.class);
+        ExecutionAuditService executionAuditService = mock(ExecutionAuditService.class);
+        AskService service = askService(
+                plannerAgent, verifierAgent, executorAgent, approvalService, responseComposer, executionAuditService);
+        when(responseComposer.compose(any())).thenReturn("planning failed");
+        doAnswer(invocation -> {
+                    GraphState state = invocation.getArgument(0);
+                    state.setStatus(GraphStatus.FAILED);
+                    return null;
+                })
+                .when(plannerAgent)
+                .run(any(GraphState.class));
+
+        AskService.AskExecutionResult result =
+                service.handleDurably("inspect payment-service", "session-1", "exe_durable_failed");
+
+        assertEquals("FAILED", result.status());
+        ArgumentCaptor<GraphState> checkpoint = ArgumentCaptor.forClass(GraphState.class);
+        verify(approvalService).saveState(checkpoint.capture());
+        assertEquals("exe_durable_failed", checkpoint.getValue().getExecutionId());
+        assertEquals("planning failed", checkpoint.getValue().getContext().get("durableCheckpointMessage"));
     }
 
     @Test
@@ -309,6 +390,40 @@ class AskServiceTest {
         verify(approvalService).clearState("exec-1");
         verify(executionAuditService).recordGraphExecution(any(), any(), any());
         verify(approvalService).releaseResumeLease("exec-1", "lease-1");
+    }
+
+    @Test
+    void shouldRetainAndReplayTerminalResumeCheckpointWithoutExecutingToolsTwice() {
+        PlannerAgent plannerAgent = mock(PlannerAgent.class);
+        VerifierAgent verifierAgent = mock(VerifierAgent.class);
+        ExecutorAgent executorAgent = mock(ExecutorAgent.class);
+        ApprovalService approvalService = mock(ApprovalService.class);
+        ResponseComposer responseComposer = mock(ResponseComposer.class);
+        ExecutionAuditService executionAuditService = mock(ExecutionAuditService.class);
+        AskService service = askService(
+                plannerAgent, verifierAgent, executorAgent, approvalService, responseComposer, executionAuditService);
+
+        GraphState state = approvedRunnableState("exec-durable-resume");
+        when(approvalService.acquireResumeLease("exec-durable-resume")).thenReturn("lease-durable");
+        when(approvalService.loadState("exec-durable-resume")).thenReturn(state);
+        when(responseComposer.compose(state)).thenReturn("resumed");
+        doAnswer(invocation -> {
+                    GraphState graphState = invocation.getArgument(0);
+                    graphState.setStatus(GraphStatus.SUCCESS);
+                    return null;
+                })
+                .when(executorAgent)
+                .executePrepared(state);
+
+        AskService.AskExecutionResult first = service.resumeAfterApprovalDurably("exec-durable-resume");
+        AskService.AskExecutionResult replay = service.resumeAfterApprovalDurably("exec-durable-resume");
+
+        assertEquals("SUCCESS", first.status());
+        assertEquals(first.message(), replay.message());
+        verify(executorAgent, times(1)).executePrepared(state);
+        verify(executionAuditService, times(1)).recordGraphExecution(any(), any(), any());
+        verify(approvalService, times(1)).saveState(state);
+        verify(approvalService, never()).clearState("exec-durable-resume");
     }
 
     @Test

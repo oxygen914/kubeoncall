@@ -27,6 +27,7 @@ import com.kubeoncall.web.dto.AlarmPolicyReplayResponse;
 import com.kubeoncall.web.dto.AlarmPolicyRollbackRequest;
 import com.kubeoncall.web.dto.AlarmRequest;
 
+@LegacyApiController
 @RestController
 @RequestMapping("/api/alarm-policies")
 public class AlarmPolicyController {

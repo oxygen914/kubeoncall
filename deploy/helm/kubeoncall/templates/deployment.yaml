@@ -23,7 +23,7 @@ spec:
               containerPort: 8080
           env:
             - name: SPRING_PROFILES_ACTIVE
-              value: docker
+              value: {{ if .Values.mysql.enabled }}docker,{{ .Values.mysql.profile }}{{ else }}docker{{ end }}
             - name: KUBEONCALL_API_AUTH_ENABLED
               value: {{ .Values.config.apiAuthEnabled | quote }}
             - name: KUBEONCALL_API_VIEWER_TOKEN
@@ -248,6 +248,45 @@ spec:
                   name: {{ .Values.secrets.existingSecret }}
                   key: {{ .Values.secrets.changeEventArgocdWebhookTokenKey }}
                   optional: true
+            {{- if .Values.mysql.enabled }}
+            - name: SPRING_DATASOURCE_URL
+              value: {{ if .Values.mysql.url }}{{ .Values.mysql.url | quote }}{{ else }}{{ printf "jdbc:mysql://%s:3306/%s?useUnicode=true&characterEncoding=utf8&serverTimezone=UTC&allowPublicKeyRetrieval=true&useSSL=false" .Values.mysql.inClusterHost .Values.mysql.database | quote }}{{ end }}
+            - name: SPRING_DATASOURCE_USERNAME
+              value: {{ .Values.mysql.username | quote }}
+            - name: SPRING_DATASOURCE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secrets.existingSecret }}
+                  key: {{ .Values.secrets.mysqlPasswordKey }}
+            - name: KUBEONCALL_AUTH_SESSION_COOKIE_SECURE
+              value: {{ .Values.mysql.sessionCookieSecure | quote }}
+            - name: KUBEONCALL_AUTH_SESSION_IDLE_TIMEOUT_SECONDS
+              value: {{ .Values.mysql.sessionIdleTimeoutSeconds | quote }}
+            - name: KUBEONCALL_AUTH_SESSION_MAX_TIMEOUT_SECONDS
+              value: {{ .Values.mysql.sessionMaxTimeoutSeconds | quote }}
+            - name: KUBEONCALL_AUTH_LOGIN_MAX_ATTEMPTS
+              value: {{ .Values.mysql.loginMaxAttempts | quote }}
+            - name: KUBEONCALL_AUTH_LOGIN_LOCK_DURATION_SECONDS
+              value: {{ .Values.mysql.loginLockDurationSeconds | quote }}
+            - name: KUBEONCALL_AUTH_LEGACY_TOKEN_COMPAT
+              value: {{ .Values.mysql.legacyTokenCompat | quote }}
+            - name: KUBEONCALL_BOOTSTRAP_ADMIN_ENABLED
+              value: {{ .Values.mysql.bootstrapAdminEnabled | quote }}
+            - name: KUBEONCALL_BOOTSTRAP_ADMIN_USERNAME
+              value: {{ .Values.mysql.bootstrapAdminUsername | quote }}
+            - name: KUBEONCALL_BOOTSTRAP_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secrets.existingSecret }}
+                  key: {{ .Values.secrets.bootstrapAdminPasswordKey }}
+                  optional: true
+            {{- end }}
+            - name: KUBEONCALL_DATA_MIGRATION_ALARM_READ_SOURCE
+              value: {{ .Values.dataMigration.alarmReadSource | quote }}
+            - name: KUBEONCALL_DATA_MIGRATION_BACKFILL_DRY_RUN
+              value: {{ .Values.dataMigration.backfillDryRun | quote }}
+            - name: KUBEONCALL_LEGACY_API_ENABLED
+              value: {{ .Values.legacyApi.enabled | quote }}
           readinessProbe:
             httpGet: {path: /actuator/health/readiness, port: http}
             initialDelaySeconds: 20

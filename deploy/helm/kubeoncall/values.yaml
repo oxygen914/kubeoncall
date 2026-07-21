@@ -83,6 +83,40 @@ config:
   deviceToolEndpoint: http://device-adapter:8080/api/tools/device
   databaseToolEndpoint: http://database-adapter:8080/api/tools/database
 
+# WBS-12: MySQL business fact store and identity/RBAC. Disabled by default so the chart still runs
+# without a database; enable in production to activate Flyway, /api/v1 auth and the alarm read model.
+mysql:
+  enabled: false
+  # Spring profiles to append when mysql is enabled (existing SPRING_PROFILES_ACTIVE is merged).
+  profile: mysql
+  # External managed MySQL is recommended in production; set url/username here and the password via
+  # the mysqlPassword secret key. Leave url empty to require a platform-provided MySQL service.
+  url: ""
+  username: kubeoncall
+  # When url is empty the backend connects to an in-cluster `mysql` service on the default port.
+  inClusterHost: mysql
+  database: kubeoncall
+  # Session/CSRF/legacy-token and bootstrap-admin controls mirror application.yml defaults.
+  sessionCookieSecure: true
+  sessionIdleTimeoutSeconds: 1800
+  sessionMaxTimeoutSeconds: 28800
+  loginMaxAttempts: 5
+  loginLockDurationSeconds: 900
+  legacyTokenCompat: true
+  bootstrapAdminEnabled: false
+  bootstrapAdminUsername: ""
+
+# WBS-11 cutover controls surfaced into the chart so operators drive the migration without redeploy.
+dataMigration:
+  alarmReadSource: MYSQL
+  backfillBatchSize: 100
+  backfillScanLimit: 10000
+  backfillDryRun: true
+
+# WBS-11 legacy /api/* retirement. Set to false once the new Console is the only entry point.
+legacyApi:
+  enabled: true
+
 secrets:
   existingSecret: kubeoncall-secrets
   apiViewerTokenKey: api-viewer-token
@@ -99,6 +133,36 @@ secrets:
   changeEventGitlabWebhookTokenKey: change-event-gitlab-webhook-token
   changeEventJenkinsWebhookTokenKey: change-event-jenkins-webhook-token
   changeEventArgocdWebhookTokenKey: change-event-argocd-webhook-token
+  # WBS-12 MySQL identity/datasource secrets.
+  mysqlPasswordKey: mysql-password
+  mysqlRootPasswordKey: mysql-root-password
+  bootstrapAdminPasswordKey: bootstrap-admin-password
+
+# WBS-12 Console (frontend) deployment. The chart deploys backend and console as independent
+# workloads so either can roll back without the other. Ingress terminates TLS and proxies /api and
+# /api/v1/events/stream to the backend (SSE with buffering disabled).
+console:
+  enabled: true
+  replicaCount: 2
+  image:
+    repository: kubeoncall-console
+    tag: latest
+    pullPolicy: IfNotPresent
+  resources:
+    requests: {cpu: 100m, memory: 128Mi}
+    limits: {cpu: "1", memory: 512Mi}
+  service:
+    type: ClusterIP
+    port: 80
+
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  host: kubeoncall.example.local
+  tls:
+    enabled: false
+    secretName: kubeoncall-tls
 
 serviceMonitor:
   enabled: false

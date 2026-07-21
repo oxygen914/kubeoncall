@@ -4,7 +4,7 @@ services:
       context: ./backend
       dockerfile: Dockerfile
     environment:
-      SPRING_PROFILES_ACTIVE: docker
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-docker,mysql}
       KUBEONCALL_API_AUTH_ENABLED: ${KUBEONCALL_API_AUTH_ENABLED:-false}
       KUBEONCALL_API_VIEWER_TOKEN: ${KUBEONCALL_API_VIEWER_TOKEN:-}
       KUBEONCALL_API_OPERATOR_TOKEN: ${KUBEONCALL_API_OPERATOR_TOKEN:-}
@@ -93,11 +93,24 @@ services:
       ALERT_NOTIFICATION_WEBHOOK_TIMEOUT_MILLIS: ${ALERT_NOTIFICATION_WEBHOOK_TIMEOUT_MILLIS:-3000}
       INCIDENT_TOOL_ENDPOINT: ${INCIDENT_TOOL_ENDPOINT:-http://host.docker.internal:18087/api/tools/incident}
       ALERTMANAGER_WEBHOOK_TOKEN: ${ALERTMANAGER_WEBHOOK_TOKEN:-}
+      SPRING_DATASOURCE_URL: ${SPRING_DATASOURCE_URL:-jdbc:mysql://mysql:3306/kubeoncall?useUnicode=true&characterEncoding=utf8&serverTimezone=UTC&allowPublicKeyRetrieval=true&useSSL=false}
+      SPRING_DATASOURCE_USERNAME: ${SPRING_DATASOURCE_USERNAME:-kubeoncall}
+      SPRING_DATASOURCE_PASSWORD: ${SPRING_DATASOURCE_PASSWORD:-CHANGE_ME}
+      KUBEONCALL_AUTH_SESSION_COOKIE_SECURE: ${KUBEONCALL_AUTH_SESSION_COOKIE_SECURE:-false}
+      KUBEONCALL_AUTH_SESSION_IDLE_TIMEOUT_SECONDS: ${KUBEONCALL_AUTH_SESSION_IDLE_TIMEOUT_SECONDS:-1800}
+      KUBEONCALL_AUTH_SESSION_MAX_TIMEOUT_SECONDS: ${KUBEONCALL_AUTH_SESSION_MAX_TIMEOUT_SECONDS:-28800}
+      KUBEONCALL_AUTH_LOGIN_MAX_ATTEMPTS: ${KUBEONCALL_AUTH_LOGIN_MAX_ATTEMPTS:-5}
+      KUBEONCALL_AUTH_LOGIN_LOCK_DURATION_SECONDS: ${KUBEONCALL_AUTH_LOGIN_LOCK_DURATION_SECONDS:-900}
+      KUBEONCALL_BOOTSTRAP_ADMIN_ENABLED: ${KUBEONCALL_BOOTSTRAP_ADMIN_ENABLED:-false}
+      KUBEONCALL_BOOTSTRAP_ADMIN_USERNAME: ${KUBEONCALL_BOOTSTRAP_ADMIN_USERNAME:-}
+      KUBEONCALL_BOOTSTRAP_ADMIN_PASSWORD: ${KUBEONCALL_BOOTSTRAP_ADMIN_PASSWORD:-}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     ports:
       - "${KUBEONCALL_BIND_ADDRESS:-127.0.0.1}:8080:8080"
     depends_on:
+      mysql:
+        condition: service_healthy
       redis:
         condition: service_healthy
       elasticsearch:
@@ -117,6 +130,24 @@ services:
     depends_on:
       kubeoncall:
         condition: service_started
+    restart: unless-stopped
+
+  mysql:
+    image: mysql:8.0
+    environment:
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-kubeoncall}
+      MYSQL_USER: ${MYSQL_USER:-kubeoncall}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-CHANGE_ME}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-CHANGE_ME}
+    ports:
+      - "${INFRA_BIND_ADDRESS:-127.0.0.1}:3306:3306"
+    volumes:
+      - mysql-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p$${MYSQL_ROOT_PASSWORD}"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
     restart: unless-stopped
 
   redis:
@@ -195,6 +226,34 @@ services:
         condition: service_started
     restart: unless-stopped
 
+  loki:
+    image: grafana/loki:3.1.1
+    command: ["-config.file=/etc/loki/loki.yml"]
+    volumes:
+      - ./deploy/loki/loki.yml:/etc/loki/loki.yml:ro
+      - loki-data:/loki
+    ports:
+      - "${OBSERVABILITY_BIND_ADDRESS:-127.0.0.1}:3100:3100"
+    restart: unless-stopped
+
+  alloy:
+    image: grafana/alloy:v1.3.1
+    command:
+      - run
+      - --server.http.listen-addr=0.0.0.0:12345
+      - --storage.path=/var/lib/alloy/data
+      - /etc/alloy/config.alloy
+    volumes:
+      - ./deploy/alloy/config.alloy:/etc/alloy/config.alloy:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - alloy-data:/var/lib/alloy/data
+    ports:
+      - "${OBSERVABILITY_BIND_ADDRESS:-127.0.0.1}:12345:12345"
+    depends_on:
+      loki:
+        condition: service_started
+    restart: unless-stopped
+
   alertmanager:
     profiles: [alerting]
     image: prom/alertmanager:v0.27.0
@@ -231,12 +290,17 @@ services:
     depends_on:
       prometheus:
         condition: service_started
+      loki:
+        condition: service_started
     restart: unless-stopped
 
 volumes:
   redis-data:
   elasticsearch-data:
   minio-data:
+  mysql-data:
   prometheus-data:
   alertmanager-data:
   grafana-data:
+  loki-data:
+  alloy-data:

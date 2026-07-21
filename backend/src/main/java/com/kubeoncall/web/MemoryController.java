@@ -34,6 +34,7 @@ import com.kubeoncall.web.dto.MemoryRestoreResponse;
 import com.kubeoncall.web.dto.MemorySearchRequest;
 import com.kubeoncall.web.dto.MemorySearchResponse;
 
+@LegacyApiController
 @RestController
 @RequestMapping("/api/memory")
 public class MemoryController {

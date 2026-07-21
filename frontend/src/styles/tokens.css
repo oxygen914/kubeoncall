@@ -1,0 +1,93 @@
+/**
+ * Design tokens. CSS custom properties so a dark theme can be applied by
+ * overriding these variables on a `[data-theme="dark"]` (or prefers-color-scheme)
+ * selector without touching component CSS.
+ */
+:root {
+  /* Neutral scale (slate-ish) */
+  --koc-neutral-0: #ffffff;
+  --koc-neutral-50: #f8fafc;
+  --koc-neutral-100: #f1f5f9;
+  --koc-neutral-200: #e2e8f0;
+  --koc-neutral-300: #cbd5e1;
+  --koc-neutral-400: #94a3b8;
+  --koc-neutral-500: #64748b;
+  --koc-neutral-600: #475569;
+  --koc-neutral-700: #334155;
+  --koc-neutral-800: #1e293b;
+  --koc-neutral-900: #0f172a;
+  --koc-neutral-950: #020617;
+
+  /* Primary (brand blue) */
+  --koc-primary-50: #eff6ff;
+  --koc-primary-100: #dbeafe;
+  --koc-primary-300: #93c5fd;
+  --koc-primary-500: #3b82f6;
+  --koc-primary-600: #2563eb;
+  --koc-primary-700: #1d4ed8;
+
+  /* Semantic */
+  --koc-success: #16a34a;
+  --koc-success-bg: #dcfce7;
+  --koc-warning: #d97706;
+  --koc-warning-bg: #fef3c7;
+  --koc-danger: #dc2626;
+  --koc-danger-bg: #fee2e2;
+  --koc-info: #0ea5e9;
+  --koc-info-bg: #e0f2fe;
+
+  /* Surfaces */
+  --koc-bg: var(--koc-neutral-50);
+  --koc-surface: var(--koc-neutral-0);
+  --koc-surface-muted: var(--koc-neutral-100);
+  --koc-border: var(--koc-neutral-200);
+  --koc-text: var(--koc-neutral-900);
+  --koc-text-muted: var(--koc-neutral-500);
+  --koc-text-inverse: var(--koc-neutral-0);
+
+  /* Spacing scale (4px base) */
+  --koc-space-1: 4px;
+  --koc-space-2: 8px;
+  --koc-space-3: 12px;
+  --koc-space-4: 16px;
+  --koc-space-5: 20px;
+  --koc-space-6: 24px;
+  --koc-space-8: 32px;
+  --koc-space-10: 40px;
+  --koc-space-12: 48px;
+
+  /* Radius */
+  --koc-radius-sm: 4px;
+  --koc-radius-md: 6px;
+  --koc-radius-lg: 10px;
+  --koc-radius-pill: 9999px;
+
+  /* Font sizes */
+  --koc-font-xs: 12px;
+  --koc-font-sm: 13px;
+  --koc-font-md: 14px;
+  --koc-font-lg: 16px;
+  --koc-font-xl: 20px;
+  --koc-font-2xl: 28px;
+
+  /* Shadows */
+  --koc-shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.06);
+  --koc-shadow-md: 0 4px 12px rgba(15, 23, 42, 0.08);
+  --koc-shadow-lg: 0 12px 32px rgba(15, 23, 42, 0.12);
+
+  /* Layout */
+  --koc-sidebar-width: 220px;
+  --koc-topbar-height: 52px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --koc-bg: var(--koc-neutral-950);
+    --koc-surface: var(--koc-neutral-900);
+    --koc-surface-muted: var(--koc-neutral-800);
+    --koc-border: var(--koc-neutral-700);
+    --koc-text: var(--koc-neutral-100);
+    --koc-text-muted: var(--koc-neutral-400);
+    --koc-text-inverse: var(--koc-neutral-900);
+  }
+}

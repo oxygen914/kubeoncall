@@ -25,6 +25,9 @@ import com.kubeoncall.domain.task.Task;
 @Service
 public class AskService {
 
+    private static final String RESUME_FINALIZED_KEY = "approvalResumeFinalized";
+    private static final String CHECKPOINT_MESSAGE_KEY = "durableCheckpointMessage";
+
     private final PlannerAgent plannerAgent;
     private final VerifierAgent verifierAgent;
     private final ExecutorAgent executorAgent;
@@ -55,21 +58,77 @@ public class AskService {
     }
 
     public AskExecutionResult handle(String question, String requestedSessionId) {
+        return handle(question, requestedSessionId, null);
+    }
+
+    /**
+     * Executes an ask workflow with a caller-assigned durable execution id.
+     *
+     * <p>The asynchronous worker creates the MySQL execution fact before doing external work and
+     * passes its public id here. The planner preserves an existing id, so Redis GraphState,
+     * approvals, audit records and the durable MySQL summary all refer to the same execution.
+     */
+    public AskExecutionResult handle(String question, String requestedSessionId, String executionId) {
+        return handle(question, requestedSessionId, executionId, false);
+    }
+
+    /**
+     * Executes an ask workflow and retains its final/paused GraphState until the MySQL task result
+     * is committed. This makes a worker retry after a process crash a checkpoint replay instead of
+     * a second planner/tool execution.
+     */
+    public AskExecutionResult handleDurably(String question, String requestedSessionId, String executionId) {
+        if (executionId == null || executionId.isBlank()) {
+            throw new IllegalArgumentException("A durable execution id is required");
+        }
+        return handle(question, requestedSessionId, executionId, true);
+    }
+
+    private AskExecutionResult handle(
+            String question, String requestedSessionId, String executionId, boolean retainCheckpoint) {
         Instant startedAt = Instant.now();
         GraphState state = new GraphState();
+        if (executionId != null && !executionId.isBlank()) {
+            state.setExecutionId(executionId);
+        }
         state.setUserRequest(question);
         String sessionId = contextLifecycle.prepare(state, question, requestedSessionId);
 
         plannerAgent.run(state);
         if (state.getStatus() != GraphStatus.SUCCESS) {
-            return finishAsk(state, startedAt, sessionId);
+            return finishAndCheckpoint(state, startedAt, sessionId, retainCheckpoint);
         }
 
         runPlannedTasks(state, 0);
-        return finishAsk(state, startedAt, sessionId);
+        return finishAndCheckpoint(state, startedAt, sessionId, retainCheckpoint);
     }
 
     public AskExecutionResult resumeAfterApproval(String executionId) {
+        return resumeAfterApproval(executionId, true);
+    }
+
+    /**
+     * Resumes an approved/rejected checkpoint but retains its terminal Redis snapshot until the
+     * asynchronous task commits its MySQL result. A retry can therefore replay the terminal result
+     * without executing tools again.
+     */
+    public AskExecutionResult resumeAfterApprovalDurably(String executionId) {
+        return resumeAfterApproval(executionId, false);
+    }
+
+    public AskExecutionResult inspectCheckpoint(String executionId) {
+        GraphState state = approvalService.loadState(executionId);
+        String message = String.valueOf(
+                state.getContext().getOrDefault(CHECKPOINT_MESSAGE_KEY, responseComposer.compose(state)));
+        return new AskExecutionResult(
+                state.getExecutionId(),
+                state.getStatus().name(),
+                message,
+                contextLifecycle.sessionId(state),
+                structuredDetails(state));
+    }
+
+    private AskExecutionResult resumeAfterApproval(String executionId, boolean clearTerminalState) {
         Instant startedAt = Instant.now();
         String resumeLease = approvalService.acquireResumeLease(executionId);
         Duration resumeLeaseTtl = approvalService.resumeLeaseTtl();
@@ -79,6 +138,15 @@ public class AskService {
                 "approval-resume-lease-heartbeat")) {
             GraphState state = approvalService.loadState(executionId);
             String sessionId = contextLifecycle.sessionId(state);
+            if (isTerminal(state.getStatus())
+                    && Boolean.TRUE.equals(state.getContext().get(RESUME_FINALIZED_KEY))) {
+                AskExecutionResult replay = checkpointResult(state, sessionId);
+                heartbeat.requireValid("Approval resume lease was lost while replaying terminal state");
+                if (clearTerminalState) {
+                    approvalService.clearState(executionId);
+                }
+                return replay;
+            }
             if (state.getStatus() == GraphStatus.REJECTED) {
                 state.addApprovalAudit("Execution terminated after rejection");
                 contextLifecycle.compressRuntime(state);
@@ -88,7 +156,8 @@ public class AskService {
                 heartbeat.requireValid("Approval resume lease was lost while finalizing rejection");
                 contextLifecycle.complete(sessionId, state, message);
                 executionAuditService.recordGraphExecution(ExecutionRequestType.APPROVAL_RESUME, state, startedAt);
-                approvalService.clearState(executionId);
+                markResumeFinalized(state, message);
+                persistOrClear(executionId, state, clearTerminalState);
                 return result;
             }
             if (state.getStatus() != GraphStatus.RUNNING) {
@@ -113,8 +182,11 @@ public class AskService {
                     state.getExecutionId(), state.getStatus().name(), message, sessionId, structuredDetails(state));
             contextLifecycle.complete(sessionId, state, message);
             executionAuditService.recordGraphExecution(ExecutionRequestType.APPROVAL_RESUME, state, startedAt);
-            if (state.getStatus() != GraphStatus.PAUSED) {
-                approvalService.clearState(executionId);
+            if (isTerminal(state.getStatus())) {
+                markResumeFinalized(state, message);
+                persistOrClear(executionId, state, clearTerminalState);
+            } else if (!clearTerminalState) {
+                approvalService.saveState(state);
             }
             return result;
         } finally {
@@ -151,6 +223,33 @@ public class AskService {
     }
 
     public record ApprovalDetailResult(ApprovalRequest approvalRequest, GraphState graphState) {}
+
+    private AskExecutionResult checkpointResult(GraphState state, String sessionId) {
+        String message = String.valueOf(
+                state.getContext().getOrDefault(CHECKPOINT_MESSAGE_KEY, responseComposer.compose(state)));
+        return new AskExecutionResult(
+                state.getExecutionId(), state.getStatus().name(), message, sessionId, structuredDetails(state));
+    }
+
+    private void persistOrClear(String executionId, GraphState state, boolean clearTerminalState) {
+        if (clearTerminalState) {
+            approvalService.clearState(executionId);
+        } else {
+            approvalService.saveState(state);
+        }
+    }
+
+    private static void markResumeFinalized(GraphState state, String message) {
+        state.getContext().put(RESUME_FINALIZED_KEY, true);
+        state.getContext().put(CHECKPOINT_MESSAGE_KEY, message == null ? "" : message);
+    }
+
+    private static boolean isTerminal(GraphStatus status) {
+        return status == GraphStatus.SUCCESS
+                || status == GraphStatus.FAILED
+                || status == GraphStatus.REPLAN_REQUIRED
+                || status == GraphStatus.REJECTED;
+    }
 
     private void runPlannedTasks(GraphState state, int startIndex) {
         if (state.getTaskPlan() == null
@@ -210,6 +309,16 @@ public class AskService {
         executionAuditService.recordGraphExecution(ExecutionRequestType.ASK, state, startedAt);
         return new AskExecutionResult(
                 state.getExecutionId(), state.getStatus().name(), message, sessionId, structuredDetails(state));
+    }
+
+    private AskExecutionResult finishAndCheckpoint(
+            GraphState state, Instant startedAt, String sessionId, boolean retainCheckpoint) {
+        AskExecutionResult result = finishAsk(state, startedAt, sessionId);
+        if (retainCheckpoint) {
+            state.getContext().put(CHECKPOINT_MESSAGE_KEY, result.message() == null ? "" : result.message());
+            approvalService.saveState(state);
+        }
+        return result;
     }
 
     private Map<String, Object> structuredDetails(GraphState state) {

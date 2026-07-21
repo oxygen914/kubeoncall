@@ -17,6 +17,7 @@ import com.kubeoncall.skill.SkillRegistry;
 import com.kubeoncall.web.dto.SkillListResponse;
 import com.kubeoncall.web.dto.SkillStateResponse;
 
+@LegacyApiController
 @RestController
 @RequestMapping("/api/skills")
 public class SkillController {

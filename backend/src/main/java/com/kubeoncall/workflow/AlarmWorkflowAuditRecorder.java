@@ -5,6 +5,8 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import com.kubeoncall.alarm.domain.AlarmEvaluationResult;
@@ -17,9 +19,18 @@ import com.kubeoncall.service.ExecutionAuditService;
 public class AlarmWorkflowAuditRecorder {
 
     private final ExecutionAuditService executionAuditService;
+    private final ObjectProvider<AlarmWorkflowFactRecorder> factRecorderProvider;
 
     public AlarmWorkflowAuditRecorder(ExecutionAuditService executionAuditService) {
+        this(executionAuditService, null);
+    }
+
+    @Autowired
+    public AlarmWorkflowAuditRecorder(
+            ExecutionAuditService executionAuditService,
+            ObjectProvider<AlarmWorkflowFactRecorder> factRecorderProvider) {
         this.executionAuditService = executionAuditService;
+        this.factRecorderProvider = factRecorderProvider;
     }
 
     public void record(AuditRequest request) {
@@ -40,6 +51,12 @@ public class AlarmWorkflowAuditRecorder {
                         request.context(),
                         request.results(),
                         request.extras()));
+        if (factRecorderProvider != null) {
+            AlarmWorkflowFactRecorder recorder = factRecorderProvider.getIfAvailable();
+            if (recorder != null) {
+                recorder.record(request);
+            }
+        }
     }
 
     public void recordTerminal(

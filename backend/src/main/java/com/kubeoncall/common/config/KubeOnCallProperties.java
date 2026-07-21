@@ -19,6 +19,10 @@ public class KubeOnCallProperties {
     private final Skill skill = new Skill();
     private final ApiSecurity apiSecurity = new ApiSecurity();
     private final Cors cors = new Cors();
+    private final Auth auth = new Auth();
+    private final Api api = new Api();
+    private final DataMigration dataMigration = new DataMigration();
+    private final LegacyApi legacyApi = new LegacyApi();
 
     public Agent getAgent() {
         return agent;
@@ -76,6 +80,22 @@ public class KubeOnCallProperties {
         return cors;
     }
 
+    public Auth getAuth() {
+        return auth;
+    }
+
+    public Api getApi() {
+        return api;
+    }
+
+    public DataMigration getDataMigration() {
+        return dataMigration;
+    }
+
+    public LegacyApi getLegacyApi() {
+        return legacyApi;
+    }
+
     public static class Agent extends AgentProperties {}
 
     public static class Approval extends ApprovalProperties {}
@@ -104,6 +124,14 @@ public class KubeOnCallProperties {
     public static class ApiSecurity extends ApiSecurityProperties {}
 
     public static class Cors extends CorsProperties {}
+
+    public static class Auth extends AuthProperties {}
+
+    public static class Api extends ApiProperties {}
+
+    public static class DataMigration extends DataMigrationProperties {}
+
+    public static class LegacyApi extends LegacyApiProperties {}
 
     public static class Integrations extends IntegrationsProperties {}
 

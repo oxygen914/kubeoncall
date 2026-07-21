@@ -19,6 +19,7 @@ import com.kubeoncall.service.ExecutionAuditService;
 import com.kubeoncall.web.dto.AlarmMaintenanceWindowRequest;
 import com.kubeoncall.web.dto.AlarmMaintenanceWindowRevocationResponse;
 
+@LegacyApiController
 @RestController
 @RequestMapping("/api/alarm-maintenance-windows")
 public class AlarmMaintenanceWindowController {

@@ -3,6 +3,12 @@ spring:
     name: kubeoncall
   profiles:
     active: local
+  autoconfigure:
+    exclude:
+      - org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration
+      - org.springframework.boot.autoconfigure.jdbc.DataSourceTransactionManagerAutoConfiguration
+      - org.springframework.boot.autoconfigure.flyway.FlywayAutoConfiguration
+      - org.springframework.boot.actuate.autoconfigure.jdbc.DataSourceHealthContributorAutoConfiguration
   data:
     redis:
       host: localhost
@@ -17,6 +23,17 @@ spring:
   jackson:
     serialization:
       write-dates-as-timestamps: false
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:}
+    username: ${SPRING_DATASOURCE_USERNAME:}
+    password: ${SPRING_DATASOURCE_PASSWORD:}
+  flyway:
+    enabled: ${KUBEONCALL_MYSQL_ENABLED:false}
+    locations: classpath:db/migration
+    baseline-on-migrate: true
+  jdbc:
+    template:
+      fetch-size: 100
 
 management:
   endpoints:
@@ -28,6 +45,12 @@ server:
   port: 8080
 
 kubeoncall:
+  mysql-enabled: ${KUBEONCALL_MYSQL_ENABLED:false}
+  api:
+    default-page-size: 20
+    max-page-size: 100
+    max-upload-bytes: 52428800
+    max-jsonl-lines: 100000
   api-security:
     enabled: ${KUBEONCALL_API_AUTH_ENABLED:false}
     viewer-token: ${KUBEONCALL_API_VIEWER_TOKEN:}
@@ -36,6 +59,36 @@ kubeoncall:
   cors:
     enabled: ${KUBEONCALL_CORS_ENABLED:true}
     allowed-origins: ${KUBEONCALL_CORS_ALLOWED_ORIGINS:http://127.0.0.1:8081,http://localhost:8081}
+  auth:
+    session-cookie-name: KOC_SESSION
+    csrf-cookie-name: KOC_CSRF
+    session-cookie-secure: ${KUBEONCALL_AUTH_SESSION_COOKIE_SECURE:false}
+    session-idle-timeout-seconds: ${KUBEONCALL_AUTH_SESSION_IDLE_TIMEOUT_SECONDS:1800}
+    session-max-timeout-seconds: ${KUBEONCALL_AUTH_SESSION_MAX_TIMEOUT_SECONDS:28800}
+    login-max-attempts: ${KUBEONCALL_AUTH_LOGIN_MAX_ATTEMPTS:5}
+    login-lock-duration-seconds: ${KUBEONCALL_AUTH_LOGIN_LOCK_DURATION_SECONDS:900}
+    legacy-token-compat: ${KUBEONCALL_AUTH_LEGACY_TOKEN_COMPAT:true}
+    bootstrap-admin-enabled: ${KUBEONCALL_BOOTSTRAP_ADMIN_ENABLED:false}
+    bootstrap-admin-username: ${KUBEONCALL_BOOTSTRAP_ADMIN_USERNAME:}
+    bootstrap-admin-password: ${KUBEONCALL_BOOTSTRAP_ADMIN_PASSWORD:}
+  release:
+    version: ${KUBEONCALL_RELEASE_VERSION:0.1.0}
+    commit: ${KUBEONCALL_RELEASE_COMMIT:unknown}
+    environment: ${KUBEONCALL_RELEASE_ENVIRONMENT:local}
+  data-migration:
+    alarm-read-source: ${KUBEONCALL_DATA_MIGRATION_ALARM_READ_SOURCE:MYSQL}
+    alarm-write-mode: ${KUBEONCALL_DATA_MIGRATION_ALARM_WRITE_MODE:REDIS_PRIMARY}
+    backfill-batch-size: ${KUBEONCALL_DATA_MIGRATION_BACKFILL_BATCH_SIZE:100}
+    backfill-scan-limit: ${KUBEONCALL_DATA_MIGRATION_BACKFILL_SCAN_LIMIT:10000}
+    backfill-dry-run: ${KUBEONCALL_DATA_MIGRATION_BACKFILL_DRY_RUN:true}
+  legacy-api:
+    enabled: ${KUBEONCALL_LEGACY_API_ENABLED:true}
+  realtime:
+    heartbeat-seconds: ${KUBEONCALL_REALTIME_HEARTBEAT_SECONDS:15}
+    replay-capacity: ${KUBEONCALL_REALTIME_REPLAY_CAPACITY:2048}
+    replay-retention-seconds: ${KUBEONCALL_REALTIME_REPLAY_RETENTION_SECONDS:600}
+    # Cluster fanout: "none" (single-instance) or "redis" (Pub/Sub multi-instance broadcast).
+    cluster-transport: ${KUBEONCALL_REALTIME_CLUSTER_TRANSPORT:none}
   agent:
     max-loops: 3
     planner-llm-enabled: true

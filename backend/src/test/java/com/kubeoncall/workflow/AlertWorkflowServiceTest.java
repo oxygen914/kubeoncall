@@ -33,6 +33,7 @@ import com.kubeoncall.alarm.maintenance.AlarmMaintenanceWindowService;
 import com.kubeoncall.alarm.policy.AlarmFingerprintService;
 import com.kubeoncall.alarm.policy.AlarmPolicyEngine;
 import com.kubeoncall.alarm.policy.AlarmPolicyRepository;
+import com.kubeoncall.alarm.readmodel.AlarmIncidentProjection;
 import com.kubeoncall.alarm.recovery.AlarmRecoveryService;
 import com.kubeoncall.alarm.recovery.AlarmRecoveryState;
 import com.kubeoncall.alarm.state.ActiveAlarmState;
@@ -1126,8 +1127,12 @@ class AlertWorkflowServiceTest {
                             new NodeResult("alarmEscalation", NodeStatus.FAILURE, "escalation unavailable", Map.of()));
         }
         AlarmWorkflowAuditRecorder auditRecorder = new AlarmWorkflowAuditRecorder(auditService);
-        AlarmEventPreparationService eventPreparationService =
-                new AlarmEventPreparationService(new AlarmFingerprintService(), engine, activeAlarmStore);
+        AlarmIncidentProjection incidentProjection = new AlarmIncidentProjection(
+                org.mockito.Mockito.mock(org.springframework.beans.factory.ObjectProvider.class),
+                org.mockito.Mockito.mock(org.springframework.beans.factory.ObjectProvider.class),
+                new com.fasterxml.jackson.databind.ObjectMapper());
+        AlarmEventPreparationService eventPreparationService = new AlarmEventPreparationService(
+                new AlarmFingerprintService(), engine, activeAlarmStore, incidentProjection);
         AlertWorkflowMemory workflowMemory = new AlertWorkflowMemory(
                 alertMemoryService == null ? mock(AlertMemoryService.class) : alertMemoryService, memoryExtractor);
         AlarmNodeNoiseSuppression nodeNoiseSuppression = new AlarmNodeNoiseSuppression(redisTemplate, properties);

@@ -7,6 +7,16 @@ spring:
     uris: http://elasticsearch:9200
 
 kubeoncall:
+  mysql-enabled: true
+  auth:
+    session-cookie-secure: ${KUBEONCALL_AUTH_SESSION_COOKIE_SECURE:false}
+    session-idle-timeout-seconds: ${KUBEONCALL_AUTH_SESSION_IDLE_TIMEOUT_SECONDS:1800}
+    session-max-timeout-seconds: ${KUBEONCALL_AUTH_SESSION_MAX_TIMEOUT_SECONDS:28800}
+    login-max-attempts: ${KUBEONCALL_AUTH_LOGIN_MAX_ATTEMPTS:5}
+    login-lock-duration-seconds: ${KUBEONCALL_AUTH_LOGIN_LOCK_DURATION_SECONDS:900}
+    bootstrap-admin-enabled: ${KUBEONCALL_BOOTSTRAP_ADMIN_ENABLED:false}
+    bootstrap-admin-username: ${KUBEONCALL_BOOTSTRAP_ADMIN_USERNAME:}
+    bootstrap-admin-password: ${KUBEONCALL_BOOTSTRAP_ADMIN_PASSWORD:}
   rag:
     knowledge-index-alias: ${RAG_KNOWLEDGE_INDEX_ALIAS:kubeoncall-knowledge-active}
     active-dataset-version: ${RAG_ACTIVE_DATASET_VERSION:}

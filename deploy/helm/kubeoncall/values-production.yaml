@@ -11,6 +11,34 @@ config:
   mcpAllowedTools: knowledge.searchSop,topology.getServiceTopology,cmdb.getServiceMetadata,kubernetes.describeResource,prometheus.queryRange,alerts.getActiveAlerts,inventory.*,logs.*,metrics.*
   changeEventWebhookEnabled: true
 
+# WBS-12 production: MySQL is the business fact store. Point url at managed MySQL and set the
+# mysql-password / bootstrap-admin-password secret keys. Bootstrap admin must be disabled after the
+# initial admin is created.
+mysql:
+  enabled: true
+  url: ""  # set to the managed MySQL JDBC URL in production
+  username: kubeoncall
+  sessionCookieSecure: true
+  legacyTokenCompat: false
+  bootstrapAdminEnabled: false
+  bootstrapAdminUsername: ""
+
+# Production runs the new Console as the only entry point; legacy /api/* is retired.
+legacyApi:
+  enabled: false
+
+console:
+  enabled: true
+  replicaCount: 3
+
+ingress:
+  enabled: true
+  className: nginx
+  host: kubeoncall.example.local  # override per environment
+  tls:
+    enabled: true
+    secretName: kubeoncall-tls
+
 serviceMonitor:
   enabled: true
 

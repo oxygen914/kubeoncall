@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+    <springProperty
+            scope="context"
+            name="serviceName"
+            source="spring.application.name"
+            defaultValue="kubeoncall"/>
+    <springProperty
+            scope="context"
+            name="environmentName"
+            source="kubeoncall.release.environment"
+            defaultValue="local"/>
+    <springProperty
+            scope="context"
+            name="releaseName"
+            source="kubeoncall.release.commit"
+            defaultValue="unknown"/>
+    <property name="instanceName" value="${HOSTNAME:-local}"/>
+
+    <appender name="JSON_STDOUT" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder class="net.logstash.logback.encoder.LoggingEventCompositeJsonEncoder">
+            <providers>
+                <timestamp>
+                    <fieldName>timestamp</fieldName>
+                </timestamp>
+                <pattern>
+                    <pattern>
+                        {
+                          "service": "${serviceName}",
+                          "environment": "${environmentName}",
+                          "release": "${releaseName}",
+                          "instance": "${instanceName}",
+                          "logger": "%logger",
+                          "level": "%level",
+                          "message": "%message"
+                        }
+                    </pattern>
+                </pattern>
+                <mdc/>
+                <stackTrace>
+                    <fieldName>stacktrace</fieldName>
+                </stackTrace>
+            </providers>
+        </encoder>
+    </appender>
+
+    <root level="${LOG_LEVEL_ROOT:-INFO}">
+        <appender-ref ref="JSON_STDOUT"/>
+    </root>
+</configuration>
