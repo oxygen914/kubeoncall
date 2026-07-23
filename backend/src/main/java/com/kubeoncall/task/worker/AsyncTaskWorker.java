@@ -285,7 +285,17 @@ public final class AsyncTaskWorker {
     }
 
     private RunResult observeAcceptedTransition(AsyncTaskRecord task, RunResult result) {
-        if (result.outcome() == Outcome.IDLE || result.outcome() == Outcome.LEASE_LOST) {
+        if (result.outcome() == Outcome.IDLE) {
+            return result;
+        }
+        if (result.outcome() == Outcome.LEASE_LOST) {
+            for (AsyncTaskLifecycleListener listener : lifecycleListeners) {
+                try {
+                    listener.onLeaseLost(task, result);
+                } catch (RuntimeException listenerFailure) {
+                    LOGGER.warn("Async task lease-loss listener failed: taskId={}", task.publicId(), listenerFailure);
+                }
+            }
             return result;
         }
         for (AsyncTaskLifecycleListener listener : lifecycleListeners) {

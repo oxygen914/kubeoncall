@@ -55,6 +55,18 @@ groups:
         labels: {severity: P2}
         annotations:
           summary: KubeOnCall database connection pool exceeds 90 percent utilization
+      - alert: KubeOnCallWorkerLeaseLost
+        expr: sum by (worker) (increase(kubeoncall_worker_lease_total{event="lost"}[5m])) > 0
+        for: 0m
+        labels: {severity: P1}
+        annotations:
+          summary: KubeOnCall durable worker lost a lease
+      - alert: KubeOnCallRequestCorrelationMissing
+        expr: sum by (boundary) (rate(kubeoncall_request_correlation_total{outcome="missing"}[10m])) / clamp_min(sum by (boundary) (rate(kubeoncall_request_correlation_total[10m])), 0.001) > 0.01
+        for: 10m
+        labels: {severity: P2}
+        annotations:
+          summary: KubeOnCall request-to-worker correlation is missing above 1 percent
   - name: node-monitoring
     rules:
       - alert: NodeDown

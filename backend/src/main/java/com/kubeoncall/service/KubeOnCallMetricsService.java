@@ -193,6 +193,21 @@ public class KubeOnCallMetricsService {
         increment("kubeoncall.dependency.circuit", "dependency", safe(dependency), "event", safe(event));
     }
 
+    /** Records bounded worker lease transitions: claimed, renewed, lost or fencing-rejected. */
+    public void recordWorkerLease(String worker, String event) {
+        increment("kubeoncall.worker.lease", "worker", safe(worker), "event", safe(event));
+    }
+
+    /** Records whether a durable worker received a correlation id from its submitting request. */
+    public void recordRequestCorrelation(String boundary, boolean present) {
+        increment(
+                "kubeoncall.request_correlation",
+                "boundary",
+                safe(boundary),
+                "outcome",
+                present ? "propagated" : "missing");
+    }
+
     private void increment(String name, String... tags) {
         Counter.builder(name).tags(tags).register(meterRegistry).increment();
     }

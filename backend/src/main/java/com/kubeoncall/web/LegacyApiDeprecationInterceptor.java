@@ -3,6 +3,7 @@ package com.kubeoncall.web;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
+import java.util.Set;
 
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
@@ -35,7 +36,8 @@ public class LegacyApiDeprecationInterceptor implements HandlerInterceptor {
     }
 
     @Override
-    public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler) {
+    public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler)
+            throws Exception {
         if (!(handler instanceof HandlerMethod method)
                 || AnnotationUtils.findAnnotation(method.getBeanType(), LegacyApiController.class) == null) {
             return true;
@@ -51,8 +53,17 @@ public class LegacyApiDeprecationInterceptor implements HandlerInterceptor {
                     "Sunset", DateTimeFormatter.RFC_1123_DATE_TIME.format(sunsetAt.atOffset(ZoneOffset.UTC)));
         }
         Object pattern = request.getAttribute(HandlerMapping.BEST_MATCHING_PATTERN_ATTRIBUTE);
-        request.setAttribute(
-                LEGACY_ENDPOINT_ATTRIBUTE, pattern instanceof String value ? value : request.getRequestURI());
+        String endpoint = pattern instanceof String value ? value : request.getRequestURI();
+        request.setAttribute(LEGACY_ENDPOINT_ATTRIBUTE, endpoint);
+        String successor = legacy.getSuccessors().get(endpoint);
+        if (successor != null && !successor.isBlank()) {
+            response.setHeader("Link", "<" + successor.trim() + ">; rel=\"successor-version\"");
+        }
+        Set<String> retiredEndpoints = legacy.getRetiredEndpoints();
+        if (retiredEndpoints != null && retiredEndpoints.contains(endpoint)) {
+            response.sendError(HttpServletResponse.SC_GONE, "Legacy endpoint has been retired");
+            return false;
+        }
         return true;
     }
 

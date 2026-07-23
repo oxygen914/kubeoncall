@@ -87,3 +87,44 @@ test('authenticated operator can inspect the overview window and drill into exec
   await expect(page.getByRole('heading', { name: '执行' })).toBeVisible()
   await expect(page.getByText('支付接口故障恢复')).toBeVisible()
 })
+
+test('authenticated operator can traverse alarm, approval and execution worklists', async ({ page }) => {
+  await page.route('**/api/v1/auth/session', async (route) => {
+    await route.fulfill({
+      contentType: 'application/json',
+      body: JSON.stringify(
+        envelope({
+          authenticated: true,
+          user: {
+            id: 'usr_e2e', username: 'operator', displayName: 'E2E Operator', roles: ['OPERATOR'],
+            permissions: ['alarm:read', 'approval:read', 'execution:read'],
+          },
+          expiresAt: '2026-07-24T00:00:00Z',
+        }),
+      ),
+    })
+  })
+  const pageInfo = { number: 1, size: 20, totalElements: 1, totalPages: 1, hasNext: false }
+  await page.route('**/api/v1/alarms?*', async (route) => route.fulfill({
+    contentType: 'application/json', body: JSON.stringify({
+      data: [{ id: 'alm_e2e', fingerprint: 'fp', alertName: '支付接口错误率高', severity: 'P1', status: 'FIRING', resource: { type: 'SERVICE', name: 'payment', cluster: 'prod', namespace: 'default', service: 'payment' }, firstSeen: '2026-07-23T10:00:00Z', lastSeen: '2026-07-23T10:01:00Z', occurrenceCount: 2, acknowledgement: { acknowledged: false, by: null, at: null }, latestExecution: { id: 'exec_e2e', status: 'WAITING_APPROVAL' }, version: 1 }], page: pageInfo, meta,
+    }),
+  }))
+  await page.route('**/api/v1/approvals?*', async (route) => route.fulfill({
+    contentType: 'application/json', body: JSON.stringify({
+      data: [{ id: 'apr_e2e', executionId: 'exec_e2e', status: 'PENDING', riskLevel: 'HIGH', summary: '重启支付工作负载', createdAt: '2026-07-23T10:00:00Z', expiresAt: null, version: 1 }], page: pageInfo, meta,
+    }),
+  }))
+  await page.route('**/api/v1/executions?*', async (route) => route.fulfill({
+    contentType: 'application/json', body: JSON.stringify({
+      data: [{ id: 'exec_e2e', type: 'REMEDIATION', status: 'WAITING_APPROVAL', summary: '支付故障处置', triggerId: 'alm_e2e', startedAt: '2026-07-23T10:00:00Z', finishedAt: null, durationMs: null, version: 1 }], page: pageInfo, meta,
+    }),
+  }))
+
+  await page.goto('/alarms')
+  await expect(page.getByText('支付接口错误率高')).toBeVisible()
+  await page.goto('/approvals')
+  await expect(page.getByText('重启支付工作负载')).toBeVisible()
+  await page.goto('/executions')
+  await expect(page.getByText('支付故障处置')).toBeVisible()
+})

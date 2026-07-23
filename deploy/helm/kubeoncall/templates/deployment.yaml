@@ -308,6 +308,8 @@ spec:
               value: {{ .Values.dataMigration.legacyActorUsernameMappings | quote }}
             - name: KUBEONCALL_LEGACY_API_ENABLED
               value: {{ .Values.legacyApi.enabled | quote }}
+            - name: SPRING_APPLICATION_JSON
+              value: {{ dict "kubeoncall" (dict "legacy-api" (dict "successors" .Values.legacyApi.successors "retired-endpoints" .Values.legacyApi.retiredEndpoints)) | toJson | quote }}
           readinessProbe:
             httpGet: {path: /actuator/health/readiness, port: http}
             initialDelaySeconds: 20

@@ -5,6 +5,8 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 import java.lang.reflect.Method;
+import java.util.Map;
+import java.util.Set;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.ObjectProvider;
@@ -59,11 +61,32 @@ class LegacyApiDeprecationInterceptorTest {
         assertThat(response.getHeader("Sunset")).isNull();
     }
 
+    @Test
+    void advertisesSuccessorAndCanRetireOneMappedLegacyEndpoint() throws Exception {
+        KubeOnCallProperties properties = new KubeOnCallProperties();
+        properties.getLegacyApi().setSuccessors(Map.of("/api/status", "/api/v1/system/status"));
+        properties.getLegacyApi().setRetiredEndpoints(Set.of("/api/status"));
+        LegacyApiDeprecationInterceptor interceptor = interceptor(new SimpleMeterRegistry(), properties);
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/status");
+        request.setAttribute(HandlerMapping.BEST_MATCHING_PATTERN_ATTRIBUTE, "/api/status");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        assertThat(interceptor.preHandle(request, response, handler(LegacyHandler.class)))
+                .isFalse();
+        assertThat(response.getStatus()).isEqualTo(410);
+        assertThat(response.getHeader("Link")).isEqualTo("</api/v1/system/status>; rel=\"successor-version\"");
+    }
+
     private static LegacyApiDeprecationInterceptor interceptor(MeterRegistry registry) {
+        return interceptor(registry, new KubeOnCallProperties());
+    }
+
+    private static LegacyApiDeprecationInterceptor interceptor(
+            MeterRegistry registry, KubeOnCallProperties properties) {
         @SuppressWarnings("unchecked")
         ObjectProvider<MeterRegistry> provider = mock(ObjectProvider.class);
         when(provider.getIfAvailable()).thenReturn(registry);
-        return new LegacyApiDeprecationInterceptor(new KubeOnCallProperties(), new KubeOnCallMetricsService(provider));
+        return new LegacyApiDeprecationInterceptor(properties, new KubeOnCallMetricsService(provider));
     }
 
     private static HandlerMethod handler(Class<?> type) throws Exception {

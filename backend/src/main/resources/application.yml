@@ -92,6 +92,9 @@ kubeoncall:
     enabled: ${KUBEONCALL_LEGACY_API_ENABLED:true}
     deprecated-at: ${KUBEONCALL_LEGACY_API_DEPRECATED_AT:2026-07-01T00:00:00Z}
     sunset-at: ${KUBEONCALL_LEGACY_API_SUNSET_AT:2026-12-31T23:59:59Z}
+    successors:
+      "/api/status": "/api/v1/system/status"
+      "/api/stats": "/api/v1/overview"
   realtime:
     heartbeat-seconds: ${KUBEONCALL_REALTIME_HEARTBEAT_SECONDS:15}
     replay-capacity: ${KUBEONCALL_REALTIME_REPLAY_CAPACITY:2048}

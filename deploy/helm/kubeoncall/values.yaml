@@ -138,6 +138,12 @@ dataMigration:
 # WBS-11 legacy /api/* retirement. Set to false once the new Console is the only entry point.
 legacyApi:
   enabled: true
+  # Stable mapping patterns, rendered into Spring environment variables as JSON.
+  successors:
+    /api/status: /api/v1/system/status
+    /api/stats: /api/v1/overview
+  # Legacy request-mapping patterns to return 410 while the remaining old API stays available.
+  retiredEndpoints: []
 
 secrets:
   existingSecret: kubeoncall-secrets

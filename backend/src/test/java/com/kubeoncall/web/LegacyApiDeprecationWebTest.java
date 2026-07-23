@@ -29,6 +29,8 @@ class LegacyApiDeprecationWebTest {
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(response.getHeaders().getFirst("Deprecation")).isEqualTo("@1782864000");
         assertThat(response.getHeaders().getFirst("Sunset")).isEqualTo("Thu, 31 Dec 2026 23:59:59 GMT");
+        assertThat(response.getHeaders().getFirst("Link"))
+                .isEqualTo("</api/v1/system/status>; rel=\"successor-version\"");
     }
 
     private String url(String path) {

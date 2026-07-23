@@ -12,4 +12,7 @@ import com.kubeoncall.task.AsyncTaskRecord;
 public interface AsyncTaskLifecycleListener {
 
     void onTransition(AsyncTaskRecord claimedTask, AsyncTaskWorker.RunResult result);
+
+    /** Observes an ownership-fence or heartbeat loss without publishing a false transition. */
+    default void onLeaseLost(AsyncTaskRecord claimedTask, AsyncTaskWorker.RunResult result) {}
 }
