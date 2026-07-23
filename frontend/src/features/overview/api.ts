@@ -7,6 +7,9 @@ export interface OverviewData {
   failedExecutions: number
   severityCounts: Record<string, number>
   statusCounts: Record<string, number>
+  executionStatusCounts: Record<string, number>
+  failureReasons: Record<string, number>
+  executionTrend: Record<string, number>
   window: string
 }
 

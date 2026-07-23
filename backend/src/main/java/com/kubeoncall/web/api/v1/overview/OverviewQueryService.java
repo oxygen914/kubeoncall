@@ -52,6 +52,26 @@ public class OverviewQueryService {
                  WHERE deleted_at IS NULL AND last_seen >= ?
                  GROUP BY status
                 """, since);
+        Map<String, Long> executionStatusCounts = countBy(jdbcTemplate, """
+                SELECT status AS label, COUNT(*) AS total FROM koc_workflow_execution
+                 WHERE created_at >= ?
+                 GROUP BY status
+                """, since);
+        Map<String, Long> failureReasons = countBy(jdbcTemplate, """
+                SELECT COALESCE(NULLIF(error_code, ''), 'UNCLASSIFIED') AS label, COUNT(*) AS total
+                  FROM koc_workflow_execution
+                 WHERE status = 'FAILED' AND created_at >= ?
+                 GROUP BY COALESCE(NULLIF(error_code, ''), 'UNCLASSIFIED')
+                 ORDER BY total DESC, label ASC
+                 LIMIT 5
+                """, since);
+        Map<String, Long> executionTrend = countBy(jdbcTemplate, """
+                SELECT DATE_FORMAT(created_at, '%Y-%m-%d %H:00') AS label, COUNT(*) AS total
+                  FROM koc_workflow_execution
+                 WHERE created_at >= ?
+                 GROUP BY DATE_FORMAT(created_at, '%Y-%m-%d %H:00')
+                 ORDER BY label ASC
+                """, since);
 
         long activeAlarms = statusCounts.getOrDefault("FIRING", 0L) + statusCounts.getOrDefault("ACKNOWLEDGED", 0L);
         long pendingApprovals = count(
@@ -68,7 +88,15 @@ public class OverviewQueryService {
                 since);
 
         return new Overview(
-                activeAlarms, pendingApprovals, runningExecutions, failedExecutions, severityCounts, statusCounts);
+                activeAlarms,
+                pendingApprovals,
+                runningExecutions,
+                failedExecutions,
+                severityCounts,
+                statusCounts,
+                executionStatusCounts,
+                failureReasons,
+                executionTrend);
     }
 
     private static long count(JdbcTemplate jdbcTemplate, String sql, Timestamp since) {
@@ -93,11 +121,18 @@ public class OverviewQueryService {
             long runningExecutions,
             long failedExecutions,
             Map<String, Long> severityCounts,
-            Map<String, Long> statusCounts) {
+            Map<String, Long> statusCounts,
+            Map<String, Long> executionStatusCounts,
+            Map<String, Long> failureReasons,
+            Map<String, Long> executionTrend) {
 
         public Overview {
             severityCounts = severityCounts == null ? Map.of() : new LinkedHashMap<>(severityCounts);
             statusCounts = statusCounts == null ? Map.of() : new LinkedHashMap<>(statusCounts);
+            executionStatusCounts =
+                    executionStatusCounts == null ? Map.of() : new LinkedHashMap<>(executionStatusCounts);
+            failureReasons = failureReasons == null ? Map.of() : new LinkedHashMap<>(failureReasons);
+            executionTrend = executionTrend == null ? Map.of() : new LinkedHashMap<>(executionTrend);
         }
     }
 }

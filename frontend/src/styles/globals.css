@@ -678,3 +678,19 @@ code {
   color: var(--koc-text-muted);
   font-size: var(--koc-font-sm);
 }
+.koc-overview__trend {
+  display: grid;
+  gap: var(--koc-space-2);
+}
+.koc-overview__trend-row {
+  display: grid;
+  grid-template-columns: minmax(150px, 1fr) minmax(48px, 4fr) 3rem;
+  align-items: center;
+  gap: var(--koc-space-2);
+  font-size: var(--koc-font-sm);
+}
+.koc-overview__trend-bar {
+  min-height: 0.75rem;
+  border-radius: var(--koc-radius-sm);
+  background: var(--koc-primary-500);
+}

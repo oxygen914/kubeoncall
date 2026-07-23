@@ -36,10 +36,30 @@ export function OverviewPage() {
         {data ? (
           <div className="koc-overview">
             <div className="koc-overview__cards">
-              <OverviewCard label="活跃告警" value={data.activeAlarms} tone="danger" onClick={() => navigate('/alarms')} />
-              <OverviewCard label="待审批" value={data.pendingApprovals} tone="warning" onClick={() => navigate('/approvals')} />
-              <OverviewCard label="运行中执行" value={data.runningExecutions} tone="info" onClick={() => navigate('/executions')} />
-              <OverviewCard label="失败执行" value={data.failedExecutions} tone="danger" onClick={() => navigate('/executions')} />
+              <OverviewCard
+                label="活跃告警"
+                value={data.activeAlarms}
+                tone="danger"
+                onClick={() => navigate('/alarms')}
+              />
+              <OverviewCard
+                label="待审批"
+                value={data.pendingApprovals}
+                tone="warning"
+                onClick={() => navigate('/approvals')}
+              />
+              <OverviewCard
+                label="运行中执行"
+                value={data.runningExecutions}
+                tone="info"
+                onClick={() => navigate('/executions')}
+              />
+              <OverviewCard
+                label="失败执行"
+                value={data.failedExecutions}
+                tone="danger"
+                onClick={() => navigate('/executions')}
+              />
             </div>
 
             <div className="koc-detail">
@@ -48,17 +68,37 @@ export function OverviewPage() {
                 <table className="koc-table">
                   <tbody>
                     {Object.entries(data.severityCounts).length === 0 ? (
-                      <tr><td>无活跃告警</td></tr>
+                      <tr>
+                        <td>无活跃告警</td>
+                      </tr>
                     ) : (
                       Object.entries(data.severityCounts).map(([sev, count]) => (
                         <tr key={sev}>
-                          <td><StatusBadge tone={severityTone(sev)}>{sev}</StatusBadge></td>
+                          <td>
+                            <StatusBadge tone={severityTone(sev)}>{sev}</StatusBadge>
+                          </td>
                           <td>{count}</td>
                         </tr>
                       ))
                     )}
                   </tbody>
                 </table>
+              </div>
+              <div className="koc-detail">
+                <OverviewTable
+                  title="执行状态"
+                  values={data.executionStatusCounts}
+                  empty="当前窗口无执行记录"
+                />
+                <OverviewTable
+                  title="失败原因 Top 5"
+                  values={data.failureReasons}
+                  empty="当前窗口无失败执行"
+                />
+              </div>
+              <div className="koc-detail__summary">
+                <h2>执行趋势（小时）</h2>
+                <Trend values={data.executionTrend} />
               </div>
               <div className="koc-detail__summary">
                 <h2>告警按状态</h2>
@@ -81,6 +121,58 @@ export function OverviewPage() {
   )
 }
 
+function OverviewTable({
+  title,
+  values,
+  empty,
+}: {
+  title: string
+  values: Record<string, number>
+  empty: string
+}) {
+  return (
+    <div className="koc-detail__summary">
+      <h2>{title}</h2>
+      <table className="koc-table">
+        <tbody>
+          {Object.entries(values).length === 0 ? (
+            <tr>
+              <td>{empty}</td>
+            </tr>
+          ) : (
+            Object.entries(values).map(([label, count]) => (
+              <tr key={label}>
+                <td className="koc-mono">{label}</td>
+                <td>{count}</td>
+              </tr>
+            ))
+          )}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
+function Trend({ values }: { values: Record<string, number> }) {
+  const entries = Object.entries(values)
+  const maximum = Math.max(1, ...entries.map(([, value]) => value))
+  if (entries.length === 0) return <p className="koc-page__subtitle">当前窗口无执行趋势数据</p>
+  return (
+    <div className="koc-overview__trend">
+      {entries.map(([bucket, count]) => (
+        <div className="koc-overview__trend-row" key={bucket}>
+          <span className="koc-mono">{bucket}</span>
+          <span
+            className="koc-overview__trend-bar"
+            style={{ width: `${(count / maximum) * 100}%` }}
+          />
+          <strong>{count}</strong>
+        </div>
+      ))}
+    </div>
+  )
+}
+
 function OverviewCard({
   label,
   value,
@@ -94,7 +186,9 @@ function OverviewCard({
 }) {
   return (
     <button className="koc-overview__card" onClick={onClick} type="button">
-      <span className="koc-overview__value" data-tone={tone}>{value}</span>
+      <span className="koc-overview__value" data-tone={tone}>
+        {value}
+      </span>
       <span className="koc-overview__label">{label}</span>
     </button>
   )

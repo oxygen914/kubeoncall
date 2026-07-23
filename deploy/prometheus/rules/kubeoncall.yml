@@ -1,4 +1,60 @@
 groups:
+  - name: kubeoncall-application
+    rules:
+      - alert: KubeOnCallTargetDown
+        expr: up{job="kubeoncall"} == 0
+        for: 2m
+        labels: {severity: P1}
+        annotations:
+          summary: KubeOnCall metrics endpoint is unreachable
+      - alert: KubeOnCallHttp5xxRateHigh
+        expr: sum(rate(http_server_requests_seconds_count{job="kubeoncall",uri!~"/actuator.*",status=~"5.."}[5m])) / clamp_min(sum(rate(http_server_requests_seconds_count{job="kubeoncall",uri!~"/actuator.*"}[5m])), 1) > 0.05
+        for: 10m
+        labels: {severity: P1}
+        annotations:
+          summary: KubeOnCall HTTP 5xx rate exceeds 5 percent
+      - alert: KubeOnCallDependencyCircuitOpened
+        expr: sum by (dependency) (increase(kubeoncall_dependency_circuit_total{event="opened"}[5m])) > 0
+        for: 0m
+        labels: {severity: P1}
+        annotations:
+          summary: KubeOnCall dependency circuit opened
+      - alert: KubeOnCallDependencyErrorRateHigh
+        expr: sum by (dependency) (rate(kubeoncall_dependency_requests_total{outcome="error"}[5m])) / clamp_min(sum by (dependency) (rate(kubeoncall_dependency_requests_total[5m])), 0.001) > 0.10
+        for: 10m
+        labels: {severity: P2}
+        annotations:
+          summary: KubeOnCall dependency error rate exceeds 10 percent
+      - alert: KubeOnCallOutboxDeadLetter
+        expr: kubeoncall_outbox_events{status="DEAD_LETTER"} > 0
+        for: 5m
+        labels: {severity: P1}
+        annotations:
+          summary: KubeOnCall outbox has dead-letter events
+      - alert: KubeOnCallOutboxBacklogAgeHigh
+        expr: kubeoncall_outbox_oldest_pending_age_seconds > 300
+        for: 10m
+        labels: {severity: P2}
+        annotations:
+          summary: KubeOnCall outbox oldest pending event exceeds 5 minutes
+      - alert: KubeOnCallAsyncTaskDeadLetter
+        expr: kubeoncall_async_tasks{status="DEAD_LETTER"} > 0
+        for: 5m
+        labels: {severity: P1}
+        annotations:
+          summary: KubeOnCall async tasks have dead-letter entries
+      - alert: KubeOnCallAsyncTaskBacklogAgeHigh
+        expr: kubeoncall_async_task_oldest_due_age_seconds > 300
+        for: 10m
+        labels: {severity: P2}
+        annotations:
+          summary: KubeOnCall oldest due async task exceeds 5 minutes
+      - alert: KubeOnCallDatabasePoolSaturated
+        expr: hikaricp_connections_active / clamp_min(hikaricp_connections_max, 1) > 0.90
+        for: 10m
+        labels: {severity: P2}
+        annotations:
+          summary: KubeOnCall database connection pool exceeds 90 percent utilization
   - name: node-monitoring
     rules:
       - alert: NodeDown

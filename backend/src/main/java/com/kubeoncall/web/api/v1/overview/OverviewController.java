@@ -55,6 +55,9 @@ public class OverviewController {
         data.put("failedExecutions", overview.failedExecutions());
         data.put("severityCounts", overview.severityCounts());
         data.put("statusCounts", overview.statusCounts());
+        data.put("executionStatusCounts", overview.executionStatusCounts());
+        data.put("failureReasons", overview.failureReasons());
+        data.put("executionTrend", overview.executionTrend());
         data.put("window", selectedWindow.value());
         data.put("windowStart", windowStart.toString());
         return ApiResponse.ok(data, RequestIdFilter.currentRequestId());
