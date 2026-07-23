@@ -1,5 +1,7 @@
 package com.kubeoncall.web.api.v1.overview;
 
+import java.sql.Timestamp;
+import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
@@ -34,34 +36,55 @@ public class OverviewQueryService {
         return jdbcTemplate != null && projection != null && projection.isAvailable();
     }
 
-    public Overview build() {
+    public Overview build(Instant windowStart) {
         JdbcTemplate jdbcTemplate = jdbcTemplateProvider.getIfAvailable();
-        AlarmIncidentProjection projection = alarmProjectionProvider.getIfAvailable();
-        Map<String, Long> severityCounts = projection == null ? Map.of() : projection.countActiveBySeverity();
-        Map<String, Long> statusCounts = projection == null ? Map.of() : projection.countByStatus();
+        if (jdbcTemplate == null) {
+            throw new IllegalStateException("Overview database is unavailable");
+        }
+        Timestamp since = Timestamp.from(windowStart);
+        Map<String, Long> severityCounts = countBy(jdbcTemplate, """
+                SELECT severity AS label, COUNT(*) AS total FROM koc_alarm_incident
+                 WHERE status IN ('FIRING', 'ACKNOWLEDGED') AND deleted_at IS NULL AND last_seen >= ?
+                 GROUP BY severity
+                """, since);
+        Map<String, Long> statusCounts = countBy(jdbcTemplate, """
+                SELECT status AS label, COUNT(*) AS total FROM koc_alarm_incident
+                 WHERE deleted_at IS NULL AND last_seen >= ?
+                 GROUP BY status
+                """, since);
 
         long activeAlarms = statusCounts.getOrDefault("FIRING", 0L) + statusCounts.getOrDefault("ACKNOWLEDGED", 0L);
         long pendingApprovals = count(
                 jdbcTemplate,
-                "SELECT COUNT(*) FROM koc_approval_request WHERE status = 'PENDING' AND deleted_at IS NULL");
-        long runningExecutions = count(jdbcTemplate, "SELECT COUNT(*) FROM koc_async_task WHERE status = 'RUNNING'");
-        long failedExecutions =
-                count(jdbcTemplate, "SELECT COUNT(*) FROM koc_async_task WHERE status IN ('FAILED','DEAD_LETTER')");
+                "SELECT COUNT(*) FROM koc_approval_request WHERE status = 'PENDING' AND requested_at >= ?",
+                since);
+        long runningExecutions = count(
+                jdbcTemplate,
+                "SELECT COUNT(*) FROM koc_workflow_execution WHERE status = 'RUNNING' AND created_at >= ?",
+                since);
+        long failedExecutions = count(
+                jdbcTemplate,
+                "SELECT COUNT(*) FROM koc_workflow_execution WHERE status = 'FAILED' AND created_at >= ?",
+                since);
 
         return new Overview(
                 activeAlarms, pendingApprovals, runningExecutions, failedExecutions, severityCounts, statusCounts);
     }
 
-    private static long count(JdbcTemplate jdbcTemplate, String sql) {
-        if (jdbcTemplate == null) {
-            return 0;
+    private static long count(JdbcTemplate jdbcTemplate, String sql, Timestamp since) {
+        Long value = jdbcTemplate.queryForObject(sql, Long.class, since);
+        return value == null ? 0 : value;
+    }
+
+    private static Map<String, Long> countBy(JdbcTemplate jdbcTemplate, String sql, Timestamp since) {
+        Map<String, Long> result = new LinkedHashMap<>();
+        for (Map<String, Object> row : jdbcTemplate.queryForList(sql, since)) {
+            Object total = row.get("total");
+            if (row.get("label") != null && total instanceof Number count) {
+                result.put(String.valueOf(row.get("label")), count.longValue());
+            }
         }
-        try {
-            Long value = jdbcTemplate.queryForObject(sql, Long.class);
-            return value == null ? 0 : value;
-        } catch (Exception ex) {
-            return 0;
-        }
+        return result;
     }
 
     public record Overview(

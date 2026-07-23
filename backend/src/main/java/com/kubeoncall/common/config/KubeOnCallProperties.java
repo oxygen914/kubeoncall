@@ -23,6 +23,8 @@ public class KubeOnCallProperties {
     private final Api api = new Api();
     private final DataMigration dataMigration = new DataMigration();
     private final LegacyApi legacyApi = new LegacyApi();
+    private final Knowledge knowledge = new Knowledge();
+    private final DependencyCircuitBreaker dependencyCircuitBreaker = new DependencyCircuitBreaker();
 
     public Agent getAgent() {
         return agent;
@@ -96,6 +98,14 @@ public class KubeOnCallProperties {
         return legacyApi;
     }
 
+    public Knowledge getKnowledge() {
+        return knowledge;
+    }
+
+    public DependencyCircuitBreaker getDependencyCircuitBreaker() {
+        return dependencyCircuitBreaker;
+    }
+
     public static class Agent extends AgentProperties {}
 
     public static class Approval extends ApprovalProperties {}
@@ -132,6 +142,10 @@ public class KubeOnCallProperties {
     public static class DataMigration extends DataMigrationProperties {}
 
     public static class LegacyApi extends LegacyApiProperties {}
+
+    public static class Knowledge extends KnowledgeProperties {}
+
+    public static class DependencyCircuitBreaker extends DependencyCircuitBreakerProperties {}
 
     public static class Integrations extends IntegrationsProperties {}
 

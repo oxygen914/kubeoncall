@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
+import java.time.Instant;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -58,6 +59,20 @@ class MinioKnowledgeObjectStorageIT {
                     .bucket(reference.bucket())
                     .object(reference.objectKey())
                     .build());
+        }
+    }
+
+    @Test
+    void shouldListImportObjectsForOrphanReconciliationThroughRealMinio() {
+        StoredDocumentReference reference = storageService.storeJsonl(
+                "imp-orphan-cleanup-it", "source.jsonl", "{\"title\":\"runbook\"}\n".getBytes(StandardCharsets.UTF_8));
+
+        try {
+            assertTrue(storageService
+                    .listObjectKeysOlderThan("knowledge/imports/", Instant.now().plusSeconds(60))
+                    .contains(reference.objectKey()));
+        } finally {
+            assertTrue(storageService.remove(reference));
         }
     }
 }

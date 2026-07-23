@@ -1,8 +1,14 @@
 # KubeOnCall single-file deployment for local Kubernetes/Minikube.
 #
 # The application uses Alibaba Cloud Model Studio's OpenAI-compatible endpoint
-# for qwen-plus and text-embedding-v4. Create kubeoncall-model-secrets before
-# applying this manifest; model credentials are intentionally not stored here.
+# for qwen-plus and text-embedding-v4. Before applying this manifest, create both
+# kubeoncall-secrets and kubeoncall-model-secrets in the kubeoncall namespace; credentials are
+# intentionally not stored here. For example:
+#   kubectl -n kubeoncall create secret generic kubeoncall-secrets \
+#     --from-literal=minio-access-key="$MINIO_ACCESS_KEY" \
+#     --from-literal=minio-secret-key="$MINIO_SECRET_KEY" \
+#     --from-literal=mysql-password="$MYSQL_PASSWORD" \
+#     --from-literal=mysql-root-password="$MYSQL_ROOT_PASSWORD"
 # MCP, cross-encoder, and external tool adapters remain disabled for local use.
 apiVersion: v1
 kind: Namespace
@@ -10,21 +16,6 @@ metadata:
   name: kubeoncall
   labels:
     app.kubernetes.io/part-of: kubeoncall
----
-apiVersion: v1
-kind: Secret
-metadata:
-  name: kubeoncall-secrets
-  namespace: kubeoncall
-  labels:
-    app.kubernetes.io/part-of: kubeoncall
-type: Opaque
-stringData:
-  # Local-only defaults. Replace these before using a shared environment.
-  minio-access-key: minioadmin
-  minio-secret-key: change-me-minio-secret
-  # WBS-12: MySQL identity/datasource password. Change in any shared environment.
-  mysql-password: change-me-mysql-password
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
@@ -397,6 +388,8 @@ spec:
               value: MYSQL
             - name: KUBEONCALL_DATA_MIGRATION_ALARM_WRITE_MODE
               value: REDIS_PRIMARY
+            - name: KUBEONCALL_DATA_MIGRATION_SHADOW_DIFF_THRESHOLD_PERCENT
+              value: "1.0"
             - name: KUBEONCALL_LEGACY_API_ENABLED
               value: "true"
             - name: SPRING_DATA_REDIS_HOST
@@ -531,7 +524,10 @@ spec:
                   name: kubeoncall-secrets
                   key: mysql-password
             - name: MYSQL_ROOT_PASSWORD
-              value: change-me-mysql-root
+              valueFrom:
+                secretKeyRef:
+                  name: kubeoncall-secrets
+                  key: mysql-root-password
           ports:
             - name: mysql
               containerPort: 3306

@@ -39,7 +39,7 @@ spec:
     spec:
       containers:
         - name: console
-          image: "{{ .Values.console.image.repository }}:{{ .Values.console.image.tag }}"
+          image: "{{ .Values.console.image.repository }}{{ if .Values.console.image.digest }}@{{ .Values.console.image.digest }}{{ else }}:{{ .Values.console.image.tag }}{{ end }}"
           imagePullPolicy: {{ .Values.console.image.pullPolicy }}
           ports:
             - name: http

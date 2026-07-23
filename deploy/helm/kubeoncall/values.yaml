@@ -3,6 +3,9 @@ replicaCount: 2
 image:
   repository: kubeoncall
   tag: latest
+  # Prefer an immutable registry manifest digest in production. When set, this overrides tag.
+  # Example: sha256:0123... (the repository remains a separate field).
+  digest: ""
   pullPolicy: IfNotPresent
 
 service:
@@ -16,6 +19,11 @@ resources:
 config:
   apiAuthEnabled: false
   approvalResumeLeaseSeconds: 300
+  # Helm defaults to multiple backend replicas, so SSE fanout must use Redis Pub/Sub.
+  realtimeClusterTransport: redis
+  dependencyCircuitBreakerEnabled: true
+  dependencyCircuitBreakerFailureThreshold: 5
+  dependencyCircuitBreakerResetTimeoutSeconds: 30
   redisHost: redis
   elasticsearchUri: http://elasticsearch:9200
   minioEndpoint: http://minio:9000
@@ -93,6 +101,7 @@ mysql:
   # the mysqlPassword secret key. Leave url empty to require a platform-provided MySQL service.
   url: ""
   username: kubeoncall
+  migrationUsername: kubeoncall_migration
   # When url is empty the backend connects to an in-cluster `mysql` service on the default port.
   inClusterHost: mysql
   database: kubeoncall
@@ -105,13 +114,26 @@ mysql:
   legacyTokenCompat: true
   bootstrapAdminEnabled: false
   bootstrapAdminUsername: ""
+  migrationJob:
+    enabled: true
+    backoffLimit: 6
+    activeDeadlineSeconds: 600
 
 # WBS-11 cutover controls surfaced into the chart so operators drive the migration without redeploy.
 dataMigration:
   alarmReadSource: MYSQL
+  # The write path remains Redis-primary until the MySQL-primary implementation and cutover
+  # evidence are complete. Keeping this explicit prevents an undeclared framework default.
+  alarmWriteMode: REDIS_PRIMARY
+  # Comma-separated explicit mappings for legacy Redis actor labels, e.g. system=migration-system.
+  legacyActorUsernameMappings: ""
   backfillBatchSize: 100
   backfillScanLimit: 10000
+  backfillMaxItemsPerSecond: 100
+  backfillTaskTimeoutSeconds: 1800
   backfillDryRun: true
+  # Sign-off blocks when the queried SHADOW mismatch rate exceeds this percentage.
+  shadowDiffThresholdPercent: 1.0
 
 # WBS-11 legacy /api/* retirement. Set to false once the new Console is the only entry point.
 legacyApi:
@@ -135,6 +157,7 @@ secrets:
   changeEventArgocdWebhookTokenKey: change-event-argocd-webhook-token
   # WBS-12 MySQL identity/datasource secrets.
   mysqlPasswordKey: mysql-password
+  mysqlMigrationPasswordKey: mysql-migration-password
   mysqlRootPasswordKey: mysql-root-password
   bootstrapAdminPasswordKey: bootstrap-admin-password
 
@@ -147,6 +170,7 @@ console:
   image:
     repository: kubeoncall-console
     tag: latest
+    digest: ""
     pullPolicy: IfNotPresent
   resources:
     requests: {cpu: 100m, memory: 128Mi}

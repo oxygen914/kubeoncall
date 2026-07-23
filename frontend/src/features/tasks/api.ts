@@ -32,6 +32,10 @@ export function getTask(taskId: string): Promise<Task> {
   return api.get<Task>(`/api/v1/tasks/${encodeURIComponent(taskId)}`)
 }
 
+export function cancelTask(taskId: string): Promise<Task> {
+  return api.delete<Task>(`/api/v1/tasks/${encodeURIComponent(taskId)}`)
+}
+
 export function isTaskTerminal(status: TaskStatus): boolean {
   return ['SUCCEEDED', 'FAILED', 'CANCELLED', 'DEAD_LETTER'].includes(status)
 }

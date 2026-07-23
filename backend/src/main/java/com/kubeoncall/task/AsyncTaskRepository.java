@@ -181,6 +181,39 @@ public class AsyncTaskRepository {
     }
 
     /**
+     * Cancels a queued, retrying or running task. A running handler observes the changed durable
+     * state through {@link #isCancelled(String)} before its next source-item commit; its stale
+     * completion write is rejected by the status predicate.
+     */
+    public boolean cancel(String publicId, Instant now) {
+        if (publicId == null || publicId.isBlank()) {
+            throw new IllegalArgumentException("publicId is required");
+        }
+        if (now == null) {
+            throw new IllegalArgumentException("now is required");
+        }
+        return jdbcTemplate.update("""
+                        UPDATE koc_async_task
+                           SET status = 'CANCELLED',
+                               error_code = 'CANCELLED',
+                               error_summary = 'Cancelled by operator',
+                               finished_at = ?,
+                               owner_token = NULL,
+                               lease_until = NULL,
+                               version = version + 1
+                         WHERE public_id = ?
+                           AND status IN ('PENDING', 'RETRY', 'RUNNING')
+                        """, now, publicId) == 1;
+    }
+
+    /** Cheap cooperative-cancellation probe for a long-running task handler. */
+    public boolean isCancelled(String publicId) {
+        Boolean cancelled = jdbcTemplate.queryForObject(
+                "SELECT status = 'CANCELLED' FROM koc_async_task WHERE public_id = ?", Boolean.class, publicId);
+        return Boolean.TRUE.equals(cancelled);
+    }
+
+    /**
      * Updates a running task's user-visible stage and progress under the same owner/fencing/lease
      * predicate as every other worker write.
      */

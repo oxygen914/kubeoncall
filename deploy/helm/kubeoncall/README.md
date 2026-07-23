@@ -14,9 +14,28 @@ Chart 只负责部署 KubeOnCall；Redis、Elasticsearch、MinIO、Prometheus Op
 - `mcp-api-key`，或 `mcp-oauth-client-secret`
 - `alertmanager-webhook-token`
 - `change-event-webhook-token`
+- `mysql-password`（应用账户，仅 DML）
+- `mysql-migration-password`（Flyway Migration Job 专用 DDL 账户）
 - 可选 Provider key：`change-event-github-webhook-secret`、`change-event-gitlab-webhook-token`、`change-event-jenkins-webhook-token`、`change-event-argocd-webhook-token`
 
 Secret 值不得写入 values 或仓库。
+
+### 轮换
+
+以不可变的新 Secret 名称进行两阶段轮换，避免原地覆盖而使回滚失去旧凭据：
+
+```bash
+KUBEONCALL_SECRET_FILE=/secure/kubeoncall-secrets.env \
+KUBEONCALL_ROTATE_APPLY=true ./scripts/rotate-kubernetes-secret.sh kubeoncall kubeoncall-secrets-20260723
+# 审核新 Secret key 完整后，再在受管 values override 中把 secrets.existingSecret 改为新名称并 helm upgrade。
+```
+
+升级后的健康验证通过前保留旧 revision；若失败，使用既有 Helm revision 回滚。脚本不输出
+Secret 值，也不自动切换工作负载。
+
+MySQL 启用时，Chart 在 `pre-install` / `pre-upgrade` 阶段运行一次 Flyway Job；常驻应用
+明确禁用 Flyway，只使用 `mysql-password`。托管 MySQL 需预先创建与 `values-production.yaml`
+一致的应用账户和迁移账户，应用账户不得授予 `CREATE`、`ALTER`、`DROP` 等 DDL 权限。
 
 ## 验收
 

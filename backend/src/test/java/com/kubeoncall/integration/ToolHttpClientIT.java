@@ -101,8 +101,8 @@ class ToolHttpClientIT {
 
         assertEquals("failed", result.get("status"));
         assertEquals(500, result.get("httpStatus"));
-        assertEquals("ToolTransportError", result.get("errorType"));
-        assertEquals("Tool request failed", result.get("errorMessage"));
+        assertEquals("TimeoutError", result.get("errorType"));
+        assertEquals("Tool request timed out", result.get("errorMessage"));
         assertTrue(((Number) result.get("latencyMs")).longValue() >= 400);
     }
 

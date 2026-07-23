@@ -1,5 +1,7 @@
 package com.kubeoncall.web.api.v1;
 
+import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplication;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplication.Type;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.annotation.Order;
@@ -20,6 +22,7 @@ import com.kubeoncall.identity.AuthService;
  * and the login endpoint are exempt.
  */
 @Configuration
+@ConditionalOnWebApplication(type = Type.SERVLET)
 public class V1SecurityConfig {
 
     private final AuthService authService;

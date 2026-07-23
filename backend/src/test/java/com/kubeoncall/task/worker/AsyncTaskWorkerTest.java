@@ -189,6 +189,48 @@ class AsyncTaskWorkerTest {
     }
 
     @Test
+    void cancellationStopsACooperativeHandlerWithoutRetryingOrCompleting() throws Exception {
+        AsyncTaskRepository repository = mock(AsyncTaskRepository.class);
+        AsyncTaskRecord task = task("ASK_EXECUTION", 1, 5);
+        AsyncTaskHandler handler = handler(task.taskType());
+        TestLeaseGuard heartbeat = new TestLeaseGuard(true);
+        when(repository.claimNext(OWNER, NOW, LEASE, TASK_TYPES)).thenReturn(Optional.of(task));
+        when(repository.isCancelled(task.publicId())).thenReturn(true);
+        when(handler.handle(any(AsyncTaskContext.class))).thenAnswer(invocation -> {
+            invocation.getArgument(0, AsyncTaskContext.class).requireValidLease();
+            return HandlerResult.empty();
+        });
+
+        RunResult result = worker(repository, List.of(handler), heartbeat).runOnce();
+
+        assertThat(result.outcome()).isEqualTo(Outcome.CANCELLED);
+        verify(repository, never()).complete(any(), any(), anyLong(), any(), any());
+        verify(repository, never()).retry(any(), any(), anyLong(), any(), any(), any(), any());
+    }
+
+    @Test
+    void expiredTaskDeadlineFailsWithoutRunningItsHandler() throws Exception {
+        AsyncTaskRepository repository = mock(AsyncTaskRepository.class);
+        AsyncTaskRecord task = taskWithRequest("ASK_EXECUTION", 1, 5, Map.of("timeoutSeconds", 1), NOW.minusSeconds(2));
+        AsyncTaskHandler handler = handler(task.taskType());
+        TestLeaseGuard heartbeat = new TestLeaseGuard(true);
+        when(repository.claimNext(OWNER, NOW, LEASE, TASK_TYPES)).thenReturn(Optional.of(task));
+        when(repository.fail(
+                        task.publicId(),
+                        OWNER,
+                        task.fencingToken(),
+                        "TIMEOUT",
+                        "Async task exceeded its execution deadline",
+                        NOW))
+                .thenReturn(true);
+
+        RunResult result = worker(repository, List.of(handler), heartbeat).runOnce();
+
+        assertThat(result.outcome()).isEqualTo(Outcome.FAILED);
+        verify(handler, never()).handle(any(AsyncTaskContext.class));
+    }
+
+    @Test
     void restoresTaskCorrelationMdcForHandlerAndCleansWorkerScope() throws Exception {
         AsyncTaskRepository repository = mock(AsyncTaskRepository.class);
         AsyncTaskRecord task = task("ASK_EXECUTION", 1, 5);
@@ -288,6 +330,11 @@ class AsyncTaskWorkerTest {
     }
 
     private static AsyncTaskRecord task(String taskType, int attempt, int maxAttempts) {
+        return taskWithRequest(taskType, attempt, maxAttempts, Map.of("question", "why"), NOW);
+    }
+
+    private static AsyncTaskRecord taskWithRequest(
+            String taskType, int attempt, int maxAttempts, Map<String, Object> request, Instant startedAt) {
         return new AsyncTaskRecord(
                 42L,
                 "tsk_123",
@@ -298,7 +345,7 @@ class AsyncTaskWorkerTest {
                 "RUNNING",
                 "execute",
                 10,
-                Map.of("question", "why"),
+                request,
                 Map.of(),
                 null,
                 null,
@@ -308,7 +355,7 @@ class AsyncTaskWorkerTest {
                 attempt,
                 maxAttempts,
                 NOW,
-                NOW,
+                startedAt,
                 null,
                 "req_123",
                 "trace_123",

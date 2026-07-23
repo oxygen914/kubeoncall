@@ -44,10 +44,21 @@ jobs:
       - name: Backend verify (unit + integration-test profile)
         run: ./mvnw --batch-mode --no-transfer-progress verify -Pintegration-test
         working-directory: backend
+      # Generate the source-controlled OpenAPI contract from the running backend. A following diff
+      # check makes an endpoint or payload change fail CI until its frontend type contract is
+      # regenerated deliberately.
+      - name: Generate and verify OpenAPI contract
+        run: |
+          ./mvnw --batch-mode --no-transfer-progress verify -Popenapi-contract
+          git diff --exit-code -- api/openapi.json
+        working-directory: backend
       # Frontend: install, typecheck, lint, unit tests, production build — the full quality gate the
       # plan requires, in dependency order so a failure stops the job early.
       - name: Frontend install
         run: npm ci
+        working-directory: frontend
+      - name: Verify generated OpenAPI client types
+        run: npm run api:check
         working-directory: frontend
       - name: Frontend typecheck
         run: npm run typecheck
@@ -157,17 +168,25 @@ jobs:
           severity: HIGH,CRITICAL
           exit-code: "1"
           ignore-unfixed: true
-      # SBOM for the backend image so releases are traceable to their dependency set.
-      - name: Generate backend SBOM
+      # CycloneDX is a standard, machine-consumable SBOM rather than Trivy's default scan report.
+      - name: Generate backend CycloneDX SBOM
         uses: aquasecurity/trivy-action@0.24.0
         with:
           image-ref: kubeoncall-backend:ci
-          format: json
-          output: backend-sbom.json
+          format: cyclonedx
+          output: backend-sbom.cdx.json
+      - name: Generate console CycloneDX SBOM
+        uses: aquasecurity/trivy-action@0.24.0
+        with:
+          image-ref: kubeoncall-console:ci
+          format: cyclonedx
+          output: console-sbom.cdx.json
       - uses: actions/upload-artifact@v4
         with:
-          name: backend-sbom
-          path: backend-sbom.json
+          name: cyclonedx-sbom
+          path: |
+            backend-sbom.cdx.json
+            console-sbom.cdx.json
 
   release-gate:
     runs-on: ubuntu-latest

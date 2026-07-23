@@ -4,14 +4,12 @@ import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.scheduling.annotation.EnableAsync;
-import org.springframework.scheduling.annotation.EnableScheduling;
 
 import com.kubeoncall.common.config.KubeOnCallProperties;
 
 @SpringBootApplication
 @EnableConfigurationProperties(KubeOnCallProperties.class)
 @EnableAsync
-@EnableScheduling
 public class KubeOnCallApplication {
 
     public static void main(String[] args) {

@@ -36,7 +36,11 @@ public class DataMigrationProperties {
     private AlarmWriteMode alarmWriteMode = AlarmWriteMode.REDIS_PRIMARY;
     private int backfillBatchSize = 100;
     private long backfillScanLimit = 10000;
+    private int backfillMaxItemsPerSecond = 100;
+    private long backfillTaskTimeoutSeconds = 1800;
     private boolean backfillDryRun = true;
+    private double shadowDiffThresholdPercent = 1.0d;
+    private String legacyActorUsernameMappings = "";
 
     public AlarmReadSource getAlarmReadSource() {
         return alarmReadSource;
@@ -70,11 +74,54 @@ public class DataMigrationProperties {
         this.backfillScanLimit = backfillScanLimit;
     }
 
+    /**
+     * Maximum Redis source records a single application process may inspect per second while a
+     * durable migration task is running. Zero disables throttling for emergency maintenance only.
+     */
+    public int getBackfillMaxItemsPerSecond() {
+        return backfillMaxItemsPerSecond;
+    }
+
+    public void setBackfillMaxItemsPerSecond(int backfillMaxItemsPerSecond) {
+        this.backfillMaxItemsPerSecond = backfillMaxItemsPerSecond;
+    }
+
+    /** Maximum wall-clock execution time for one durable migration task attempt. */
+    public long getBackfillTaskTimeoutSeconds() {
+        return backfillTaskTimeoutSeconds;
+    }
+
+    public void setBackfillTaskTimeoutSeconds(long backfillTaskTimeoutSeconds) {
+        this.backfillTaskTimeoutSeconds = backfillTaskTimeoutSeconds;
+    }
+
     public boolean isBackfillDryRun() {
         return backfillDryRun;
     }
 
     public void setBackfillDryRun(boolean backfillDryRun) {
         this.backfillDryRun = backfillDryRun;
+    }
+
+    /** Maximum SHADOW mismatch rate allowed during the queried sign-off window. */
+    public double getShadowDiffThresholdPercent() {
+        return shadowDiffThresholdPercent;
+    }
+
+    public void setShadowDiffThresholdPercent(double shadowDiffThresholdPercent) {
+        this.shadowDiffThresholdPercent = Math.max(0d, shadowDiffThresholdPercent);
+    }
+
+    /**
+     * Explicit legacy-actor to local-username mappings, encoded as comma-separated
+     * {@code legacyActor=username} pairs. Values not listed here may only migrate when the legacy
+     * actor already exactly matches a local username.
+     */
+    public String getLegacyActorUsernameMappings() {
+        return legacyActorUsernameMappings;
+    }
+
+    public void setLegacyActorUsernameMappings(String legacyActorUsernameMappings) {
+        this.legacyActorUsernameMappings = legacyActorUsernameMappings == null ? "" : legacyActorUsernameMappings;
     }
 }

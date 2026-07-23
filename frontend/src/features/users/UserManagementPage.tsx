@@ -12,6 +12,7 @@ interface UserView {
   displayName: string
   email: string | null
   status: string
+  version: number
   roles: string[]
   lastLoginAt: string | null
   lockedUntil: string | null
@@ -21,6 +22,7 @@ interface UserView {
 export function UserManagementPage() {
   const queryClient = useQueryClient()
   const [showCreate, setShowCreate] = useState(false)
+  const [editingUser, setEditingUser] = useState<UserView | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   const listQuery = useQuery({
@@ -34,20 +36,20 @@ export function UserManagementPage() {
   }
 
   const disableMutation = useMutation({
-    mutationFn: (userId: string) =>
-      api.post(`/api/v1/users/${encodeURIComponent(userId)}/disable`, undefined),
+    mutationFn: (user: UserView) =>
+      api.post(`/api/v1/users/${encodeURIComponent(user.id)}/disable`, undefined, revisionOptions(user)),
     onSuccess: invalidate,
     onError: (err) => setError(err instanceof ApiError ? err.message : '操作失败'),
   })
   const enableMutation = useMutation({
-    mutationFn: (userId: string) =>
-      api.post(`/api/v1/users/${encodeURIComponent(userId)}/enable`, undefined),
+    mutationFn: (user: UserView) =>
+      api.post(`/api/v1/users/${encodeURIComponent(user.id)}/enable`, undefined, revisionOptions(user)),
     onSuccess: invalidate,
     onError: (err) => setError(err instanceof ApiError ? err.message : '操作失败'),
   })
   const revokeMutation = useMutation({
-    mutationFn: (userId: string) =>
-      api.post(`/api/v1/users/${encodeURIComponent(userId)}/session-revocations`, undefined),
+    mutationFn: (user: UserView) =>
+      api.post(`/api/v1/users/${encodeURIComponent(user.id)}/session-revocations`, undefined, revisionOptions(user)),
     onSuccess: invalidate,
     onError: (err) => setError(err instanceof ApiError ? err.message : '操作失败'),
   })
@@ -89,16 +91,19 @@ export function UserManagementPage() {
                 <td>
                   <div className="koc-pagination__actions">
                     {user.status === 'ACTIVE' ? (
-                      <Button variant="ghost" size="sm" disabled={disableMutation.isPending} onClick={() => disableMutation.mutate(user.id)}>
+                      <Button variant="ghost" size="sm" disabled={disableMutation.isPending} onClick={() => disableMutation.mutate(user)}>
                         禁用
                       </Button>
                     ) : (
-                      <Button variant="ghost" size="sm" disabled={enableMutation.isPending} onClick={() => enableMutation.mutate(user.id)}>
+                      <Button variant="ghost" size="sm" disabled={enableMutation.isPending} onClick={() => enableMutation.mutate(user)}>
                         启用
                       </Button>
                     )}
-                    <Button variant="ghost" size="sm" disabled={revokeMutation.isPending} onClick={() => revokeMutation.mutate(user.id)}>
+                    <Button variant="ghost" size="sm" disabled={revokeMutation.isPending} onClick={() => revokeMutation.mutate(user)}>
                       撤销会话
+                    </Button>
+                    <Button variant="ghost" size="sm" onClick={() => setEditingUser(user)}>
+                      管理
                     </Button>
                   </div>
                 </td>
@@ -107,8 +112,128 @@ export function UserManagementPage() {
           </tbody>
         </table>
       </AsyncState>
+      {editingUser ? (
+        <UserAdminDialog
+          user={editingUser}
+          onClose={() => setEditingUser(null)}
+          onChanged={invalidate}
+        />
+      ) : null}
     </section>
   )
+}
+
+function UserAdminDialog({
+  user,
+  onClose,
+  onChanged,
+}: {
+  user: UserView
+  onClose: () => void
+  onChanged: () => void
+}) {
+  const [role, setRole] = useState('VIEWER')
+  const [password, setPassword] = useState('')
+  const [error, setError] = useState<string | null>(null)
+  const [pending, setPending] = useState(false)
+  const basePath = `/api/v1/users/${encodeURIComponent(user.id)}`
+
+  const run = async (operation: () => Promise<unknown>, success: string) => {
+    setPending(true)
+    setError(null)
+    try {
+      await operation()
+      onChanged()
+      if (success === 'password') {
+        setPassword('')
+      }
+      onClose()
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : '操作失败')
+    } finally {
+      setPending(false)
+    }
+  }
+
+  return (
+    <div className="koc-dialog" role="dialog" aria-modal="true" aria-labelledby="user-admin-title">
+      <div className="koc-dialog__panel">
+        <h2 id="user-admin-title">管理用户：{user.username}</h2>
+        <p className="koc-dialog__subtitle">角色变更和改密会立即撤销该用户的现有会话。</p>
+
+        <section className="koc-detail__summary">
+          <h3>角色</h3>
+          <div className="koc-pagination__actions">
+            {user.roles.map((assignedRole) => (
+              <Button
+                key={assignedRole}
+                variant="ghost"
+                size="sm"
+                disabled={pending || user.roles.length === 1}
+                onClick={() => void run(() => api.delete(`${basePath}/roles/${encodeURIComponent(assignedRole)}`, undefined, revisionOptions(user)), 'role')}
+              >
+                移除 {assignedRole}
+              </Button>
+            ))}
+          </div>
+          <div className="koc-dialog__actions">
+            <label className="koc-filter"><span>添加角色</span>
+              <select value={role} onChange={(e) => setRole(e.target.value)}>
+                <option value="VIEWER">VIEWER</option>
+                <option value="OPERATOR">OPERATOR</option>
+                <option value="ADMIN">ADMIN</option>
+              </select>
+            </label>
+            <Button
+              variant="secondary"
+              size="sm"
+              disabled={pending || user.roles.includes(role)}
+              onClick={() => void run(() => api.post(`${basePath}/roles`, { role }, revisionOptions(user)), 'role')}
+            >
+              添加角色
+            </Button>
+          </div>
+        </section>
+
+        <section className="koc-detail__summary">
+          <h3>修改密码</h3>
+          <label className="koc-filter"><span>新密码（≥12）</span>
+            <input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              minLength={12}
+              maxLength={1024}
+            />
+          </label>
+          <Button
+            variant="secondary"
+            size="sm"
+            disabled={pending || password.length < 12}
+            onClick={() => void run(() => api.post(`${basePath}/password`, { password }, revisionOptions(user)), 'password')}
+          >
+            保存新密码
+          </Button>
+        </section>
+
+        {error ? <p className="koc-alert koc-alert--error" role="alert">{error}</p> : null}
+        <div className="koc-dialog__actions">
+          <Button variant="ghost" onClick={onClose} disabled={pending}>关闭</Button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function revisionOptions(user: UserView) {
+  return {
+    headers: { 'If-Match': `"${user.version}"` },
+    idempotencyKey: commandKey(),
+  }
+}
+
+function commandKey() {
+  return `usercmd-${crypto.randomUUID()}`
 }
 
 function CreateUserForm({ onCreated }: { onCreated: () => void }) {
@@ -126,7 +251,7 @@ function CreateUserForm({ onCreated }: { onCreated: () => void }) {
         email: email || undefined,
         password,
         role,
-      }),
+      }, { idempotencyKey: commandKey() }),
     onSuccess: onCreated,
     onError: (err) => setError(err instanceof ApiError ? err.message : '创建失败'),
   })

@@ -1,5 +1,7 @@
 package com.kubeoncall.web.api.v1.overview;
 
+import java.time.Duration;
+import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
@@ -43,7 +45,9 @@ public class OverviewController {
                     V1ApiErrorCode.SERVICE_UNAVAILABLE,
                     "Overview read model is not available");
         }
-        OverviewQueryService.Overview overview = queryService.build();
+        OverviewWindow selectedWindow = OverviewWindow.parse(window);
+        Instant windowStart = Instant.now().minus(selectedWindow.duration());
+        OverviewQueryService.Overview overview = queryService.build(windowStart);
         Map<String, Object> data = new LinkedHashMap<>();
         data.put("activeAlarms", overview.activeAlarms());
         data.put("pendingApprovals", overview.pendingApprovals());
@@ -51,7 +55,45 @@ public class OverviewController {
         data.put("failedExecutions", overview.failedExecutions());
         data.put("severityCounts", overview.severityCounts());
         data.put("statusCounts", overview.statusCounts());
-        data.put("window", window == null ? "24h" : window);
+        data.put("window", selectedWindow.value());
+        data.put("windowStart", windowStart.toString());
         return ApiResponse.ok(data, RequestIdFilter.currentRequestId());
+    }
+
+    private enum OverviewWindow {
+        ONE_HOUR("1h", Duration.ofHours(1)),
+        SIX_HOURS("6h", Duration.ofHours(6)),
+        TWENTY_FOUR_HOURS("24h", Duration.ofHours(24)),
+        SEVEN_DAYS("7d", Duration.ofDays(7)),
+        THIRTY_DAYS("30d", Duration.ofDays(30));
+
+        private final String value;
+        private final Duration duration;
+
+        OverviewWindow(String value, Duration duration) {
+            this.value = value;
+            this.duration = duration;
+        }
+
+        String value() {
+            return value;
+        }
+
+        Duration duration() {
+            return duration;
+        }
+
+        static OverviewWindow parse(String raw) {
+            String value = raw == null || raw.isBlank() ? "24h" : raw.trim().toLowerCase();
+            for (OverviewWindow candidate : values()) {
+                if (candidate.value.equals(value)) {
+                    return candidate;
+                }
+            }
+            throw new V1ApiException(
+                    HttpStatus.BAD_REQUEST.value(),
+                    V1ApiErrorCode.INVALID_REQUEST,
+                    "window must be one of 1h, 6h, 24h, 7d, 30d");
+        }
     }
 }

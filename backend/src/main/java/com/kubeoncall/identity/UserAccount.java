@@ -20,12 +20,51 @@ public record UserAccount(
         long passwordVersion,
         String status,
         long authVersion,
+        long version,
         Instant passwordChangedAt,
         Instant lastLoginAt,
         Instant lockedUntil,
         int failedLoginCount,
         Set<String> roles,
         Set<String> permissions) {
+
+    /** Compatibility constructor for callers that do not need the persistent resource revision. */
+    public UserAccount(
+            long id,
+            String publicId,
+            String username,
+            String displayName,
+            String email,
+            String passwordHash,
+            String passwordAlgorithm,
+            long passwordVersion,
+            String status,
+            long authVersion,
+            Instant passwordChangedAt,
+            Instant lastLoginAt,
+            Instant lockedUntil,
+            int failedLoginCount,
+            Set<String> roles,
+            Set<String> permissions) {
+        this(
+                id,
+                publicId,
+                username,
+                displayName,
+                email,
+                passwordHash,
+                passwordAlgorithm,
+                passwordVersion,
+                status,
+                authVersion,
+                authVersion,
+                passwordChangedAt,
+                lastLoginAt,
+                lockedUntil,
+                failedLoginCount,
+                roles,
+                permissions);
+    }
 
     public boolean isActive() {
         return "ACTIVE".equals(status);

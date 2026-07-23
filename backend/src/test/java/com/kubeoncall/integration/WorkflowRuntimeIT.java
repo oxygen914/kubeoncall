@@ -271,6 +271,54 @@ class WorkflowRuntimeIT {
                 .isGreaterThanOrEqualTo(4L);
     }
 
+    @Test
+    void expiredWorkerLeaseIsReclaimedAndTheOldOwnerCannotComplete() {
+        Instant claimedAt = Instant.parse("2026-07-22T01:00:00Z");
+        AsyncTaskRecord created = tasks.create(new AsyncTaskRepository.CreateTask(
+                "tsk_reclaim_after_restart",
+                "KNOWLEDGE_IMPORT",
+                "KNOWLEDGE_IMPORT",
+                "imp_reclaim_after_restart",
+                "reclaim-after-restart",
+                "queued",
+                Map.of("source", "integration-test"),
+                3,
+                claimedAt,
+                "req_reclaim_after_restart",
+                null));
+
+        AsyncTaskRecord oldOwner = tasks.claimNext(
+                        "worker-before-restart", claimedAt, Duration.ofSeconds(30), Set.of("KNOWLEDGE_IMPORT"))
+                .orElseThrow();
+        AsyncTaskRecord reclaimed = tasks.claimNext(
+                        "worker-after-restart",
+                        claimedAt.plusSeconds(31),
+                        Duration.ofSeconds(30),
+                        Set.of("KNOWLEDGE_IMPORT"))
+                .orElseThrow();
+
+        assertThat(reclaimed.publicId()).isEqualTo(created.publicId());
+        assertThat(reclaimed.attempt()).isEqualTo(oldOwner.attempt() + 1);
+        assertThat(reclaimed.fencingToken()).isEqualTo(oldOwner.fencingToken() + 1);
+        assertThat(tasks.complete(
+                        created.publicId(),
+                        oldOwner.ownerToken(),
+                        oldOwner.fencingToken(),
+                        Map.of("stale", true),
+                        claimedAt.plusSeconds(31)))
+                .isFalse();
+        assertThat(tasks.complete(
+                        created.publicId(),
+                        reclaimed.ownerToken(),
+                        reclaimed.fencingToken(),
+                        Map.of("reclaimed", true),
+                        claimedAt.plusSeconds(31)))
+                .isTrue();
+        assertThat(tasks.findByPublicId(created.publicId()).orElseThrow())
+                .extracting(AsyncTaskRecord::status)
+                .isEqualTo("SUCCEEDED");
+    }
+
     private static AsyncTaskWorker worker(String owner, Set<String> types, AsyncTaskHandler handler) {
         return new AsyncTaskWorker(
                 tasks,

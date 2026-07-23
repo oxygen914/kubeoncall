@@ -16,8 +16,7 @@ import com.kubeoncall.web.api.v1.V1Security;
 /**
  * {@code /api/v1/users} — read-only user and role listing for the user-management page. Requires
  * {@code user:read}. Password hashes and auth versions are never serialized; the response exposes
- * only what an operator needs to identify and manage accounts. Write operations (create/disable/role
- * assignment) arrive in WBS-4 follow-up with audit and version handling.
+ * the non-sensitive resource revision required for an operator to send an optimistic-lock write.
  */
 @RestController
 @RequestMapping("/api/v1/users")
@@ -46,6 +45,7 @@ public class UsersController {
                 user.displayName(),
                 user.email(),
                 user.status(),
+                user.version(),
                 List.copyOf(user.roles()),
                 user.lastLoginAt(),
                 user.lockedUntil());
@@ -57,6 +57,7 @@ public class UsersController {
             String displayName,
             String email,
             String status,
+            long version,
             List<String> roles,
             java.time.Instant lastLoginAt,
             java.time.Instant lockedUntil) {}

@@ -67,13 +67,14 @@ cp .env.example .env
 chmod 600 .env
 ```
 
-编辑 `.env`，替换所有 `CHANGE_ME` 和 `YOUR_*` 值。至少需要设置：
+编辑 `.env`，替换所有 `CHANGE_ME` 值。至少需要设置：
 
-- `ALIYUN_API_KEY`
 - Viewer、Operator、Admin 三个 API Token
 - MinIO 密码
 - Alertmanager Token
 - Grafana 密码
+
+基础栈可在没有模型密钥时启动，并回退到规则规划。若启用 Spring AI 规划模型，先设置 `ALIYUN_API_KEY`，再将 `SPRING_AUTOCONFIGURE_EXCLUDE` 置空并把 `SPRING_AI_OPENAI_CHAT_ENABLED=true`；当前 Spring AI `1.0.0-M2` 会无条件初始化 moderation client，因此两项必须同时调整。
 
 启用 Alertmanager 前，把同一个 Token 写入 credentials file：
 

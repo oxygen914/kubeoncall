@@ -16,7 +16,7 @@ spec:
     spec:
       containers:
         - name: kubeoncall
-          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          image: "{{ .Values.image.repository }}{{ if .Values.image.digest }}@{{ .Values.image.digest }}{{ else }}:{{ .Values.image.tag }}{{ end }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           ports:
             - name: http
@@ -46,6 +46,14 @@ spec:
                   optional: {{ not .Values.config.apiAuthEnabled }}
             - name: APPROVAL_RESUME_LEASE_SECONDS
               value: {{ .Values.config.approvalResumeLeaseSeconds | quote }}
+            - name: KUBEONCALL_REALTIME_CLUSTER_TRANSPORT
+              value: {{ .Values.config.realtimeClusterTransport | quote }}
+            - name: KUBEONCALL_DEPENDENCY_CIRCUIT_BREAKER_ENABLED
+              value: {{ .Values.config.dependencyCircuitBreakerEnabled | quote }}
+            - name: KUBEONCALL_DEPENDENCY_CIRCUIT_BREAKER_FAILURE_THRESHOLD
+              value: {{ .Values.config.dependencyCircuitBreakerFailureThreshold | quote }}
+            - name: KUBEONCALL_DEPENDENCY_CIRCUIT_BREAKER_RESET_TIMEOUT_SECONDS
+              value: {{ .Values.config.dependencyCircuitBreakerResetTimeoutSeconds | quote }}
             - name: SPRING_DATA_REDIS_HOST
               value: {{ .Values.config.redisHost | quote }}
             - name: SPRING_ELASTICSEARCH_URIS
@@ -258,6 +266,9 @@ spec:
                 secretKeyRef:
                   name: {{ .Values.secrets.existingSecret }}
                   key: {{ .Values.secrets.mysqlPasswordKey }}
+            # Schema changes run in the Helm migration Job with a separate DDL identity.
+            - name: SPRING_FLYWAY_ENABLED
+              value: "false"
             - name: KUBEONCALL_AUTH_SESSION_COOKIE_SECURE
               value: {{ .Values.mysql.sessionCookieSecure | quote }}
             - name: KUBEONCALL_AUTH_SESSION_IDLE_TIMEOUT_SECONDS
@@ -283,8 +294,18 @@ spec:
             {{- end }}
             - name: KUBEONCALL_DATA_MIGRATION_ALARM_READ_SOURCE
               value: {{ .Values.dataMigration.alarmReadSource | quote }}
+            - name: KUBEONCALL_DATA_MIGRATION_ALARM_WRITE_MODE
+              value: {{ .Values.dataMigration.alarmWriteMode | quote }}
             - name: KUBEONCALL_DATA_MIGRATION_BACKFILL_DRY_RUN
               value: {{ .Values.dataMigration.backfillDryRun | quote }}
+            - name: KUBEONCALL_DATA_MIGRATION_SHADOW_DIFF_THRESHOLD_PERCENT
+              value: {{ .Values.dataMigration.shadowDiffThresholdPercent | quote }}
+            - name: KUBEONCALL_DATA_MIGRATION_BACKFILL_MAX_ITEMS_PER_SECOND
+              value: {{ .Values.dataMigration.backfillMaxItemsPerSecond | quote }}
+            - name: KUBEONCALL_DATA_MIGRATION_BACKFILL_TASK_TIMEOUT_SECONDS
+              value: {{ .Values.dataMigration.backfillTaskTimeoutSeconds | quote }}
+            - name: KUBEONCALL_DATA_MIGRATION_LEGACY_ACTOR_USERNAME_MAPPINGS
+              value: {{ .Values.dataMigration.legacyActorUsernameMappings | quote }}
             - name: KUBEONCALL_LEGACY_API_ENABLED
               value: {{ .Values.legacyApi.enabled | quote }}
           readinessProbe:

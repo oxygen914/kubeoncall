@@ -1,5 +1,7 @@
 package com.kubeoncall.web;
 
+import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplication;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplication.Type;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.annotation.Order;
@@ -15,6 +17,7 @@ import org.springframework.security.web.SecurityFilterChain;
  * actuator. Ordered after the v1 chain so v1 always wins its security matcher.
  */
 @Configuration
+@ConditionalOnWebApplication(type = Type.SERVLET)
 public class DefaultSecurityConfig {
 
     @Bean

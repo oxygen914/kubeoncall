@@ -104,6 +104,52 @@ public class AlarmIncidentProjection {
         project(canonical, AlarmEvaluationResult.unmatched(state.severity(), "backfill"), state);
     }
 
+    /**
+     * MySQL-primary entry point. It constructs state from the incoming event instead of reading a
+     * Redis snapshot and propagates a database failure to its caller; Redis can therefore remain a
+     * compatibility projection rather than deciding whether the fact write succeeded.
+     */
+    public ActiveAlarmState projectPrimary(NormalizedAlarmEvent event, AlarmEvaluationResult evaluation) {
+        ActiveAlarmState state = primaryState(event, evaluation);
+        JdbcTemplate jdbcTemplate = jdbcTemplateProvider.getIfAvailable();
+        if (jdbcTemplate == null || !isAvailable()) {
+            throw new IllegalStateException("MySQL alarm projection unavailable for MYSQL_PRIMARY");
+        }
+        DeliveryIdentity delivery = deliveryIdentity(event);
+        try {
+            projectAtomically(jdbcTemplate, event, evaluation, state, delivery, false);
+        } catch (DuplicateKeyException ex) {
+            // Same idempotent delivery outcome as the Redis-primary projection path. A concurrent
+            // primary writer may insert the event after this transaction's first existence check.
+            if (!deliveryExists(jdbcTemplate, delivery)) {
+                throw ex;
+            }
+        }
+        return state;
+    }
+
+    private static ActiveAlarmState primaryState(NormalizedAlarmEvent event, AlarmEvaluationResult evaluation) {
+        Instant eventTime = event.occurredAt() == null ? Instant.now() : event.occurredAt();
+        AlarmStatus status = event.status() == null ? AlarmStatus.FIRING : event.status();
+        AlarmSeverity severity = evaluation != null && evaluation.finalSeverity() != null
+                ? evaluation.finalSeverity()
+                : event.severity();
+        return new ActiveAlarmState(
+                event.fingerprint(),
+                event.alarmId(),
+                event.alertName(),
+                event.cluster(),
+                event.namespace(),
+                event.service(),
+                event.resourceName(),
+                severity,
+                status,
+                evaluation == null ? null : evaluation.policyId(),
+                eventTime,
+                eventTime,
+                1L);
+    }
+
     private static com.kubeoncall.alarm.domain.AlarmResourceType inferResourceType(ActiveAlarmState state) {
         // Best-effort heuristic from the alert name; backfill cannot recover the original resource
         // type from Redis, so unknown is a safe fallback that the read model accepts.
@@ -128,7 +174,7 @@ public class AlarmIncidentProjection {
         }
         DeliveryIdentity delivery = deliveryIdentity(event);
         try {
-            projectAtomically(jdbcTemplate, event, evaluation, state, delivery);
+            projectAtomically(jdbcTemplate, event, evaluation, state, delivery, true);
         } catch (DuplicateKeyException ex) {
             // A concurrent retry can pass the pre-check while the first transaction is still open.
             // Its incident mutation is rolled back with the duplicate event insert, so it is safe to
@@ -151,10 +197,11 @@ public class AlarmIncidentProjection {
             NormalizedAlarmEvent event,
             AlarmEvaluationResult evaluation,
             ActiveAlarmState state,
-            DeliveryIdentity delivery) {
+            DeliveryIdentity delivery,
+            boolean redisCumulativeCount) {
         DataSource dataSource = jdbcTemplate.getDataSource();
         if (dataSource == null) {
-            projectOnce(jdbcTemplate, event, evaluation, state, delivery);
+            projectOnce(jdbcTemplate, event, evaluation, state, delivery, redisCumulativeCount);
             return;
         }
 
@@ -165,7 +212,7 @@ public class AlarmIncidentProjection {
             transaction.setName("alarm-incident-projection");
             try {
                 transaction.executeWithoutResult(
-                        ignored -> projectOnce(jdbcTemplate, event, evaluation, state, delivery));
+                        ignored -> projectOnce(jdbcTemplate, event, evaluation, state, delivery, redisCumulativeCount));
                 return;
             } catch (TransientDataAccessException ex) {
                 lastTransientFailure = ex;
@@ -183,13 +230,15 @@ public class AlarmIncidentProjection {
             NormalizedAlarmEvent event,
             AlarmEvaluationResult evaluation,
             ActiveAlarmState state,
-            DeliveryIdentity delivery) {
+            DeliveryIdentity delivery,
+            boolean redisCumulativeCount) {
         // This must remain the first database decision in the transaction. In particular, no
         // incident version/count update may happen before duplicate delivery detection.
         if (deliveryExists(jdbcTemplate, delivery)) {
             return;
         }
-        IncidentProjectionResult incident = upsertIncident(jdbcTemplate, event, evaluation, state);
+        IncidentProjectionResult incident =
+                upsertIncident(jdbcTemplate, event, evaluation, state, redisCumulativeCount);
         insertEvent(jdbcTemplate, incident.id(), event, delivery);
         if (shouldRecordStatusHistory(incident.previousStatus(), incident.targetStatus())) {
             insertStatusHistory(jdbcTemplate, incident, event);
@@ -200,14 +249,15 @@ public class AlarmIncidentProjection {
             JdbcTemplate jdbcTemplate,
             NormalizedAlarmEvent event,
             AlarmEvaluationResult evaluation,
-            ActiveAlarmState state) {
+            ActiveAlarmState state,
+            boolean redisCumulativeCount) {
         IncidentRef latest = findLatestIncidentForUpdate(jdbcTemplate, state.fingerprint());
         String eventStatus = projectedStatus(event, state);
         boolean startsNewCycle = latest == null || startsNewCycle(latest.status(), eventStatus);
         String targetStatus =
                 latest == null || startsNewCycle ? eventStatus : transitionStatus(latest.status(), eventStatus);
         if (!startsNewCycle) {
-            updateIncident(jdbcTemplate, latest, event, state, targetStatus);
+            updateIncident(jdbcTemplate, latest, event, state, targetStatus, redisCumulativeCount);
             return new IncidentProjectionResult(latest.id(), latest.status(), targetStatus);
         }
 
@@ -232,7 +282,7 @@ public class AlarmIncidentProjection {
                     + cycleNo);
         }
         if (!inserted) {
-            updateIncident(jdbcTemplate, target, event, state, targetStatus);
+            updateIncident(jdbcTemplate, target, event, state, targetStatus, redisCumulativeCount);
             return new IncidentProjectionResult(target.id(), target.status(), targetStatus);
         }
         return new IncidentProjectionResult(target.id(), null, targetStatus);
@@ -293,16 +343,21 @@ public class AlarmIncidentProjection {
             IncidentRef incident,
             NormalizedAlarmEvent event,
             ActiveAlarmState state,
-            String targetStatus) {
+            String targetStatus,
+            boolean redisCumulativeCount) {
         Instant lastSeen = state.lastSeen() == null ? Instant.now() : state.lastSeen();
         long occurrenceCount = incident.occurrenceCount();
         if ("FIRING".equals(targetStatus)) {
-            long previousOccurrences =
-                    occurrenceCountBeforeCycle(jdbcTemplate, state.fingerprint(), incident.cycleNo());
-            // Redis carries the cumulative count. Concurrent projections can arrive out of order,
-            // so incrementing the persisted value would double-count when the newer cumulative
-            // snapshot wins the insert race and an older snapshot updates it afterwards.
-            occurrenceCount = mergedOccurrenceCount(incident.occurrenceCount(), state.count(), previousOccurrences);
+            if (redisCumulativeCount) {
+                long previousOccurrences =
+                        occurrenceCountBeforeCycle(jdbcTemplate, state.fingerprint(), incident.cycleNo());
+                // Redis carries the cumulative count. Concurrent projections can arrive out of order,
+                // so incrementing the persisted value would double-count when the newer cumulative
+                // snapshot wins the insert race and an older snapshot updates it afterwards.
+                occurrenceCount = mergedOccurrenceCount(incident.occurrenceCount(), state.count(), previousOccurrences);
+            } else {
+                occurrenceCount = incident.occurrenceCount() + 1;
+            }
         }
         jdbcTemplate.update(
                 """

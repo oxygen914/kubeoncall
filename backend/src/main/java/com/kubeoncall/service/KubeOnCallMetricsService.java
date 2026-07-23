@@ -155,6 +155,44 @@ public class KubeOnCallMetricsService {
         increment("kubeoncall.skill.governance", "operation", safe(operation), "outcome", safe(outcome));
     }
 
+    /** Records a legacy Console API response with a mapping-pattern endpoint tag, never raw IDs. */
+    public void recordLegacyApiRequest(String endpoint, String method, int status) {
+        increment(
+                "kubeoncall.legacy_api.requests",
+                "endpoint",
+                safe(endpoint),
+                "method",
+                safe(method),
+                "status",
+                statusFamily(status));
+    }
+
+    /** Records a bounded-cardinality dependency call outcome and end-to-end client latency. */
+    public void recordDependency(String dependency, String operation, String outcome, long latencyMs) {
+        increment(
+                "kubeoncall.dependency.requests",
+                "dependency",
+                safe(dependency),
+                "operation",
+                safe(operation),
+                "outcome",
+                safe(outcome));
+        recordAmount(
+                "kubeoncall.dependency.latency_ms",
+                Math.max(0, latencyMs),
+                "dependency",
+                safe(dependency),
+                "operation",
+                safe(operation),
+                "outcome",
+                safe(outcome));
+    }
+
+    /** Records lifecycle transitions of the process-local dependency circuit breaker. */
+    public void recordDependencyCircuit(String dependency, String event) {
+        increment("kubeoncall.dependency.circuit", "dependency", safe(dependency), "event", safe(event));
+    }
+
     private void increment(String name, String... tags) {
         Counter.builder(name).tags(tags).register(meterRegistry).increment();
     }
@@ -168,5 +206,18 @@ public class KubeOnCallMetricsService {
             return "unknown";
         }
         return value.trim().toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9_.-]+", "_");
+    }
+
+    private static String statusFamily(int status) {
+        if (status >= 500) {
+            return "5xx";
+        }
+        if (status >= 400) {
+            return "4xx";
+        }
+        if (status >= 300) {
+            return "3xx";
+        }
+        return "2xx";
     }
 }

@@ -5,8 +5,10 @@ import java.sql.SQLException;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HexFormat;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 import org.springframework.beans.factory.annotation.Value;
@@ -109,6 +111,25 @@ public class KnowledgeImportRepository {
                 new ImportRowMapper(),
                 pagedArgs.toArray());
         return new ImportPage(rows, count == null ? 0 : count);
+    }
+
+    /** Object keys that are still reachable from durable import metadata or error reports. */
+    public Set<String> referencedObjectKeys(String bucket) {
+        if (bucket == null || bucket.isBlank()) {
+            return Set.of();
+        }
+        List<String> keys = jdbcTemplate.query("""
+                SELECT source_object_key AS object_key
+                  FROM koc_knowledge_import
+                 WHERE source_bucket = ? AND source_object_key IS NOT NULL
+                UNION
+                SELECT error_report_object_key AS object_key
+                  FROM koc_knowledge_import
+                 WHERE error_report_bucket = ? AND error_report_object_key IS NOT NULL
+                """, (rs, rowNum) -> rs.getString("object_key"), bucket, bucket);
+        return keys.stream()
+                .filter(key -> key != null && !key.isBlank())
+                .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
     }
 
     public boolean updateProgress(

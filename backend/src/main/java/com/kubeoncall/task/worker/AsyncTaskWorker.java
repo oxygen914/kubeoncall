@@ -159,6 +159,11 @@ public final class AsyncTaskWorker {
                     task.publicId(), ownerToken, task.fencingToken(), clock.instant(), leaseDuration);
             try (LeaseGuard heartbeat =
                     heartbeatStarter.start(leaseDuration, renewLease, "async-task-heartbeat-" + task.publicId())) {
+                Instant deadline = deadline(task);
+                if (deadline != null && !clock.instant().isBefore(deadline)) {
+                    return recordTerminalFailure(
+                            task, heartbeat, "TIMEOUT", "Async task exceeded its execution deadline");
+                }
                 AsyncTaskHandler handler = registry.find(task.taskType()).orElse(null);
                 if (handler == null) {
                     return recordFailure(
@@ -169,14 +174,34 @@ public final class AsyncTaskWorker {
                 }
 
                 HandlerResult handlerResult;
+                AsyncTaskContext context = new AsyncTaskContext(
+                        task,
+                        ownerToken,
+                        heartbeat::isValid,
+                        () -> repository.isCancelled(task.publicId()),
+                        deadline,
+                        clock);
                 try {
-                    handlerResult = handler.handle(new AsyncTaskContext(task, ownerToken, heartbeat::isValid));
+                    handlerResult = handler.handle(context);
+                } catch (AsyncTaskContext.TaskCancelledException cancelled) {
+                    return RunResult.cancelled(task);
+                } catch (AsyncTaskContext.TaskTimedOutException timedOut) {
+                    return recordTerminalFailure(task, heartbeat, "TIMEOUT", safeMessage(timedOut));
                 } catch (Exception exception) {
                     return recordFailure(
                             task,
                             heartbeat,
                             "HANDLER_FAILURE",
                             exception.getClass().getSimpleName() + ": " + safeMessage(exception));
+                }
+                try {
+                    context.requireValidLease();
+                } catch (AsyncTaskContext.TaskCancelledException cancelled) {
+                    return RunResult.cancelled(task);
+                } catch (AsyncTaskContext.TaskTimedOutException timedOut) {
+                    return recordTerminalFailure(task, heartbeat, "TIMEOUT", safeMessage(timedOut));
+                } catch (IllegalStateException leaseLost) {
+                    return RunResult.leaseLost(task, safeMessage(leaseLost));
                 }
 
                 try {
@@ -223,6 +248,40 @@ public final class AsyncTaskWorker {
                 ? RunResult.retryScheduled(task, errorCode, safeSummary, nextAttemptAt)
                 : RunResult.leaseLost(task, "Retry transition was rejected by the task ownership fence");
         return observeAcceptedTransition(task, result);
+    }
+
+    private RunResult recordTerminalFailure(
+            AsyncTaskRecord task, LeaseGuard heartbeat, String errorCode, String errorSummary) {
+        try {
+            heartbeat.requireValid("Async task lease was lost before terminal failure recording");
+        } catch (IllegalStateException leaseLost) {
+            return RunResult.leaseLost(task, safeMessage(leaseLost));
+        }
+        boolean failed = repository.fail(
+                task.publicId(), ownerToken, task.fencingToken(), errorCode, truncate(errorSummary), clock.instant());
+        RunResult result = failed
+                ? RunResult.failed(task, errorCode, truncate(errorSummary))
+                : RunResult.leaseLost(task, "Terminal failure transition was rejected by the task ownership fence");
+        return observeAcceptedTransition(task, result);
+    }
+
+    private Instant deadline(AsyncTaskRecord task) {
+        Object configured = task.request().get("timeoutSeconds");
+        if (configured == null || task.startedAt() == null) {
+            return null;
+        }
+        try {
+            long seconds = configured instanceof Number number
+                    ? number.longValue()
+                    : Long.parseLong(String.valueOf(configured));
+            if (seconds <= 0) {
+                return null;
+            }
+            return task.startedAt()
+                    .plusSeconds(Math.min(seconds, Duration.ofDays(7).toSeconds()));
+        } catch (NumberFormatException ignored) {
+            return null;
+        }
     }
 
     private RunResult observeAcceptedTransition(AsyncTaskRecord task, RunResult result) {
@@ -364,6 +423,8 @@ public final class AsyncTaskWorker {
     public enum Outcome {
         IDLE,
         SUCCEEDED,
+        FAILED,
+        CANCELLED,
         RETRY_SCHEDULED,
         DEAD_LETTERED,
         LEASE_LOST
@@ -384,6 +445,14 @@ public final class AsyncTaskWorker {
 
         private static RunResult succeeded(AsyncTaskRecord task) {
             return from(task, Outcome.SUCCEEDED, null, null, null);
+        }
+
+        private static RunResult failed(AsyncTaskRecord task, String errorCode, String errorSummary) {
+            return from(task, Outcome.FAILED, errorCode, errorSummary, null);
+        }
+
+        private static RunResult cancelled(AsyncTaskRecord task) {
+            return from(task, Outcome.CANCELLED, "CANCELLED", "Cancelled by operator", null);
         }
 
         private static RunResult retryScheduled(

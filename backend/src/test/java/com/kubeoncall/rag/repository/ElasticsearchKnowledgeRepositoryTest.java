@@ -17,6 +17,7 @@ import java.util.stream.Stream;
 
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.data.elasticsearch.client.elc.ElasticsearchTemplate;
 import org.springframework.data.elasticsearch.client.elc.NativeQuery;
 import org.springframework.data.elasticsearch.core.SearchHit;
@@ -25,6 +26,10 @@ import org.springframework.data.elasticsearch.core.SearchHits;
 import com.kubeoncall.common.config.KubeOnCallProperties;
 import com.kubeoncall.domain.rag.KnowledgeDocument;
 import com.kubeoncall.domain.rag.RetrievalRequest;
+import com.kubeoncall.service.KubeOnCallMetricsService;
+
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 
 class ElasticsearchKnowledgeRepositoryTest {
 
@@ -43,6 +48,32 @@ class ElasticsearchKnowledgeRepositoryTest {
         ArgumentCaptor<EsKnowledgeDocumentEntity> entity = ArgumentCaptor.forClass(EsKnowledgeDocumentEntity.class);
         verify(template).save(entity.capture(), any());
         assertNull(entity.getValue().getEmbedding());
+    }
+
+    @Test
+    void recordsElasticsearchFailureAtTemplateBoundary() {
+        ElasticsearchTemplate template = mock(ElasticsearchTemplate.class);
+        when(template.save(
+                        any(EsKnowledgeDocumentEntity.class),
+                        any(org.springframework.data.elasticsearch.core.mapping.IndexCoordinates.class)))
+                .thenThrow(new IllegalStateException("cluster unavailable"));
+        KubeOnCallProperties properties = new KubeOnCallProperties();
+        SimpleMeterRegistry registry = new SimpleMeterRegistry();
+        ElasticsearchKnowledgeRepository repository = new ElasticsearchKnowledgeRepository(
+                template, properties, mock(KnowledgeIndexAdmin.class), metrics(registry));
+
+        try {
+            repository.save(new KnowledgeDocument("doc-error", "title", "content", "manual", Map.of(), Instant.now()));
+        } catch (IllegalStateException expected) {
+            // Repository deliberately preserves the caller-visible Elasticsearch failure.
+        }
+
+        assertEquals(
+                1.0,
+                registry.get("kubeoncall.dependency.requests")
+                        .tags("dependency", "elasticsearch", "operation", "save", "outcome", "error")
+                        .counter()
+                        .count());
     }
 
     @Test
@@ -264,5 +295,12 @@ class ElasticsearchKnowledgeRepositoryTest {
         KnowledgeIndexAdmin indexAdmin = mock(KnowledgeIndexAdmin.class);
         when(indexAdmin.indexExists()).thenReturn(true);
         return new ElasticsearchKnowledgeRepository(template, properties, indexAdmin);
+    }
+
+    @SuppressWarnings("unchecked")
+    private static KubeOnCallMetricsService metrics(MeterRegistry registry) {
+        ObjectProvider<MeterRegistry> provider = mock(ObjectProvider.class);
+        when(provider.getIfAvailable()).thenReturn(registry);
+        return new KubeOnCallMetricsService(provider);
     }
 }

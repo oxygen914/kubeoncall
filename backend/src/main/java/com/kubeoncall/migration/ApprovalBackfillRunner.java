@@ -1,15 +1,14 @@
 package com.kubeoncall.migration;
 
-import java.time.Duration;
 import java.time.Instant;
 import java.util.UUID;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
-import org.springframework.data.redis.core.Cursor;
-import org.springframework.data.redis.core.ScanOptions;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 
@@ -38,6 +37,7 @@ public class ApprovalBackfillRunner {
     private final ObjectProvider<MySqlApprovalRepository> mysqlApprovalProvider;
     private final ObjectProvider<MigrationLedgerRepository> ledgerProvider;
     private final KubeOnCallProperties properties;
+    private final MigrationRunControl runControl;
 
     public ApprovalBackfillRunner(
             ObjectProvider<StringRedisTemplate> redisProvider,
@@ -45,11 +45,29 @@ public class ApprovalBackfillRunner {
             ObjectProvider<MySqlApprovalRepository> mysqlApprovalProvider,
             ObjectProvider<MigrationLedgerRepository> ledgerProvider,
             KubeOnCallProperties properties) {
+        this(
+                redisProvider,
+                redisApprovalProvider,
+                mysqlApprovalProvider,
+                ledgerProvider,
+                properties,
+                MigrationRunControl.disabled());
+    }
+
+    @Autowired
+    public ApprovalBackfillRunner(
+            ObjectProvider<StringRedisTemplate> redisProvider,
+            ObjectProvider<RedisApprovalRepository> redisApprovalProvider,
+            ObjectProvider<MySqlApprovalRepository> mysqlApprovalProvider,
+            ObjectProvider<MigrationLedgerRepository> ledgerProvider,
+            KubeOnCallProperties properties,
+            MigrationRunControl runControl) {
         this.redisProvider = redisProvider;
         this.redisApprovalProvider = redisApprovalProvider;
         this.mysqlApprovalProvider = mysqlApprovalProvider;
         this.ledgerProvider = ledgerProvider;
         this.properties = properties;
+        this.runControl = runControl;
     }
 
     public BackfillResult run(Boolean dryRunOverride, String requestId) {
@@ -62,11 +80,28 @@ public class ApprovalBackfillRunner {
                     0, 0, 0, 0, null, "redis, RedisApprovalRepository or MySQL approval store unavailable", false);
         }
         boolean dryRun = dryRunOverride == null ? properties.getDataMigration().isBackfillDryRun() : dryRunOverride;
+        if (!dryRun && ledger == null) {
+            return new BackfillResult(0, 0, 0, 0, null, "MySQL migration ledger unavailable for apply", false);
+        }
+        MigrationLedgerRepository.ScanCheckpoint checkpoint =
+                dryRun ? MigrationLedgerRepository.ScanCheckpoint.initial() : ledger.loadScanCheckpoint(DOMAIN);
+        if (checkpoint.completed()) {
+            return new BackfillResult(0, 0, 0, 0, "0", "backfill checkpoint already completed", dryRun);
+        }
         String mode = dryRun ? "DRY_RUN" : "APPLY";
         String leaseKey = "kubeoncall:migration:lock:" + DOMAIN;
-        Boolean acquired = redis.opsForValue().setIfAbsent(leaseKey, requestId, Duration.ofMinutes(30));
-        if (!Boolean.TRUE.equals(acquired)) {
+        String leaseOwner = leaseOwner(requestId);
+        if (!MigrationLease.acquire(redis, leaseKey, leaseOwner)) {
             return new BackfillResult(0, 0, 0, 0, null, "another backfill is already running for " + DOMAIN, false);
+        }
+        MigrationLedgerRepository.MigrationWriteFence writeFence = null;
+        if (!dryRun) {
+            try {
+                writeFence = ledger.claimWriteFence(DOMAIN, leaseOwner);
+            } catch (Exception ex) {
+                MigrationLease.releaseIfOwned(redis, leaseKey, leaseOwner);
+                return new BackfillResult(0, 0, 0, 0, null, "MySQL migration write fence unavailable", false);
+            }
         }
         String batchId = ledger == null ? null : ledger.beginBatch(DOMAIN, mode, requestId);
         log.info("Approval backfill starting: mode={}, batchId={}, dryRun={}", mode, batchId, dryRun);
@@ -75,84 +110,158 @@ public class ApprovalBackfillRunner {
         AtomicLong migrated = new AtomicLong();
         AtomicLong skipped = new AtomicLong();
         AtomicLong failed = new AtomicLong();
-        final String[] lastKeyHolder = {null};
         long limit = Math.max(1, properties.getDataMigration().getBackfillScanLimit());
         int batchSize = Math.max(1, properties.getDataMigration().getBackfillBatchSize());
-        ScanOptions options =
-                ScanOptions.scanOptions().match(KEY_PATTERN).count(batchSize).build();
         String interruptionNote = null;
+        String cursor = checkpoint.redisCursor();
 
-        try (Cursor<String> cursor = redis.scan(options)) {
-            while (cursor.hasNext() && scanned.get() < limit) {
-                String key = cursor.next();
-                scanned.incrementAndGet();
-                lastKeyHolder[0] = key;
-                String executionId = executionIdFromKey(key);
-                if (executionId == null) {
-                    skipped.incrementAndGet();
-                    continue;
+        try {
+            while (scanned.get() < limit) {
+                if (!MigrationLease.renewIfOwned(redis, leaseKey, leaseOwner)) {
+                    interruptionNote = "lease ownership lost before next source item";
+                    break;
                 }
-                try {
-                    ApprovalRequest request =
-                            redisApproval.findByExecutionId(executionId).orElse(null);
-                    if (request == null) {
+                RedisCursorScanner.Page page = RedisCursorScanner.scan(redis, cursor, KEY_PATTERN, batchSize);
+                for (String key : page.keys()) {
+                    runControl.beforeSourceItem();
+                    scanned.incrementAndGet();
+                    String executionId = executionIdFromKey(key);
+                    if (executionId == null) {
                         skipped.incrementAndGet();
-                        if (ledger != null) {
-                            ledger.recordItem(batchId, key, DOMAIN, null, "SKIPPED", "approval not found in redis");
-                        }
                         continue;
                     }
-                    if (!dryRun) {
-                        if (ledger != null && ledger.itemAlreadyMigrated(key, DOMAIN)) {
+                    try {
+                        ApprovalRequest request =
+                                redisApproval.findByExecutionId(executionId).orElse(null);
+                        if (request == null) {
                             skipped.incrementAndGet();
-                            ledger.recordItem(batchId, key, DOMAIN, null, "SKIPPED", "already migrated");
+                            if (ledger != null) {
+                                ledger.recordItem(batchId, key, DOMAIN, null, "SKIPPED", "approval not found in redis");
+                            }
                             continue;
                         }
-                        String publicId = "apv_" + UUID.randomUUID().toString().replace("-", "");
-                        // actionType/riskLevel are derived at creation time from the workflow context
-                        // and are not stored in the Redis ApprovalRequest, so the backfill cannot
-                        // recover them; UNKNOWN/MEDIUM are safe placeholders that preserve the pending
-                        // approval fact without blocking the cutover.
-                        MySqlApprovalRepository.CreateApproval command = new MySqlApprovalRepository.CreateApproval(
-                                publicId,
-                                request.executionId(),
-                                "UNKNOWN",
-                                request.taskId(),
-                                "MEDIUM",
-                                java.util.Map.of(),
-                                parseRequestedBy(request.requestedBy()),
-                                request.requestedAt() == null ? Instant.now() : request.requestedAt(),
-                                request.decidedAt() == null ? Instant.now().plusSeconds(1800) : request.decidedAt());
-                        mysqlApproval.create(command);
-                    }
-                    migrated.incrementAndGet();
-                    if (ledger != null) {
-                        ledger.recordItem(batchId, key, DOMAIN, null, dryRun ? "DRY_RUN" : "MIGRATED", null);
-                    }
-                } catch (Exception ex) {
-                    // FK violations (execution/user missing) land here as a skip-worthy skip, but we
-                    // cannot cheaply distinguish them from a real failure, so we count as failed and
-                    // record the reason for the operator to triage in the diff report.
-                    failed.incrementAndGet();
-                    log.warn("Approval backfill failed for key={}: {}", key, ex.getMessage());
-                    if (ledger != null) {
-                        ledger.recordItem(batchId, key, DOMAIN, null, "FAILED", truncate(ex.getMessage(), 900));
+                        Instant now = Instant.now();
+                        long remainingTtlMillis = redis.getExpire(key, TimeUnit.MILLISECONDS);
+                        if (remainingTtlMillis <= 0) {
+                            if (remainingTtlMillis == -1) {
+                                failed.incrementAndGet();
+                                if (ledger != null) {
+                                    ledger.recordItem(
+                                            batchId,
+                                            key,
+                                            DOMAIN,
+                                            null,
+                                            "FAILED",
+                                            "legacy approval has no Redis TTL; expires_at cannot be reconstructed");
+                                }
+                            } else {
+                                skipped.incrementAndGet();
+                                if (ledger != null) {
+                                    ledger.recordItem(
+                                            batchId,
+                                            key,
+                                            DOMAIN,
+                                            null,
+                                            "SKIPPED",
+                                            "legacy approval expired or disappeared before migration");
+                                }
+                            }
+                            continue;
+                        }
+                        Instant requestedAt = request.requestedAt() == null ? now : request.requestedAt();
+                        Instant expiresAt = now.plusMillis(remainingTtlMillis);
+                        if (!expiresAt.isAfter(requestedAt)) {
+                            failed.incrementAndGet();
+                            if (ledger != null) {
+                                ledger.recordItem(
+                                        batchId,
+                                        key,
+                                        DOMAIN,
+                                        null,
+                                        "FAILED",
+                                        "legacy approval expiry is not after requested_at");
+                            }
+                            continue;
+                        }
+                        if (!dryRun) {
+                            if (ledger.itemAlreadyMigrated(key, DOMAIN)) {
+                                skipped.incrementAndGet();
+                                ledger.recordItem(batchId, key, DOMAIN, null, "SKIPPED", "already migrated");
+                                continue;
+                            }
+                            String publicId =
+                                    "apv_" + UUID.randomUUID().toString().replace("-", "");
+                            // actionType/riskLevel are derived at creation time from the workflow context
+                            // and are not stored in the Redis ApprovalRequest, so the backfill cannot
+                            // recover them; UNKNOWN/MEDIUM are safe placeholders that preserve the pending
+                            // approval fact without blocking the cutover.
+                            MySqlApprovalRepository.CreateApproval command = new MySqlApprovalRepository.CreateApproval(
+                                    publicId,
+                                    request.executionId(),
+                                    "UNKNOWN",
+                                    request.taskId(),
+                                    "MEDIUM",
+                                    java.util.Map.of(),
+                                    parseRequestedBy(request.requestedBy()),
+                                    requestedAt,
+                                    expiresAt);
+                            MigrationLedgerRepository.MigrationWriteFence activeFence = writeFence;
+                            ledger.withWriteFence(activeFence, () -> mysqlApproval.create(command));
+                        }
+                        migrated.incrementAndGet();
+                        if (ledger != null) {
+                            ledger.recordItem(batchId, key, DOMAIN, null, dryRun ? "DRY_RUN" : "MIGRATED", null);
+                        }
+                    } catch (MigrationLedgerRepository.LostMigrationWriteFenceException ex) {
+                        interruptionNote = "MySQL write fence ownership lost before source item commit";
+                        break;
+                    } catch (Exception ex) {
+                        // FK violations (execution/user missing) land here as a skip-worthy skip, but we
+                        // cannot cheaply distinguish them from a real failure, so we count as failed and
+                        // record the reason for the operator to triage in the diff report.
+                        failed.incrementAndGet();
+                        log.warn("Approval backfill failed for key={}: {}", key, ex.getMessage());
+                        if (ledger != null) {
+                            ledger.recordItem(batchId, key, DOMAIN, null, "FAILED", truncate(ex.getMessage(), 900));
+                        }
                     }
                 }
+                if (interruptionNote != null) {
+                    break;
+                }
+                cursor = page.nextCursor();
+                if (!dryRun) {
+                    ledger.advanceScanCheckpointFenced(writeFence, DOMAIN, cursor, page.completed());
+                }
+                if (page.completed()) {
+                    break;
+                }
             }
+        } catch (MigrationLedgerRepository.LostMigrationWriteFenceException ex) {
+            log.warn("Approval backfill lost MySQL write fence at scanned={}", scanned.get());
+            interruptionNote = "MySQL write fence ownership lost before checkpoint commit";
         } catch (Exception ex) {
             log.warn("Approval backfill scan interrupted at scanned={}: {}", scanned.get(), ex.getMessage());
             interruptionNote = "scan interrupted: " + ex.getMessage();
         } finally {
-            redis.delete(leaseKey);
+            if (!MigrationLease.releaseIfOwned(redis, leaseKey, leaseOwner)) {
+                log.warn("Approval backfill lease was not released because this runner no longer owns it");
+            }
         }
-        String lastKey = lastKeyHolder[0];
+        String lastKey = cursor;
         if (ledger != null) {
-            ledger.finishBatch(batchId, scanned.get(), migrated.get(), skipped.get(), failed.get(), lastKey);
+            ledger.finishBatch(
+                    batchId,
+                    scanned.get(),
+                    migrated.get(),
+                    skipped.get(),
+                    failed.get(),
+                    lastKey,
+                    batchStatus(interruptionNote));
         }
         String note = dryRun ? "dry-run (no MySQL writes)" : "applied";
         if (scanned.get() >= limit) {
-            note = note + "; scan limit reached, rerun to continue";
+            note = note + "; scan limit reached, rerun resumes from persisted Redis cursor";
         }
         if (interruptionNote != null) {
             note = note + "; " + interruptionNote;
@@ -184,6 +293,18 @@ public class ApprovalBackfillRunner {
             return null;
         }
         return key.substring(colon + 1);
+    }
+
+    private static String batchStatus(String interruptionNote) {
+        if (interruptionNote == null) {
+            return "COMPLETED";
+        }
+        return interruptionNote.startsWith("scan interrupted") ? "FAILED" : "INTERRUPTED";
+    }
+
+    private static String leaseOwner(String requestId) {
+        String requestPart = requestId == null || requestId.isBlank() ? "unknown" : requestId;
+        return requestPart + ":" + UUID.randomUUID();
     }
 
     private static String truncate(String value, int max) {

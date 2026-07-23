@@ -43,6 +43,8 @@ public final class TaskOutboxLifecycleListener implements AsyncTaskLifecycleList
     private static String publicStatus(RunResult result) {
         return switch (result.outcome()) {
             case SUCCEEDED -> "SUCCEEDED";
+            case FAILED -> "FAILED";
+            case CANCELLED -> "CANCELLED";
             case RETRY_SCHEDULED -> "RETRY";
             case DEAD_LETTERED -> "DEAD_LETTER";
             case IDLE, LEASE_LOST ->

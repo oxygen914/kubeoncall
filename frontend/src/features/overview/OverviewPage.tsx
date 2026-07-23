@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { getOverview } from './api'
 import { AsyncState } from '@/components/feedback/AsyncState'
@@ -7,9 +8,10 @@ import { useNavigate } from 'react-router-dom'
 /** Dashboard overview page: single aggregate query for the home view. */
 export function OverviewPage() {
   const navigate = useNavigate()
+  const [window, setWindow] = useState('24h')
   const { data, isLoading, error } = useQuery({
-    queryKey: ['overview', '24h'],
-    queryFn: () => getOverview('24h'),
+    queryKey: ['overview', window],
+    queryFn: () => getOverview(window),
     staleTime: 15_000,
   })
 
@@ -17,7 +19,17 @@ export function OverviewPage() {
     <section className="koc-page">
       <header className="koc-page__header">
         <h1>概览</h1>
-        <p className="koc-page__subtitle">告警、审批与执行汇总（最近 24 小时）。</p>
+        <p className="koc-page__subtitle">告警、审批与执行汇总（按所选时间窗口统计）。</p>
+        <label className="koc-filter">
+          <span>时间窗口</span>
+          <select value={window} onChange={(event) => setWindow(event.target.value)}>
+            <option value="1h">最近 1 小时</option>
+            <option value="6h">最近 6 小时</option>
+            <option value="24h">最近 24 小时</option>
+            <option value="7d">最近 7 天</option>
+            <option value="30d">最近 30 天</option>
+          </select>
+        </label>
       </header>
 
       <AsyncState isLoading={isLoading} error={error} isEmpty={!isLoading && !data}>

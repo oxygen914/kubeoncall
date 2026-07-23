@@ -131,6 +131,24 @@ public class AlarmReadRepository {
         }
     }
 
+    /** Returns the newest non-deleted incident for a Redis alarm fingerprint. */
+    public Optional<AlarmIncidentRecord> findByFingerprint(String fingerprint) {
+        if (fingerprint == null || fingerprint.isBlank()) {
+            return Optional.empty();
+        }
+        try {
+            AlarmIncidentRecord row = jdbcTemplate.queryForObject(
+                    "SELECT " + SELECT_INCIDENT_COLUMNS
+                            + " FROM koc_alarm_incident WHERE fingerprint = ? AND deleted_at IS NULL"
+                            + " ORDER BY cycle_no DESC, id DESC LIMIT 1",
+                    new IncidentRowMapper(objectMapper),
+                    fingerprint.trim());
+            return Optional.ofNullable(row);
+        } catch (EmptyResultDataAccessException ex) {
+            return Optional.empty();
+        }
+    }
+
     public List<AlarmTimelineItem> timeline(String publicId, int limit, Instant after) {
         Optional<Long> incidentId = findIdByPublicId(publicId);
         if (incidentId.isEmpty()) {

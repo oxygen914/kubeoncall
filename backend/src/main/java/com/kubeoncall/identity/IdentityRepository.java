@@ -30,7 +30,7 @@ public class IdentityRepository {
     private static final String SELECT_USER_BY_USERNAME = """
             SELECT id, public_id, username, display_name, email, password_hash, password_algorithm,
                    password_version, status, auth_version, password_changed_at, last_login_at,
-                   locked_until, failed_login_count
+                   locked_until, failed_login_count, version
               FROM koc_user
              WHERE username_normalized = ? AND deleted_at IS NULL
             """;
@@ -38,7 +38,7 @@ public class IdentityRepository {
     private static final String SELECT_USER_BY_ID = """
             SELECT id, public_id, username, display_name, email, password_hash, password_algorithm,
                    password_version, status, auth_version, password_changed_at, last_login_at,
-                   locked_until, failed_login_count
+                   locked_until, failed_login_count, version
               FROM koc_user
              WHERE id = ? AND deleted_at IS NULL
             """;
@@ -153,6 +153,20 @@ public class IdentityRepository {
         }
     }
 
+    /**
+     * Applies a status change only if the user resource has not changed since the caller read it.
+     * All admin mutations also advance auth version so stale sessions cannot retain old privileges.
+     */
+    public boolean setStatusIfVersion(long userId, String status, long expectedVersion) {
+        return jdbcTemplate.update(
+                        "UPDATE koc_user SET status = ?, auth_version = auth_version + 1, version = version + 1 "
+                                + "WHERE id = ? AND version = ?",
+                        status,
+                        userId,
+                        expectedVersion)
+                == 1;
+    }
+
     /** Change a user's password hash and bump password/auth version so old sessions and tokens die. */
     public void changePassword(long userId, String passwordHash) {
         jdbcTemplate.update(
@@ -161,6 +175,29 @@ public class IdentityRepository {
                 passwordHash,
                 Timestamp.from(Instant.now()),
                 userId);
+    }
+
+    /** Changes password only when the resource revision supplied by the caller still matches. */
+    public boolean changePasswordIfVersion(long userId, String passwordHash, long expectedVersion) {
+        return jdbcTemplate.update(
+                        "UPDATE koc_user SET password_hash = ?, password_version = password_version + 1, "
+                                + "auth_version = auth_version + 1, password_changed_at = ?, version = version + 1 "
+                                + "WHERE id = ? AND version = ?",
+                        passwordHash,
+                        Timestamp.from(Instant.now()),
+                        userId,
+                        expectedVersion)
+                == 1;
+    }
+
+    /** Reserves one resource revision before a role or session mutation within the same transaction. */
+    public boolean advanceAdminVersion(long userId, long expectedVersion) {
+        return jdbcTemplate.update(
+                        "UPDATE koc_user SET auth_version = auth_version + 1, version = version + 1 "
+                                + "WHERE id = ? AND version = ?",
+                        userId,
+                        expectedVersion)
+                == 1;
     }
 
     /** Bump auth version so cached sessions for this user are invalidated on next request. */
@@ -188,6 +225,7 @@ public class IdentityRepository {
                 partial.passwordVersion(),
                 partial.status(),
                 partial.authVersion(),
+                partial.version(),
                 partial.passwordChangedAt(),
                 partial.lastLoginAt(),
                 partial.lockedUntil(),
@@ -220,6 +258,7 @@ public class IdentityRepository {
                     rs.getLong("password_version"),
                     rs.getString("status"),
                     rs.getLong("auth_version"),
+                    rs.getLong("version"),
                     rs.getTimestamp("password_changed_at") == null
                             ? null
                             : rs.getTimestamp("password_changed_at").toInstant(),
@@ -276,7 +315,7 @@ public class IdentityRepository {
         List<UserAccount> users = jdbcTemplate.query(
                 "SELECT id, public_id, username, display_name, email, password_hash, password_algorithm, "
                         + "password_version, status, auth_version, password_changed_at, last_login_at, "
-                        + "locked_until, failed_login_count FROM koc_user WHERE deleted_at IS NULL ORDER BY id",
+                        + "locked_until, failed_login_count, version FROM koc_user WHERE deleted_at IS NULL ORDER BY id",
                 new UserRowMapper());
         return users.stream().map(this::withAuthorization).toList();
     }

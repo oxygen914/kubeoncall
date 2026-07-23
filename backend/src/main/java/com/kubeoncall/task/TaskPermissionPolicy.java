@@ -12,6 +12,9 @@ public final class TaskPermissionPolicy {
     public static String requiredPermission(String taskType, String resourceType) {
         String normalizedResource = normalize(resourceType);
         String normalizedTask = taskType == null ? "" : taskType.trim().toUpperCase(Locale.ROOT);
+        if (normalizedResource.contains("migration") || normalizedTask.startsWith("MIGRATION_")) {
+            return PermissionCode.SYSTEM_MANAGE;
+        }
         if (normalizedResource.contains("knowledge")
                 || normalizedResource.contains("import")
                 || normalizedTask.startsWith("KNOWLEDGE_")) {

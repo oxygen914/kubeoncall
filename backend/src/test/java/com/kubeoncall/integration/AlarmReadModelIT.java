@@ -167,6 +167,74 @@ class AlarmReadModelIT {
     }
 
     @Test
+    void mysqlPrimaryProjectionOwnsOccurrenceCountWithoutRedisState() {
+        NormalizedAlarmEvent first = new NormalizedAlarmEvent(
+                "am-mysql-primary",
+                "fp-mysql-primary",
+                "NodeMemoryHigh",
+                "alertmanager",
+                "warning",
+                AlarmSeverity.P2,
+                AlarmResourceType.NODE,
+                "worker-primary",
+                "prod",
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                Map.of(),
+                Map.of(),
+                null,
+                AlarmStatus.FIRING,
+                Instant.parse("2026-07-22T01:00:00Z"),
+                "memory high",
+                Map.of());
+        NormalizedAlarmEvent second = new NormalizedAlarmEvent(
+                first.alarmId(),
+                first.fingerprint(),
+                first.alertName(),
+                first.source(),
+                first.rawSeverity(),
+                first.severity(),
+                first.resourceType(),
+                first.resourceName(),
+                first.cluster(),
+                first.namespace(),
+                first.service(),
+                first.metricName(),
+                first.currentValue(),
+                first.threshold(),
+                first.unit(),
+                first.duration(),
+                first.labels(),
+                first.annotations(),
+                first.runbookId(),
+                first.status(),
+                Instant.parse("2026-07-22T01:01:00Z"),
+                first.summary(),
+                first.metadata());
+
+        projection.projectPrimary(first, AlarmEvaluationResult.unmatched(AlarmSeverity.P2, "primary"));
+        projection.projectPrimary(second, AlarmEvaluationResult.unmatched(AlarmSeverity.P2, "primary"));
+        projection.projectPrimary(second, AlarmEvaluationResult.unmatched(AlarmSeverity.P2, "primary"));
+
+        Long occurrenceCount = jdbcTemplate.queryForObject(
+                "SELECT occurrence_count FROM koc_alarm_incident WHERE fingerprint = ? AND cycle_no = 1",
+                Long.class,
+                "fp-mysql-primary");
+        Long eventCount = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM koc_alarm_event e JOIN koc_alarm_incident i ON i.id = e.incident_id "
+                        + "WHERE i.fingerprint = ?",
+                Long.class,
+                "fp-mysql-primary");
+        assertThat(occurrenceCount).isEqualTo(2L);
+        assertThat(eventCount).isEqualTo(2L);
+    }
+
+    @Test
     void repeatedShadowWriteUpdatesOccurrenceCount() {
         NormalizedAlarmEvent event = new NormalizedAlarmEvent(
                 "am-upstream-2",
@@ -504,6 +572,36 @@ class AlarmReadModelIT {
         assertThat(item.latestExecution()).isNotNull();
         assertThat(item.latestExecution().id()).isEqualTo(executionPublicId);
         assertThat(item.latestExecution().status()).isEqualTo("SUCCEEDED");
+    }
+
+    @Test
+    void activeAlarmListExplainUsesBoundedStatusTimeIndex() {
+        Instant historical = Instant.parse("2026-01-01T00:00:00Z");
+        for (int index = 0; index < 600; index++) {
+            jdbcTemplate.update(
+                    """
+                    INSERT INTO koc_alarm_incident
+                      (public_id, fingerprint, cycle_no, alert_name, severity, severity_rank, status,
+                       resource_type, resource_name, first_seen, last_seen)
+                    VALUES (?, ?, 1, 'HistoricalAlarm', 'P3', 4, 'RESOLVED', 'NODE', 'historical-node', ?, ?)
+                    """,
+                    "alm_explain_" + index,
+                    "fp_explain_" + index,
+                    java.sql.Timestamp.from(historical),
+                    java.sql.Timestamp.from(historical));
+        }
+        jdbcTemplate.execute("ANALYZE TABLE koc_alarm_incident");
+
+        Map<String, Object> plan = jdbcTemplate.queryForMap("""
+                EXPLAIN SELECT id
+                  FROM koc_alarm_incident
+                 WHERE deleted_at IS NULL AND status = 'FIRING'
+                 ORDER BY last_seen DESC, id DESC
+                 LIMIT 50
+                """);
+
+        assertThat(plan.get("key")).isEqualTo("idx_alarm_list_status_deleted_seen");
+        assertThat(((Number) plan.get("rows")).longValue()).isLessThanOrEqualTo(16L);
     }
 
     private static NormalizedAlarmEvent event(

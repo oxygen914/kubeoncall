@@ -1,5 +1,6 @@
 import { api } from './client'
 import { readCookie, CSRF_COOKIE_NAME } from './client'
+import type { components } from './generated/schema'
 
 /**
  * Auth API module. Matches the OpenAPI SessionResponse shape:
@@ -27,10 +28,8 @@ export interface SessionData {
   idleExpiresAt?: string
 }
 
-export interface LoginInput {
-  username: string
-  password: string
-}
+/** Request type generated from the backend's OpenAPI contract. */
+export type LoginInput = components['schemas']['LoginRequest']
 
 /** POST /api/v1/auth/login — sets the KOC_SESSION cookie and KOC_CSRF cookie. */
 export async function login(input: LoginInput): Promise<SessionData> {

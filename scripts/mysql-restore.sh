@@ -2,8 +2,10 @@
 # KubeOnCall MySQL restore (WBS-12 §6).
 #
 # Restores a backup produced by mysql-backup.sh into a target database. Destructive: overwrites
-# existing rows. The script refuses to run unless CONFIRM_RESTORE matches the target database name,
-# so an operator cannot accidentally clobber production by running the wrong command.
+# existing rows. The script checks gzip integrity and, when supplied by the backup script, its
+# SHA-256 sidecar before it makes any database change. It refuses to run unless CONFIRM_RESTORE
+# matches the target database name, so an operator cannot accidentally clobber production by
+# running the wrong command.
 #
 # Usage:
 #   CONFIRM_RESTORE=kubeoncall MYSQL_HOST=... MYSQL_USER=... MYSQL_PASSWORD=... \
@@ -28,6 +30,34 @@ fi
 if [ ! -f "${BACKUP_FILE}" ]; then
   echo "[restore] backup file not found: ${BACKUP_FILE}" >&2
   exit 2
+fi
+
+sha256() {
+  if command -v sha256sum >/dev/null 2>&1; then
+    sha256sum "$1" | awk '{print $1}'
+    return
+  fi
+  if command -v shasum >/dev/null 2>&1; then
+    shasum -a 256 "$1" | awk '{print $1}'
+    return
+  fi
+  echo "[restore] sha256sum or shasum is required" >&2
+  return 1
+}
+
+echo "[restore] checking compressed backup integrity"
+gzip -t "${BACKUP_FILE}"
+CHECKSUM_FILE="${BACKUP_FILE}.sha256"
+if [ -f "${CHECKSUM_FILE}" ]; then
+  EXPECTED_SHA256="$(awk 'NR == 1 { print $1 }' "${CHECKSUM_FILE}")"
+  ACTUAL_SHA256="$(sha256 "${BACKUP_FILE}")"
+  if [ -z "${EXPECTED_SHA256}" ] || [ "${EXPECTED_SHA256}" != "${ACTUAL_SHA256}" ]; then
+    echo "[restore] REFUSING: checksum mismatch for ${BACKUP_FILE}" >&2
+    exit 2
+  fi
+  echo "[restore] checksum verified: ${CHECKSUM_FILE}"
+else
+  echo "[restore] WARNING: no checksum sidecar found; continuing after gzip integrity check" >&2
 fi
 
 echo "[restore] ${BACKUP_FILE} -> ${USER}@${HOST}:${PORT}/${TARGET_DB}"

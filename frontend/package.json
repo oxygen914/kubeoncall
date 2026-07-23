@@ -15,7 +15,9 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
-    "e2e": "playwright test"
+    "e2e": "playwright test",
+    "api:generate": "openapi-typescript ../api/openapi.json -o src/api/generated/schema.ts",
+    "api:check": "npm run api:generate && git diff --exit-code -- src/api/generated/schema.ts"
   },
   "dependencies": {
     "react": "^18.3.1",
@@ -49,6 +51,7 @@
     "@testing-library/user-event": "^14.5.2",
     "jsdom": "^24.1.1",
     "msw": "^2.3.5",
-    "@playwright/test": "^1.46.0"
+    "@playwright/test": "^1.46.0",
+    "openapi-typescript": "^7.7.0"
   }
 }

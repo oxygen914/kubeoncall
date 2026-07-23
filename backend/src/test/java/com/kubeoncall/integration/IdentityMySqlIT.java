@@ -107,6 +107,38 @@ class IdentityMySqlIT {
         assertThat(auditRows).isGreaterThanOrEqualTo(2);
     }
 
+    @Test
+    void rejectsStaleUserResourceVersionsAgainstRealMySql() throws Exception {
+        DataSource dataSource = DataSourceBuilder.create()
+                .url(MYSQL.getJdbcUrl() + "?allowPublicKeyRetrieval=true&useSSL=false")
+                .username(MYSQL.getUsername())
+                .password(MYSQL.getPassword())
+                .build();
+        JdbcTemplate jdbcTemplate = new JdbcTemplate(dataSource);
+        runMigration(jdbcTemplate);
+        IdentityRepository repository = new IdentityRepository(jdbcTemplate, true);
+
+        long userId = repository.createUser(
+                "usr_cas_identity",
+                "cas-user",
+                "CAS User",
+                null,
+                passwordHasher.hash("initial-password-123".toCharArray()));
+        UserAccount before = repository.findById(userId).orElseThrow();
+        assertThat(before.version()).isEqualTo(1);
+
+        assertThat(repository.setStatusIfVersion(userId, "DISABLED", before.version()))
+                .isTrue();
+        assertThat(repository.changePasswordIfVersion(
+                        userId, passwordHasher.hash("new-password-1234".toCharArray()), before.version()))
+                .isFalse();
+
+        UserAccount after = repository.findById(userId).orElseThrow();
+        assertThat(after.status()).isEqualTo("DISABLED");
+        assertThat(after.version()).isEqualTo(2);
+        assertThat(after.authVersion()).isEqualTo(2);
+    }
+
     private void runMigration(JdbcTemplate jdbcTemplate) throws Exception {
         org.flywaydb.core.Flyway flyway = org.flywaydb.core.Flyway.configure()
                 .dataSource(

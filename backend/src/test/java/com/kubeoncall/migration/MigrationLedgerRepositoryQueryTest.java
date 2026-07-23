@@ -5,12 +5,14 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.util.List;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.dao.EmptyResultDataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
 
@@ -49,6 +51,10 @@ class MigrationLedgerRepositoryQueryTest {
                 "status=FIRING",
                 "status=RESOLVED",
                 "req_1",
+                "OPEN",
+                null,
+                null,
+                null,
                 null);
         when(jdbcTemplate.query(anyString(), any(RowMapper.class), any(Object[].class)))
                 .thenReturn(List.of(sample));
@@ -69,6 +75,52 @@ class MigrationLedgerRepositoryQueryTest {
         MigrationLedgerRepository repo = new MigrationLedgerRepository(provider);
         assertThat(repo.listBatches(1, 20, null).rows()).isEmpty();
         assertThat(repo.listDiffs(1, 20, null).rows()).isEmpty();
+        assertThat(repo.listItems(1, 20, null, null, null).rows()).isEmpty();
+        assertThat(repo.diffStatistics("active-alarm", 60, 1.0d).available()).isFalse();
+    }
+
+    @Test
+    void recordsShadowComparisonInMinuteBucket() {
+        JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
+        MigrationLedgerRepository repo = newRepo(jdbcTemplate);
+
+        repo.recordShadowComparison("active-alarm", true);
+
+        verify(jdbcTemplate).update(anyString(), eq("active-alarm"), eq(1));
+    }
+
+    @Test
+    void scanCheckpointStartsAtZeroThenPersistsOpaqueCursor() {
+        JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
+        when(jdbcTemplate.queryForObject(anyString(), any(RowMapper.class), eq("active-alarm")))
+                .thenThrow(new EmptyResultDataAccessException(1));
+        MigrationLedgerRepository repo = newRepo(jdbcTemplate);
+
+        assertThat(repo.loadScanCheckpoint("active-alarm"))
+                .isEqualTo(MigrationLedgerRepository.ScanCheckpoint.initial());
+
+        repo.advanceScanCheckpoint("active-alarm", "581", false);
+        verify(jdbcTemplate).update(anyString(), eq("active-alarm"), eq("581"), eq(false));
+    }
+
+    @Test
+    void terminalBatchStatusPreservesInterruptionInsteadOfMarkingItCompleted() {
+        JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
+        MigrationLedgerRepository repo = newRepo(jdbcTemplate);
+
+        repo.finishBatch("mbt_interrupted", 10, 8, 1, 1, "581", "INTERRUPTED");
+
+        verify(jdbcTemplate)
+                .update(
+                        anyString(),
+                        eq("INTERRUPTED"),
+                        any(java.sql.Timestamp.class),
+                        eq(10L),
+                        eq(8L),
+                        eq(1L),
+                        eq(1L),
+                        eq("581"),
+                        eq("mbt_interrupted"));
     }
 
     @SuppressWarnings("unchecked")

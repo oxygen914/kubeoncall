@@ -167,13 +167,17 @@ public class AlarmQueryService {
             Optional<ActiveAlarmState> redisState = store.find(mysql.fingerprint());
             if (redisState.isEmpty()) {
                 ledger.recordDiff("active-alarm", alarmId, "REDIS_MISSING", null, summarizeMysql(mysql), null);
+                ledger.recordShadowComparison("active-alarm", true);
                 return;
             }
             ActiveAlarmState redis = redisState.get();
-            if (!equalsOrBothNull(redis.status() == null ? null : redis.status().name(), mysql.status())
+            boolean mismatch = !equalsOrBothNull(
+                            redis.status() == null ? null : redis.status().name(), mysql.status())
                     || !equalsOrBothNull(
                             redis.severity() == null ? null : redis.severity().name(), mysql.severity())
-                    || redis.count() != mysql.occurrenceCount()) {
+                    || redis.count() != mysql.occurrenceCount();
+            ledger.recordShadowComparison("active-alarm", mismatch);
+            if (mismatch) {
                 ledger.recordDiff(
                         "active-alarm", alarmId, "FIELD_MISMATCH", summarizeRedis(redis), summarizeMysql(mysql), null);
             }

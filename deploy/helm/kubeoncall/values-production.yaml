@@ -18,10 +18,13 @@ mysql:
   enabled: true
   url: ""  # set to the managed MySQL JDBC URL in production
   username: kubeoncall
+  migrationUsername: kubeoncall_migration
   sessionCookieSecure: true
   legacyTokenCompat: false
   bootstrapAdminEnabled: false
   bootstrapAdminUsername: ""
+  migrationJob:
+    enabled: true
 
 # Production runs the new Console as the only entry point; legacy /api/* is retired.
 legacyApi:

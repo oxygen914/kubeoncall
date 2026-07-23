@@ -6,6 +6,11 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import java.time.Instant;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 
 import javax.sql.DataSource;
 
@@ -303,6 +308,111 @@ class AlarmCommandIT {
                                 + "AND to_status = 'ACKNOWLEDGED'",
                         alarmId))
                 .isZero();
+    }
+
+    @Test
+    void outboxFailureRollsBackIncidentAuditAndCommandFact() {
+        String alarmId = seedFiringAlarm("fp-outbox-rollback", "NodeFilesystemFull");
+        long version = repository.findByPublicId(alarmId).orElseThrow().version();
+        @SuppressWarnings("unchecked")
+        ObjectProvider<JdbcTemplate> jdbcProvider =
+                (ObjectProvider<JdbcTemplate>) new SingletonObjectProvider<>(jdbcTemplate);
+        @SuppressWarnings("unchecked")
+        ObjectProvider<AlarmReadRepository> repoProvider =
+                (ObjectProvider<AlarmReadRepository>) new SingletonObjectProvider<>(repository);
+        @SuppressWarnings("unchecked")
+        ObjectProvider<JdbcTemplate> unavailableJdbcProvider =
+                (ObjectProvider<JdbcTemplate>) new SingletonObjectProvider<JdbcTemplate>(null);
+        AlarmCommandService rollbackService = transactionalAlarmCommandService(
+                repoProvider,
+                jdbcProvider,
+                new OperationAuditWriter(jdbcProvider, new ObjectMapper()),
+                new OutboxWriter(unavailableJdbcProvider, new ObjectMapper()),
+                txManager);
+
+        assertThatThrownBy(() -> rollbackService.acknowledge(new AlarmCommandService.AcknowledgeCommand(
+                        alarmId,
+                        version,
+                        1L,
+                        "USER",
+                        "Alarm Command IT",
+                        "must roll back on outbox failure",
+                        Instant.parse("2026-07-20T02:30:00Z"),
+                        null,
+                        "req_outbox_rollback",
+                        "127.0.0.1",
+                        "test")))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("Outbox");
+
+        AlarmIncidentRecordSnapshot current = current(alarmId);
+        assertThat(current.status()).isEqualTo("FIRING");
+        assertThat(current.version()).isEqualTo(version);
+        assertThat(count(
+                        "SELECT COUNT(*) FROM koc_operation_audit WHERE resource_public_id = ? AND action = 'alarm.acknowledge'",
+                        alarmId))
+                .isZero();
+    }
+
+    @Test
+    void concurrentAcknowledgementsCommitExactlyOneStateTransition() throws Exception {
+        String alarmId = seedFiringAlarm("fp-concurrent-ack", "NodeLoadHigh");
+        long version = repository.findByPublicId(alarmId).orElseThrow().version();
+        CountDownLatch ready = new CountDownLatch(2);
+        CountDownLatch start = new CountDownLatch(1);
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        try {
+            Future<Boolean> first =
+                    executor.submit(() -> acknowledgeConcurrently(alarmId, version, "req_concurrent_1", ready, start));
+            Future<Boolean> second =
+                    executor.submit(() -> acknowledgeConcurrently(alarmId, version, "req_concurrent_2", ready, start));
+            assertThat(ready.await(5, TimeUnit.SECONDS)).isTrue();
+            start.countDown();
+
+            int succeeded = (first.get(10, TimeUnit.SECONDS) ? 1 : 0) + (second.get(10, TimeUnit.SECONDS) ? 1 : 0);
+            assertThat(succeeded).isEqualTo(1);
+        } finally {
+            executor.shutdownNow();
+        }
+
+        AlarmIncidentRecordSnapshot current = current(alarmId);
+        assertThat(current.status()).isEqualTo("ACKNOWLEDGED");
+        assertThat(current.version()).isEqualTo(version + 1);
+        assertThat(count(
+                        "SELECT COUNT(*) FROM koc_alarm_acknowledgement WHERE incident_id = "
+                                + "(SELECT id FROM koc_alarm_incident WHERE public_id = ?)",
+                        alarmId))
+                .isEqualTo(1L);
+        assertThat(count(
+                        "SELECT COUNT(*) FROM koc_outbox_event WHERE aggregate_public_id = ? AND event_type = 'alarm.acknowledged'",
+                        alarmId))
+                .isEqualTo(1L);
+    }
+
+    private boolean acknowledgeConcurrently(
+            String alarmId, long version, String requestId, CountDownLatch ready, CountDownLatch start)
+            throws Exception {
+        ready.countDown();
+        if (!start.await(5, TimeUnit.SECONDS)) {
+            throw new IllegalStateException("Concurrent command start timed out");
+        }
+        try {
+            commandService.acknowledge(new AlarmCommandService.AcknowledgeCommand(
+                    alarmId,
+                    version,
+                    1L,
+                    "USER",
+                    "Alarm Command IT",
+                    "concurrent acknowledge",
+                    Instant.now(),
+                    null,
+                    requestId,
+                    "127.0.0.1",
+                    "test"));
+            return true;
+        } catch (AlarmCommandException ex) {
+            return false;
+        }
     }
 
     @Test

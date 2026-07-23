@@ -4,6 +4,7 @@ import java.time.Instant;
 
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.http.HttpStatus;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -41,6 +42,24 @@ public class TasksController {
         security.requireAuthenticated();
         AsyncTaskRecord task = repository().findByPublicId(taskId).orElseThrow(() -> notFound(taskId));
         security.requirePermission(TaskPermissionPolicy.requiredPermission(task.taskType(), task.resourceType()));
+        return ApiResponse.ok(TaskView.from(task), RequestIdFilter.currentRequestId());
+    }
+
+    /** Cancels a queued/retrying task or cooperatively stops a running task at its next safe boundary. */
+    @DeleteMapping("/{taskId}")
+    public ApiResponse<TaskView> cancel(@PathVariable String taskId) {
+        security.requireAuthenticated();
+        AsyncTaskRecord task = repository().findByPublicId(taskId).orElseThrow(() -> notFound(taskId));
+        security.requirePermission(TaskPermissionPolicy.requiredPermission(task.taskType(), task.resourceType()));
+        if (!repository().cancel(taskId, Instant.now())) {
+            AsyncTaskRecord current = repository().findByPublicId(taskId).orElseThrow(() -> notFound(taskId));
+            if (!"CANCELLED".equals(current.status())) {
+                throw V1ApiException.conflict(V1ApiErrorCode.CONFLICT, "Async task is already terminal: " + taskId);
+            }
+            task = current;
+        } else {
+            task = repository().findByPublicId(taskId).orElseThrow(() -> notFound(taskId));
+        }
         return ApiResponse.ok(TaskView.from(task), RequestIdFilter.currentRequestId());
     }
 

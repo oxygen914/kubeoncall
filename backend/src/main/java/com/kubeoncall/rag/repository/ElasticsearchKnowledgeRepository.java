@@ -7,7 +7,9 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.function.Supplier;
 
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Primary;
 import org.springframework.data.elasticsearch.client.elc.ElasticsearchTemplate;
 import org.springframework.data.elasticsearch.client.elc.NativeQuery;
@@ -22,6 +24,8 @@ import com.kubeoncall.common.config.KubeOnCallProperties;
 import com.kubeoncall.domain.rag.KnowledgeDocument;
 import com.kubeoncall.domain.rag.RetrievalHit;
 import com.kubeoncall.domain.rag.RetrievalRequest;
+import com.kubeoncall.observability.DependencyCircuitBreaker;
+import com.kubeoncall.service.KubeOnCallMetricsService;
 
 import co.elastic.clients.elasticsearch._types.KnnQuery;
 import co.elastic.clients.elasticsearch._types.query_dsl.Query;
@@ -33,14 +37,36 @@ public class ElasticsearchKnowledgeRepository implements KnowledgeRepository {
     private final ElasticsearchTemplate elasticsearchTemplate;
     private final KubeOnCallProperties properties;
     private final KnowledgeIndexAdmin indexAdmin;
+    private final KubeOnCallMetricsService metricsService;
+    private final DependencyCircuitBreaker circuitBreaker;
 
     public ElasticsearchKnowledgeRepository(
             ElasticsearchTemplate elasticsearchTemplate,
             KubeOnCallProperties properties,
             KnowledgeIndexAdmin indexAdmin) {
+        this(elasticsearchTemplate, properties, indexAdmin, null);
+    }
+
+    public ElasticsearchKnowledgeRepository(
+            ElasticsearchTemplate elasticsearchTemplate,
+            KubeOnCallProperties properties,
+            KnowledgeIndexAdmin indexAdmin,
+            KubeOnCallMetricsService metricsService) {
+        this(elasticsearchTemplate, properties, indexAdmin, metricsService, null);
+    }
+
+    @Autowired
+    public ElasticsearchKnowledgeRepository(
+            ElasticsearchTemplate elasticsearchTemplate,
+            KubeOnCallProperties properties,
+            KnowledgeIndexAdmin indexAdmin,
+            KubeOnCallMetricsService metricsService,
+            DependencyCircuitBreaker circuitBreaker) {
         this.elasticsearchTemplate = elasticsearchTemplate;
         this.properties = properties;
         this.indexAdmin = indexAdmin;
+        this.metricsService = metricsService;
+        this.circuitBreaker = circuitBreaker;
     }
 
     @Override
@@ -53,7 +79,7 @@ public class ElasticsearchKnowledgeRepository implements KnowledgeRepository {
             indexAdmin.ensureVectorMapping(dimensions);
         }
         EsKnowledgeDocumentEntity entity = toEntity(document);
-        elasticsearchTemplate.save(entity, index());
+        esRun("save", () -> elasticsearchTemplate.save(entity, index()));
     }
 
     @Override
@@ -139,7 +165,7 @@ public class ElasticsearchKnowledgeRepository implements KnowledgeRepository {
             return Optional.empty();
         }
         EsKnowledgeDocumentEntity entity =
-                elasticsearchTemplate.get(documentId.trim(), EsKnowledgeDocumentEntity.class, index());
+                es("get", () -> elasticsearchTemplate.get(documentId.trim(), EsKnowledgeDocumentEntity.class, index()));
         return Optional.ofNullable(entity).map(this::toDomain);
     }
 
@@ -159,7 +185,7 @@ public class ElasticsearchKnowledgeRepository implements KnowledgeRepository {
             return;
         }
         CriteriaQuery query = new CriteriaQuery(new Criteria("id").is(documentId));
-        elasticsearchTemplate.delete(query, EsKnowledgeDocumentEntity.class, index());
+        esRun("delete", () -> elasticsearchTemplate.delete(query, EsKnowledgeDocumentEntity.class, index()));
     }
 
     private Criteria buildLexicalCriteria(RetrievalRequest request) {
@@ -225,14 +251,14 @@ public class ElasticsearchKnowledgeRepository implements KnowledgeRepository {
 
     private List<KnowledgeDocument> searchByQuery(org.springframework.data.elasticsearch.core.query.Query query) {
         SearchHits<EsKnowledgeDocumentEntity> hits =
-                elasticsearchTemplate.search(query, EsKnowledgeDocumentEntity.class, index());
+                es("search", () -> elasticsearchTemplate.search(query, EsKnowledgeDocumentEntity.class, index()));
         return hits.stream().map(SearchHit::getContent).map(this::toDomain).toList();
     }
 
     private List<RetrievalHit> searchHitsByQuery(
             org.springframework.data.elasticsearch.core.query.Query query, String channel) {
         SearchHits<EsKnowledgeDocumentEntity> hits =
-                elasticsearchTemplate.search(query, EsKnowledgeDocumentEntity.class, index());
+                es("search", () -> elasticsearchTemplate.search(query, EsKnowledgeDocumentEntity.class, index()));
         java.util.concurrent.atomic.AtomicInteger rank = new java.util.concurrent.atomic.AtomicInteger(1);
         return hits.stream()
                 .map(hit -> new RetrievalHit(
@@ -259,6 +285,35 @@ public class ElasticsearchKnowledgeRepository implements KnowledgeRepository {
                 createdAt.toEpochMilli(),
                 document.embeddingText(),
                 embedding);
+    }
+
+    private <T> T es(String operation, Supplier<T> call) {
+        long startedAt = System.nanoTime();
+        try {
+            T result = circuitBreaker == null ? call.get() : circuitBreaker.execute("elasticsearch", call);
+            recordEs(operation, "success", startedAt);
+            return result;
+        } catch (RuntimeException ex) {
+            recordEs(operation, "error", startedAt);
+            throw ex;
+        }
+    }
+
+    private void esRun(String operation, Runnable call) {
+        es(operation, () -> {
+            call.run();
+            return null;
+        });
+    }
+
+    private void recordEs(String operation, String outcome, long startedAt) {
+        if (metricsService != null) {
+            metricsService.recordDependency(
+                    "elasticsearch",
+                    operation,
+                    outcome,
+                    java.time.Duration.ofNanos(System.nanoTime() - startedAt).toMillis());
+        }
     }
 
     private KnowledgeDocument toDomain(EsKnowledgeDocumentEntity entity) {
