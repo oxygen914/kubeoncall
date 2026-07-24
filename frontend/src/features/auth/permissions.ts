@@ -21,6 +21,9 @@ export const PERMISSIONS = {
   AUDIT_READ: 'audit:read',
   SYSTEM_READ: 'system:read',
   SYSTEM_MANAGE: 'system:manage',
+  TOKEN_READ_OWN: 'token:read-own',
+  TOKEN_MANAGE_OWN: 'token:manage-own',
+  TOKEN_MANAGE_ALL: 'token:manage-all',
 } as const
 
 export type Permission = (typeof PERMISSIONS)[keyof typeof PERMISSIONS]

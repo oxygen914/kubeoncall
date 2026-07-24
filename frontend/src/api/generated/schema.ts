@@ -452,6 +452,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/api-tokens": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["list_7"];
+        put?: never;
+        post: operations["create_2"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/alarms/{alarmId}/silence-approvals": {
         parameters: {
             query?: never;
@@ -1069,7 +1085,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        post: operations["create_2"];
+        post: operations["create_3"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1563,7 +1579,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get: operations["list_7"];
+        get: operations["list_8"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1707,7 +1723,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get: operations["list_8"];
+        get: operations["list_9"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1755,7 +1771,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get: operations["list_9"];
+        get: operations["list_10"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1780,7 +1796,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/alarm-maintenance-windows/{id}": {
+    "/api/v1/api-tokens/{tokenId}": {
         parameters: {
             query?: never;
             header?: never;
@@ -1791,6 +1807,22 @@ export interface paths {
         put?: never;
         post?: never;
         delete: operations["revoke"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/alarm-maintenance-windows/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete: operations["revoke_1"];
         options?: never;
         head?: never;
         patch?: never;
@@ -2039,6 +2071,12 @@ export interface components {
         ApprovalDecisionRequest: {
             decision: string;
             comment?: string;
+        };
+        CreateTokenRequest: {
+            name: string;
+            scopes?: string[];
+            /** Format: date-time */
+            expiresAt?: string;
         };
         SilenceApprovalRequest: {
             reason?: string;
@@ -3044,6 +3082,12 @@ export interface components {
             decision?: {
                 [key: string]: Record<string, never>;
             };
+        };
+        ApiResponseListMapStringObject: {
+            data?: {
+                [key: string]: Record<string, never>;
+            }[];
+            meta?: components["schemas"]["ResponseMeta"];
         };
         AlarmAcknowledgement: {
             acknowledged?: boolean;
@@ -4122,6 +4166,52 @@ export interface operations {
             };
         };
     };
+    list_7: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseListMapStringObject"];
+                };
+            };
+        };
+    };
+    create_2: {
+        parameters: {
+            query?: never;
+            header?: {
+                "Idempotency-Key"?: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateTokenRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseMapStringObject"];
+                };
+            };
+        };
+    };
     approveSilence: {
         parameters: {
             query?: never;
@@ -5070,7 +5160,7 @@ export interface operations {
             };
         };
     };
-    create_2: {
+    create_3: {
         parameters: {
             query?: never;
             header?: never;
@@ -5872,7 +5962,7 @@ export interface operations {
             };
         };
     };
-    list_7: {
+    list_8: {
         parameters: {
             query?: {
                 page?: number;
@@ -6069,7 +6159,7 @@ export interface operations {
             };
         };
     };
-    list_8: {
+    list_9: {
         parameters: {
             query?: never;
             header?: never;
@@ -6131,7 +6221,7 @@ export interface operations {
             };
         };
     };
-    list_9: {
+    list_10: {
         parameters: {
             query?: never;
             header?: never;
@@ -6178,6 +6268,31 @@ export interface operations {
         };
     };
     revoke: {
+        parameters: {
+            query?: never;
+            header?: {
+                "If-Match"?: string;
+                "Idempotency-Key"?: string;
+            };
+            path: {
+                tokenId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseMapStringObject"];
+                };
+            };
+        };
+    };
+    revoke_1: {
         parameters: {
             query?: never;
             header?: never;

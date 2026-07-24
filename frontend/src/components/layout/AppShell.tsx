@@ -24,6 +24,7 @@ const NAV_ITEMS: NavItem[] = [
   { to: '/skills', label: '技能', permission: PERMISSIONS.SKILL_READ },
   { to: '/audit', label: '审计', permission: PERMISSIONS.AUDIT_READ },
   { to: '/users', label: '用户', permission: PERMISSIONS.SYSTEM_MANAGE },
+  { to: '/tokens', label: 'API Token', permission: PERMISSIONS.TOKEN_READ_OWN },
   { to: '/system', label: '系统' },
   { to: '/migration', label: '数据迁移', permission: PERMISSIONS.SYSTEM_MANAGE },
 ]
