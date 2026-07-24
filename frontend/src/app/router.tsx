@@ -21,6 +21,7 @@ import { SkillDetailPage } from '@/features/skills/SkillDetailPage'
 import { AuditListPage } from '@/features/audit/AuditListPage'
 import { AuditDetailPage } from '@/features/audit/AuditDetailPage'
 import { ApiTokensPage } from '@/features/tokens/ApiTokensPage'
+import { ToolsPage } from '@/features/tools/ToolsPage'
 import { AppShell } from '@/components/layout/AppShell'
 import { ForbiddenPage } from '@/components/feedback/ForbiddenPage'
 import { NotFoundPage } from '@/components/feedback/NotFoundPage'
@@ -198,6 +199,14 @@ export function AppRouter() {
           element={
             <Restricted permission={PERMISSIONS.TOKEN_READ_OWN}>
               <ApiTokensPage />
+            </Restricted>
+          }
+        />
+        <Route
+          path="/tools"
+          element={
+            <Restricted permission={PERMISSIONS.TOOL_READ}>
+              <ToolsPage />
             </Restricted>
           }
         />

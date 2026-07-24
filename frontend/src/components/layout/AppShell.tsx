@@ -22,6 +22,7 @@ const NAV_ITEMS: NavItem[] = [
   { to: '/knowledge', label: '知识库', permission: PERMISSIONS.KNOWLEDGE_READ },
   { to: '/memory', label: '记忆', permission: PERMISSIONS.MEMORY_READ },
   { to: '/skills', label: '技能', permission: PERMISSIONS.SKILL_READ },
+  { to: '/tools', label: '工具', permission: PERMISSIONS.TOOL_READ },
   { to: '/audit', label: '审计', permission: PERMISSIONS.AUDIT_READ },
   { to: '/users', label: '用户', permission: PERMISSIONS.SYSTEM_MANAGE },
   { to: '/tokens', label: 'API Token', permission: PERMISSIONS.TOKEN_READ_OWN },

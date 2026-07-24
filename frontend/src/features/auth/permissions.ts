@@ -18,6 +18,7 @@ export const PERMISSIONS = {
   MEMORY_MAINTAIN: 'memory:maintain',
   SKILL_READ: 'skill:read',
   SKILL_MANAGE: 'skill:manage',
+  TOOL_READ: 'tool:read',
   AUDIT_READ: 'audit:read',
   SYSTEM_READ: 'system:read',
   SYSTEM_MANAGE: 'system:manage',

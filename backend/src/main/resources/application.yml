@@ -107,6 +107,10 @@ kubeoncall:
       "/api/status": "/api/v1/system/status"
       "/api/stats": "/api/v1/overview"
       "/api/change-events": "/api/v1/change-events"
+      "/api/tools": "/api/v1/tools"
+      "/api/tools/planner": "/api/v1/tools/planner"
+      "/api/tools/executor": "/api/v1/tools/executor"
+      "/api/tools/verifier": "/api/v1/tools/verifier"
   realtime:
     heartbeat-seconds: ${KUBEONCALL_REALTIME_HEARTBEAT_SECONDS:15}
     replay-capacity: ${KUBEONCALL_REALTIME_REPLAY_CAPACITY:2048}
