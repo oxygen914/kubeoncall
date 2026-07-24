@@ -14,6 +14,7 @@ import org.springframework.beans.factory.ObjectProvider;
 
 import com.kubeoncall.common.config.KubeOnCallProperties;
 import com.kubeoncall.migration.ActiveAlarmBackfillRunner;
+import com.kubeoncall.migration.ChangeEventBackfillRunner;
 import com.kubeoncall.migration.LegacyAlarmCommandBackfillRunner;
 import com.kubeoncall.migration.LegacyAlarmCommandPreflightService;
 import com.kubeoncall.migration.LegacyExecutionAuditBackfillRunner;
@@ -37,6 +38,7 @@ class MigrationAdminControllerTest {
             mock(LegacyAlarmCommandBackfillRunner.class);
     private final LegacyExecutionAuditBackfillRunner legacyExecutionAuditBackfillRunner =
             mock(LegacyExecutionAuditBackfillRunner.class);
+    private final ChangeEventBackfillRunner changeEventBackfillRunner = mock(ChangeEventBackfillRunner.class);
     private final KubeOnCallProperties properties = new KubeOnCallProperties();
     private final MigrationBackfillTaskSubmissionService taskSubmissionService =
             mock(MigrationBackfillTaskSubmissionService.class);
@@ -53,6 +55,7 @@ class MigrationAdminControllerTest {
                 mock(LegacyAlarmCommandPreflightService.class),
                 legacyAlarmCommandBackfillRunner,
                 legacyExecutionAuditBackfillRunner,
+                changeEventBackfillRunner,
                 mock(ObjectProvider.class),
                 provider(taskSubmissionService),
                 properties,
@@ -68,13 +71,15 @@ class MigrationAdminControllerTest {
         assertRejected(() -> controller.backfillActiveAlarm(false, false, null));
         assertRejected(() -> controller.backfillApproval(false, false, null));
         assertRejected(() -> controller.backfillSkillState(false, false, null));
+        assertRejected(() -> controller.backfillChangeEvent(false, false, null));
 
         verifyNoInteractions(
                 activeAlarmBackfillRunner,
                 approvalBackfillRunner,
                 skillStateBackfillRunner,
                 legacyAlarmCommandBackfillRunner,
-                legacyExecutionAuditBackfillRunner);
+                legacyExecutionAuditBackfillRunner,
+                changeEventBackfillRunner);
     }
 
     @Test
@@ -168,6 +173,7 @@ class MigrationAdminControllerTest {
                 mock(LegacyAlarmCommandPreflightService.class),
                 legacyAlarmCommandBackfillRunner,
                 legacyExecutionAuditBackfillRunner,
+                changeEventBackfillRunner,
                 provider(ledger),
                 provider(taskSubmissionService),
                 properties,

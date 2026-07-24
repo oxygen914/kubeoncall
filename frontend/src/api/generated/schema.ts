@@ -132,6 +132,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/migration/diffs/{diffId}/resolution": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["resolveDiff"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/migration/backfill/tasks": {
         parameters: {
             query?: never;
@@ -174,6 +190,22 @@ export interface paths {
         get?: never;
         put?: never;
         post: operations["backfillExecutionAudit"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/migration/backfill/change-event": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["backfillChangeEvent"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1172,6 +1204,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/migration/items": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["items"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/migration/diffs": {
         parameters: {
             query?: never;
@@ -1180,6 +1228,22 @@ export interface paths {
             cookie?: never;
         };
         get: operations["diffs"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/migration/diff-statistics": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["diffStatistics"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1380,6 +1444,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/change-events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["list_4"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/capabilities": {
         parameters: {
             query?: never;
@@ -1419,7 +1499,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get: operations["list_4"];
+        get: operations["list_5"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1451,7 +1531,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get: operations["list_5"];
+        get: operations["list_6"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1483,7 +1563,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get: operations["list_6"];
+        get: operations["list_7"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1627,7 +1707,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get: operations["list_7"];
+        get: operations["list_8"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1675,7 +1755,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get: operations["list_8"];
+        get: operations["list_9"];
         put?: never;
         post?: never;
         delete?: never;
@@ -2564,6 +2644,21 @@ export interface components {
             items?: components["schemas"]["PreflightItem"][];
             note?: string;
         };
+        ItemSummary: {
+            batchId?: string;
+            sourceKey?: string;
+            domain?: string;
+            targetPublicId?: string;
+            result?: string;
+            reason?: string;
+            /** Format: date-time */
+            occurredAt?: string;
+        };
+        ListEnvelopeItemSummary: {
+            data?: components["schemas"]["ItemSummary"][];
+            page?: components["schemas"]["PageMeta"];
+            meta?: components["schemas"]["ResponseMeta"];
+        };
         DiffSummary: {
             publicId?: string;
             domain?: string;
@@ -2572,6 +2667,11 @@ export interface components {
             redisSummary?: string;
             mysqlSummary?: string;
             requestId?: string;
+            resolutionStatus?: string;
+            resolutionNote?: string;
+            resolvedBy?: string;
+            /** Format: date-time */
+            resolvedAt?: string;
             /** Format: date-time */
             occurredAt?: string;
         };
@@ -2579,6 +2679,27 @@ export interface components {
             data?: components["schemas"]["DiffSummary"][];
             page?: components["schemas"]["PageMeta"];
             meta?: components["schemas"]["ResponseMeta"];
+        };
+        ApiResponseDiffStatistics: {
+            data?: components["schemas"]["DiffStatistics"];
+            meta?: components["schemas"]["ResponseMeta"];
+        };
+        DiffStatistics: {
+            domain?: string;
+            /** Format: int32 */
+            windowMinutes?: number;
+            /** Format: int64 */
+            comparisonCount?: number;
+            /** Format: int64 */
+            mismatchCount?: number;
+            /** Format: double */
+            mismatchRatePercent?: number;
+            /** Format: double */
+            thresholdPercent?: number;
+            withinThreshold?: boolean;
+            /** Format: int64 */
+            openDiffCount?: number;
+            available?: boolean;
         };
         BatchSummary: {
             batchId?: string;
@@ -2805,6 +2926,27 @@ export interface components {
         };
         ApiResponseListDictionaryItem: {
             data?: components["schemas"]["DictionaryItem"][];
+            meta?: components["schemas"]["ResponseMeta"];
+        };
+        ChangeEventView: {
+            changeId?: string;
+            changeType?: string;
+            changedBy?: string;
+            /** Format: date-time */
+            changedAt?: string;
+            resourceType?: string;
+            resourceName?: string;
+            namespace?: string;
+            cluster?: string;
+            diff?: {
+                [key: string]: Record<string, never>;
+            };
+            changeSource?: string;
+            correlationId?: string;
+        };
+        ListEnvelopeChangeEventView: {
+            data?: components["schemas"]["ChangeEventView"][];
+            page?: components["schemas"]["PageMeta"];
             meta?: components["schemas"]["ResponseMeta"];
         };
         ActorView: {
@@ -3417,10 +3559,35 @@ export interface operations {
             };
         };
     };
+    resolveDiff: {
+        parameters: {
+            query: {
+                status: string;
+                note?: string;
+            };
+            header?: never;
+            path: {
+                diffId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseMapStringObject"];
+                };
+            };
+        };
+    };
     submitBackfillTask: {
         parameters: {
             query: {
-                domain: "ACTIVE_ALARM" | "APPROVAL" | "SKILL_STATE" | "ALARM_ACKNOWLEDGEMENT" | "ALARM_SILENCE" | "ALARM_RECOVERY" | "EXECUTION_AUDIT";
+                domain: "ACTIVE_ALARM" | "APPROVAL" | "SKILL_STATE" | "ALARM_ACKNOWLEDGEMENT" | "ALARM_SILENCE" | "ALARM_RECOVERY" | "EXECUTION_AUDIT" | "CHANGE_EVENT";
                 "dry-run"?: boolean;
                 "confirm-apply"?: boolean;
             };
@@ -3465,6 +3632,29 @@ export interface operations {
         };
     };
     backfillExecutionAudit: {
+        parameters: {
+            query?: {
+                "dry-run"?: boolean;
+                "confirm-apply"?: boolean;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseMapStringObject"];
+                };
+            };
+        };
+    };
+    backfillChangeEvent: {
         parameters: {
             query?: {
                 "dry-run"?: boolean;
@@ -5100,12 +5290,39 @@ export interface operations {
             };
         };
     };
+    items: {
+        parameters: {
+            query?: {
+                page?: number;
+                size?: number;
+                domain?: string;
+                result?: string;
+                "batch-id"?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ListEnvelopeItemSummary"];
+                };
+            };
+        };
+    };
     diffs: {
         parameters: {
             query?: {
                 page?: number;
                 size?: number;
                 domain?: string;
+                "resolution-status"?: string;
             };
             header?: never;
             path?: never;
@@ -5120,6 +5337,29 @@ export interface operations {
                 };
                 content: {
                     "*/*": components["schemas"]["ListEnvelopeDiffSummary"];
+                };
+            };
+        };
+    };
+    diffStatistics: {
+        parameters: {
+            query?: {
+                domain?: string;
+                "window-minutes"?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseDiffStatistics"];
                 };
             };
         };
@@ -5464,6 +5704,33 @@ export interface operations {
             };
         };
     };
+    list_4: {
+        parameters: {
+            query?: {
+                from?: string;
+                to?: string;
+                cluster?: string;
+                namespace?: string;
+                page?: number;
+                size?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ListEnvelopeChangeEventView"];
+                };
+            };
+        };
+    };
     capabilities: {
         parameters: {
             query?: never;
@@ -5504,7 +5771,7 @@ export interface operations {
             };
         };
     };
-    list_4: {
+    list_5: {
         parameters: {
             query?: {
                 actor?: string;
@@ -5557,7 +5824,7 @@ export interface operations {
             };
         };
     };
-    list_5: {
+    list_6: {
         parameters: {
             query?: {
                 page?: number;
@@ -5605,7 +5872,7 @@ export interface operations {
             };
         };
     };
-    list_6: {
+    list_7: {
         parameters: {
             query?: {
                 page?: number;
@@ -5802,7 +6069,7 @@ export interface operations {
             };
         };
     };
-    list_7: {
+    list_8: {
         parameters: {
             query?: never;
             header?: never;
@@ -5864,7 +6131,7 @@ export interface operations {
             };
         };
     };
-    list_8: {
+    list_9: {
         parameters: {
             query?: never;
             header?: never;

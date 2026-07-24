@@ -21,7 +21,9 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 public class RedisChangeEventRepository implements ChangeEventRepository {
 
     private static final Logger log = LoggerFactory.getLogger(RedisChangeEventRepository.class);
-    private static final String TIMELINE_KEY = "alarm-change-events:timeline";
+    /** Redis ZSET holding the serialized change-event timeline; the backfill source. */
+    public static final String TIMELINE_KEY = "alarm-change-events:timeline";
+
     private static final String IDEMPOTENCY_PREFIX = "alarm-change-event:id:";
     private static final Duration RETENTION = Duration.ofDays(30);
     private static final DefaultRedisScript<Long> SAVE_IF_ABSENT_SCRIPT = new DefaultRedisScript<>("""

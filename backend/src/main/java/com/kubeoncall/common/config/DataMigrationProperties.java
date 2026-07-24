@@ -32,8 +32,33 @@ public class DataMigrationProperties {
         MYSQL_PRIMARY
     }
 
+    /**
+     * Read source for the change-event correlation timeline. {@code REDIS} (default) keeps the
+     * pre-cutover behaviour; {@code MYSQL} serves from {@code koc_change_event}; {@code SHADOW}
+     * serves MySQL and records any Redis disagreement in the migration ledger.
+     */
+    public enum ChangeEventReadSource {
+        REDIS,
+        MYSQL,
+        SHADOW
+    }
+
+    /**
+     * Write target for recorded change events. Mirrors {@link AlarmWriteMode}:
+     * {@code REDIS_PRIMARY} → Redis only; {@code DUAL_WRITE} → MySQL first then a best-effort Redis
+     * compatibility projection; {@code MYSQL_PRIMARY} → MySQL only. Flipping back is a config-only
+     * rollback.
+     */
+    public enum ChangeEventWriteMode {
+        REDIS_PRIMARY,
+        DUAL_WRITE,
+        MYSQL_PRIMARY
+    }
+
     private AlarmReadSource alarmReadSource = AlarmReadSource.MYSQL;
     private AlarmWriteMode alarmWriteMode = AlarmWriteMode.REDIS_PRIMARY;
+    private ChangeEventReadSource changeEventReadSource = ChangeEventReadSource.REDIS;
+    private ChangeEventWriteMode changeEventWriteMode = ChangeEventWriteMode.REDIS_PRIMARY;
     private int backfillBatchSize = 100;
     private long backfillScanLimit = 10000;
     private int backfillMaxItemsPerSecond = 100;
@@ -56,6 +81,24 @@ public class DataMigrationProperties {
 
     public void setAlarmWriteMode(AlarmWriteMode alarmWriteMode) {
         this.alarmWriteMode = alarmWriteMode == null ? AlarmWriteMode.REDIS_PRIMARY : alarmWriteMode;
+    }
+
+    public ChangeEventReadSource getChangeEventReadSource() {
+        return changeEventReadSource;
+    }
+
+    public void setChangeEventReadSource(ChangeEventReadSource changeEventReadSource) {
+        this.changeEventReadSource =
+                changeEventReadSource == null ? ChangeEventReadSource.REDIS : changeEventReadSource;
+    }
+
+    public ChangeEventWriteMode getChangeEventWriteMode() {
+        return changeEventWriteMode;
+    }
+
+    public void setChangeEventWriteMode(ChangeEventWriteMode changeEventWriteMode) {
+        this.changeEventWriteMode =
+                changeEventWriteMode == null ? ChangeEventWriteMode.REDIS_PRIMARY : changeEventWriteMode;
     }
 
     public int getBackfillBatchSize() {

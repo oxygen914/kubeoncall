@@ -81,6 +81,8 @@ kubeoncall:
   data-migration:
     alarm-read-source: ${KUBEONCALL_DATA_MIGRATION_ALARM_READ_SOURCE:MYSQL}
     alarm-write-mode: ${KUBEONCALL_DATA_MIGRATION_ALARM_WRITE_MODE:REDIS_PRIMARY}
+    change-event-read-source: ${KUBEONCALL_DATA_MIGRATION_CHANGE_EVENT_READ_SOURCE:REDIS}
+    change-event-write-mode: ${KUBEONCALL_DATA_MIGRATION_CHANGE_EVENT_WRITE_MODE:REDIS_PRIMARY}
     backfill-batch-size: ${KUBEONCALL_DATA_MIGRATION_BACKFILL_BATCH_SIZE:100}
     backfill-scan-limit: ${KUBEONCALL_DATA_MIGRATION_BACKFILL_SCAN_LIMIT:10000}
     backfill-max-items-per-second: ${KUBEONCALL_DATA_MIGRATION_BACKFILL_MAX_ITEMS_PER_SECOND:100}
@@ -95,6 +97,7 @@ kubeoncall:
     successors:
       "/api/status": "/api/v1/system/status"
       "/api/stats": "/api/v1/overview"
+      "/api/change-events": "/api/v1/change-events"
   realtime:
     heartbeat-seconds: ${KUBEONCALL_REALTIME_HEARTBEAT_SECONDS:15}
     replay-capacity: ${KUBEONCALL_REALTIME_REPLAY_CAPACITY:2048}

@@ -24,7 +24,8 @@ public class MigrationBackfillTaskHandler implements AsyncTaskHandler {
         ALARM_ACKNOWLEDGEMENT,
         ALARM_SILENCE,
         ALARM_RECOVERY,
-        EXECUTION_AUDIT;
+        EXECUTION_AUDIT,
+        CHANGE_EVENT;
 
         public static Domain parse(Object value) {
             try {
@@ -40,6 +41,7 @@ public class MigrationBackfillTaskHandler implements AsyncTaskHandler {
     private final SkillStateBackfillRunner skillStateRunner;
     private final LegacyAlarmCommandBackfillRunner alarmCommandRunner;
     private final LegacyExecutionAuditBackfillRunner executionAuditRunner;
+    private final ChangeEventBackfillRunner changeEventRunner;
     private final AsyncTaskRepository taskRepository;
     private final MigrationRunControl runControl;
 
@@ -49,6 +51,7 @@ public class MigrationBackfillTaskHandler implements AsyncTaskHandler {
             SkillStateBackfillRunner skillStateRunner,
             LegacyAlarmCommandBackfillRunner alarmCommandRunner,
             LegacyExecutionAuditBackfillRunner executionAuditRunner,
+            ChangeEventBackfillRunner changeEventRunner,
             AsyncTaskRepository taskRepository,
             MigrationRunControl runControl) {
         this.activeAlarmRunner = activeAlarmRunner;
@@ -56,6 +59,7 @@ public class MigrationBackfillTaskHandler implements AsyncTaskHandler {
         this.skillStateRunner = skillStateRunner;
         this.alarmCommandRunner = alarmCommandRunner;
         this.executionAuditRunner = executionAuditRunner;
+        this.changeEventRunner = changeEventRunner;
         this.taskRepository = taskRepository;
         this.runControl = runControl;
     }
@@ -96,6 +100,8 @@ public class MigrationBackfillTaskHandler implements AsyncTaskHandler {
                             context.task().requestId()));
                 case EXECUTION_AUDIT ->
                     result(executionAuditRunner.run(dryRun, context.task().requestId()));
+                case CHANGE_EVENT ->
+                    result(changeEventRunner.run(dryRun, context.task().requestId()));
             };
         }
         context.requireValidLease();
@@ -167,6 +173,17 @@ public class MigrationBackfillTaskHandler implements AsyncTaskHandler {
     }
 
     private static Map<String, Object> result(LegacyExecutionAuditBackfillRunner.BackfillResult result) {
+        return result(
+                result.scanned(),
+                result.migrated(),
+                result.skipped(),
+                result.failed(),
+                result.checkpoint(),
+                result.note(),
+                result.dryRun());
+    }
+
+    private static Map<String, Object> result(ChangeEventBackfillRunner.BackfillResult result) {
         return result(
                 result.scanned(),
                 result.migrated(),

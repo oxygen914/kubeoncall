@@ -16,6 +16,7 @@ import org.junit.jupiter.api.Test;
 
 import com.kubeoncall.migration.ActiveAlarmBackfillRunner;
 import com.kubeoncall.migration.ApprovalBackfillRunner;
+import com.kubeoncall.migration.ChangeEventBackfillRunner;
 import com.kubeoncall.migration.LegacyAlarmCommandBackfillRunner;
 import com.kubeoncall.migration.LegacyExecutionAuditBackfillRunner;
 import com.kubeoncall.migration.MigrationBackfillTaskHandler;
@@ -33,6 +34,7 @@ class MigrationBackfillTaskHandlerTest {
         SkillStateBackfillRunner skill = mock(SkillStateBackfillRunner.class);
         LegacyAlarmCommandBackfillRunner commands = mock(LegacyAlarmCommandBackfillRunner.class);
         LegacyExecutionAuditBackfillRunner audit = mock(LegacyExecutionAuditBackfillRunner.class);
+        ChangeEventBackfillRunner changeEvent = mock(ChangeEventBackfillRunner.class);
         AsyncTaskRepository tasks = mock(AsyncTaskRepository.class);
         MigrationRunControl runControl = mock(MigrationRunControl.class);
         AsyncTaskContext context = new AsyncTaskContext(
@@ -49,7 +51,7 @@ class MigrationBackfillTaskHandlerTest {
                 .thenReturn(new ApprovalBackfillRunner.BackfillResult(8, 4, 3, 1, "42", "done", true));
 
         Map<String, Object> result = new MigrationBackfillTaskHandler(
-                        activeAlarm, approval, skill, commands, audit, tasks, runControl)
+                        activeAlarm, approval, skill, commands, audit, changeEvent, tasks, runControl)
                 .handle(context)
                 .result();
 

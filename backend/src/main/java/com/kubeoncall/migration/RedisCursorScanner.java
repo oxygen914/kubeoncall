@@ -9,6 +9,8 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 import io.lettuce.core.KeyScanCursor;
 import io.lettuce.core.ScanArgs;
 import io.lettuce.core.ScanCursor;
+import io.lettuce.core.ScoredValue;
+import io.lettuce.core.ScoredValueScanCursor;
 import io.lettuce.core.api.async.RedisAsyncCommands;
 
 /** Executes Redis SCAN with an explicit opaque cursor so a persisted checkpoint can resume it. */
@@ -53,5 +55,40 @@ final class RedisCursorScanner {
         boolean completed() {
             return "0".equals(nextCursor);
         }
+    }
+
+    /**
+     * Executes Redis ZSCAN over a single sorted-set key, returning each member (the serialized
+     * change event). Used by the change-event backfill, whose Redis source is the single ZSET
+     * {@code alarm-change-events:timeline} rather than a SCAN-able key pattern. The opaque cursor
+     * is persisted as a checkpoint so an interrupted run resumes rather than restarting.
+     */
+    static Page zscan(StringRedisTemplate redis, String key, String cursor, int count) {
+        if (redis == null) {
+            throw new IllegalStateException("Redis unavailable for checkpointed ZSCAN");
+        }
+        String safeCursor = cursor == null || cursor.isBlank() ? "0" : cursor.trim();
+        return redis.execute((RedisCallback<Page>) connection -> {
+            Object nativeConnection = connection.getNativeConnection();
+            if (!(nativeConnection instanceof RedisAsyncCommands<?, ?> rawCommands)) {
+                String type = nativeConnection == null
+                        ? "null"
+                        : nativeConnection.getClass().getName();
+                throw new IllegalStateException("Redis connection does not expose a Lettuce cursor client: " + type);
+            }
+            @SuppressWarnings("unchecked")
+            RedisAsyncCommands<byte[], byte[]> lettuce = (RedisAsyncCommands<byte[], byte[]>) rawCommands;
+            ScoredValueScanCursor<byte[]> page = lettuce.zscan(
+                            key.getBytes(StandardCharsets.UTF_8),
+                            ScanCursor.of(safeCursor),
+                            new ScanArgs().limit(Math.max(1, count)))
+                    .toCompletableFuture()
+                    .join();
+            List<String> members = page.getValues().stream()
+                    .map(ScoredValue::getValue)
+                    .map(value -> new String(value, StandardCharsets.UTF_8))
+                    .toList();
+            return new Page(page.getCursor(), members);
+        });
     }
 }

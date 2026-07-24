@@ -16,6 +16,7 @@ import org.springframework.web.bind.annotation.RestController;
 import com.kubeoncall.common.config.KubeOnCallProperties;
 import com.kubeoncall.identity.PermissionCode;
 import com.kubeoncall.migration.ActiveAlarmBackfillRunner;
+import com.kubeoncall.migration.ChangeEventBackfillRunner;
 import com.kubeoncall.migration.LegacyAlarmCommandBackfillRunner;
 import com.kubeoncall.migration.LegacyAlarmCommandPreflightService;
 import com.kubeoncall.migration.LegacyExecutionAuditBackfillRunner;
@@ -52,6 +53,7 @@ public class MigrationAdminController {
     private final LegacyAlarmCommandPreflightService legacyAlarmCommandPreflightService;
     private final LegacyAlarmCommandBackfillRunner legacyAlarmCommandBackfillRunner;
     private final LegacyExecutionAuditBackfillRunner legacyExecutionAuditBackfillRunner;
+    private final ChangeEventBackfillRunner changeEventBackfillRunner;
     private final ObjectProvider<MigrationLedgerRepository> ledgerProvider;
     private final ObjectProvider<MigrationBackfillTaskSubmissionService> taskSubmissionProvider;
     private final KubeOnCallProperties properties;
@@ -65,6 +67,7 @@ public class MigrationAdminController {
             LegacyAlarmCommandPreflightService legacyAlarmCommandPreflightService,
             LegacyAlarmCommandBackfillRunner legacyAlarmCommandBackfillRunner,
             LegacyExecutionAuditBackfillRunner legacyExecutionAuditBackfillRunner,
+            ChangeEventBackfillRunner changeEventBackfillRunner,
             ObjectProvider<MigrationLedgerRepository> ledgerProvider,
             ObjectProvider<MigrationBackfillTaskSubmissionService> taskSubmissionProvider,
             KubeOnCallProperties properties,
@@ -76,6 +79,7 @@ public class MigrationAdminController {
         this.legacyAlarmCommandPreflightService = legacyAlarmCommandPreflightService;
         this.legacyAlarmCommandBackfillRunner = legacyAlarmCommandBackfillRunner;
         this.legacyExecutionAuditBackfillRunner = legacyExecutionAuditBackfillRunner;
+        this.changeEventBackfillRunner = changeEventBackfillRunner;
         this.ledgerProvider = ledgerProvider;
         this.taskSubmissionProvider = taskSubmissionProvider;
         this.properties = properties;
@@ -195,6 +199,18 @@ public class MigrationAdminController {
         return backfillResponse(result);
     }
 
+    @PostMapping("/backfill/change-event")
+    public ApiResponse<Map<String, Object>> backfillChangeEvent(
+            @RequestParam(name = "dry-run", required = false) Boolean dryRun,
+            @RequestParam(name = "confirm-apply", required = false) Boolean confirmApply,
+            HttpServletRequest request) {
+        security.requirePermission(PermissionCode.SYSTEM_MANAGE);
+        requireApplyConfirmation(dryRun, confirmApply);
+        ChangeEventBackfillRunner.BackfillResult result =
+                changeEventBackfillRunner.run(dryRun, RequestIdFilter.currentRequestId());
+        return backfillResponse(result);
+    }
+
     private static ApiResponse<Map<String, Object>> backfillResponse(ActiveAlarmBackfillRunner.BackfillResult result) {
         Map<String, Object> data = new LinkedHashMap<>();
         data.put("scanned", result.scanned());
@@ -259,6 +275,18 @@ public class MigrationAdminController {
         return ApiResponse.ok(data, RequestIdFilter.currentRequestId());
     }
 
+    private static ApiResponse<Map<String, Object>> backfillResponse(ChangeEventBackfillRunner.BackfillResult result) {
+        Map<String, Object> data = new LinkedHashMap<>();
+        data.put("scanned", result.scanned());
+        data.put("migrated", result.migrated());
+        data.put("skipped", result.skipped());
+        data.put("failed", result.failed());
+        data.put("checkpoint", result.checkpoint());
+        data.put("dryRun", result.dryRun());
+        data.put("note", result.note());
+        return ApiResponse.ok(data, RequestIdFilter.currentRequestId());
+    }
+
     /**
      * A dry-run uses the explicit request value, or the configured default when omitted. Every
      * request whose effective mode writes facts must carry a separate confirmation flag so that a
@@ -301,6 +329,12 @@ public class MigrationAdminController {
         data.put(
                 "alarmWriteMode",
                 properties.getDataMigration().getAlarmWriteMode().name());
+        data.put(
+                "changeEventReadSource",
+                properties.getDataMigration().getChangeEventReadSource().name());
+        data.put(
+                "changeEventWriteMode",
+                properties.getDataMigration().getChangeEventWriteMode().name());
         data.put("backfillDryRun", properties.getDataMigration().isBackfillDryRun());
         data.put("legacyApiEnabled", properties.getLegacyApi().isEnabled());
         data.put("ledgerAvailable", ledger != null && ledger.isAvailable());
