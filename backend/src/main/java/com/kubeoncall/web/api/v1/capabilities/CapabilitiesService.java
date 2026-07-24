@@ -64,6 +64,17 @@ public class CapabilitiesService {
         features.put("policyManagement", true);
         features.put("sse", false);
         features.put("fileUpload", true);
+        // Per-domain fact source for the non-isomorphic Redis/MySQL domains (WBS-11 GAP-11-02), so
+        // integrators can tell whether a domain still serves from Redis or has cut over to MySQL.
+        features.put(
+                "approvalFactSource",
+                properties.getDataMigration().getApproval().factSource());
+        features.put(
+                "skillStateFactSource",
+                properties.getDataMigration().getSkillState().factSource());
+        features.put(
+                "executionAuditFactSource",
+                properties.getDataMigration().getExecutionAudit().factSource());
         return features;
     }
 

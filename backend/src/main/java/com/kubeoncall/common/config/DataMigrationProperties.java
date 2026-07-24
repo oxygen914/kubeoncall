@@ -55,10 +55,31 @@ public class DataMigrationProperties {
         MYSQL_PRIMARY
     }
 
+    /**
+     * Per-domain Redis compatibility-projection retirement state for the non-isomorphic domains
+     * (approval, skill-state, execution-audit). Unlike alarm/changeEvent these domains run parallel
+     * Redis/MySQL chains rather than a single routed repository, so GAP-11-02 exposes their fact
+     * source and a soft write-disable switch instead of a full read-source/write-mode router.
+     *
+     * <p>{@code legacyWriteDisabled} is a soft switch: when true, the Redis compatibility write path
+     * skips the write and records a metric, but never blocks the MySQL fact. Flipping back is a
+     * config-only rollback. {@code factSource} is {@code REDIS} while the compatibility projection is
+     * still authoritative/active and {@code MYSQL} once MySQL is the sole fact.
+     */
+    public record DomainRetirement(String factSource, boolean legacyWriteDisabled) {
+
+        public static DomainRetirement redis() {
+            return new DomainRetirement("REDIS", false);
+        }
+    }
+
     private AlarmReadSource alarmReadSource = AlarmReadSource.MYSQL;
     private AlarmWriteMode alarmWriteMode = AlarmWriteMode.REDIS_PRIMARY;
     private ChangeEventReadSource changeEventReadSource = ChangeEventReadSource.REDIS;
     private ChangeEventWriteMode changeEventWriteMode = ChangeEventWriteMode.REDIS_PRIMARY;
+    private DomainRetirement approval = DomainRetirement.redis();
+    private DomainRetirement skillState = DomainRetirement.redis();
+    private DomainRetirement executionAudit = DomainRetirement.redis();
     private int backfillBatchSize = 100;
     private long backfillScanLimit = 10000;
     private int backfillMaxItemsPerSecond = 100;
@@ -99,6 +120,30 @@ public class DataMigrationProperties {
     public void setChangeEventWriteMode(ChangeEventWriteMode changeEventWriteMode) {
         this.changeEventWriteMode =
                 changeEventWriteMode == null ? ChangeEventWriteMode.REDIS_PRIMARY : changeEventWriteMode;
+    }
+
+    public DomainRetirement getApproval() {
+        return approval;
+    }
+
+    public void setApproval(DomainRetirement approval) {
+        this.approval = approval == null ? DomainRetirement.redis() : approval;
+    }
+
+    public DomainRetirement getSkillState() {
+        return skillState;
+    }
+
+    public void setSkillState(DomainRetirement skillState) {
+        this.skillState = skillState == null ? DomainRetirement.redis() : skillState;
+    }
+
+    public DomainRetirement getExecutionAudit() {
+        return executionAudit;
+    }
+
+    public void setExecutionAudit(DomainRetirement executionAudit) {
+        this.executionAudit = executionAudit == null ? DomainRetirement.redis() : executionAudit;
     }
 
     public int getBackfillBatchSize() {

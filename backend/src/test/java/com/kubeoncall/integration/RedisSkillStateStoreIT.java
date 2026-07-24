@@ -9,6 +9,8 @@ import org.junit.jupiter.api.Test;
 import org.springframework.data.redis.connection.lettuce.LettuceConnectionFactory;
 import org.springframework.data.redis.core.StringRedisTemplate;
 
+import com.kubeoncall.common.config.KubeOnCallProperties;
+import com.kubeoncall.service.KubeOnCallMetricsService;
 import com.kubeoncall.skill.SkillStateStore;
 
 class RedisSkillStateStoreIT {
@@ -39,7 +41,8 @@ class RedisSkillStateStoreIT {
 
     @Test
     void shouldPersistAndRefreshDisabledSkillsThroughRealRedis() {
-        SkillStateStore store = new SkillStateStore(redisTemplate);
+        SkillStateStore store = new SkillStateStore(
+                redisTemplate, new KubeOnCallProperties(), org.mockito.Mockito.mock(KubeOnCallMetricsService.class));
 
         store.disable("payment-oom-triage");
 

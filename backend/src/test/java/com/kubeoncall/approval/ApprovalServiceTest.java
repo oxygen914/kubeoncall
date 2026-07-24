@@ -18,6 +18,7 @@ import com.kubeoncall.domain.approval.ApprovalRequest;
 import com.kubeoncall.domain.graph.GraphState;
 import com.kubeoncall.domain.graph.GraphStatus;
 import com.kubeoncall.domain.task.TaskPlan;
+import com.kubeoncall.service.KubeOnCallMetricsService;
 import com.kubeoncall.state.GraphStateStore;
 
 class ApprovalServiceTest {
@@ -36,7 +37,8 @@ class ApprovalServiceTest {
                         org.mockito.ArgumentMatchers.eq(pending),
                         org.mockito.ArgumentMatchers.any(ApprovalRequest.class)))
                 .thenReturn(false);
-        ApprovalService service = new ApprovalService(repository, stateStore, new KubeOnCallProperties());
+        ApprovalService service = new ApprovalService(
+                repository, stateStore, new KubeOnCallProperties(), mock(KubeOnCallMetricsService.class));
 
         assertThrows(
                 IllegalStateException.class,

@@ -208,6 +208,15 @@ public class KubeOnCallMetricsService {
                 present ? "propagated" : "missing");
     }
 
+    /**
+     * Records that a Redis compatibility-projection write was skipped because the domain's
+     * {@code legacyWriteDisabled} soft switch is on (WBS-11 GAP-11-02). The MySQL fact is unaffected;
+     * this counter lets operators confirm compatibility writes have actually stopped.
+     */
+    public void recordLegacyWriteSkipped(String domain) {
+        increment("kubeoncall.migration.legacy_write_skipped", "domain", safe(domain));
+    }
+
     private void increment(String name, String... tags) {
         Counter.builder(name).tags(tags).register(meterRegistry).increment();
     }

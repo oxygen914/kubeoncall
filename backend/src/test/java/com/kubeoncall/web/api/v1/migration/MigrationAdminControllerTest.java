@@ -100,6 +100,26 @@ class MigrationAdminControllerTest {
     }
 
     @Test
+    void statusExposesPerDomainRetirementState() {
+        properties
+                .getDataMigration()
+                .setApproval(new com.kubeoncall.common.config.DataMigrationProperties.DomainRetirement("MYSQL", true));
+
+        java.util.Map<String, Object> data = controller.status().data();
+
+        assertThat(data.get("approval")).isInstanceOf(java.util.Map.class);
+        @SuppressWarnings("unchecked")
+        java.util.Map<String, Object> approval = (java.util.Map<String, Object>) data.get("approval");
+        assertThat(approval).containsEntry("factSource", "MYSQL").containsEntry("legacyWriteDisabled", true);
+        @SuppressWarnings("unchecked")
+        java.util.Map<String, Object> skillState = (java.util.Map<String, Object>) data.get("skillState");
+        assertThat(skillState).containsEntry("factSource", "REDIS").containsEntry("legacyWriteDisabled", false);
+        @SuppressWarnings("unchecked")
+        java.util.Map<String, Object> executionAudit = (java.util.Map<String, Object>) data.get("executionAudit");
+        assertThat(executionAudit).containsEntry("factSource", "REDIS").containsEntry("legacyWriteDisabled", false);
+    }
+
+    @Test
     void queuesAConfirmedApplyAsDurableTask() {
         com.kubeoncall.task.AsyncTaskRecord task = new com.kubeoncall.task.AsyncTaskRecord(
                 1L,

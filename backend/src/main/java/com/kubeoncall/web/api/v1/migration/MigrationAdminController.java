@@ -335,10 +335,21 @@ public class MigrationAdminController {
         data.put(
                 "changeEventWriteMode",
                 properties.getDataMigration().getChangeEventWriteMode().name());
+        data.put("approval", retirement(properties.getDataMigration().getApproval()));
+        data.put("skillState", retirement(properties.getDataMigration().getSkillState()));
+        data.put("executionAudit", retirement(properties.getDataMigration().getExecutionAudit()));
         data.put("backfillDryRun", properties.getDataMigration().isBackfillDryRun());
         data.put("legacyApiEnabled", properties.getLegacyApi().isEnabled());
         data.put("ledgerAvailable", ledger != null && ledger.isAvailable());
         return ApiResponse.ok(data, RequestIdFilter.currentRequestId());
+    }
+
+    private static Map<String, Object> retirement(
+            com.kubeoncall.common.config.DataMigrationProperties.DomainRetirement domain) {
+        Map<String, Object> view = new LinkedHashMap<>();
+        view.put("factSource", domain.factSource());
+        view.put("legacyWriteDisabled", domain.legacyWriteDisabled());
+        return view;
     }
 
     /** Paged migration batch history (newest first). */

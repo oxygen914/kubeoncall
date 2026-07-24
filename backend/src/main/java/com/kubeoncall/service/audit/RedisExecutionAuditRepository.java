@@ -8,6 +8,8 @@ import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Primary;
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -17,28 +19,43 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.kubeoncall.common.config.KubeOnCallProperties;
 import com.kubeoncall.domain.audit.ExecutionAuditRecord;
+import com.kubeoncall.service.KubeOnCallMetricsService;
 
 @Repository
 @Primary
 @ConditionalOnProperty(prefix = "kubeoncall.audit", name = "repository", havingValue = "redis", matchIfMissing = true)
 public class RedisExecutionAuditRepository implements ExecutionAuditRepository {
 
+    private static final Logger log = LoggerFactory.getLogger(RedisExecutionAuditRepository.class);
     private static final String KEY_PREFIX = "execution-audit:";
     private static final String INDEX_KEY = "execution-audit:index";
+    private static final String DOMAIN = "execution-audit";
 
     private final StringRedisTemplate redisTemplate;
     private final ObjectMapper objectMapper;
     private final KubeOnCallProperties properties;
+    private final KubeOnCallMetricsService metricsService;
 
     public RedisExecutionAuditRepository(
-            StringRedisTemplate redisTemplate, ObjectMapper objectMapper, KubeOnCallProperties properties) {
+            StringRedisTemplate redisTemplate,
+            ObjectMapper objectMapper,
+            KubeOnCallProperties properties,
+            KubeOnCallMetricsService metricsService) {
         this.redisTemplate = redisTemplate;
         this.objectMapper = objectMapper;
         this.properties = properties;
+        this.metricsService = metricsService;
     }
 
     @Override
     public void save(ExecutionAuditRecord record) {
+        if (properties.getDataMigration().getExecutionAudit().legacyWriteDisabled()) {
+            log.debug(
+                    "Skipping Redis execution-audit projection; legacy write disabled for executionId={}",
+                    record.executionId());
+            metricsService.recordLegacyWriteSkipped(DOMAIN);
+            return;
+        }
         String key = key(record.executionId(), record.occurredAt());
         try {
             redisTemplate.opsForValue().set(key, objectMapper.writeValueAsString(record), ttl());
