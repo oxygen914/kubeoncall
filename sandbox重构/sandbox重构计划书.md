@@ -8,8 +8,8 @@
 | 制定日期 | 2026-07-27 |
 | 目标项目 | KubeOnCall |
 | 实施状态 | IN_PROGRESS |
-| 代码实现进度 | 17% |
-| 自动化验证进度 | 17% |
+| 代码实现进度 | 21% |
+| 自动化验证进度 | 21% |
 | 真实环境验收进度 | 0%，按阶段单独记录 |
 | 计划提交数 | 24 个，`SBX-00`～`SBX-23` |
 
@@ -415,7 +415,7 @@ helm lint deploy/helm/kubeoncall
 | SBX-01 | `feat(sandbox): add feature flags and limits` | 默认关闭的配置与能力发现 | COMPLETED |
 | SBX-02 | `feat(identity): add sandbox permissions` | Sandbox 权限和角色映射 | COMPLETED |
 | SBX-03 | `feat(sandbox): add run policy contracts` | 领域类型、状态机和策略契约 | COMPLETED |
-| SBX-04 | `feat(sandbox): persist runs and artifacts` | MySQL 事实表与 Repository | PLANNED |
+| SBX-04 | `feat(sandbox): persist runs and artifacts` | MySQL 事实表与 Repository | COMPLETED |
 | SBX-05 | `feat(sandbox): add artifact storage boundary` | MinIO Artifact 隔离与校验 | PLANNED |
 | SBX-06 | `feat(api): add sandbox run lifecycle endpoints` | 创建、查询、取消 API 与审计 | PLANNED |
 | SBX-07 | `feat(sandbox-controller): scaffold internal service` | 独立 Controller 基座 | PLANNED |
@@ -622,6 +622,36 @@ Codex 审核补充（提交 `42c469e` 后审核，补丁提交 `[SBX-02-fix]`）
 回滚：
 
 - revert Repository；新增表保留。
+
+完成记录：
+
+- 新增 `V16__sandbox_run_artifact.sql`：`koc_sandbox_run`（run 事实 + owner/lease/fencing/version，
+  `(mode, idempotency_key)` 唯一去重、run_status/cleanup_status/mode/risk CHECK 约束、reconcile/
+  alarm/execution/controller 索引）与 `koc_sandbox_artifact`（对象引用 + sha256/size/classification，
+  `(bucket, object_key)` 唯一、retention 索引、FK→run）。只存摘要/引用/校验值，正文/脚本/完整日志留 MinIO。
+  纯向前增量、无 down、不触碰既有表。
+- 新增 `com.kubeoncall.sandbox`：`SandboxRunRecord`/`SandboxArtifactRecord`（值类型，引用 domain 枚举）、
+  `SandboxRunRepository`（`@ConditionalOnProperty(mysql-enabled)`，与既有 MySQL 事实仓库一致）。
+- Repository 能力：`create`（DuplicateKey → 回查既有 run，幂等去重不抛错）、`findByPublicId`/
+  `findByModeAndIdempotencyKey`、`list`（mode/status/execution/alarm/createdFrom/createdTo 过滤 + 分页）、
+  `claim`（全局扫描，PENDING 无 lease 或过期 lease，`FOR UPDATE SKIP LOCKED` + fencing_token+1）、
+  `claimByPublicId`（定向恢复）、`heartbeat`/`updateProgress`（owner+fencing+lease 三重谓词）、
+  `markDispatching`/`transitionRunStatus`/`complete`/`fail`（先经 `SandboxStateMachine` 校验合法迁移，
+  再 owner+fencing+version CAS 写）、`cancel`（CAS + 非终态谓词，终态重复取消返回 false）、
+  `transitionCleanupStatus`（cleanup 状态机校验，终态不可倒退）、
+  `createArtifact`/`findArtifactsByRun`/`findArtifactByPublicId`/`findExpiredArtifacts`（TTL janitor）。
+- 终态写清 owner_token/lease_until；终态迁移由 `SandboxStateMachine.resolveRunStatus` 在 SQL 前
+  拦截，迟到回调/过期 owner 被 owner+fencing+version 谓词拒绝而不覆盖终态。
+- 新增 `SandboxConfiguration`：注册无状态 `SandboxStateMachine`/`SandboxExecutionPolicy` 单例 bean。
+- ArchUnit：`..sandbox..` 已在 SBX-03 纳入两条规则；本单元 repository 依赖 web 层为 0（`grep
+  import com.kubeoncall.web` 为 0），`ArchitectureRulesTest` 通过。
+- 测试：`SandboxRunRepositoryIT`（8 例，真实 MySQL Testcontainers + Flyway V16 迁移）：幂等去重、
+  CAS 取消 + 终态重复取消、claim fencing 前进 + 过期 owner 合法迁移被拒、状态机非法迁移拦截、
+  heartbeat 仅 owner 续约、cleanup 终态不可倒退、artifact 列表/过期查询、全局 claim 扫描。
+  `-Pintegration-test` failsafe 全 57 例通过（含本单元 8 例）。
+- 既有失败（`ApiTokensControllerTest` ×2、`AsyncTaskWorkerTest` ×1、`LegacyApiDeprecationWebTest`
+  ×1）在父提交（SBX-03 HEAD）已存在，与本单元无关；`spotless:apply`、`checkstyle:check`、
+  `git diff --check` 通过。MySQL 关闭时 Repository bean 不创建，Spring Context 与现有行为不变。
 
 ### SBX-05：Artifact 存储边界
 
@@ -1048,13 +1078,13 @@ Codex 审核补充（提交 `42c469e` 后审核，补丁提交 `[SBX-02-fix]`）
 
 ## 13. 当前停止点
 
-SBX-03 已完成：新增 `sandbox/domain`（RunMode/RunStatus/CleanupStatus/ArtifactType/
-Classification/RiskLevel/StateException/StateMachine）与 `sandbox/policy`（ResourceLimits/
-ToolSpec/ExecutionPolicy），固化四模式、显式状态迁移表（终态不可倒退、迟到回调不覆盖）、
-digest-pinned 镜像强制、资源上限构造期校验、审批与风险矩阵。SBX-01 的 `SandboxProperties.RunMode`
-提升为权威域类型 `SandboxRunMode`；ArchUnit 两条规则补 `..sandbox..`。23 例域/策略测试通过，
-`spotless`/`checkstyle`/`git diff --check` 通过；既有 4 例失败在父提交已存在，与本单元无关。
-尚未触碰 Sandbox 持久化（Run/Artifact 表）、Controller、部署或 CI。
+SBX-04 已完成：新增 `V16__sandbox_run_artifact.sql`（`koc_sandbox_run`/`koc_sandbox_artifact`，
+`(mode, idempotency_key)` 去重、run/cleanup 状态 CHECK、owner/lease/fencing/version、retention 索引）
+与 `SandboxRunRepository`（幂等 create、claim/claimByPublicId + fencing 前进、heartbeat、
+状态机校验 + owner+fencing+version CAS 的迁移/完成/失败/取消、cleanup 状态机、artifact 引用与
+TTL 查询）。`SandboxConfiguration` 注册无状态 stateMachine/executionPolicy bean。8 例真实 MySQL
+Testcontainers IT 通过（failsafe 全 57 例绿）；既有 4 例失败在父提交已存在，与本单元无关。
+尚未触碰 MinIO Artifact 存储边界（SBX-05）、Controller、部署或 CI。
 
 此后每次只提交一个 SBX 单元，验证通过并产生本地 commit 后再进入下一个单元；远端推送
-仍需用户单独授权。下一个单元为 `SBX-04`。
+仍需用户单独授权。下一个单元为 `SBX-05`。
