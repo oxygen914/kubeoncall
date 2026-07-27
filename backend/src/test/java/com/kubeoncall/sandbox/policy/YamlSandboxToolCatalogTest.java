@@ -54,6 +54,12 @@ class YamlSandboxToolCatalogTest {
                         asStream(duplicated.replace("input.json", "missing.json")),
                         path -> !path.equals("missing.json")))
                 .hasMessageContaining("schema reference is missing");
+        assertThatThrownBy(() -> new YamlSandboxToolCatalog(
+                        asStream(duplicated
+                                .replace("FIXED_DIAGNOSTIC", "GENERATED_CODE")
+                                .replace("DENY_ALL", "DNS_AND_ARTIFACT_CHANNEL")),
+                        ignored -> true))
+                .hasMessageContaining("must default to DENY_ALL");
     }
 
     @Test
@@ -82,6 +88,20 @@ class YamlSandboxToolCatalogTest {
             assertThat(result.has("commands")).isFalse();
             assertThat(result.has("shell")).isFalse();
             assertThat(result.has("exec")).isFalse();
+        }
+    }
+
+    @Test
+    void exposesOnlyPinnedGeneratedCodeRuntimesWithDenyAllNetwork() {
+        YamlSandboxToolCatalog catalog = new YamlSandboxToolCatalog();
+
+        for (String id : List.of("generated-python", "generated-posix-shell")) {
+            SandboxToolSpec runtime =
+                    catalog.find(id, "v1", SandboxRunMode.GENERATED_CODE).orElseThrow();
+            assertThat(runtime.imageDigest()).matches(".+@sha256:[0-9a-f]{64}");
+            assertThat(runtime.networkEgressPolicy()).isEqualTo(SandboxToolSpec.NetworkEgressPolicy.DENY_ALL);
+            assertThat(runtime.inputSchemaRef()).isEqualTo("sandbox-tools/schemas/generated-code-input-v1.json");
+            assertThat(runtime.outputSchemaRef()).isEqualTo("sandbox-tools/schemas/generated-code-result-v1.json");
         }
     }
 

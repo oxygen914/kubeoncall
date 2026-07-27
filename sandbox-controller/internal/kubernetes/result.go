@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"regexp"
+	"strings"
 	"time"
 
 	batchv1 "k8s.io/api/batch/v1"
@@ -16,11 +17,14 @@ import (
 // Result is the collected outcome of a finished sandbox Job. It carries only normalized fields and
 // redacted, size-bounded logs — the backend never sees raw pod state or untrusted output verbatim.
 type Result struct {
-	RunID       string
-	Phase       Phase
-	ExitCode    *int32
-	Reason      FailureReason
-	Logs        string
+	RunID    string
+	Phase    Phase
+	ExitCode *int32
+	Reason   FailureReason
+	Logs     string
+	// Output is a bounded structured result emitted by a runtime with the KOC_RESULT_JSON marker.
+	// It remains untrusted until Backend validates the mode-specific schema before persisting it.
+	Output      string
 	StartedAt   *time.Time
 	FinishedAt  *time.Time
 	OutputFound bool
@@ -84,11 +88,33 @@ func (manager *Manager) CollectResult(ctx context.Context, runID string, logLimi
 			// Log collection failure must not mask the run's own outcome; record a marker instead.
 			result.Logs = redact(fmt.Sprintf("[log collection failed: %v]\n", err))
 		} else {
+			result.Output = outputFromLogs(logs)
+			result.OutputFound = result.Output != ""
 			result.Logs = redact(logs)
 		}
-		result.OutputFound = podHasOutputMarker(pod)
+		if !result.OutputFound {
+			result.OutputFound = podHasOutputMarker(pod)
+		}
 	}
 	return result, nil
+}
+
+const outputMarker = "KOC_RESULT_JSON:"
+const maxStructuredOutputBytes = 1024 * 1024
+
+// outputFromLogs extracts only a single compact JSON marker. It never executes or interprets the
+// payload and bounds its size before it leaves the Controller; Backend validates the schema.
+func outputFromLogs(logs string) string {
+	for _, line := range strings.Split(logs, "\n") {
+		if !strings.HasPrefix(line, outputMarker) {
+			continue
+		}
+		output := strings.TrimSpace(strings.TrimPrefix(line, outputMarker))
+		if output != "" && len(output) <= maxStructuredOutputBytes {
+			return output
+		}
+	}
+	return ""
 }
 
 // ReapFinished deletes a Job that has reached a terminal state, returning the collected Result

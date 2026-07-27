@@ -43,6 +43,16 @@ func TestCollectResultMapsDeadlineAndMissingOutput(t *testing.T) {
 	}
 }
 
+func TestOutputMarkerIsBoundedAndKeptSeparateFromLogs(t *testing.T) {
+	output := `{"schemaVersion":"v1","status":"SUCCEEDED","findings":[],"evidenceReferences":[],"summary":"ok"}`
+	if got := outputFromLogs("normal log\n" + outputMarker + output + "\n"); got != output {
+		t.Fatalf("output = %q", got)
+	}
+	if got := outputFromLogs(outputMarker + strings.Repeat("x", maxStructuredOutputBytes+1)); got != "" {
+		t.Fatalf("oversized output must be rejected: %d", len(got))
+	}
+}
+
 func TestJanitorReapsOnlyFinishedOrExpiredSandboxJobs(t *testing.T) {
 	manager, clientset := newTestManager(t)
 	ctx := context.Background()

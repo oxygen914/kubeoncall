@@ -15,7 +15,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
 import com.kubeoncall.sandbox.domain.SandboxRunMode;
 
-/** Loads the immutable, versioned fixed-diagnostic tool catalog bundled with the backend. */
+/** Loads the immutable, versioned server-owned sandbox tool catalog bundled with the backend. */
 @Component
 public class YamlSandboxToolCatalog implements SandboxToolCatalog {
 
@@ -68,11 +68,12 @@ public class YamlSandboxToolCatalog implements SandboxToolCatalog {
                                 tool.networkEgressPolicy().trim().toUpperCase(Locale.ROOT)),
                         tool.inputSchemaRef(),
                         tool.outputSchemaRef());
-                if (spec.mode() != SandboxRunMode.FIXED_DIAGNOSTIC) {
-                    throw new IllegalStateException("SBX-15 catalog only accepts fixed diagnostic tools");
-                }
                 if (!sha256Digest(spec.imageDigest())) {
                     throw new IllegalStateException("sandbox tool image must contain a 64-character SHA-256 digest");
+                }
+                if (spec.mode() == SandboxRunMode.GENERATED_CODE
+                        && spec.networkEgressPolicy() != SandboxToolSpec.NetworkEgressPolicy.DENY_ALL) {
+                    throw new IllegalStateException("generated-code runtimes must default to DENY_ALL network egress");
                 }
                 if (!schemaResolver.test(spec.inputSchemaRef()) || !schemaResolver.test(spec.outputSchemaRef())) {
                     throw new IllegalStateException("sandbox tool schema reference is missing");
@@ -82,7 +83,7 @@ public class YamlSandboxToolCatalog implements SandboxToolCatalog {
                 }
             }
             if (loaded.size() < 3) {
-                throw new IllegalStateException("sandbox catalog must provide the first three fixed diagnostic tools");
+                throw new IllegalStateException("sandbox catalog must provide the first fixed diagnostic tools");
             }
             return Map.copyOf(loaded);
         } catch (RuntimeException ex) {

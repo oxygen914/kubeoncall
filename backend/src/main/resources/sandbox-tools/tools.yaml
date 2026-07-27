@@ -26,3 +26,21 @@ tools:
     inputSchemaRef: sandbox-tools/schemas/evidence-v1.json
     outputSchemaRef: sandbox-tools/schemas/diagnosis-v1.json
     resources: {cpu: 250m, memory: 256Mi, ephemeralStorage: 512Mi, inputMaxBytes: 52428800, outputMaxBytes: 10485760, logMaxBytes: 2097152, scriptMaxBytes: 262144, timeoutSeconds: 300, maxTimeoutSeconds: 900}
+  - id: generated-python
+    version: v1
+    mode: GENERATED_CODE
+    imageDigest: registry.kubeoncall.io/sandbox/generated-python@sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd
+    entrypoint: /usr/local/bin/koc-run-python
+    networkEgressPolicy: DENY_ALL
+    inputSchemaRef: sandbox-tools/schemas/generated-code-input-v1.json
+    outputSchemaRef: sandbox-tools/schemas/generated-code-result-v1.json
+    resources: {cpu: 500m, memory: 512Mi, ephemeralStorage: 512Mi, inputMaxBytes: 52428800, outputMaxBytes: 1048576, logMaxBytes: 2097152, scriptMaxBytes: 262144, timeoutSeconds: 120, maxTimeoutSeconds: 300}
+  - id: generated-posix-shell
+    version: v1
+    mode: GENERATED_CODE
+    imageDigest: registry.kubeoncall.io/sandbox/generated-posix-shell@sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee
+    entrypoint: /usr/local/bin/koc-run-posix-shell
+    networkEgressPolicy: DENY_ALL
+    inputSchemaRef: sandbox-tools/schemas/generated-code-input-v1.json
+    outputSchemaRef: sandbox-tools/schemas/generated-code-result-v1.json
+    resources: {cpu: 500m, memory: 512Mi, ephemeralStorage: 512Mi, inputMaxBytes: 52428800, outputMaxBytes: 1048576, logMaxBytes: 2097152, scriptMaxBytes: 262144, timeoutSeconds: 120, maxTimeoutSeconds: 300}

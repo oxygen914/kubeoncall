@@ -75,6 +75,24 @@ func defaultTools() map[string]jobs.Tool {
 		},
 		"kubernetes-consistency:v1": {ID: "kubernetes-consistency", Version: "v1", Image: "registry.kubeoncall.io/sandbox/kubernetes-consistency@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", Entrypoint: []string{"/tool"}},
 		"configuration-diff:v1":     {ID: "configuration-diff", Version: "v1", Image: "registry.kubeoncall.io/sandbox/configuration-diff@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc", Entrypoint: []string{"/tool"}},
+		"generated-python:v1": {
+			ID:             "generated-python",
+			Version:        "v1",
+			Image:          "registry.kubeoncall.io/sandbox/generated-python@sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+			Entrypoint:     []string{"/usr/local/bin/koc-run-python"},
+			Runtime:        jobs.RuntimeGeneratedPython,
+			MaxProcesses:   32,
+			OutputMaxBytes: 1024 * 1024,
+		},
+		"generated-posix-shell:v1": {
+			ID:             "generated-posix-shell",
+			Version:        "v1",
+			Image:          "registry.kubeoncall.io/sandbox/generated-posix-shell@sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+			Entrypoint:     []string{"/usr/local/bin/koc-run-posix-shell"},
+			Runtime:        jobs.RuntimeGeneratedPOSIX,
+			MaxProcesses:   32,
+			OutputMaxBytes: 1024 * 1024,
+		},
 	}
 }
 
@@ -114,6 +132,7 @@ type LifecycleResult struct {
 	ExitCode    *int32     `json:"exitCode,omitempty"`
 	Reason      string     `json:"reason,omitempty"`
 	Logs        string     `json:"logs,omitempty"`
+	Output      string     `json:"output,omitempty"`
 	StartedAt   *time.Time `json:"startedAt,omitempty"`
 	FinishedAt  *time.Time `json:"finishedAt,omitempty"`
 	OutputFound bool       `json:"outputFound"`

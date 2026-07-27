@@ -219,6 +219,17 @@ func TestEnsureJobEmitsHardenedSecurityContext(t *testing.T) {
 	if job.Spec.ActiveDeadlineSeconds == nil || *job.Spec.ActiveDeadlineSeconds != 300 {
 		t.Fatal("active deadline (timeout) must be set")
 	}
+	if pod.Spec.AutomountServiceAccountToken == nil || *pod.Spec.AutomountServiceAccountToken {
+		t.Fatal("sandbox jobs must not mount a ServiceAccount token")
+	}
+	if len(container.VolumeMounts) != 1 || container.VolumeMounts[0].MountPath != "/sandbox" || container.VolumeMounts[0].ReadOnly {
+		t.Fatalf("only a writable sandbox workspace may be mounted: %#v", container.VolumeMounts)
+	}
+	for _, env := range container.Env {
+		if strings.Contains(strings.ToLower(env.Name), "credential") || strings.Contains(strings.ToLower(env.Name), "secret") || strings.Contains(strings.ToLower(env.Name), "token") {
+			t.Fatalf("sandbox job received credential-like env %s", env.Name)
+		}
+	}
 	if job.Labels[RunIDLabel] != "sbx_a3b4" || job.Labels[ToolVersionLabel] != "v1" {
 		t.Fatalf("job labels = %v", job.Labels)
 	}

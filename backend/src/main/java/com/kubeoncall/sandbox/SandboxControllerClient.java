@@ -9,6 +9,7 @@ import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.security.GeneralSecurityException;
 import java.security.MessageDigest;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.HexFormat;
 import java.util.LinkedHashMap;
@@ -42,12 +43,17 @@ public class SandboxControllerClient {
     private final KubeOnCallProperties properties;
     private final DependencyCircuitBreaker circuitBreaker;
     private final ObjectMapper objectMapper;
+    private final SandboxArtifactStore artifactStore;
 
     public SandboxControllerClient(
-            KubeOnCallProperties properties, DependencyCircuitBreaker circuitBreaker, ObjectMapper objectMapper) {
+            KubeOnCallProperties properties,
+            DependencyCircuitBreaker circuitBreaker,
+            ObjectMapper objectMapper,
+            SandboxArtifactStore artifactStore) {
         this.properties = properties;
         this.circuitBreaker = circuitBreaker;
         this.objectMapper = objectMapper;
+        this.artifactStore = artifactStore;
     }
 
     /** Performs one idempotent create-or-return call; it never polls a Job. */
@@ -96,6 +102,7 @@ public class SandboxControllerClient {
                 numberValue(payload.get("exitCode")),
                 stringValue(payload.get("reason")),
                 stringValue(payload.get("logs")),
+                stringValue(payload.get("output")),
                 Boolean.TRUE.equals(payload.get("outputFound")));
     }
 
@@ -232,9 +239,18 @@ public class SandboxControllerClient {
         if (bucket == null || bucket.isBlank()) {
             throw new SandboxControllerClientException("SANDBOX_ARTIFACT_BUCKET_NOT_CONFIGURED", false, 0);
         }
-        return "minio://" + bucket + "/"
-                + SandboxArtifactStore.objectKey(
-                        run.publicId(), com.kubeoncall.sandbox.domain.SandboxArtifactType.INPUT, "evidence.json");
+        String objectKey = SandboxArtifactStore.objectKey(
+                run.publicId(),
+                com.kubeoncall.sandbox.domain.SandboxArtifactType.INPUT,
+                run.mode() == com.kubeoncall.sandbox.domain.SandboxRunMode.GENERATED_CODE
+                        ? "generated-code.json"
+                        : "evidence.json");
+        // A Job receives one short-lived, read-only artifact capability rather than MinIO access
+        // credentials. The capability is sent only in the signed Controller request and is neither
+        // stored in MySQL nor written to logs.
+        return artifactStore
+                .presignedGetUrl(bucket, objectKey, Duration.ofMinutes(5))
+                .toString();
     }
 
     private Map<String, Object> parseBounded(InputStream body, long maxBytes) {
@@ -342,7 +358,18 @@ public class SandboxControllerClient {
     public record ControllerStatus(String runId, String phase, boolean exists) {}
 
     public record CollectedResult(
-            String runId, String phase, Integer exitCode, String reason, String logs, boolean outputFound) {}
+            String runId,
+            String phase,
+            Integer exitCode,
+            String reason,
+            String logs,
+            String output,
+            boolean outputFound) {
+        public CollectedResult(
+                String runId, String phase, Integer exitCode, String reason, String logs, boolean outputFound) {
+            this(runId, phase, exitCode, reason, logs, "", outputFound);
+        }
+    }
 
     private record ControllerResponse(int statusCode, Map<String, Object> payload) {}
 }

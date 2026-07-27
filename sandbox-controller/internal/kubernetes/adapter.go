@@ -46,6 +46,7 @@ func toHTTPResult(result Result) httpapi.LifecycleResult {
 		ExitCode:    result.ExitCode,
 		Reason:      string(result.Reason),
 		Logs:        result.Logs,
+		Output:      result.Output,
 		StartedAt:   result.StartedAt,
 		FinishedAt:  result.FinishedAt,
 		OutputFound: result.OutputFound,

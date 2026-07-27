@@ -144,4 +144,12 @@ spec:
         - namespaceSelector:
             matchLabels: {kubernetes.io/metadata.name: kube-system}
       ports: [{protocol: UDP, port: 53}, {protocol: TCP, port: 53}]
+    # The only non-DNS egress path is the in-release MinIO service. Jobs receive a short-lived,
+    # object-scoped URL from Backend; they never receive MinIO access keys or general egress.
+    - to:
+        - namespaceSelector:
+            matchLabels: {kubernetes.io/metadata.name: {{ .Release.Namespace | quote }}}
+          podSelector:
+            matchLabels: {app.kubernetes.io/name: minio}
+      ports: [{protocol: TCP, port: 9000}]
 {{- end }}

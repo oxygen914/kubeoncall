@@ -8,6 +8,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sort"
 	"time"
 
 	batchv1 "k8s.io/api/batch/v1"
@@ -207,10 +208,18 @@ func (manager *Manager) jobFromSpec(spec jobs.JobSpec, request jobs.Request, exp
 					HostNetwork:                   spec.HostNetwork,
 					SecurityContext:               podSecurityContext(spec),
 					TerminationGracePeriodSeconds: ptrInt64(5),
+					Volumes: []corev1.Volume{{
+						Name:         "sandbox-workspace",
+						VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}},
+					}},
 					Containers: []corev1.Container{{
-						Name:      "sandbox",
-						Image:     spec.Image,
-						Command:   spec.Command,
+						Name:    "sandbox",
+						Image:   spec.Image,
+						Command: spec.Command,
+						Env:     environment(spec.Environment),
+						VolumeMounts: []corev1.VolumeMount{{
+							Name: "sandbox-workspace", MountPath: "/sandbox",
+						}},
 						Resources: containerResources(spec),
 						SecurityContext: &corev1.SecurityContext{
 							RunAsNonRoot:             ptrBool(spec.Security.RunAsNonRoot),
@@ -223,6 +232,19 @@ func (manager *Manager) jobFromSpec(spec jobs.JobSpec, request jobs.Request, exp
 			},
 		},
 	}
+}
+
+func environment(values map[string]string) []corev1.EnvVar {
+	keys := make([]string, 0, len(values))
+	for key := range values {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	result := make([]corev1.EnvVar, 0, len(keys))
+	for _, key := range keys {
+		result = append(result, corev1.EnvVar{Name: key, Value: values[key]})
+	}
+	return result
 }
 
 func (manager *Manager) statusFromJob(job *batchv1.Job) Status {

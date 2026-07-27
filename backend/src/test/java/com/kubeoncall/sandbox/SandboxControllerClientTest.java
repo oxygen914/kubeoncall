@@ -2,9 +2,12 @@ package com.kubeoncall.sandbox;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;
+import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.time.Instant;
@@ -57,7 +60,7 @@ class SandboxControllerClientTest {
         assertThat(result.phase()).isEqualTo("PENDING");
         assertThat(new String(capturedBody.get(), StandardCharsets.UTF_8))
                 .contains("\"runId\":\"sbx_abc\"")
-                .contains("minio://sandbox-artifacts/sandbox/sbx_abc/inputs/evidence.json")
+                .contains("https://artifact.example/sandbox/sbx_abc/inputs/evidence.json")
                 .doesNotContain("runtimeImageDigest");
         Map<String, java.util.List<String>> headers = capturedHeaders.get();
         String canonical = "POST\n/internal/v1/runs\n" + first(headers, "X-sandbox-timestamp") + "\n"
@@ -87,6 +90,21 @@ class SandboxControllerClientTest {
                     assertThat(failure.retryable()).isTrue();
                     assertThat(failure.getMessage()).isEqualTo("CONTROLLER_TIMEOUT");
                 });
+    }
+
+    @Test
+    void usesTheGeneratedCodeArtifactInsteadOfDiagnosticEvidenceForGeneratedRuns() throws Exception {
+        AtomicReference<byte[]> capturedBody = new AtomicReference<>();
+        start(exchange -> {
+            capturedBody.set(exchange.getRequestBody().readAllBytes());
+            respond(exchange, 200, "{\"runId\":\"sbx_abc\",\"phase\":\"PENDING\"}");
+        });
+
+        client(500).dispatch(run(com.kubeoncall.sandbox.domain.SandboxRunMode.GENERATED_CODE));
+
+        assertThat(new String(capturedBody.get(), StandardCharsets.UTF_8))
+                .contains("https://artifact.example/sandbox/sbx_abc/inputs/generated-code.json")
+                .doesNotContain("evidence.json");
     }
 
     @Test
@@ -127,8 +145,16 @@ class SandboxControllerClientTest {
         properties.getSandbox().setControllerMaxResponseBytes(1024);
         properties.getStorage().getMinio().setBucket("sandbox-artifacts");
         properties.getDependencyCircuitBreaker().setFailureThreshold(1);
+        SandboxArtifactStore artifactStore = org.mockito.Mockito.mock(SandboxArtifactStore.class);
+        try {
+            org.mockito.Mockito.when(artifactStore.presignedGetUrl(
+                            eq("sandbox-artifacts"), anyString(), eq(java.time.Duration.ofMinutes(5))))
+                    .thenAnswer(invocation -> new URL("https://artifact.example/" + invocation.getArgument(1)));
+        } catch (Exception ex) {
+            throw new IllegalStateException(ex);
+        }
         return new SandboxControllerClient(
-                properties, new DependencyCircuitBreaker(properties, metrics()), new ObjectMapper());
+                properties, new DependencyCircuitBreaker(properties, metrics()), new ObjectMapper(), artifactStore);
     }
 
     @SuppressWarnings("unchecked")
@@ -146,13 +172,19 @@ class SandboxControllerClientTest {
     }
 
     private static SandboxRunRecord run() {
+        return run(com.kubeoncall.sandbox.domain.SandboxRunMode.FIXED_DIAGNOSTIC);
+    }
+
+    private static SandboxRunRecord run(com.kubeoncall.sandbox.domain.SandboxRunMode mode) {
         return new SandboxRunRecord(
                 1L,
                 "sbx_abc",
                 null,
                 null,
-                com.kubeoncall.sandbox.domain.SandboxRunMode.FIXED_DIAGNOSTIC,
-                "pod-inspect",
+                mode,
+                mode == com.kubeoncall.sandbox.domain.SandboxRunMode.GENERATED_CODE
+                        ? "generated-python"
+                        : "pod-inspect",
                 "v1",
                 "registry.example/tool@sha256:" + "a".repeat(64),
                 com.kubeoncall.sandbox.domain.SandboxRunStatus.DISPATCHING,

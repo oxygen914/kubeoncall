@@ -8,8 +8,8 @@
 | 制定日期 | 2026-07-27 |
 | 目标项目 | KubeOnCall |
 | 实施状态 | IN_PROGRESS |
-| 代码实现进度 | 67%（SBX-00～15 已完成） |
-| 自动化验证进度 | 67%（代码级验证；真实集群待验收） |
+| 代码实现进度 | 71%（SBX-00～16 已完成） |
+| 自动化验证进度 | 71%（SBX-00～16 代码级验证通过；真实集群待验收） |
 | 真实环境验收进度 | 0%，按阶段单独记录 |
 | 计划提交数 | 24 个，`SBX-00`～`SBX-23` |
 
@@ -427,7 +427,7 @@ helm lint deploy/helm/kubeoncall
 | SBX-13 | `feat(sandbox): reconcile run convergence` | 多实例安全的状态收敛与清理重试 | COMPLETED |
 | SBX-14 | `feat(sandbox): build diagnostic evidence packages` | 证据采集、裁剪、脱敏和哈希 | COMPLETED |
 | SBX-15 | `feat(sandbox): add fixed diagnostic tools` | 固定工具目录与首批工具 | COMPLETED |
-| SBX-16 | `feat(sandbox): isolate generated code execution` | Python/Shell 受限执行 | PLANNED |
+| SBX-16 | `feat(sandbox): isolate generated code execution` | Python/Shell 受限执行 | COMPLETED |
 | SBX-17 | `feat(sandbox): validate manifests and runbooks` | YAML、Helm、Patch、Runbook 校验 | PLANNED |
 | SBX-18 | `feat(sandbox): simulate remediation plans` | 独立仿真集群验证 | PLANNED |
 | SBX-19 | `feat(agent): route diagnostics through sandbox` | Planner/Executor 异步路由 | PLANNED |
@@ -1075,6 +1075,21 @@ Codex 审核补充（提交 `ae94ebb` 后审核，补丁提交 `[SBX-09-fix]`）
 
 - 单独关闭 `generated-code`，固定工具仍可工作。
 
+完成记录：
+
+- 新增仅服务端可选的 `generated-python:v1` 与 `generated-posix-shell:v1` Runtime；两者均固定 64 位镜像
+  digest、入口、资源上限、输入/输出 Schema 和 `DENY_ALL` 网络策略。目录加载器会拒绝任意生成代码 Runtime 放宽网络策略。
+- 新增 `GeneratedCodeArtifactService`：代码连同模型、prompt 版本、生成原因、源代码 SHA-256 和运行约束写入
+  `generated-code.json`；MySQL 仅保存 Artifact 引用和哈希，分类固定为 `UNTRUSTED`。静态检查会提前拒绝无限循环、
+  fork bomb、网络访问和路径穿越特征，但不把静态检查当作安全边界。
+- Backend 给 Job 签发单对象、5 分钟有效的输入读取 URL，而非注入 MinIO 或生产凭据；Job 无 ServiceAccount Token、
+  只读根文件系统，仅挂载 `/sandbox` 空目录，固定 PID/输出上限、超时和 `/sandbox/output/result.json` 输出路径。
+- Python/Shell 固定 wrapper 将结构化结果写入限定路径并输出受限标记；Controller 提取上限 1 MiB 的结果，Backend
+  再按 Schema 校验后才保存为 `UNTRUSTED` 输出 Artifact。Sandbox Job NetworkPolicy 仅保留 DNS 和同发布域 MinIO 的
+  单对象 Artifact 通道，无通用外网出口。
+- Java 定向测试、Controller Go 测试与 `go vet`、Helm lint 均通过。镜像构建/签名/扫描、真实 MinIO Artifact
+  通道、Kubernetes 运行时隔离效果和故障演练仍属于环境验收项。
+
 ### SBX-17：YAML、Helm、Patch、Runbook 校验
 
 改动：
@@ -1279,9 +1294,9 @@ Codex 审核补充（提交 `ae94ebb` 后审核，补丁提交 `[SBX-09-fix]`）
 
 ## 13. 当前停止点
 
-SBX-00～15 已完成（含此前的审核修复）。Backend 已具备 Run/Artifact/API/权限、短时派发任务、
+SBX-00～16 已完成（含此前的审核修复）。Backend 已具备 Run/Artifact/API/权限、短时派发任务、
 HMAC Controller Client、断路器、短轮询状态收敛和脱敏诊断证据包；Controller 已具备基座、hardened JobSpec、
-生命周期、结果收集清理与隔离部署。首批固定诊断工具目录、契约与可重放样例已落地。下一单元为
-SBX-16：Agent 生成 Python/Shell 的受限执行。
+生命周期、结果收集清理与隔离部署。首批固定诊断工具目录、受限 Python/Shell Runtime、生成代码 Artifact 与结构化
+结果契约已落地。下一单元为 SBX-17：YAML、Helm、Patch 与 Runbook 校验。
 
 每次只提交一个 SBX 单元，代码验证通过并产生本地 commit 后再进入下一个单元；远端推送仍需用户单独授权。

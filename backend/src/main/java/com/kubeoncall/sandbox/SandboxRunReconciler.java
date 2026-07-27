@@ -12,10 +12,12 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.kubeoncall.common.config.KubeOnCallProperties;
 import com.kubeoncall.sandbox.domain.SandboxArtifactType;
 import com.kubeoncall.sandbox.domain.SandboxClassification;
 import com.kubeoncall.sandbox.domain.SandboxCleanupStatus;
+import com.kubeoncall.sandbox.domain.SandboxRunMode;
 import com.kubeoncall.sandbox.domain.SandboxRunStatus;
 
 /**
@@ -34,6 +36,7 @@ public class SandboxRunReconciler {
     private final SandboxArtifactStore artifactStore;
     private final KubeOnCallProperties properties;
     private final Clock clock;
+    private final ObjectMapper objectMapper;
     private final String ownerToken = "sandbox-reconciler-" + UUID.randomUUID();
 
     public SandboxRunReconciler(
@@ -55,6 +58,7 @@ public class SandboxRunReconciler {
         this.artifactStore = artifactStore;
         this.properties = properties;
         this.clock = clock;
+        this.objectMapper = new ObjectMapper();
     }
 
     @Scheduled(fixedDelayString = "${kubeoncall.sandbox.reconcile-poll-millis:1000}")
@@ -165,6 +169,30 @@ public class SandboxRunReconciler {
         summary.put("exitCode", result.exitCode());
         summary.put("reason", result.reason());
         summary.put("outputFound", result.outputFound());
+        if (collecting.mode() == SandboxRunMode.GENERATED_CODE) {
+            if (!result.outputFound() || !GeneratedCodeResultValidator.isValid(result.output(), objectMapper)) {
+                return fail(collecting, SandboxRunStatus.FAILED, "GENERATED_OUTPUT_CONTRACT_INVALID", now);
+            }
+            SandboxArtifactStore.StoredArtifact output = artifactStore.store(
+                    collecting.publicId(),
+                    SandboxArtifactType.OUTPUT,
+                    "result.json",
+                    "application/json",
+                    result.output().getBytes(StandardCharsets.UTF_8),
+                    SandboxClassification.UNTRUSTED);
+            repository.createArtifact(new SandboxRunRepository.CreateArtifact(
+                    null,
+                    collecting.id(),
+                    SandboxArtifactType.OUTPUT,
+                    output.bucket(),
+                    output.objectKey(),
+                    output.contentType(),
+                    output.sizeBytes(),
+                    output.sha256(),
+                    SandboxClassification.UNTRUSTED,
+                    now.plus(Duration.ofHours(properties.getSandbox().getArtifactRetentionHours()))));
+            summary.put("outputArtifactSha256", output.sha256());
+        }
         if (!result.logs().isBlank()) {
             SandboxArtifactStore.StoredArtifact artifact = artifactStore.store(
                     collecting.publicId(),
