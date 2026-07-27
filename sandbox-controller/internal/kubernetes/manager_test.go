@@ -2,6 +2,7 @@ package kubernetes
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
@@ -218,8 +219,18 @@ func TestEnsureJobEmitsHardenedSecurityContext(t *testing.T) {
 	if job.Spec.ActiveDeadlineSeconds == nil || *job.Spec.ActiveDeadlineSeconds != 300 {
 		t.Fatal("active deadline (timeout) must be set")
 	}
-	if job.Labels[RunIDLabel] != "sbx_a3b4" || job.Labels[ToolVersionLabel] != "v1" || job.Labels[ExpiryLabel] == "" {
+	if job.Labels[RunIDLabel] != "sbx_a3b4" || job.Labels[ToolVersionLabel] != "v1" {
 		t.Fatalf("job labels = %v", job.Labels)
+	}
+	// Expiry lives in an annotation because RFC3339 colons are illegal in label values; assert it is
+	// present and that no label carries a colon-bearing value a real apiserver would reject.
+	if job.Annotations[ExpiryAnnotation] == "" {
+		t.Fatalf("job expiry annotation missing: %v", job.Annotations)
+	}
+	for key, value := range job.Labels {
+		if strings.Contains(value, ":") {
+			t.Fatalf("label %s=%s contains a colon, illegal in Kubernetes label values", key, value)
+		}
 	}
 }
 

@@ -23,10 +23,12 @@ import (
 // idempotency key for create and the scoping key for cancel/status.
 const RunIDLabel = "sandbox.kubeoncall.io/run-id"
 
-// ToolVersionLabel and ExpiryLabel annotate the Job for reconciliation and janitor cleanup.
+// ToolVersionLabel labels the Job for reconciliation; ExpiryAnnotation stores the RFC3339 expiry as
+// an annotation because label values forbid the colons in a timestamp. The janitor reads the
+// annotation to decide when a finished Job may be reaped.
 const (
 	ToolVersionLabel = "sandbox.kubeoncall.io/tool-version"
-	ExpiryLabel      = "sandbox.kubeoncall.io/expires-at"
+	ExpiryAnnotation = "sandbox.kubeoncall.io/expires-at"
 )
 
 // Status is the controller's normalized view of a Job, decoupled from Kubernetes types so the
@@ -177,7 +179,7 @@ func (manager *Manager) findJob(ctx context.Context, runID string) (*batchv1.Job
 func (manager *Manager) jobFromSpec(spec jobs.JobSpec, request jobs.Request, expiresAt time.Time) *batchv1.Job {
 	labels := spec.Labels
 	labels[ToolVersionLabel] = request.ToolVersion
-	labels[ExpiryLabel] = expiresAt.UTC().Format(time.RFC3339)
+	annotations := map[string]string{ExpiryAnnotation: expiresAt.UTC().Format(time.RFC3339)}
 	ttl := int32(spec.Limits.TTLSeconds)
 	backoff := int32(0) // one-shot: never retry a failed sandbox run automatically.
 	completions := int32(1)
@@ -186,9 +188,10 @@ func (manager *Manager) jobFromSpec(spec jobs.JobSpec, request jobs.Request, exp
 	automount := false
 	return &batchv1.Job{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      spec.Name,
-			Namespace: spec.Namespace,
-			Labels:    labels,
+			Name:        spec.Name,
+			Namespace:   spec.Namespace,
+			Labels:      labels,
+			Annotations: annotations,
 		},
 		Spec: batchv1.JobSpec{
 			Completions:             &completions,

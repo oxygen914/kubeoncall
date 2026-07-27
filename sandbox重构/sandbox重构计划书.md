@@ -865,6 +865,13 @@ Codex 审核补充（提交 `420bf60` 后审核，补丁提交 `[SBX-05-fix]`）
   `go test ./...` + `go vet ./...` + `gofmt -l .` 全通过。
 - 依赖：新增 `k8s.io/api`/`apimachinery`/`client-go` v0.36.3（经 goproxy.cn + sum.golang.google.cn 拉取）。
 
+Codex 审核补充（提交 `ae94ebb` 后审核，补丁提交 `[SBX-09-fix]`）：
+
+- `ExpiryLabel` 原先用 `time.RFC3339`（含冒号）作为 label value，Kubernetes label value 禁止冒号，
+  真实 apiserver 会拒绝所有 Job 创建（fake clientset 不做该校验，测试漏网）。补丁将 expiry 改为
+  存 annotation（`ExpiryAnnotation`，annotation 值无冒号限制），run-id/tool-version 仍为合法 label。
+  测试增断言：expiry annotation 非空 + 遍历所有 label value 不含冒号。
+
 ### SBX-10：结果、日志和清理
 
 改动：
