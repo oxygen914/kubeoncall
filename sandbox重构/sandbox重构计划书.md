@@ -488,7 +488,7 @@ helm lint deploy/helm/kubeoncall
 - 关闭 Sandbox 时 `KubeOnCallApplicationTests.contextLoads` 与 `V1ApiContractTest` 通过；
   既有失败（`ApiTokensControllerTest`、`LegacyApiDeprecationWebTest`）在父提交已存在，与本单元无关。
 
-Codex 审核补充（提交 `7712ccb` 后审核，补丁提交 `[SBX-01-fix]`、`[SBX-01-fix2]`）：
+Codex 审核补充（提交 `7712ccb` 后审核，补丁提交 `[SBX-01-fix]`、`[SBX-01-fix2]`、`[SBX-01-fix3]`）：
 
 - CPU/内存/临时存储原先仅校验非空，`cpu=2`、`memory=2Gi`、`cpu=banana` 可越过 §7.1 硬上限
   通过启动校验并被回显为已校验限制。新增 Kubernetes 量纲解析（CPU millicores、字节
@@ -502,9 +502,12 @@ Codex 审核补充（提交 `7712ccb` 后审核，补丁提交 `[SBX-01-fix]`、
   Java 数值形式，且校验 trim 但未归一存储。改为 `BigDecimal` 精确运算 + `longValueExact()`
   （非整单位小数一律拒绝而非取整），显式 Kubernetes 十进制语法（拒绝 Java-only 形式），
   并在 `validate()` 中将 CPU/内存/临时存储归一为 trim 后的规范值，避免回显被 K8s 拒绝的串。
-- 测试新增 8 例：K8s 量纲越限、畸形量纲、边界与交替形式（`1000m`/`1024Mi`/`2048Mi`）、
+- 第三轮审核指出 millicores 分支（`m` 后缀）未走 `QUANTITY_MANTISSA` 语法校验，`1e3m` 会因
+  `BigDecimal` 接受指数而被当作 1000 millicores 通过，但 Kubernetes 不允许指数与 `m` 后缀并存。
+  补丁对该分支的尾数同样强制 Kubernetes 兼容十进制语法；新增 `1e3m` 拒绝回归测试。
+- 测试新增 9 例：K8s 量纲越限、畸形量纲、边界与交替形式（`1000m`/`1024Mi`/`2048Mi`）、
   Controller 调用限制越限、整数单位刚好越上限（`1001m`/`1073741825`）、非整单位小数拒绝、
-  Java-only 数值形式拒绝、空格归一。`KubeOnCallPropertiesTest` 共 16 例全通过。
+  Java-only 数值形式拒绝、millicores 指数拒绝、空格归一。`KubeOnCallPropertiesTest` 共 17 例全通过。
 
 回滚：
 

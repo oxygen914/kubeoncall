@@ -243,6 +243,17 @@ class KubeOnCallPropertiesTest {
     }
 
     @Test
+    void sandboxValidateShouldRejectExponentInMillicoresSuffix() {
+        // Kubernetes does not allow an exponent alongside the millicores suffix; BigDecimal alone would
+        // accept "1e3m" as 1000 millicores, so the grammar check must reject it.
+        KubeOnCallProperties.Sandbox sandbox = new KubeOnCallProperties().getSandbox();
+        sandbox.setCpu("1e3m");
+
+        IllegalStateException ex = assertThrows(IllegalStateException.class, sandbox::validate);
+        assertTrue(ex.getMessage().contains("cpu"), ex.getMessage());
+    }
+
+    @Test
     void sandboxValidateShouldNormalizeSurroundingWhitespaceOnQuantities() {
         KubeOnCallProperties.Sandbox sandbox = new KubeOnCallProperties().getSandbox();
         sandbox.setCpu(" 1 ");

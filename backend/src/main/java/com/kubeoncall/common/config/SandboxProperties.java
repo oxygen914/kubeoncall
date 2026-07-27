@@ -410,7 +410,13 @@ class SandboxProperties {
     private static Long parseCpuMillicores(String value) {
         String trimmed = value.trim();
         if (trimmed.endsWith("m")) {
-            java.math.BigDecimal millicores = new java.math.BigDecimal(trimmed.substring(0, trimmed.length() - 1));
+            String mantissa = trimmed.substring(0, trimmed.length() - 1);
+            // BigDecimal would accept exponents (e.g. "1e3m"); Kubernetes does not allow an exponent
+            // alongside the millicores suffix, so enforce the Kubernetes-compatible grammar first.
+            if (!QUANTITY_MANTISSA.matcher(mantissa).matches()) {
+                throw new IllegalArgumentException("non-kubernetes cpu quantity: " + value);
+            }
+            java.math.BigDecimal millicores = new java.math.BigDecimal(mantissa);
             if (millicores.signum() < 0) {
                 throw new IllegalArgumentException("negative cpu");
             }
