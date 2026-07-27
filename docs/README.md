@@ -9,6 +9,7 @@ README 只保留项目定位和最短成功路径；安装、配置、部署和�
 | [安装指南](installation.md) | 在 Linux、macOS、Docker Compose 或 Kubernetes 中启动 KubeOnCall |
 | [配置参考](configuration.md) | 配置模型、认证、存储、RAG、记忆、MCP、Webhook 和监听地址 |
 | [后端运行手册](后端运行手册.md) | 开发运行、告警策略、RAG、记忆和运维接口的详细说明 |
+| [Sandbox 运行与验收手册](../sandbox重构/Sandbox运行与验收手册.md) | Sandbox 的启用、关闭、回滚、泄漏处置和代码/环境验收边界 |
 | [阿里云模型联调](阿里云模型联调.md) | 验证百炼 Embedding、Rerank 和 Chat Completions |
 
 ## 集成与运维
