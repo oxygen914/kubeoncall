@@ -20,6 +20,7 @@ import com.kubeoncall.sandbox.domain.SandboxClassification;
 import com.kubeoncall.sandbox.domain.SandboxCleanupStatus;
 import com.kubeoncall.sandbox.domain.SandboxRunMode;
 import com.kubeoncall.sandbox.domain.SandboxRunStatus;
+import com.kubeoncall.service.KubeOnCallMetricsService;
 
 /**
  * Short, fenced convergence loop for Controller-owned Jobs.
@@ -39,6 +40,7 @@ public class SandboxRunReconciler {
     private final Clock clock;
     private final ObjectMapper objectMapper;
     private final OutboxWriter outboxWriter;
+    private final KubeOnCallMetricsService metrics;
     private final String ownerToken = "sandbox-reconciler-" + UUID.randomUUID();
 
     public SandboxRunReconciler(
@@ -46,8 +48,9 @@ public class SandboxRunReconciler {
             SandboxControllerClient controller,
             SandboxArtifactStore artifactStore,
             KubeOnCallProperties properties,
-            OutboxWriter outboxWriter) {
-        this(repository, controller, artifactStore, properties, outboxWriter, Clock.systemUTC());
+            OutboxWriter outboxWriter,
+            KubeOnCallMetricsService metrics) {
+        this(repository, controller, artifactStore, properties, outboxWriter, metrics, Clock.systemUTC());
     }
 
     SandboxRunReconciler(
@@ -56,6 +59,7 @@ public class SandboxRunReconciler {
             SandboxArtifactStore artifactStore,
             KubeOnCallProperties properties,
             OutboxWriter outboxWriter,
+            KubeOnCallMetricsService metrics,
             Clock clock) {
         this.repository = repository;
         this.controller = controller;
@@ -64,6 +68,7 @@ public class SandboxRunReconciler {
         this.clock = clock;
         this.objectMapper = new ObjectMapper();
         this.outboxWriter = outboxWriter;
+        this.metrics = metrics;
     }
 
     @Scheduled(fixedDelayString = "${kubeoncall.sandbox.reconcile-poll-millis:1000}")
@@ -78,16 +83,49 @@ public class SandboxRunReconciler {
                 .claimForReconciliation(ownerToken, now, leaseDuration())
                 .orElse(null);
         if (claimed == null) {
-            return reconcileCleanupOnce(now);
+            Outcome cleanup = reconcileCleanupOnce(now);
+            metrics.recordSandboxRunEvent("cleanup", "unknown", "unknown", cleanup.name());
+            return cleanup;
         }
+        Outcome outcome;
         try {
-            return reconcile(claimed, now);
+            outcome = reconcile(claimed, now);
         } catch (SandboxControllerClientException unavailable) {
             // A controller outage must leave the Run recoverable; no terminal business fact is
             // inferred from a transport failure. The following poll will claim it again.
-            return Outcome.DEFERRED;
+            outcome = Outcome.DEFERRED;
         } finally {
             repository.releaseReconciliationClaim(claimed.publicId(), ownerToken, claimed.fencingToken());
+        }
+        recordOutcome(claimed, outcome, now);
+        return outcome;
+    }
+
+    private void recordOutcome(SandboxRunRecord run, Outcome outcome, Instant now) {
+        String event =
+                switch (outcome) {
+                    case RUNNING -> "running";
+                    case SUCCEEDED -> "completed";
+                    case FAILED -> "failed";
+                    case TIMED_OUT -> "timed_out";
+                    case CANCELLED -> "cancelled";
+                    case FENCE_REJECTED -> "fence_rejected";
+                    case DEFERRED -> "deferred";
+                    default -> "reconciled";
+                };
+        metrics.recordSandboxRunEvent(event, run.mode().name(), run.toolId(), outcome.name());
+        if (outcome == Outcome.SUCCEEDED
+                || outcome == Outcome.FAILED
+                || outcome == Outcome.TIMED_OUT
+                || outcome == Outcome.CANCELLED) {
+            Instant started = run.startedAt() == null ? run.createdAt() : run.startedAt();
+            if (started != null) {
+                metrics.recordSandboxRunDuration(
+                        run.mode().name(),
+                        run.toolId(),
+                        outcome.name(),
+                        Duration.between(started, now).toMillis());
+            }
         }
     }
 
@@ -121,8 +159,8 @@ public class SandboxRunReconciler {
             case "PENDING" -> Outcome.PENDING;
             case "RUNNING" -> transitionRunning(claimed, now);
             case "SUCCEEDED" -> collectSucceeded(claimed, now);
-            case "FAILED" -> fail(claimed, SandboxRunStatus.FAILED, "CONTROLLER_FAILED", now);
-            case "TIMED_OUT" -> fail(claimed, SandboxRunStatus.TIMED_OUT, "CONTROLLER_TIMED_OUT", now);
+            case "FAILED" -> fail(claimed, SandboxRunStatus.FAILED, failureCode(status), now);
+            case "TIMED_OUT" -> fail(claimed, SandboxRunStatus.TIMED_OUT, "DEADLINE", now);
             case "CANCELLED" -> cancel(claimed, now);
             case "UNKNOWN" -> Outcome.DEFERRED;
             default -> Outcome.DEFERRED;
@@ -290,8 +328,20 @@ public class SandboxRunReconciler {
                 now);
         if (failed) {
             markCleanupPending(run.publicId(), now);
+            metrics.recordSandboxRunEvent("failure_reason", run.mode().name(), run.toolId(), code);
         }
         return failed ? Outcome.FAILED : Outcome.FENCE_REJECTED;
+    }
+
+    private static String failureCode(SandboxControllerClient.ControllerStatus status) {
+        for (String reason : status.failureReasons()) {
+            String normalized = reason == null ? "" : reason.trim().toUpperCase(java.util.Locale.ROOT);
+            if (normalized.contains("OOM")) return "OOM";
+            if (normalized.contains("IMAGEPULL") || normalized.contains("IMAGE_PULL")) return "IMAGE_PULL";
+            if (normalized.contains("POLICY")) return "POLICY_DENIED";
+            if (normalized.contains("DEADLINE")) return "DEADLINE";
+        }
+        return "TOOL_FAILURE";
     }
 
     private Outcome cancel(SandboxRunRecord run, Instant now) {

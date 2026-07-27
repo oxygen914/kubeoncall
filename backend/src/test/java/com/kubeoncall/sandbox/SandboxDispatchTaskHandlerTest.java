@@ -25,6 +25,7 @@ import com.kubeoncall.sandbox.domain.SandboxCleanupStatus;
 import com.kubeoncall.sandbox.domain.SandboxRiskLevel;
 import com.kubeoncall.sandbox.domain.SandboxRunMode;
 import com.kubeoncall.sandbox.domain.SandboxRunStatus;
+import com.kubeoncall.service.KubeOnCallMetricsService;
 import com.kubeoncall.task.AsyncTaskRecord;
 import com.kubeoncall.task.AsyncTaskRepository;
 import com.kubeoncall.task.worker.AsyncTaskHandlerRegistry;
@@ -144,7 +145,15 @@ class SandboxDispatchTaskHandlerTest {
             SandboxRunRepository runRepository, SandboxControllerClient controller) {
         KubeOnCallProperties properties = new KubeOnCallProperties();
         properties.getSandbox().setControllerReadTimeoutMillis(5000);
-        return new SandboxDispatchTaskHandler(runRepository, controller, properties);
+        return new SandboxDispatchTaskHandler(runRepository, controller, properties, metrics());
+    }
+
+    @SuppressWarnings("unchecked")
+    private static KubeOnCallMetricsService metrics() {
+        org.springframework.beans.factory.ObjectProvider<io.micrometer.core.instrument.MeterRegistry> provider =
+                mock(org.springframework.beans.factory.ObjectProvider.class);
+        when(provider.getIfAvailable()).thenReturn(new io.micrometer.core.instrument.simple.SimpleMeterRegistry());
+        return new KubeOnCallMetricsService(provider);
     }
 
     private static AsyncTaskWorker worker(AsyncTaskRepository repository, SandboxDispatchTaskHandler handler) {

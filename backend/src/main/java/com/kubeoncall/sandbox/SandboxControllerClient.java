@@ -13,6 +13,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.HexFormat;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -25,6 +26,7 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.kubeoncall.common.config.KubeOnCallProperties;
 import com.kubeoncall.observability.DependencyCircuitBreaker;
+import com.kubeoncall.service.KubeOnCallMetricsService;
 
 /**
  * Bounded authenticated client for the private Sandbox Controller API.
@@ -45,16 +47,19 @@ public class SandboxControllerClient {
     private final DependencyCircuitBreaker circuitBreaker;
     private final ObjectMapper objectMapper;
     private final SandboxArtifactStore artifactStore;
+    private final KubeOnCallMetricsService metrics;
 
     public SandboxControllerClient(
             KubeOnCallProperties properties,
             DependencyCircuitBreaker circuitBreaker,
             ObjectMapper objectMapper,
-            SandboxArtifactStore artifactStore) {
+            SandboxArtifactStore artifactStore,
+            KubeOnCallMetricsService metrics) {
         this.properties = properties;
         this.circuitBreaker = circuitBreaker;
         this.objectMapper = objectMapper;
         this.artifactStore = artifactStore;
+        this.metrics = metrics;
     }
 
     /** Performs one idempotent create-or-return call; it never polls a Job. */
@@ -62,15 +67,17 @@ public class SandboxControllerClient {
         if (run == null) {
             throw new IllegalArgumentException("sandbox run is required");
         }
-        DispatchResult result = circuitBreaker.execute(DEPENDENCY, () -> send(run));
-        if (result.statusCode() < 200 || result.statusCode() >= 300) {
-            throw new SandboxControllerClientException(
-                    "CONTROLLER_HTTP_" + result.statusCode(), false, result.statusCode());
-        }
-        if (!run.publicId().equals(result.controllerRunId())) {
-            throw new SandboxControllerClientException("CONTROLLER_RUN_ID_MISMATCH", false, result.statusCode());
-        }
-        return result;
+        return measured("dispatch", run, () -> {
+            DispatchResult result = circuitBreaker.execute(DEPENDENCY, () -> send(run));
+            if (result.statusCode() < 200 || result.statusCode() >= 300) {
+                throw new SandboxControllerClientException(
+                        "CONTROLLER_HTTP_" + result.statusCode(), false, result.statusCode());
+            }
+            if (!run.publicId().equals(result.controllerRunId())) {
+                throw new SandboxControllerClientException("CONTROLLER_RUN_ID_MISMATCH", false, result.statusCode());
+            }
+            return result;
+        });
     }
 
     /** Reads one normalized controller status; it never waits for a Job transition. */
@@ -78,7 +85,7 @@ public class SandboxControllerClient {
         if (run == null) {
             throw new IllegalArgumentException("sandbox run is required");
         }
-        return lifecycle("GET", lifecyclePath(run) + "/" + run.publicId(), run);
+        return measured("status", run, () -> lifecycle("GET", lifecyclePath(run) + "/" + run.publicId(), run));
     }
 
     /** Requests asynchronous Job cancellation and returns the Controller's immediate status. */
@@ -86,7 +93,7 @@ public class SandboxControllerClient {
         if (run == null) {
             throw new IllegalArgumentException("sandbox run is required");
         }
-        return lifecycle("DELETE", lifecyclePath(run) + "/" + run.publicId(), run);
+        return measured("cancel", run, () -> lifecycle("DELETE", lifecyclePath(run) + "/" + run.publicId(), run));
     }
 
     /** Collects the controller's normalized bounded result once a Job is terminal. */
@@ -94,18 +101,53 @@ public class SandboxControllerClient {
         if (run == null) {
             throw new IllegalArgumentException("sandbox run is required");
         }
-        ControllerResponse response =
-                call("GET", lifecyclePath(run) + "/" + run.publicId() + "/logs", null, run.requestId());
-        Map<String, Object> payload = response.payload();
-        requireMatchingRunId(run.publicId(), payload, response.statusCode());
-        return new CollectedResult(
-                run.publicId(),
-                stringValue(payload.get("phase")),
-                numberValue(payload.get("exitCode")),
-                stringValue(payload.get("reason")),
-                stringValue(payload.get("logs")),
-                stringValue(payload.get("output")),
-                Boolean.TRUE.equals(payload.get("outputFound")));
+        return measured("collect", run, () -> {
+            ControllerResponse response =
+                    call("GET", lifecyclePath(run) + "/" + run.publicId() + "/logs", null, run.requestId());
+            Map<String, Object> payload = response.payload();
+            requireMatchingRunId(run.publicId(), payload, response.statusCode());
+            return new CollectedResult(
+                    run.publicId(),
+                    stringValue(payload.get("phase")),
+                    numberValue(payload.get("exitCode")),
+                    stringValue(payload.get("reason")),
+                    stringValue(payload.get("logs")),
+                    stringValue(payload.get("output")),
+                    Boolean.TRUE.equals(payload.get("outputFound")));
+        });
+    }
+
+    private <T> T measured(String operation, SandboxRunRecord run, ControllerCall<T> call) {
+        long startedAtNanos = System.nanoTime();
+        try {
+            T result = call.execute();
+            metrics.recordSandboxController(
+                    operation, run.mode().name(), run.toolId(), "success", "none", elapsedMillis(startedAtNanos));
+            return result;
+        } catch (RuntimeException ex) {
+            metrics.recordSandboxController(
+                    operation, run.mode().name(), run.toolId(), "error", errorCode(ex), elapsedMillis(startedAtNanos));
+            throw ex;
+        }
+    }
+
+    private static long elapsedMillis(long startedAtNanos) {
+        return Math.max(0, (System.nanoTime() - startedAtNanos) / 1_000_000L);
+    }
+
+    private static String errorCode(RuntimeException error) {
+        if (error instanceof SandboxControllerClientException controllerError) {
+            return controllerError.getMessage();
+        }
+        if (error instanceof DependencyCircuitBreaker.CircuitOpenException) {
+            return "CIRCUIT_OPEN";
+        }
+        return error.getClass().getSimpleName();
+    }
+
+    @FunctionalInterface
+    private interface ControllerCall<T> {
+        T execute();
     }
 
     private ControllerStatus lifecycle(String method, String path, SandboxRunRecord run) {
@@ -113,7 +155,25 @@ public class SandboxControllerClient {
         Map<String, Object> payload = response.payload();
         requireMatchingRunId(run.publicId(), payload, response.statusCode());
         return new ControllerStatus(
-                run.publicId(), stringValue(payload.get("phase")), Boolean.TRUE.equals(payload.get("exists")));
+                run.publicId(),
+                stringValue(payload.get("phase")),
+                Boolean.TRUE.equals(payload.get("exists")),
+                failureReasons(payload));
+    }
+
+    private static List<String> failureReasons(Map<String, Object> payload) {
+        Object raw = payload.get("failedPods");
+        if (!(raw instanceof List<?> entries)) {
+            return List.of();
+        }
+        return entries.stream()
+                .filter(Map.class::isInstance)
+                .map(Map.class::cast)
+                .map(entry -> stringValue(entry.get("reason")))
+                .filter(reason -> reason != null && !reason.isBlank())
+                .distinct()
+                .limit(8)
+                .toList();
     }
 
     private DispatchResult send(SandboxRunRecord run) {
@@ -367,7 +427,11 @@ public class SandboxControllerClient {
 
     public record DispatchResult(String controllerRunId, String phase, int statusCode) {}
 
-    public record ControllerStatus(String runId, String phase, boolean exists) {}
+    public record ControllerStatus(String runId, String phase, boolean exists, List<String> failureReasons) {
+        public ControllerStatus(String runId, String phase, boolean exists) {
+            this(runId, phase, exists, List.of());
+        }
+    }
 
     public record CollectedResult(
             String runId,

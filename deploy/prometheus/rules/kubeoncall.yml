@@ -67,6 +67,36 @@ groups:
         labels: {severity: P2}
         annotations:
           summary: KubeOnCall request-to-worker correlation is missing above 1 percent
+      - alert: KubeOnCallSandboxRunBacklogAgeHigh
+        expr: kubeoncall_sandbox_oldest_active_age_seconds > 600
+        for: 10m
+        labels: {severity: P2}
+        annotations:
+          summary: KubeOnCall Sandbox oldest active run exceeds 10 minutes
+      - alert: KubeOnCallSandboxFailureRateHigh
+        expr: sum(rate(kubeoncall_sandbox_run_events_total{event=~"failed|timed_out"}[15m])) / clamp_min(sum(rate(kubeoncall_sandbox_run_events_total{event="created"}[15m])), 0.001) > 0.10
+        for: 15m
+        labels: {severity: P2}
+        annotations:
+          summary: KubeOnCall Sandbox terminal failure rate exceeds 10 percent
+      - alert: KubeOnCallSandboxCleanupLeak
+        expr: kubeoncall_sandbox_cleanup{status="FAILED"} > 0 or kubeoncall_sandbox_oldest_cleanup_pending_age_seconds > 600
+        for: 10m
+        labels: {severity: P1}
+        annotations:
+          summary: KubeOnCall Sandbox cleanup failed or remains pending over 10 minutes
+      - alert: KubeOnCallSandboxControllerUnavailable
+        expr: sum(rate(kubeoncall_sandbox_controller_requests_total{outcome="error"}[5m])) / clamp_min(sum(rate(kubeoncall_sandbox_controller_requests_total[5m])), 0.001) > 0.25
+        for: 5m
+        labels: {severity: P1}
+        annotations:
+          summary: KubeOnCall Sandbox Controller error rate exceeds 25 percent
+      - alert: KubeOnCallSandboxTimedOut
+        expr: sum(increase(kubeoncall_sandbox_run_events_total{event="timed_out"}[5m])) > 0
+        for: 0m
+        labels: {severity: P2}
+        annotations:
+          summary: KubeOnCall Sandbox Run timed out
   - name: node-monitoring
     rules:
       - alert: NodeDown

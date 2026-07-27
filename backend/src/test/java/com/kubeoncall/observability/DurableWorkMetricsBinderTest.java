@@ -25,6 +25,9 @@ class DurableWorkMetricsBinderTest {
             if (sql.contains("koc_async_task") && sql.contains("COUNT")) {
                 return sql.contains("DEAD_LETTER") ? 2L : 4L;
             }
+            if (sql.contains("koc_sandbox_run") && sql.contains("COUNT")) {
+                return sql.contains("PENDING") ? 5L : 1L;
+            }
             return 12.5;
         });
 
@@ -42,6 +45,16 @@ class DurableWorkMetricsBinderTest {
                         .value())
                 .isEqualTo(12.5);
         assertThat(registry.get("kubeoncall_async_task_oldest_due_age_seconds")
+                        .gauge()
+                        .value())
+                .isEqualTo(12.5);
+        assertThat(gauge(registry, "kubeoncall_sandbox_runs", "status", "PENDING")
+                        .value())
+                .isEqualTo(5.0);
+        assertThat(gauge(registry, "kubeoncall_sandbox_cleanup", "status", "FAILED")
+                        .value())
+                .isEqualTo(1.0);
+        assertThat(registry.get("kubeoncall_sandbox_oldest_active_age_seconds")
                         .gauge()
                         .value())
                 .isEqualTo(12.5);

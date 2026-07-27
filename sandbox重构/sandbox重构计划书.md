@@ -8,8 +8,8 @@
 | 制定日期 | 2026-07-27 |
 | 目标项目 | KubeOnCall |
 | 实施状态 | IN_PROGRESS |
-| 代码实现进度 | 91%（SBX-00～21 已完成） |
-| 自动化验证进度 | 91%（SBX-00～21 代码级验证通过；真实集群待验收） |
+| 代码实现进度 | 95%（SBX-00～22 已完成） |
+| 自动化验证进度 | 95%（SBX-00～22 代码级验证通过；真实集群待验收） |
 | 真实环境验收进度 | 0%，按阶段单独记录 |
 | 计划提交数 | 24 个，`SBX-00`～`SBX-23` |
 
@@ -1255,6 +1255,22 @@ Codex 审核补充（提交 `ae94ebb` 后审核，补丁提交 `[SBX-09-fix]`）
 回滚：
 
 - 可独立 revert Dashboard/规则；不影响运行事实。
+
+完成记录：
+
+- `KubeOnCallMetricsService` 新增受控基数的 Run 生命周期、终态时长、Controller 请求/时延和
+  Artifact 次数/字节指标；标签仅包含 mode、服务端工具目录项、操作、结果和归一化错误类型，绝不包含
+  runId、alarmId、对象 key、预签名 URL 或原始日志。
+- Run 创建、派发、运行、成功、失败、超时、取消、清理和策略拒绝均产生指标。Controller 的
+  `failedPods` 原因在进入 Backend 后归一为 `OOM`、`IMAGE_PULL`、`POLICY_DENIED`、`DEADLINE`
+  或 `TOOL_FAILURE`，以支持失败原因分布；Controller 短暂不可达仍保持 Run 可恢复。
+- `DurableWorkMetricsBinder` 新增 Sandbox Run/清理状态和最老活跃/待清理年龄 Gauge，直接读取
+  `koc_sandbox_run`，数据库不可用时保持 `NaN`，不影响 `/actuator/prometheus` 抓取。
+- 新增 `KubeOnCall Sandbox Operations` Grafana Dashboard，并同步进 Helm ConfigMap；覆盖 Run/清理积压、
+  Run 时延与结果、Controller 错误率/时延、原因分布和 Artifact 吞吐。
+- Prometheus 增加 Sandbox 积压、终态失败率、清理泄漏、Controller 不可用和超时规则；规则语法与样例
+  通过 `promtool` 校验，Dashboard JSON、Helm lint/template 和 Micrometer/Backend 单测通过。
+- Dashboard/Prometheus 以及客户端指标的真实抓取、告警送达、Grafana 数据源和容量阈值仍待真实环境验收。
 
 ### SBX-23：CI、安全与运维收口
 

@@ -28,6 +28,7 @@ import com.kubeoncall.sandbox.policy.SandboxExecutionPolicy;
 import com.kubeoncall.sandbox.policy.SandboxResourceLimits;
 import com.kubeoncall.sandbox.policy.SandboxToolCatalog;
 import com.kubeoncall.sandbox.policy.SandboxToolSpec;
+import com.kubeoncall.service.KubeOnCallMetricsService;
 import com.kubeoncall.task.AsyncTaskRepository;
 
 class SandboxRunCommandServiceTest {
@@ -71,7 +72,8 @@ class SandboxRunCommandServiceTest {
                 audit,
                 outbox,
                 idempotency,
-                new ObjectMapper());
+                new ObjectMapper(),
+                metrics());
 
         SandboxRunCommandService.CommandResult result = service.create(
                 new SandboxRunCommandService.CreateCommand(
@@ -151,5 +153,9 @@ class SandboxRunCommandServiceTest {
         ObjectProvider<T> provider = mock(ObjectProvider.class);
         when(provider.getIfAvailable()).thenReturn(value);
         return provider;
+    }
+
+    private static KubeOnCallMetricsService metrics() {
+        return new KubeOnCallMetricsService(provider(new io.micrometer.core.instrument.simple.SimpleMeterRegistry()));
     }
 }

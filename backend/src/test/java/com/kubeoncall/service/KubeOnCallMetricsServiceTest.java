@@ -132,4 +132,53 @@ class KubeOnCallMetricsServiceTest {
                                 "rejected")
                         .count());
     }
+
+    @Test
+    void shouldRecordSandboxMetricsWithoutHighCardinalityIdentifiers() {
+        SimpleMeterRegistry registry = new SimpleMeterRegistry();
+        @SuppressWarnings("unchecked")
+        ObjectProvider<io.micrometer.core.instrument.MeterRegistry> provider = mock(ObjectProvider.class);
+        when(provider.getIfAvailable()).thenReturn(registry);
+        KubeOnCallMetricsService metricsService = new KubeOnCallMetricsService(provider);
+
+        metricsService.recordSandboxRunEvent("created", "FIXED_DIAGNOSTIC", "pod-inspect", "queued");
+        metricsService.recordSandboxRunDuration("FIXED_DIAGNOSTIC", "pod-inspect", "succeeded", 42);
+        metricsService.recordSandboxController("status", "FIXED_DIAGNOSTIC", "pod-inspect", "error", "OOM", 7);
+        metricsService.recordSandboxArtifact("store", "OUTPUT", "UNTRUSTED", "success", 128);
+
+        assertEquals(
+                1.0,
+                registry.counter(
+                                "kubeoncall.sandbox.run_events",
+                                "event",
+                                "created",
+                                "mode",
+                                "fixed_diagnostic",
+                                "tool",
+                                "pod-inspect",
+                                "outcome",
+                                "queued")
+                        .count());
+        assertEquals(
+                1.0,
+                registry.counter(
+                                "kubeoncall.sandbox.controller_requests",
+                                "operation",
+                                "status",
+                                "mode",
+                                "fixed_diagnostic",
+                                "tool",
+                                "pod-inspect",
+                                "outcome",
+                                "error",
+                                "error",
+                                "oom")
+                        .count());
+        assertEquals(
+                128.0,
+                registry.get("kubeoncall.sandbox.artifact_bytes")
+                        .tag("operation", "store")
+                        .summary()
+                        .totalAmount());
+    }
 }

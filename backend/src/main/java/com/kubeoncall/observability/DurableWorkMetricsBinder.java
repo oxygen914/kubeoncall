@@ -29,6 +29,10 @@ public class DurableWorkMetricsBinder implements MeterBinder {
     private static final Logger log = LoggerFactory.getLogger(DurableWorkMetricsBinder.class);
     private static final List<String> OUTBOX_STATUSES = List.of("PENDING", "PROCESSING", "DEAD_LETTER");
     private static final List<String> TASK_STATUSES = List.of("PENDING", "RETRY", "RUNNING", "DEAD_LETTER");
+    private static final List<String> SANDBOX_RUN_STATUSES =
+            List.of("PENDING", "DISPATCHING", "RUNNING", "COLLECTING", "SUCCEEDED", "FAILED", "TIMED_OUT", "CANCELLED");
+    private static final List<String> SANDBOX_CLEANUP_STATUSES =
+            List.of("NOT_REQUIRED", "PENDING", "RUNNING", "SUCCEEDED", "FAILED");
 
     private final JdbcTemplate jdbcTemplate;
     private final Map<String, AtomicBoolean> failedQueries = new ConcurrentHashMap<>();
@@ -57,6 +61,29 @@ public class DurableWorkMetricsBinder implements MeterBinder {
         }
         Gauge.builder("kubeoncall_async_task_oldest_due_age_seconds", this, ignored -> taskOldestDueAge())
                 .description("Age in seconds of the oldest due pending or retry task")
+                .register(registry);
+
+        for (String status : SANDBOX_RUN_STATUSES) {
+            Gauge.builder("kubeoncall_sandbox_runs", this, ignored -> sandboxRunCount(status))
+                    .description("Current Sandbox Runs by lifecycle status")
+                    .tag("status", status)
+                    .register(registry);
+        }
+        Gauge.builder("kubeoncall_sandbox_oldest_active_age_seconds", this, ignored -> sandboxOldestActiveAge())
+                .description("Age in seconds of the oldest active Sandbox Run")
+                .register(registry);
+
+        for (String status : SANDBOX_CLEANUP_STATUSES) {
+            Gauge.builder("kubeoncall_sandbox_cleanup", this, ignored -> sandboxCleanupCount(status))
+                    .description("Current Sandbox cleanup records by lifecycle status")
+                    .tag("status", status)
+                    .register(registry);
+        }
+        Gauge.builder(
+                        "kubeoncall_sandbox_oldest_cleanup_pending_age_seconds",
+                        this,
+                        ignored -> sandboxOldestCleanupPendingAge())
+                .description("Age in seconds of the oldest Sandbox cleanup waiting to finish")
                 .register(registry);
     }
 
@@ -96,6 +123,40 @@ public class DurableWorkMetricsBinder implements MeterBinder {
                   FROM koc_async_task
                  WHERE status IN ('PENDING', 'RETRY')
                    AND next_attempt_at <= UTC_TIMESTAMP(6)
+                """);
+    }
+
+    double sandboxRunCount(String status) {
+        return query(
+                "sandbox.run.count." + status,
+                "SELECT COUNT(*) FROM koc_sandbox_run WHERE run_status = '" + status + "'");
+    }
+
+    double sandboxOldestActiveAge() {
+        return query("sandbox.run.oldest.active", """
+                SELECT COALESCE(
+                    GREATEST(TIMESTAMPDIFF(MICROSECOND, MIN(created_at), UTC_TIMESTAMP(6)) / 1000000.0, 0),
+                    0
+                )
+                  FROM koc_sandbox_run
+                 WHERE run_status IN ('PENDING', 'DISPATCHING', 'RUNNING', 'COLLECTING')
+                """);
+    }
+
+    double sandboxCleanupCount(String status) {
+        return query(
+                "sandbox.cleanup.count." + status,
+                "SELECT COUNT(*) FROM koc_sandbox_run WHERE cleanup_status = '" + status + "'");
+    }
+
+    double sandboxOldestCleanupPendingAge() {
+        return query("sandbox.cleanup.oldest.pending", """
+                SELECT COALESCE(
+                    GREATEST(TIMESTAMPDIFF(MICROSECOND, MIN(updated_at), UTC_TIMESTAMP(6)) / 1000000.0, 0),
+                    0
+                )
+                  FROM koc_sandbox_run
+                 WHERE cleanup_status IN ('PENDING', 'RUNNING', 'FAILED')
                 """);
     }
 

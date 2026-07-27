@@ -11,12 +11,16 @@ import java.util.UUID;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.ObjectProvider;
 
 import com.kubeoncall.common.config.KubeOnCallProperties;
 import com.kubeoncall.sandbox.SandboxArtifactStore;
 import com.kubeoncall.sandbox.domain.SandboxArtifactType;
 import com.kubeoncall.sandbox.domain.SandboxClassification;
+import com.kubeoncall.service.KubeOnCallMetricsService;
 
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import io.minio.BucketExistsArgs;
 import io.minio.GetObjectArgs;
 import io.minio.MakeBucketArgs;
@@ -51,7 +55,7 @@ class SandboxArtifactStoreIT {
         properties.getSandbox().setInputMaxBytes(8L);
         properties.getSandbox().setOutputMaxBytes(64L);
         properties.getSandbox().setLogMaxBytes(32L);
-        store = new SandboxArtifactStore(minioClient, properties);
+        store = new SandboxArtifactStore(minioClient, properties, metrics());
     }
 
     @Test
@@ -209,6 +213,13 @@ class SandboxArtifactStoreIT {
         } catch (Exception ignored) {
             // best-effort cleanup
         }
+    }
+
+    @SuppressWarnings("unchecked")
+    private static KubeOnCallMetricsService metrics() {
+        ObjectProvider<MeterRegistry> provider = org.mockito.Mockito.mock(ObjectProvider.class);
+        org.mockito.Mockito.when(provider.getIfAvailable()).thenReturn(new SimpleMeterRegistry());
+        return new KubeOnCallMetricsService(provider);
     }
 
     private static String sha256(byte[] content) throws Exception {

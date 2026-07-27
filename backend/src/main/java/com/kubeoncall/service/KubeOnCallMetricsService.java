@@ -217,6 +217,74 @@ public class KubeOnCallMetricsService {
         increment("kubeoncall.migration.legacy_write_skipped", "domain", safe(domain));
     }
 
+    /**
+     * Records a bounded Sandbox Run lifecycle event. Tool IDs come from the server-owned catalog,
+     * never from raw request input, so the tag remains suitable for Prometheus aggregation.
+     */
+    public void recordSandboxRunEvent(String event, String mode, String tool, String outcome) {
+        increment(
+                "kubeoncall.sandbox.run_events",
+                "event",
+                safe(event),
+                "mode",
+                safe(mode),
+                "tool",
+                safe(tool),
+                "outcome",
+                safe(outcome));
+    }
+
+    /** Records end-to-end Run duration only at a terminal outcome. */
+    public void recordSandboxRunDuration(String mode, String tool, String outcome, long durationMs) {
+        recordAmount(
+                "kubeoncall.sandbox.run_duration_ms",
+                Math.max(0, durationMs),
+                "mode",
+                safe(mode),
+                "tool",
+                safe(tool),
+                "outcome",
+                safe(outcome));
+    }
+
+    /** Records one bounded Controller operation and its client-observed latency. */
+    public void recordSandboxController(
+            String operation, String mode, String tool, String outcome, String errorCode, long latencyMs) {
+        String[] tags = new String[] {
+            "operation",
+            safe(operation),
+            "mode",
+            safe(mode),
+            "tool",
+            safe(tool),
+            "outcome",
+            safe(outcome),
+            "error",
+            safe(errorCode)
+        };
+        increment("kubeoncall.sandbox.controller_requests", tags);
+        recordAmount("kubeoncall.sandbox.controller_latency_ms", Math.max(0, latencyMs), tags);
+    }
+
+    /** Records object-store activity without exposing object keys, Run IDs, or payload contents. */
+    public void recordSandboxArtifact(
+            String operation, String type, String classification, String outcome, long sizeBytes) {
+        String[] tags = new String[] {
+            "operation",
+            safe(operation),
+            "type",
+            safe(type),
+            "classification",
+            safe(classification),
+            "outcome",
+            safe(outcome)
+        };
+        increment("kubeoncall.sandbox.artifacts", tags);
+        if (sizeBytes >= 0) {
+            recordAmount("kubeoncall.sandbox.artifact_bytes", sizeBytes, tags);
+        }
+    }
+
     private void increment(String name, String... tags) {
         Counter.builder(name).tags(tags).register(meterRegistry).increment();
     }

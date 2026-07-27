@@ -24,6 +24,7 @@ import com.kubeoncall.sandbox.domain.SandboxCleanupStatus;
 import com.kubeoncall.sandbox.domain.SandboxRiskLevel;
 import com.kubeoncall.sandbox.domain.SandboxRunMode;
 import com.kubeoncall.sandbox.domain.SandboxRunStatus;
+import com.kubeoncall.service.KubeOnCallMetricsService;
 
 class SandboxRunReconcilerTest {
 
@@ -138,7 +139,16 @@ class SandboxRunReconcilerTest {
                 mock(SandboxArtifactStore.class),
                 properties,
                 mock(OutboxWriter.class),
+                metrics(),
                 Clock.fixed(NOW, ZoneOffset.UTC));
+    }
+
+    @SuppressWarnings("unchecked")
+    private static KubeOnCallMetricsService metrics() {
+        org.springframework.beans.factory.ObjectProvider<io.micrometer.core.instrument.MeterRegistry> provider =
+                mock(org.springframework.beans.factory.ObjectProvider.class);
+        when(provider.getIfAvailable()).thenReturn(new io.micrometer.core.instrument.simple.SimpleMeterRegistry());
+        return new KubeOnCallMetricsService(provider);
     }
 
     private static SandboxRunRecord run(SandboxRunStatus status, long fence, Instant expiresAt) {

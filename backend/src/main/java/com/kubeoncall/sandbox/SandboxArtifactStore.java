@@ -20,6 +20,7 @@ import org.springframework.stereotype.Service;
 import com.kubeoncall.common.config.KubeOnCallProperties;
 import com.kubeoncall.sandbox.domain.SandboxArtifactType;
 import com.kubeoncall.sandbox.domain.SandboxClassification;
+import com.kubeoncall.service.KubeOnCallMetricsService;
 
 import io.minio.GetPresignedObjectUrlArgs;
 import io.minio.MinioClient;
@@ -54,11 +55,14 @@ public class SandboxArtifactStore {
 
     private final MinioClient minioClient;
     private final KubeOnCallProperties properties;
+    private final KubeOnCallMetricsService metrics;
 
     @Autowired
-    public SandboxArtifactStore(MinioClient minioClient, KubeOnCallProperties properties) {
+    public SandboxArtifactStore(
+            MinioClient minioClient, KubeOnCallProperties properties, KubeOnCallMetricsService metrics) {
         this.minioClient = minioClient;
         this.properties = properties;
+        this.metrics = metrics;
     }
 
     /**
@@ -76,44 +80,50 @@ public class SandboxArtifactStore {
             String contentType,
             InputStream content,
             SandboxClassification classification) {
-        String bucket = requireBucket();
-        String key = objectKey(runPublicId, type, filename);
-        String mime = normalizeMime(contentType);
-        if (!MIME_ALLOWLIST.contains(mime)) {
-            throw new SandboxArtifactException("unsupported content type: " + contentType);
-        }
-        long maxBytes = maxBytesFor(type);
         // Read into a bounded buffer first so the size ceiling is enforced before any byte reaches
         // MinIO: streaming the digest into putObject lets OkHttp swallow a mid-stream abort and
         // upload a truncated object, which would defeat the ceiling. Sandbox artifacts are small and
         // individually capped, so buffering a single upload is safe and authoritative.
-        byte[] bytes;
-        String sha256;
         try {
+            String bucket = requireBucket();
+            String key = objectKey(runPublicId, type, filename);
+            String mime = normalizeMime(contentType);
+            if (!MIME_ALLOWLIST.contains(mime)) {
+                throw new SandboxArtifactException("unsupported content type: " + contentType);
+            }
+            long maxBytes = maxBytesFor(type);
             BoundedDigest read = BoundedDigest.read(content, maxBytes);
-            bytes = read.bytes();
-            sha256 = read.hexDigest();
+            byte[] bytes = read.bytes();
+            String sha256 = read.hexDigest();
+            long size = bytes.length;
+            try {
+                minioClient.putObject(PutObjectArgs.builder().bucket(bucket).object(key).stream(
+                                new ByteArrayInputStream(bytes), size, -1)
+                        .contentType(mime)
+                        .build());
+            } catch (Exception ex) {
+                throw new SandboxArtifactException("failed to store sandbox artifact", ex);
+            }
+            log.debug(
+                    "stored sandbox artifact bucket={} type={} size={} classification={}",
+                    bucket,
+                    type,
+                    size,
+                    classification);
+            metrics.recordSandboxArtifact("store", type.name(), classification.name(), "success", size);
+            return new StoredArtifact(bucket, key, mime, size, sha256);
         } catch (BoundedDigest.TooLargeException ex) {
-            throw new SandboxArtifactException("artifact exceeds " + type + " ceiling " + maxBytes + " bytes");
+            SandboxArtifactException error = new SandboxArtifactException(
+                    "artifact exceeds " + type + " ceiling " + maxBytesFor(type) + " bytes");
+            metrics.recordSandboxArtifact("store", typeName(type), classificationName(classification), "error", -1);
+            throw error;
         } catch (IOException ex) {
+            metrics.recordSandboxArtifact("store", typeName(type), classificationName(classification), "error", -1);
             throw new SandboxArtifactException("failed to read sandbox artifact", ex);
+        } catch (RuntimeException ex) {
+            metrics.recordSandboxArtifact("store", typeName(type), classificationName(classification), "error", -1);
+            throw ex;
         }
-        long size = bytes.length;
-        try {
-            minioClient.putObject(
-                    PutObjectArgs.builder().bucket(bucket).object(key).stream(new ByteArrayInputStream(bytes), size, -1)
-                            .contentType(mime)
-                            .build());
-        } catch (Exception ex) {
-            throw new SandboxArtifactException("failed to store sandbox artifact", ex);
-        }
-        log.debug(
-                "stored sandbox artifact bucket={} type={} size={} classification={}",
-                bucket,
-                type,
-                size,
-                classification);
-        return new StoredArtifact(bucket, key, mime, size, sha256);
     }
 
     /** Convenience overload for in-memory content. */
@@ -160,14 +170,24 @@ public class SandboxArtifactStore {
                     .bucket(bucket)
                     .object(objectKey)
                     .build());
+            metrics.recordSandboxArtifact("delete", "unknown", "unknown", "success", -1);
             return true;
         } catch (Exception ex) {
             log.warn(
                     "sandbox artifact delete failed: bucket={}, errorType={}",
                     bucket,
                     ex.getClass().getSimpleName());
+            metrics.recordSandboxArtifact("delete", "unknown", "unknown", "error", -1);
             return false;
         }
+    }
+
+    private static String typeName(SandboxArtifactType type) {
+        return type == null ? "unknown" : type.name();
+    }
+
+    private static String classificationName(SandboxClassification classification) {
+        return classification == null ? "unknown" : classification.name();
     }
 
     /**

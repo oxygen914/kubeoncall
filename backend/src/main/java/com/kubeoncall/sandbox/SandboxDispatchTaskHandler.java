@@ -10,6 +10,7 @@ import org.springframework.stereotype.Component;
 
 import com.kubeoncall.common.config.KubeOnCallProperties;
 import com.kubeoncall.sandbox.domain.SandboxRunStatus;
+import com.kubeoncall.service.KubeOnCallMetricsService;
 import com.kubeoncall.task.worker.AsyncTaskContext;
 import com.kubeoncall.task.worker.AsyncTaskHandler;
 import com.kubeoncall.task.worker.NonRetryableTaskException;
@@ -30,15 +31,18 @@ public class SandboxDispatchTaskHandler implements AsyncTaskHandler {
     private final SandboxRunRepository repository;
     private final SandboxControllerClient controllerClient;
     private final KubeOnCallProperties properties;
+    private final KubeOnCallMetricsService metrics;
     private final Clock clock = Clock.systemUTC();
 
     public SandboxDispatchTaskHandler(
             SandboxRunRepository repository,
             SandboxControllerClient controllerClient,
-            KubeOnCallProperties properties) {
+            KubeOnCallProperties properties,
+            KubeOnCallMetricsService metrics) {
         this.repository = repository;
         this.controllerClient = controllerClient;
         this.properties = properties;
+        this.metrics = metrics;
     }
 
     @Override
@@ -70,12 +74,15 @@ public class SandboxDispatchTaskHandler implements AsyncTaskHandler {
         try {
             SandboxControllerClient.DispatchResult dispatched = controllerClient.dispatch(run);
             context.requireValidLease();
+            metrics.recordSandboxRunEvent("dispatched", run.mode().name(), run.toolId(), "success");
             return new HandlerResult(Map.of(
                     "runId", run.publicId(),
                     "controllerRunId", dispatched.controllerRunId(),
                     "controllerPhase", dispatched.phase(),
                     "status", "DISPATCHED"));
         } catch (SandboxControllerClientException ex) {
+            metrics.recordSandboxRunEvent(
+                    "dispatch", run.mode().name(), run.toolId(), ex.retryable() ? "deferred" : ex.getMessage());
             if (!ex.retryable()) {
                 failOwnedRun(run, context, ex);
                 throw new NonRetryableTaskException(ex.getMessage());

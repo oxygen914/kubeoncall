@@ -1,0 +1,19 @@
+{
+  "title": "KubeOnCall Sandbox Operations",
+  "uid": "kubeoncall-sandbox",
+  "schemaVersion": 39,
+  "refresh": "30s",
+  "time": {"from": "now-6h", "to": "now"},
+  "panels": [
+    {"type": "stat", "title": "Active runs", "gridPos": {"x": 0, "y": 0, "w": 6, "h": 4}, "targets": [{"expr": "sum(kubeoncall_sandbox_runs{status=~\"PENDING|DISPATCHING|RUNNING|COLLECTING\"})"}]},
+    {"type": "stat", "title": "Oldest active run", "gridPos": {"x": 6, "y": 0, "w": 6, "h": 4}, "fieldConfig": {"defaults": {"unit": "s"}}, "targets": [{"expr": "max(kubeoncall_sandbox_oldest_active_age_seconds)"}]},
+    {"type": "stat", "title": "Cleanup leaks", "gridPos": {"x": 12, "y": 0, "w": 6, "h": 4}, "targets": [{"expr": "sum(kubeoncall_sandbox_cleanup{status=~\"PENDING|RUNNING|FAILED\"})"}]},
+    {"type": "stat", "title": "Controller error rate", "gridPos": {"x": 18, "y": 0, "w": 6, "h": 4}, "targets": [{"expr": "sum(rate(kubeoncall_sandbox_controller_requests_total{outcome=\"error\"}[5m])) / clamp_min(sum(rate(kubeoncall_sandbox_controller_requests_total[5m])), 0.001)"}]},
+    {"type": "timeseries", "title": "Run lifecycle by mode and outcome", "gridPos": {"x": 0, "y": 4, "w": 12, "h": 8}, "targets": [{"expr": "sum by (mode, event, outcome) (rate(kubeoncall_sandbox_run_events_total[5m]))", "legendFormat": "{{mode}} / {{event}} / {{outcome}}"}]},
+    {"type": "timeseries", "title": "Run duration by mode and tool", "gridPos": {"x": 12, "y": 4, "w": 12, "h": 8}, "fieldConfig": {"defaults": {"unit": "ms"}}, "targets": [{"expr": "sum by (mode, tool, outcome) (rate(kubeoncall_sandbox_run_duration_ms_sum[5m])) / clamp_min(sum by (mode, tool, outcome) (rate(kubeoncall_sandbox_run_duration_ms_count[5m])), 0.001)", "legendFormat": "{{mode}} / {{tool}} / {{outcome}}"}]},
+    {"type": "timeseries", "title": "Run and cleanup backlog", "gridPos": {"x": 0, "y": 12, "w": 12, "h": 8}, "targets": [{"expr": "kubeoncall_sandbox_runs", "legendFormat": "run / {{status}}"}, {"expr": "kubeoncall_sandbox_cleanup", "legendFormat": "cleanup / {{status}}"}, {"expr": "kubeoncall_sandbox_oldest_cleanup_pending_age_seconds", "legendFormat": "oldest cleanup age"}]},
+    {"type": "timeseries", "title": "Controller request outcome and latency", "gridPos": {"x": 12, "y": 12, "w": 12, "h": 8}, "fieldConfig": {"defaults": {"unit": "ms"}}, "targets": [{"expr": "sum by (operation, outcome, error) (rate(kubeoncall_sandbox_controller_requests_total[5m]))", "legendFormat": "{{operation}} / {{outcome}} / {{error}}"}, {"expr": "sum by (operation) (rate(kubeoncall_sandbox_controller_latency_ms_sum[5m])) / clamp_min(sum by (operation) (rate(kubeoncall_sandbox_controller_latency_ms_count[5m])), 0.001)", "legendFormat": "{{operation}} latency"}]},
+    {"type": "timeseries", "title": "Failure and policy reasons", "gridPos": {"x": 0, "y": 20, "w": 12, "h": 8}, "targets": [{"expr": "sum by (mode, tool, outcome) (increase(kubeoncall_sandbox_run_events_total{event=~\"failure_reason|policy_denied\"}[5m]))", "legendFormat": "{{mode}} / {{tool}} / {{outcome}}"}]},
+    {"type": "timeseries", "title": "Artifact operations and bytes", "gridPos": {"x": 12, "y": 20, "w": 12, "h": 8}, "targets": [{"expr": "sum by (operation, type, classification, outcome) (rate(kubeoncall_sandbox_artifacts_total[5m]))", "legendFormat": "{{operation}} / {{type}} / {{classification}} / {{outcome}}"}, {"expr": "sum by (type) (rate(kubeoncall_sandbox_artifact_bytes_sum[5m]))", "legendFormat": "{{type}} bytes/s"}]}
+  ]
+}

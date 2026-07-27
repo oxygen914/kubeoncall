@@ -9,4 +9,6 @@ metadata:
 data:
   kubeoncall-overview.json: |-
 {{ .Files.Get "dashboards/kubeoncall-overview.json" | indent 4 }}
+  kubeoncall-sandbox.json: |-
+{{ .Files.Get "dashboards/kubeoncall-sandbox.json" | indent 4 }}
 {{- end }}

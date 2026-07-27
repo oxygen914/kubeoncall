@@ -108,6 +108,19 @@ class SandboxControllerClientTest {
     }
 
     @Test
+    void exposesOnlyBoundedControllerFailureReasonsForMetricsClassification() throws Exception {
+        start(
+                exchange -> respond(
+                        exchange,
+                        200,
+                        "{\"runId\":\"sbx_abc\",\"phase\":\"FAILED\",\"exists\":true,\"failedPods\":[{\"reason\":\"OOMKilled\"},{\"reason\":\"ImagePullBackOff\"}]}"));
+
+        SandboxControllerClient.ControllerStatus status = client(500).status(run());
+
+        assertThat(status.failureReasons()).containsExactly("OOMKilled", "ImagePullBackOff");
+    }
+
+    @Test
     void usesTheManifestValidationArtifactForValidationRuns() throws Exception {
         AtomicReference<byte[]> capturedBody = new AtomicReference<>();
         start(exchange -> {
@@ -187,7 +200,11 @@ class SandboxControllerClientTest {
             throw new IllegalStateException(ex);
         }
         return new SandboxControllerClient(
-                properties, new DependencyCircuitBreaker(properties, metrics()), new ObjectMapper(), artifactStore);
+                properties,
+                new DependencyCircuitBreaker(properties, metrics()),
+                new ObjectMapper(),
+                artifactStore,
+                metrics());
     }
 
     @SuppressWarnings("unchecked")

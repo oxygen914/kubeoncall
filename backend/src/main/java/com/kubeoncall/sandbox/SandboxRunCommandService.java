@@ -22,6 +22,7 @@ import com.kubeoncall.sandbox.domain.SandboxRunMode;
 import com.kubeoncall.sandbox.policy.SandboxExecutionPolicy;
 import com.kubeoncall.sandbox.policy.SandboxToolCatalog;
 import com.kubeoncall.sandbox.policy.SandboxToolSpec;
+import com.kubeoncall.service.KubeOnCallMetricsService;
 import com.kubeoncall.task.AsyncTaskRepository;
 
 /**
@@ -46,6 +47,7 @@ public class SandboxRunCommandService {
     private final OutboxWriter outboxWriter;
     private final IdempotencyService idempotencyService;
     private final ObjectMapper objectMapper;
+    private final KubeOnCallMetricsService metrics;
 
     public SandboxRunCommandService(
             ObjectProvider<SandboxRunRepository> repositoryProvider,
@@ -56,7 +58,8 @@ public class SandboxRunCommandService {
             OperationAuditWriter auditWriter,
             OutboxWriter outboxWriter,
             IdempotencyService idempotencyService,
-            ObjectMapper objectMapper) {
+            ObjectMapper objectMapper,
+            KubeOnCallMetricsService metrics) {
         this.repositoryProvider = repositoryProvider;
         this.taskRepositoryProvider = taskRepositoryProvider;
         this.toolCatalogProvider = toolCatalogProvider;
@@ -66,6 +69,7 @@ public class SandboxRunCommandService {
         this.outboxWriter = outboxWriter;
         this.idempotencyService = idempotencyService;
         this.objectMapper = objectMapper;
+        this.metrics = metrics;
     }
 
     public boolean isAvailable() {
@@ -106,6 +110,7 @@ public class SandboxRunCommandService {
                 command.generatedCodeAutoRun(),
                 command.approvalWaiverRequested());
         if (!decision.isAllowed()) {
+            metrics.recordSandboxRunEvent("policy_denied", command.mode().name(), tool.id(), decision.denialReason());
             throw invalid(decision.denialReason());
         }
         SandboxRunRepository repository = requiredRepository();
@@ -165,6 +170,7 @@ public class SandboxRunCommandService {
                         run.mode().name()),
                 command.requestId()));
         idempotencyService.succeed(scope, key, 202, response, "sandbox-run", run.publicId());
+        metrics.recordSandboxRunEvent("created", run.mode().name(), run.toolId(), "queued");
         return CommandResult.executed(response, 202);
     }
 
@@ -199,6 +205,7 @@ public class SandboxRunCommandService {
                 "sandbox.run.cancelled",
                 Map.of("runId", after.publicId(), "status", after.runStatus().name()),
                 command.requestId()));
+        metrics.recordSandboxRunEvent("cancelled", after.mode().name(), after.toolId(), "accepted");
         return response;
     }
 
