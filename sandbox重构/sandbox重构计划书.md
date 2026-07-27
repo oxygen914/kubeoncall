@@ -8,8 +8,8 @@
 | 制定日期 | 2026-07-27 |
 | 目标项目 | KubeOnCall |
 | 实施状态 | IN_PROGRESS |
-| 代码实现进度 | 33% |
-| 自动化验证进度 | 33% |
+| 代码实现进度 | 38% |
+| 自动化验证进度 | 38% |
 | 真实环境验收进度 | 0%，按阶段单独记录 |
 | 计划提交数 | 24 个，`SBX-00`～`SBX-23` |
 
@@ -419,7 +419,7 @@ helm lint deploy/helm/kubeoncall
 | SBX-05 | `feat(sandbox): add artifact storage boundary` | MinIO Artifact 隔离与校验 | COMPLETED |
 | SBX-06 | `feat(api): add sandbox run lifecycle endpoints` | 创建、查询、取消 API 与审计 | COMPLETED |
 | SBX-07 | `feat(sandbox-controller): scaffold internal service` | 独立 Controller 基座 | COMPLETED |
-| SBX-08 | `feat(sandbox-controller): build hardened jobs` | 安全 JobSpec 生成器 | PLANNED |
+| SBX-08 | `feat(sandbox-controller): build hardened jobs` | 安全 JobSpec 生成器 | COMPLETED |
 | SBX-09 | `feat(sandbox-controller): manage job lifecycle` | 幂等创建、查询和取消 | PLANNED |
 | SBX-10 | `feat(sandbox-controller): collect results and cleanup` | 结果收集、超时和 TTL 清理 | PLANNED |
 | SBX-11 | `feat(deploy): isolate sandbox runtime` | Namespace、RBAC、Quota、NetworkPolicy | PLANNED |
@@ -807,6 +807,17 @@ Codex 审核补充（提交 `420bf60` 后审核，补丁提交 `[SBX-05-fix]`）
 回滚：
 
 - revert Builder；Controller 仍只有健康检查。
+
+完成记录：
+
+- Controller 新增纯函数式 `internal/jobs.Builder` 与受限 `JobSpec` 投影；仅接收 Run ID、服务端
+  Tool ID/Version、Artifact URI 和受控标签，镜像、命令、环境变量、卷和 ServiceAccount 不来自调用方。
+- Tool 必须来自 Controller 的服务端目录且为 `@sha256:` digest；固定 namespace、资源/超时/TTL 天花板、
+  `runAsNonRoot`、只读根文件系统、禁止提权、drop `ALL` capabilities、禁止 host network、privileged
+  与 ServiceAccount Token 自动挂载。
+- 输入仅接受 `minio://` Artifact URI，不把脚本或正文拼接进命令行。非法 Run ID、未知/非 digest Tool、
+  非 Artifact 输入和非 sandbox 标签均拒绝。
+- 验证：`go test ./...` 与 `go vet ./...` 通过；结构测试覆盖安全默认值和恶意输入拒绝。
 
 ### SBX-09：Kubernetes Job 生命周期
 
