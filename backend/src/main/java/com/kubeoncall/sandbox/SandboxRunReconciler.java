@@ -13,6 +13,7 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.kubeoncall.audit.OutboxWriter;
 import com.kubeoncall.common.config.KubeOnCallProperties;
 import com.kubeoncall.sandbox.domain.SandboxArtifactType;
 import com.kubeoncall.sandbox.domain.SandboxClassification;
@@ -37,14 +38,16 @@ public class SandboxRunReconciler {
     private final KubeOnCallProperties properties;
     private final Clock clock;
     private final ObjectMapper objectMapper;
+    private final OutboxWriter outboxWriter;
     private final String ownerToken = "sandbox-reconciler-" + UUID.randomUUID();
 
     public SandboxRunReconciler(
             SandboxRunRepository repository,
             SandboxControllerClient controller,
             SandboxArtifactStore artifactStore,
-            KubeOnCallProperties properties) {
-        this(repository, controller, artifactStore, properties, Clock.systemUTC());
+            KubeOnCallProperties properties,
+            OutboxWriter outboxWriter) {
+        this(repository, controller, artifactStore, properties, outboxWriter, Clock.systemUTC());
     }
 
     SandboxRunReconciler(
@@ -52,6 +55,7 @@ public class SandboxRunReconciler {
             SandboxControllerClient controller,
             SandboxArtifactStore artifactStore,
             KubeOnCallProperties properties,
+            OutboxWriter outboxWriter,
             Clock clock) {
         this.repository = repository;
         this.controller = controller;
@@ -59,6 +63,7 @@ public class SandboxRunReconciler {
         this.properties = properties;
         this.clock = clock;
         this.objectMapper = new ObjectMapper();
+        this.outboxWriter = outboxWriter;
     }
 
     @Scheduled(fixedDelayString = "${kubeoncall.sandbox.reconcile-poll-millis:1000}")
@@ -301,7 +306,18 @@ public class SandboxRunReconciler {
     private void markCleanupPending(String runId, Instant now) {
         SandboxRunRecord terminal = repository.findByPublicId(runId).orElse(null);
         if (terminal != null && terminal.cleanupStatus() == SandboxCleanupStatus.NOT_REQUIRED) {
-            repository.transitionCleanupStatus(runId, terminal.version(), SandboxCleanupStatus.PENDING, now);
+            if (repository.transitionCleanupStatus(runId, terminal.version(), SandboxCleanupStatus.PENDING, now)) {
+                outboxWriter.enqueue(OutboxWriter.OutboxEvent.of(
+                        "sandbox-run",
+                        terminal.publicId(),
+                        "sandbox.run.terminal",
+                        Map.of(
+                                "runId", terminal.publicId(),
+                                "executionId", terminal.executionPublicId() == null ? "" : terminal.executionPublicId(),
+                                "status", terminal.runStatus().name(),
+                                "mode", terminal.mode().name()),
+                        terminal.requestId()));
+            }
         }
     }
 

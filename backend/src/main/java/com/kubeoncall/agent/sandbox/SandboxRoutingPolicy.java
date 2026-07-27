@@ -30,6 +30,9 @@ public class SandboxRoutingPolicy {
         if (!properties.getSandbox().isAgentAutoRouteEnabled()) {
             return Decision.no("agent auto-route is disabled");
         }
+        if (context != null && context.containsKey("sandboxEvidence")) {
+            return Decision.no("terminal sandbox evidence is pending verifier review");
+        }
         String text = (request == null ? "" : request).toLowerCase(Locale.ROOT);
         if (task == null || isReadOnlyQuery(task)) {
             return Decision.no("ordinary read-only query remains on its existing tool path");

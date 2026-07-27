@@ -18,6 +18,7 @@ import java.util.Optional;
 
 import org.junit.jupiter.api.Test;
 
+import com.kubeoncall.audit.OutboxWriter;
 import com.kubeoncall.common.config.KubeOnCallProperties;
 import com.kubeoncall.sandbox.domain.SandboxCleanupStatus;
 import com.kubeoncall.sandbox.domain.SandboxRiskLevel;
@@ -132,7 +133,12 @@ class SandboxRunReconcilerTest {
         KubeOnCallProperties properties = new KubeOnCallProperties();
         properties.getSandbox().setControllerReadTimeoutMillis(5000);
         return new SandboxRunReconciler(
-                repository, controller, mock(SandboxArtifactStore.class), properties, Clock.fixed(NOW, ZoneOffset.UTC));
+                repository,
+                controller,
+                mock(SandboxArtifactStore.class),
+                properties,
+                mock(OutboxWriter.class),
+                Clock.fixed(NOW, ZoneOffset.UTC));
     }
 
     private static SandboxRunRecord run(SandboxRunStatus status, long fence, Instant expiresAt) {

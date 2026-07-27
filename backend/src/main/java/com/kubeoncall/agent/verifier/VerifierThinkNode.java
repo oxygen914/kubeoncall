@@ -78,6 +78,14 @@ public class VerifierThinkNode extends ThinkNode {
         ToolDefinition toolDefinition = resolveToolDefinition(task, executionPlan);
         RiskLevel activatedSkillMaxRisk = readActivatedSkillMaxRisk(context);
 
+        if (context != null && context.containsKey("sandboxEvidence")) {
+            if (!hasCurrentProductionRecheck(context)) {
+                reasons.add("Sandbox evidence has no successful current production recheck");
+                return new Evaluation("REJECT", reasons, detailMap(task, executionPlan, null, reasons, context));
+            }
+            reasons.add("Sandbox-derived remediation requires human approval");
+        }
+
         if (toolDefinition == null) {
             reasons.add("No executor tool is registered for the planned task action");
             return new Evaluation("REJECT", reasons, detailMap(task, executionPlan, null, reasons, context));
@@ -201,6 +209,14 @@ public class VerifierThinkNode extends ThinkNode {
         } catch (IllegalArgumentException ignored) {
             return null;
         }
+    }
+
+    private static boolean hasCurrentProductionRecheck(Map<String, Object> context) {
+        Object raw = context.get("productionRecheck");
+        if (!(raw instanceof Map<?, ?> recheck)) {
+            return false;
+        }
+        return "CURRENT".equals(String.valueOf(recheck.get("status")));
     }
 
     private void putIfPresent(Map<String, Object> details, Map<String, Object> context, String key) {

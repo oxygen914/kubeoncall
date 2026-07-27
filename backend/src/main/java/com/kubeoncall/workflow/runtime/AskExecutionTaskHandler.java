@@ -42,7 +42,9 @@ public class AskExecutionTaskHandler implements AsyncTaskHandler {
     public HandlerResult handle(AsyncTaskContext context) {
         WorkflowExecutionRecord execution =
                 coordinator.requiredExecution(context.task().resourcePublicId());
-        if (coordinator.isDurablyFinished(execution) || "WAITING_APPROVAL".equals(execution.status())) {
+        if (coordinator.isDurablyFinished(execution)
+                || "WAITING_APPROVAL".equals(execution.status())
+                || "WAITING_SANDBOX".equals(execution.status())) {
             if (coordinator.isDurablyFinished(execution)) {
                 clearCheckpointBestEffort(execution.publicId());
             }

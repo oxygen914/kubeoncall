@@ -116,14 +116,16 @@ public class WorkflowTaskResultCoordinator {
     public FinalizationResult finalizeResult(
             AsyncTaskContext context, AskService.AskExecutionResult result, String phase) {
         WorkflowExecutionRecord current = requiredExecution(context.task().resourcePublicId());
-        if (isDurablyFinished(current) || "WAITING_APPROVAL".equals(current.status())) {
+        if (isDurablyFinished(current)
+                || "WAITING_APPROVAL".equals(current.status())
+                || "WAITING_SANDBOX".equals(current.status())) {
             return existingResult(current);
         }
         guardLease(context);
         Instant now = Instant.now();
         persistNodes(current, result, now);
 
-        String durableStatus = durableStatus(result.status());
+        String durableStatus = durableStatus(result);
         boolean terminal = isTerminalStatus(durableStatus);
         ApprovalRequestRecord approval = null;
         if ("WAITING_APPROVAL".equals(durableStatus)) {
@@ -271,7 +273,7 @@ public class WorkflowTaskResultCoordinator {
             WorkflowNodeExecutionRecord created =
                     executionRepository.createNode(new WorkflowExecutionRepository.CreateNodeExecution(
                             null, execution.publicId(), nodeName, "AGENT_NODE", attempt, "RUNNING", null, now));
-            String status = nodeStatus(node.status());
+            String status = nodeStatus(node, isSandboxPause(result));
             String errorCode = node.status() == NodeStatus.FAILURE || node.status() == NodeStatus.RETRY
                     ? firstNonBlank(node.retryReason(), node.status().name())
                     : null;
@@ -347,7 +349,32 @@ public class WorkflowTaskResultCoordinator {
         return payload;
     }
 
-    private static String durableStatus(String graphStatus) {
+    public WorkflowExecutionRecord markSandboxRecovering(AsyncTaskContext context) {
+        WorkflowExecutionRecord current = requiredExecution(context.task().resourcePublicId());
+        if (!"WAITING_SANDBOX".equals(current.status())) {
+            return current;
+        }
+        guardLease(context);
+        Instant now = Instant.now();
+        if (!executionRepository.updateStatus(
+                current.publicId(), current.version(), "RUNNING", null, null, null, null, null)) {
+            throw versionConflict(current.publicId());
+        }
+        WorkflowExecutionRecord updated = requiredExecution(current.publicId());
+        outboxWriter.enqueue(OutboxWriter.OutboxEvent.of(
+                "execution",
+                updated.publicId(),
+                "execution.updated",
+                eventPayload(updated, null),
+                context.task().requestId()));
+        return updated;
+    }
+
+    private static String durableStatus(AskService.AskExecutionResult result) {
+        if (isSandboxPause(result)) {
+            return "WAITING_SANDBOX";
+        }
+        String graphStatus = result.status();
         GraphStatus status;
         try {
             status = GraphStatus.valueOf(graphStatus);
@@ -373,15 +400,30 @@ public class WorkflowTaskResultCoordinator {
         return null;
     }
 
-    private static String nodeStatus(NodeStatus status) {
+    private static String nodeStatus(NodeResult node, boolean sandboxPause) {
+        NodeStatus status = node.status();
         if (status == null) {
             return "FAILED";
         }
         return switch (status) {
             case SUCCESS -> "SUCCEEDED";
-            case WAITING -> "WAITING_APPROVAL";
+            case WAITING ->
+                sandboxPause && "executorThinkNode".equals(node.nodeName()) ? "WAITING_SANDBOX" : "WAITING_APPROVAL";
             case FAILURE, RETRY -> "FAILED";
         };
+    }
+
+    private static boolean isSandboxPause(AskService.AskExecutionResult result) {
+        Object rawNodes = result.details().get("nodeResults");
+        if (!(rawNodes instanceof List<?> nodes)) {
+            return false;
+        }
+        return nodes.stream()
+                .filter(NodeResult.class::isInstance)
+                .map(NodeResult.class::cast)
+                .anyMatch(node -> node.status() == NodeStatus.WAITING
+                        && "executorThinkNode".equals(node.nodeName())
+                        && node.payload().containsKey("runId"));
     }
 
     private static boolean isTerminalStatus(String status) {
