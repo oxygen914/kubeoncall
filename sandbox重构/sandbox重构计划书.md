@@ -8,8 +8,8 @@
 | 制定日期 | 2026-07-27 |
 | 目标项目 | KubeOnCall |
 | 实施状态 | IN_PROGRESS |
-| 代码实现进度 | 58%（SBX-00～13 已完成） |
-| 自动化验证进度 | 58%（代码级验证；真实集群待验收） |
+| 代码实现进度 | 63%（SBX-00～14 已完成） |
+| 自动化验证进度 | 63%（代码级验证；真实集群待验收） |
 | 真实环境验收进度 | 0%，按阶段单独记录 |
 | 计划提交数 | 24 个，`SBX-00`～`SBX-23` |
 
@@ -425,7 +425,7 @@ helm lint deploy/helm/kubeoncall
 | SBX-11 | `feat(deploy): isolate sandbox runtime` | Namespace、RBAC、Quota、NetworkPolicy | COMPLETED |
 | SBX-12 | `feat(sandbox): dispatch runs through controller` | Backend Client、短时派发和断路器 | COMPLETED |
 | SBX-13 | `feat(sandbox): reconcile run convergence` | 多实例安全的状态收敛与清理重试 | COMPLETED |
-| SBX-14 | `feat(sandbox): build diagnostic evidence packages` | 证据采集、裁剪、脱敏和哈希 | PLANNED |
+| SBX-14 | `feat(sandbox): build diagnostic evidence packages` | 证据采集、裁剪、脱敏和哈希 | COMPLETED |
 | SBX-15 | `feat(sandbox): add fixed diagnostic tools` | 固定工具目录与首批工具 | PLANNED |
 | SBX-16 | `feat(sandbox): isolate generated code execution` | Python/Shell 受限执行 | PLANNED |
 | SBX-17 | `feat(sandbox): validate manifests and runbooks` | YAML、Helm、Patch、Runbook 校验 | PLANNED |
@@ -1015,6 +1015,17 @@ Codex 审核补充（提交 `ae94ebb` 后审核，补丁提交 `[SBX-09-fix]`）
 
 - revert Builder；不影响现有日志查询工具。
 
+完成记录：
+
+- 新增 `DiagnosticEvidenceBuilder`：统一封装日志、Events、资源描述、指标窗口与资源 YAML；限制 24 小时时间
+  窗口、100 个对象、日志 500 行/项及 8 KiB 单字段，二进制内容只保留哈希占位。
+- 对所有文本应用统一敏感信息脱敏，并额外移除 PEM 私钥；`Secret` YAML 的 `data`/`stringData`/Token 字段不进入
+  证据包。输入按类型/来源稳定排序，以 canonical JSON 计算 SHA-256，重排同一证据不会改变包内容或哈希。
+- 新增 `DiagnosticEvidenceArtifactService`，只将脱敏 canonical JSON 写入 Controller 固定读取的
+  `sandbox/{runId}/inputs/evidence.json`；数据库只保留 Artifact 引用、哈希与 `INTERNAL` 分类，不保存正文。
+- 自动化验证覆盖 Secret、Token、私钥、超长日志、二进制、时间/数量限额、稳定哈希与 Artifact 写入。真实 Kubernetes/
+  Prometheus 数据采集、MinIO 故障恢复和大对象吞吐仍待环境验收。
+
 ### SBX-15：固定诊断工具
 
 改动：
@@ -1256,9 +1267,8 @@ Codex 审核补充（提交 `ae94ebb` 后审核，补丁提交 `[SBX-09-fix]`）
 
 ## 13. 当前停止点
 
-SBX-00～13 已完成（含此前的审核修复）。Backend 已具备 Run/Artifact/API/权限、短时派发任务、
-HMAC Controller Client、断路器和短轮询状态收敛；Controller 已具备基座、hardened JobSpec、生命周期、
-结果收集清理与隔离部署。下一单元为 SBX-14：诊断证据包的采集、裁剪、脱敏和稳定哈希；随后是
-SBX-15 的固定诊断工具目录与可重放样例。
+SBX-00～14 已完成（含此前的审核修复）。Backend 已具备 Run/Artifact/API/权限、短时派发任务、
+HMAC Controller Client、断路器、短轮询状态收敛和脱敏诊断证据包；Controller 已具备基座、hardened JobSpec、
+生命周期、结果收集清理与隔离部署。下一单元为 SBX-15：固定诊断工具目录、Schema 校验与可重放样例。
 
 每次只提交一个 SBX 单元，代码验证通过并产生本地 commit 后再进入下一个单元；远端推送仍需用户单独授权。
