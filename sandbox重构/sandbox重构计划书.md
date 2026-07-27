@@ -8,8 +8,8 @@
 | 制定日期 | 2026-07-27 |
 | 目标项目 | KubeOnCall |
 | 实施状态 | IN_PROGRESS |
-| 代码实现进度 | 21% |
-| 自动化验证进度 | 21% |
+| 代码实现进度 | 25% |
+| 自动化验证进度 | 25% |
 | 真实环境验收进度 | 0%，按阶段单独记录 |
 | 计划提交数 | 24 个，`SBX-00`～`SBX-23` |
 
@@ -416,7 +416,7 @@ helm lint deploy/helm/kubeoncall
 | SBX-02 | `feat(identity): add sandbox permissions` | Sandbox 权限和角色映射 | COMPLETED |
 | SBX-03 | `feat(sandbox): add run policy contracts` | 领域类型、状态机和策略契约 | COMPLETED |
 | SBX-04 | `feat(sandbox): persist runs and artifacts` | MySQL 事实表与 Repository | COMPLETED |
-| SBX-05 | `feat(sandbox): add artifact storage boundary` | MinIO Artifact 隔离与校验 | PLANNED |
+| SBX-05 | `feat(sandbox): add artifact storage boundary` | MinIO Artifact 隔离与校验 | COMPLETED |
 | SBX-06 | `feat(api): add sandbox run lifecycle endpoints` | 创建、查询、取消 API 与审计 | PLANNED |
 | SBX-07 | `feat(sandbox-controller): scaffold internal service` | 独立 Controller 基座 | PLANNED |
 | SBX-08 | `feat(sandbox-controller): build hardened jobs` | 安全 JobSpec 生成器 | PLANNED |
@@ -684,6 +684,29 @@ Codex 审核补充（提交 `2813b51` 后审核，补丁提交 `[SBX-04-fix]`）
 回滚：
 
 - 关闭 Sandbox 后 revert；已写对象由 TTL Janitor 清理。
+
+完成记录：
+
+- 新增独立 `SandboxArtifactStore`（`com.kubeoncall.sandbox`，不复用知识库语义方法名）：
+  对象 key 由服务端按 `sandbox/{runPublicId}/{inputs|outputs|logs|reports}/{flatFilename}` 派生，
+  调用方只给 runId+type+filename，filename 经 `flatFilename` 归一为扁平 basename（取最后路径段、
+  非 `[A-Za-z0-9._-]` 替为 `-`、空/`.`/`..` 回退 `artifact`），永不产生 `/` 或 `..`，从根本上杜绝
+  object-key 穿越。
+- 写入：`store` 先把内容读入有界缓冲（`BoundedDigest`，超 `maxBytes` 立即抛 `TooLargeException`，
+  在任何字节进 MinIO 前强制上限——流式 digest 喂给 putObject 会让 OkHttp 吞掉中途异常并上传截断
+  对象，故改用缓冲校验后再上传），同步计算 SHA-256；MIME 必须在固定 allowlist
+  （json/ndjson/text/plain/yaml/octet-stream）内；按类型取 `SandboxProperties` 的 inputMaxBytes/
+  outputMaxBytes/logMaxBytes 上限（REPORT 复用 output 上限）。返回 `StoredArtifact(bucket, key, mime,
+  size, sha256)` 供 Repository 落库。
+- 读取授权：`presignedGetUrl` 单对象短时 GET URL，TTL≤5 分钟、objectKey 必须以 `sandbox/` 前缀
+  （`requireBucketReference` 拒绝越界 key），URL 不入日志、不持久化。`delete` 幂等（缺失对象即成功）。
+  `listObjectsForRun` 仅返回 `sandbox/{runPublicId}/` 前缀下对象，janitor 无法被指向任意前缀。
+- 测试：`SandboxArtifactStoreKeyTest`（4 例，objectKey 规范前缀、flatFilename 路径剥离/穿越拒绝/无 `/`无 `..`、
+  空 runId/null type 拒绝）；`SandboxArtifactStoreIT`（6 例，真实 MinIO `localhost:9000`：写入+SHA-256+
+  规范 key、超 type 上限拒绝且不写对象、MIME 拒绝、穿越 filename 归一、presigned URL 短时+前缀约束+
+  TTL≤5min、delete 幂等+list 仅 run 前缀）。failsafe 全 65 例通过。
+- ArchUnit：`..sandbox..` 已纳入两条规则，store 不依赖 web 层；`spotless`/`checkstyle`/
+  `git diff --check` 通过。MinIO 关闭时 store bean 仍创建但调用报 `bucket not configured`，不影响现有行为。
 
 ### SBX-06：Run API、审计与事件
 
@@ -1092,13 +1115,12 @@ Codex 审核补充（提交 `2813b51` 后审核，补丁提交 `[SBX-04-fix]`）
 
 ## 13. 当前停止点
 
-SBX-04 已完成：新增 `V16__sandbox_run_artifact.sql`（`koc_sandbox_run`/`koc_sandbox_artifact`，
-`(mode, idempotency_key)` 去重、run/cleanup 状态 CHECK、owner/lease/fencing/version、retention 索引）
-与 `SandboxRunRepository`（幂等 create、claim/claimByPublicId + fencing 前进、heartbeat、
-状态机校验 + owner+fencing+version CAS 的迁移/完成/失败/取消、cleanup 状态机、artifact 引用与
-TTL 查询）。`SandboxConfiguration` 注册无状态 stateMachine/executionPolicy bean。8 例真实 MySQL
-Testcontainers IT 通过（failsafe 全 57 例绿）；既有 4 例失败在父提交已存在，与本单元无关。
-尚未触碰 MinIO Artifact 存储边界（SBX-05）、Controller、部署或 CI。
+SBX-05 已完成：新增独立 `SandboxArtifactStore`——对象 key 服务端按
+`sandbox/{runId}/{inputs|outputs|logs|reports}/` 派生且 filename 归一防穿越；写入先有界缓冲校验上限
+（超限在进 MinIO 前拒绝）再上传并算 SHA-256，MIME 固定 allowlist；presigned GET URL≤5min 且限
+`sandbox/` 前缀；delete 幂等；list 仅返回 run 前缀。4 例 key 单测 + 6 例真实 MinIO IT 通过
+（failsafe 全 65 例绿）；`spotless`/`checkstyle`/`git diff --check` 通过。尚未触碰 Run API
+（SBX-06）、Controller、部署或 CI。
 
 此后每次只提交一个 SBX 单元，验证通过并产生本地 commit 后再进入下一个单元；远端推送
-仍需用户单独授权。下一个单元为 `SBX-05`。
+仍需用户单独授权。下一个单元为 `SBX-06`。
