@@ -203,6 +203,60 @@ class KubeOnCallPropertiesTest {
     }
 
     @Test
+    void sandboxValidateShouldRejectValuesJustOverCeilingWithoutRounding() {
+        // Integer-unit values just over the ceiling must trip the exact ceiling comparison, not round
+        // down past it. 1001m is one millicore over the 1-core ceiling; 1073741825 is one byte over 1Gi.
+        KubeOnCallProperties.Sandbox sandbox = new KubeOnCallProperties().getSandbox();
+        sandbox.setCpu("1001m");
+        sandbox.setMemory("1073741825");
+
+        IllegalStateException ex = assertThrows(IllegalStateException.class, sandbox::validate);
+        String message = ex.getMessage();
+        assertTrue(message.contains("cpu"), message);
+        assertTrue(message.contains("memory"), message);
+    }
+
+    @Test
+    void sandboxValidateShouldRejectFractionalQuantitiesThatDoNotMapToWholeUnits() {
+        // Fractional quantities that do not resolve to a whole unit (millicore or byte) are rejected
+        // rather than silently rounded, so a hair-above-ceiling value can never round down to it.
+        KubeOnCallProperties.Sandbox sandbox = new KubeOnCallProperties().getSandbox();
+        sandbox.setCpu("1.0001");
+        sandbox.setMemory("1.0000001Gi");
+
+        IllegalStateException ex = assertThrows(IllegalStateException.class, sandbox::validate);
+        String message = ex.getMessage();
+        assertTrue(message.contains("cpu"), message);
+        assertTrue(message.contains("memory"), message);
+    }
+
+    @Test
+    void sandboxValidateShouldRejectJavaOnlyNumericFormsThatKubernetesWouldReject() {
+        KubeOnCallProperties.Sandbox sandbox = new KubeOnCallProperties().getSandbox();
+        sandbox.setCpu("0x1.0p0");
+        sandbox.setMemory("1f");
+
+        IllegalStateException ex = assertThrows(IllegalStateException.class, sandbox::validate);
+        String message = ex.getMessage();
+        assertTrue(message.contains("cpu"), message);
+        assertTrue(message.contains("memory"), message);
+    }
+
+    @Test
+    void sandboxValidateShouldNormalizeSurroundingWhitespaceOnQuantities() {
+        KubeOnCallProperties.Sandbox sandbox = new KubeOnCallProperties().getSandbox();
+        sandbox.setCpu(" 1 ");
+        sandbox.setMemory(" 1Gi ");
+        sandbox.setEphemeralStorage(" 2Gi ");
+        sandbox.validate();
+
+        // The canonical trimmed form is what capabilities and downstream consumers see.
+        assertEquals("1", sandbox.getCpu());
+        assertEquals("1Gi", sandbox.getMemory());
+        assertEquals("2Gi", sandbox.getEphemeralStorage());
+    }
+
+    @Test
     void sandboxValidateShouldRejectControllerCallLimits() {
         KubeOnCallProperties.Sandbox sandbox = new KubeOnCallProperties().getSandbox();
         sandbox.setControllerConnectTimeoutMillis(0);

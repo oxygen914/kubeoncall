@@ -488,17 +488,23 @@ helm lint deploy/helm/kubeoncall
 - 关闭 Sandbox 时 `KubeOnCallApplicationTests.contextLoads` 与 `V1ApiContractTest` 通过；
   既有失败（`ApiTokensControllerTest`、`LegacyApiDeprecationWebTest`）在父提交已存在，与本单元无关。
 
-Codex 审核补充（提交 `7712ccb` 后审核，补丁提交 `[SBX-01-fix]`）：
+Codex 审核补充（提交 `7712ccb` 后审核，补丁提交 `[SBX-01-fix]`、`[SBX-01-fix2]`）：
 
 - CPU/内存/临时存储原先仅校验非空，`cpu=2`、`memory=2Gi`、`cpu=banana` 可越过 §7.1 硬上限
-  通过启动校验并被回显为已校验限制。新增轻量 Kubernetes 量纲解析（CPU millicores、字节
+  通过启动校验并被回显为已校验限制。新增 Kubernetes 量纲解析（CPU millicores、字节
   二进制/十进制后缀），在 `validate()` 中对 CPU≤1 核、内存≤1Gi、临时存储≤2Gi 强校验，
   越限或畸形（负值、未知后缀）一律收集为违规字段；SBX-08 JobSpec Builder 仍二次校验。
 - Controller 调用超时/最大响应原先未校验，零/负超时或无界响应可在总开关开启时启动成功。
   新增 `controllerConnectTimeoutMillis`≤30s、`controllerReadTimeoutMillis`≤60s、
   `controllerMaxResponseBytes`≤16MiB 的硬上限与正数校验。
-- 测试新增 4 例：K8s 量纲越限、畸形量纲、边界与交替形式（`1000m`/`1024Mi`/`2048Mi`）、
-  Controller 调用限制越限。`KubeOnCallPropertiesTest` 共 12 例全通过。
+- 第二轮审核指出解析精度与语法问题：`double`+`Math.round` 会让略超上限的小数向下取整越过
+  上限（如 `1.0001` 核），`Double.parseDouble` 接受 `0x1.0p0`/`1f` 等 Kubernetes 不接受的
+  Java 数值形式，且校验 trim 但未归一存储。改为 `BigDecimal` 精确运算 + `longValueExact()`
+  （非整单位小数一律拒绝而非取整），显式 Kubernetes 十进制语法（拒绝 Java-only 形式），
+  并在 `validate()` 中将 CPU/内存/临时存储归一为 trim 后的规范值，避免回显被 K8s 拒绝的串。
+- 测试新增 8 例：K8s 量纲越限、畸形量纲、边界与交替形式（`1000m`/`1024Mi`/`2048Mi`）、
+  Controller 调用限制越限、整数单位刚好越上限（`1001m`/`1073741825`）、非整单位小数拒绝、
+  Java-only 数值形式拒绝、空格归一。`KubeOnCallPropertiesTest` 共 16 例全通过。
 
 回滚：
 

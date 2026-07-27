@@ -316,6 +316,9 @@ class SandboxProperties {
                     HardLimits.MAX_CPU_MILLICORES,
                     "millicores",
                     SandboxProperties::parseCpuMillicores);
+            // Normalize to the canonical trimmed form so capabilities and downstream consumers
+            // never emit a value that Kubernetes would reject for surrounding whitespace.
+            cpu = cpu.trim();
         }
         if (memory == null || memory.isBlank()) {
             violations.put("memory", "must be a non-blank Kubernetes quantity");
@@ -327,6 +330,7 @@ class SandboxProperties {
                     HardLimits.MAX_MEMORY_BYTES,
                     "bytes",
                     SandboxProperties::parseByteQuantity);
+            memory = memory.trim();
         }
         if (ephemeralStorage == null || ephemeralStorage.isBlank()) {
             violations.put("ephemeralStorage", "must be a non-blank Kubernetes quantity");
@@ -338,6 +342,7 @@ class SandboxProperties {
                     HardLimits.MAX_EPHEMERAL_STORAGE_BYTES,
                     "bytes",
                     SandboxProperties::parseByteQuantity);
+            ephemeralStorage = ephemeralStorage.trim();
         }
         validateControllerCall(violations);
         if (!violations.isEmpty()) {
@@ -355,7 +360,9 @@ class SandboxProperties {
         Long parsed;
         try {
             parsed = parser.apply(value);
-        } catch (IllegalArgumentException ex) {
+        } catch (RuntimeException ex) {
+            // IllegalArgumentException = malformed/non-kubernetes syntax; ArithmeticException =
+            // a fractional quantity that does not map to a whole unit (e.g. 0.5001 cores).
             violations.put(field, "must be a valid Kubernetes quantity: " + value);
             return;
         }
@@ -387,55 +394,80 @@ class SandboxProperties {
     }
 
     /**
-     * Parses a Kubernetes CPU quantity into millicores. Supports plain cores (e.g. {@code "1"},
-     * {@code "0.5"}) and millicores ({@code "100m"}); rejects negatives and any other suffix, which is
-     * not a valid CPU unit.
+     * Kubernetes-quantity mantissa grammar: an optional sign, then digits with an optional single
+     * decimal point. Deliberately stricter than {@link Double#parseDouble} so Java-only forms such as
+     * {@code 0x1.0p0} or {@code 1f} — which Kubernetes itself rejects — fail loudly here.
+     */
+    private static final java.util.regex.Pattern QUANTITY_MANTISSA =
+            java.util.regex.Pattern.compile("^([+-]?\\d+(?:\\.\\d+)?|[+-]?\\.\\d+)$");
+
+    /**
+     * Parses a Kubernetes CPU quantity into millicores using exact {@link java.math.BigDecimal}
+     * arithmetic, so a value a hair above one core cannot round down past the ceiling. Supports plain
+     * cores (e.g. {@code "1"}, {@code "0.5"}) and millicores ({@code "100m"}); rejects negatives and
+     * any other suffix, which is not a valid CPU unit.
      */
     private static Long parseCpuMillicores(String value) {
         String trimmed = value.trim();
         if (trimmed.endsWith("m")) {
-            return Long.parseLong(trimmed.substring(0, trimmed.length() - 1));
+            java.math.BigDecimal millicores = new java.math.BigDecimal(trimmed.substring(0, trimmed.length() - 1));
+            if (millicores.signum() < 0) {
+                throw new IllegalArgumentException("negative cpu");
+            }
+            return millicores.setScale(0, java.math.RoundingMode.UNNECESSARY).longValueExact();
         }
-        double cores = Double.parseDouble(trimmed);
-        if (cores < 0) {
+        if (!QUANTITY_MANTISSA.matcher(trimmed).matches()) {
+            throw new IllegalArgumentException("non-kubernetes cpu quantity: " + value);
+        }
+        java.math.BigDecimal cores = new java.math.BigDecimal(trimmed);
+        if (cores.signum() < 0) {
             throw new IllegalArgumentException("negative cpu");
         }
-        return Math.round(cores * 1000L);
+        return cores.multiply(java.math.BigDecimal.valueOf(1000L))
+                .setScale(0, java.math.RoundingMode.UNNECESSARY)
+                .longValueExact();
     }
 
     /**
-     * Parses a Kubernetes storage/byte quantity into bytes. Supports binary (Ki/Mi/Gi/Ti) and decimal
-     * (K/M/G/T, case-insensitive for kilo) suffixes as well as plain bytes; rejects unknown suffixes
-     * and negatives so misconfiguration fails loudly rather than being advertised as a valid limit.
+     * Parses a Kubernetes storage/byte quantity into bytes using exact {@link java.math.BigDecimal}
+     * arithmetic, so a fractional value just over the ceiling cannot round down and slip through.
+     * Supports binary (Ki/Mi/Gi/Ti) and decimal (k/K/M/G/T) suffixes as well as plain bytes; rejects
+     * unknown suffixes, Java-only numeric forms and negatives so misconfiguration fails loudly rather
+     * than being advertised as a valid limit.
      */
     private static Long parseByteQuantity(String value) {
         String trimmed = value.trim();
         if (trimmed.isEmpty()) {
             return null;
         }
-        java.util.regex.Matcher matcher = java.util.regex.Pattern.compile("^([+-]?\\d+(?:\\.\\d+)?)([A-Za-z]*)$")
+        java.util.regex.Matcher matcher = java.util.regex.Pattern.compile(
+                        "^([+-]?(?:\\d+(?:\\.\\d+)?|\\.\\d+))([A-Za-z]*)$")
                 .matcher(trimmed);
         if (!matcher.matches()) {
             throw new IllegalArgumentException("unparseable quantity: " + value);
         }
-        double mantissa = Double.parseDouble(matcher.group(1));
-        if (mantissa < 0) {
+        java.math.BigDecimal mantissa = new java.math.BigDecimal(matcher.group(1));
+        if (mantissa.signum() < 0) {
             throw new IllegalArgumentException("negative quantity");
         }
-        long multiplier =
+        java.math.BigDecimal multiplier =
                 switch (matcher.group(2)) {
-                    case "" -> 1L;
-                    case "Ki" -> 1L << 10;
-                    case "Mi" -> 1L << 20;
-                    case "Gi" -> 1L << 30;
-                    case "Ti" -> 1L << 40;
-                    case "k", "K" -> 1_000L;
-                    case "M" -> 1_000_000L;
-                    case "G" -> 1_000_000_000L;
-                    case "T" -> 1_000_000_000_000L;
+                    case "" -> java.math.BigDecimal.ONE;
+                    case "Ki" -> java.math.BigDecimal.valueOf(1L << 10);
+                    case "Mi" -> java.math.BigDecimal.valueOf(1L << 20);
+                    case "Gi" -> java.math.BigDecimal.valueOf(1L << 30);
+                    case "Ti" -> java.math.BigDecimal.valueOf(1L << 40);
+                    case "k", "K" -> java.math.BigDecimal.valueOf(1_000L);
+                    case "M" -> java.math.BigDecimal.valueOf(1_000_000L);
+                    case "G" -> java.math.BigDecimal.valueOf(1_000_000_000L);
+                    case "T" -> java.math.BigDecimal.valueOf(1_000_000_000_000L);
                     default -> throw new IllegalArgumentException("unknown quantity suffix: " + matcher.group(2));
                 };
-        return Math.round(mantissa * multiplier);
+        java.math.BigDecimal bytes = mantissa.multiply(multiplier);
+        if (bytes.compareTo(java.math.BigDecimal.valueOf(Long.MAX_VALUE)) > 0) {
+            throw new IllegalArgumentException("quantity overflows long: " + value);
+        }
+        return bytes.setScale(0, java.math.RoundingMode.UNNECESSARY).longValueExact();
     }
 
     /**
