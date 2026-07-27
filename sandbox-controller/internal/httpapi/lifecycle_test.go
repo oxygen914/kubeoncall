@@ -17,6 +17,7 @@ import (
 type fakeManager struct {
 	created []jobs.Request
 	status  LifecycleStatus
+	result  LifecycleResult
 	err     error
 	cancels []string
 }
@@ -33,6 +34,10 @@ func (fake *fakeManager) Status(_ context.Context, _ string) (LifecycleStatus, e
 func (fake *fakeManager) Cancel(_ context.Context, runID string) (LifecycleStatus, error) {
 	fake.cancels = append(fake.cancels, runID)
 	return fake.status, fake.err
+}
+
+func (fake *fakeManager) Collect(_ context.Context, _ string, _ int64) (LifecycleResult, error) {
+	return fake.result, fake.err
 }
 
 func signedLifecycle(config Config, method, path string, body []byte, nonce string) *http.Request {
@@ -122,12 +127,21 @@ func TestNilManagerReportsNotReadyForLifecycle(t *testing.T) {
 	}
 }
 
-func TestLogsEndpointReturnsNotReady(t *testing.T) {
+func TestLogsEndpointCollectsResultThroughManager(t *testing.T) {
 	config := testConfig()
-	server := NewServerWithManager(config, &fakeManager{status: LifecycleStatus{Exists: true}})
+	manager := &fakeManager{result: LifecycleResult{RunID: "sbx_a1b2", Phase: "FAILED", Reason: "OOM", Logs: "killed by OOM\n[REDACTED]\n"}}
+	server := NewServerWithManager(config, manager)
+
 	response := httptest.NewRecorder()
 	server.Handler().ServeHTTP(response, signedLifecycle(config, http.MethodGet, "/internal/v1/runs/sbx_a1b2/logs", nil, "nonce-logs-00000001"))
-	if response.Code != http.StatusNotImplemented {
-		t.Fatalf("logs status = %d", response.Code)
+	if response.Code != http.StatusOK {
+		t.Fatalf("logs status = %d body=%s", response.Code, response.Body.String())
+	}
+	var result LifecycleResult
+	if err := json.Unmarshal(response.Body.Bytes(), &result); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if result.Phase != "FAILED" || result.Reason != "OOM" {
+		t.Fatalf("result = %+v", result)
 	}
 }

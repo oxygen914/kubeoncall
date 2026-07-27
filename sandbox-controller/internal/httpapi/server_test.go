@@ -65,7 +65,7 @@ func TestInternalRunRejectsOversizedRequestBeforeAuthentication(t *testing.T) {
 }
 
 func testConfig() Config {
-	return Config{ListenAddress: ":0", BackendKeyID: "backend", BackendHMACSecret: "test-secret", ClockSkew: time.Minute, RequestTimeout: time.Second, ShutdownTimeout: time.Second, MaxRequestBytes: 1024, MaxConcurrent: 1}
+	return Config{ListenAddress: ":0", BackendKeyID: "backend", BackendHMACSecret: "test-secret", ClockSkew: time.Minute, RequestTimeout: time.Second, ShutdownTimeout: time.Second, MaxRequestBytes: 1024, MaxConcurrent: 1, LogLimitBytes: 1024}
 }
 func signedRequest(config Config, body []byte, unix int64, nonce string) *http.Request {
 	request := httptest.NewRequest(http.MethodPost, "/internal/v1/runs", strings.NewReader(string(body)))

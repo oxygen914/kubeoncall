@@ -32,6 +32,8 @@ type Config struct {
 	Tools map[string]jobs.Tool
 	// JobCeiling is the immutable resource ceiling applied to every Job.
 	JobCeiling jobs.Limits
+	// LogLimitBytes is the byte ceiling on collected pod logs (§7.1 default 2 MiB).
+	LogLimitBytes int64
 }
 
 func LoadConfigFromEnv() (Config, error) {
@@ -53,6 +55,7 @@ func LoadConfigFromEnv() (Config, error) {
 			TimeoutSeconds: 300,
 			TTLSeconds:     86400,
 		},
+		LogLimitBytes: int64Env("SANDBOX_CONTROLLER_LOG_LIMIT_BYTES", 2*1024*1024),
 	}
 	if config.BackendHMACSecret == "" || config.MaxRequestBytes < 1024 || config.MaxConcurrent < 1 {
 		return Config{}, fmt.Errorf("backend HMAC secret, request limit and concurrency must be configured safely")
@@ -87,6 +90,7 @@ type LifecycleManager interface {
 	EnsureJob(ctx context.Context, request jobs.Request, expiresAt time.Time) (LifecycleStatus, error)
 	Status(ctx context.Context, runID string) (LifecycleStatus, error)
 	Cancel(ctx context.Context, runID string) (LifecycleStatus, error)
+	Collect(ctx context.Context, runID string, logLimit int64) (LifecycleResult, error)
 }
 
 // LifecycleStatus mirrors kubernetes.Status without importing that package here.
@@ -99,6 +103,18 @@ type LifecycleStatus struct {
 	FailedPods []struct {
 		Name, Reason string
 	}
+}
+
+// LifecycleResult mirrors kubernetes.Result: normalized outcome with redacted, size-bounded logs.
+type LifecycleResult struct {
+	RunID       string
+	Phase       string
+	ExitCode    *int32
+	Reason      string
+	Logs        string
+	StartedAt   *time.Time
+	FinishedAt  *time.Time
+	OutputFound bool
 }
 
 func NewServer(config Config) *Server {
@@ -188,14 +204,25 @@ func (server *Server) cancelRun(writer http.ResponseWriter, request *http.Reques
 	server.writeLifecycleResult(writer, status, err)
 }
 
-// getRunLogs streams truncated pod logs. SBX-10 owns result collection and log scrubbing; until then
-// the endpoint exists with a stable contract so the backend client is not blocked on routing.
+// getRunLogs collects the normalized result — exit code, failure reason and redacted, size-bounded
+// logs — for a run. The controller never streams raw pod logs; logs are truncated and scrubbed of
+// secret-bearing patterns before leaving the cluster.
 func (server *Server) getRunLogs(writer http.ResponseWriter, request *http.Request) {
+	runID := request.PathValue("runId")
 	if !server.authenticateGet(request) {
 		writeError(writer, http.StatusUnauthorized, "UNAUTHENTICATED", "signature verification failed")
 		return
 	}
-	writeError(writer, http.StatusNotImplemented, "LOGS_NOT_READY", "sandbox log collection is not enabled")
+	if server.manager == nil {
+		writeError(writer, http.StatusNotImplemented, "CONTROLLER_NOT_READY", "sandbox job lifecycle is not enabled")
+		return
+	}
+	result, err := server.manager.Collect(request.Context(), runID, server.config.LogLimitBytes)
+	if err != nil {
+		writeError(writer, http.StatusInternalServerError, "LIFECYCLE_ERROR", err.Error())
+		return
+	}
+	writeJSON(writer, http.StatusOK, result)
 }
 
 // authenticateGet verifies the HMAC signature on GET/DELETE requests that carry no body.

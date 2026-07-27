@@ -421,7 +421,7 @@ helm lint deploy/helm/kubeoncall
 | SBX-07 | `feat(sandbox-controller): scaffold internal service` | 独立 Controller 基座 | COMPLETED |
 | SBX-08 | `feat(sandbox-controller): build hardened jobs` | 安全 JobSpec 生成器 | COMPLETED |
 | SBX-09 | `feat(sandbox-controller): manage job lifecycle` | 幂等创建、查询和取消 | COMPLETED |
-| SBX-10 | `feat(sandbox-controller): collect results and cleanup` | 结果收集、超时和 TTL 清理 | PLANNED |
+| SBX-10 | `feat(sandbox-controller): collect results and cleanup` | 结果收集、超时和 TTL 清理 | COMPLETED |
 | SBX-11 | `feat(deploy): isolate sandbox runtime` | Namespace、RBAC、Quota、NetworkPolicy | PLANNED |
 | SBX-12 | `feat(sandbox): dispatch runs through controller` | Backend Client、短时派发和断路器 | PLANNED |
 | SBX-13 | `feat(sandbox): reconcile run convergence` | 多实例安全的状态收敛与清理重试 | PLANNED |
@@ -889,6 +889,19 @@ Codex 审核补充（提交 `ae94ebb` 后审核，补丁提交 `[SBX-09-fix]`）
 回滚：
 
 - 保留 Job TTL，revert 结果增强；不得关闭已部署的基础 TTL。
+
+完成记录：
+
+- 新增 `Manager.CollectResult`：读取 Job/Pod 终态、退出码、开始/结束时间、输出标记与受限日志；日志
+  读取和对外返回均受字节上限约束，超过上限显式追加截断标记，绝不超过配置预算。
+- 失败原因归一为 `OOM`、`DEADLINE`、`IMAGE_PULL`、`POLICY_DENIED`、`TOOL_FAILURE` 和 `UNKNOWN`；
+  容器终止原因优先于 Job 通用失败原因。日志中的 Authorization/Bearer、Token、Secret、Password、
+  JWT 和 URL 用户凭据均在离开 Controller 前脱敏。
+- 新增 `Janitor.ReapOnce`：只扫描有 sandbox 应用标签的 Job；对终态 Job 或到期 annotation Job 清理，
+  单个删除失败记录在结果中但不阻断后续 Job，下一轮可重试；未知/非 sandbox Job 永不删除。
+- HTTP `GET /internal/v1/runs/{runId}/logs` 现返回归一化、脱敏且裁剪后的结果，不再返回原始日志。
+- 验证：`go test ./...`、`go vet ./...`、`gofmt -l .` 通过；新增 OOM/ImagePull/Deadline 映射、
+  Token/URL 脱敏、日志严格上限、缺失输出、终态/过期 Job 清理与非 sandbox Job 保护测试。
 
 ### SBX-11：部署隔离
 

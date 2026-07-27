@@ -34,6 +34,24 @@ func (adapter *HTTPAdapter) Cancel(ctx context.Context, runID string) (httpapi.L
 	return toHTTPStatus(status), err
 }
 
+func (adapter *HTTPAdapter) Collect(ctx context.Context, runID string, logLimit int64) (httpapi.LifecycleResult, error) {
+	result, err := adapter.manager.CollectResult(ctx, runID, logLimit)
+	return toHTTPResult(result), err
+}
+
+func toHTTPResult(result Result) httpapi.LifecycleResult {
+	return httpapi.LifecycleResult{
+		RunID:       result.RunID,
+		Phase:       string(result.Phase),
+		ExitCode:    result.ExitCode,
+		Reason:      string(result.Reason),
+		Logs:        result.Logs,
+		StartedAt:   result.StartedAt,
+		FinishedAt:  result.FinishedAt,
+		OutputFound: result.OutputFound,
+	}
+}
+
 func toHTTPStatus(status Status) httpapi.LifecycleStatus {
 	result := httpapi.LifecycleStatus{
 		RunID:     status.RunID,
