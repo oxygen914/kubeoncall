@@ -158,6 +158,64 @@ class KubeOnCallPropertiesTest {
         assertDoesNotThrowValidate(new KubeOnCallProperties().getSandbox());
     }
 
+    @Test
+    void sandboxValidateShouldRejectKubernetesQuantitiesAboveHardCeilings() {
+        KubeOnCallProperties.Sandbox sandbox = new KubeOnCallProperties().getSandbox();
+        // §7.1 ceilings: CPU 1 core, memory 1Gi, ephemeral 2Gi.
+        sandbox.setCpu("2");
+        sandbox.setMemory("2Gi");
+        sandbox.setEphemeralStorage("3Gi");
+
+        IllegalStateException ex = assertThrows(IllegalStateException.class, sandbox::validate);
+        String message = ex.getMessage();
+        assertTrue(message.contains("cpu"), message);
+        assertTrue(message.contains("memory"), message);
+        assertTrue(message.contains("ephemeralStorage"), message);
+    }
+
+    @Test
+    void sandboxValidateShouldRejectMalformedKubernetesQuantities() {
+        KubeOnCallProperties.Sandbox sandbox = new KubeOnCallProperties().getSandbox();
+        sandbox.setCpu("banana");
+        sandbox.setMemory("1Xi");
+        sandbox.setEphemeralStorage("-2Gi");
+
+        IllegalStateException ex = assertThrows(IllegalStateException.class, sandbox::validate);
+        String message = ex.getMessage();
+        assertTrue(message.contains("cpu"), message);
+        assertTrue(message.contains("memory"), message);
+        assertTrue(message.contains("ephemeralStorage"), message);
+    }
+
+    @Test
+    void sandboxValidateShouldAcceptBoundaryAndAlternateQuantityForms() {
+        KubeOnCallProperties.Sandbox sandbox = new KubeOnCallProperties().getSandbox();
+        // Exactly at ceilings, plus accepted alternate forms (millicores, decimal cores, Mi suffix).
+        sandbox.setCpu("1000m");
+        sandbox.setMemory("1024Mi");
+        sandbox.setEphemeralStorage("2Gi");
+        assertDoesNotThrowValidate(sandbox);
+
+        sandbox.setCpu("1");
+        sandbox.setMemory("1Gi");
+        sandbox.setEphemeralStorage("2048Mi");
+        assertDoesNotThrowValidate(sandbox);
+    }
+
+    @Test
+    void sandboxValidateShouldRejectControllerCallLimits() {
+        KubeOnCallProperties.Sandbox sandbox = new KubeOnCallProperties().getSandbox();
+        sandbox.setControllerConnectTimeoutMillis(0);
+        sandbox.setControllerReadTimeoutMillis(-1);
+        sandbox.setControllerMaxResponseBytes(Long.MAX_VALUE);
+
+        IllegalStateException ex = assertThrows(IllegalStateException.class, sandbox::validate);
+        String message = ex.getMessage();
+        assertTrue(message.contains("controllerConnectTimeoutMillis"), message);
+        assertTrue(message.contains("controllerReadTimeoutMillis"), message);
+        assertTrue(message.contains("controllerMaxResponseBytes"), message);
+    }
+
     private static void assertDoesNotThrowValidate(KubeOnCallProperties.Sandbox sandbox) {
         sandbox.validate();
     }

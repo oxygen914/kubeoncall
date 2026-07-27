@@ -31,6 +31,17 @@ class SandboxProperties {
         static final int MAX_PER_ALARM_CONCURRENCY = 1;
         static final int MAX_GLOBAL_CONCURRENCY = 4;
 
+        // Kubernetes-quantity ceilings, expressed in the smallest unit each resource is measured in.
+        static final long MAX_CPU_MILLICORES = 1000L;
+        static final long MAX_MEMORY_BYTES = 1024L * 1024 * 1024;
+        static final long MAX_EPHEMERAL_STORAGE_BYTES = 2L * 1024 * 1024 * 1024;
+
+        // Controller-call safety ceilings so a misconfigured client cannot hang the backend or
+        // swallow an unbounded response while the sandbox is enabled.
+        static final long MAX_CONTROLLER_CONNECT_TIMEOUT_MILLIS = 30_000L;
+        static final long MAX_CONTROLLER_READ_TIMEOUT_MILLIS = 60_000L;
+        static final long MAX_CONTROLLER_RESPONSE_BYTES = 16L * 1024 * 1024;
+
         private HardLimits() {}
     }
 
@@ -256,8 +267,9 @@ class SandboxProperties {
      * Validates configured values against the immutable hard ceilings. Throws
      * {@link IllegalStateException} with every offending field collected, so misconfiguration fails
      * fast at startup rather than silently clamping a production request. CPU, memory and ephemeral
-     * storage quantities are validated as non-blank Kubernetes quantities here; their cross-resource
-     * ceiling comparison is deferred to the hardened JobSpec builder (SBX-08).
+     * storage are parsed as Kubernetes quantities and rejected when malformed or above the hard
+     * ceilings; the hardened JobSpec builder (SBX-08) re-validates at render time as defense in
+     * depth.
      */
     public void validate() {
         Map<String, String> violations = new LinkedHashMap<>();
@@ -296,16 +308,134 @@ class SandboxProperties {
         }
         if (cpu == null || cpu.isBlank()) {
             violations.put("cpu", "must be a non-blank Kubernetes quantity");
+        } else {
+            validateQuantity(
+                    violations,
+                    "cpu",
+                    cpu,
+                    HardLimits.MAX_CPU_MILLICORES,
+                    "millicores",
+                    SandboxProperties::parseCpuMillicores);
         }
         if (memory == null || memory.isBlank()) {
             violations.put("memory", "must be a non-blank Kubernetes quantity");
+        } else {
+            validateQuantity(
+                    violations,
+                    "memory",
+                    memory,
+                    HardLimits.MAX_MEMORY_BYTES,
+                    "bytes",
+                    SandboxProperties::parseByteQuantity);
         }
         if (ephemeralStorage == null || ephemeralStorage.isBlank()) {
             violations.put("ephemeralStorage", "must be a non-blank Kubernetes quantity");
+        } else {
+            validateQuantity(
+                    violations,
+                    "ephemeralStorage",
+                    ephemeralStorage,
+                    HardLimits.MAX_EPHEMERAL_STORAGE_BYTES,
+                    "bytes",
+                    SandboxProperties::parseByteQuantity);
         }
+        validateControllerCall(violations);
         if (!violations.isEmpty()) {
             throw new IllegalStateException("invalid sandbox configuration: " + violations);
         }
+    }
+
+    private void validateQuantity(
+            Map<String, String> violations,
+            String field,
+            String value,
+            long ceiling,
+            String unit,
+            java.util.function.Function<String, Long> parser) {
+        Long parsed;
+        try {
+            parsed = parser.apply(value);
+        } catch (IllegalArgumentException ex) {
+            violations.put(field, "must be a valid Kubernetes quantity: " + value);
+            return;
+        }
+        if (parsed == null || parsed <= 0) {
+            violations.put(field, "must be a positive Kubernetes quantity: " + value);
+        } else if (parsed > ceiling) {
+            violations.put(field, "must not exceed hard ceiling " + ceiling + " " + unit + ": " + value);
+        }
+    }
+
+    private void validateControllerCall(Map<String, String> violations) {
+        if (controllerConnectTimeoutMillis < 1
+                || controllerConnectTimeoutMillis > HardLimits.MAX_CONTROLLER_CONNECT_TIMEOUT_MILLIS) {
+            violations.put(
+                    "controllerConnectTimeoutMillis",
+                    "must be between 1 and " + HardLimits.MAX_CONTROLLER_CONNECT_TIMEOUT_MILLIS + " ms");
+        }
+        if (controllerReadTimeoutMillis < 1
+                || controllerReadTimeoutMillis > HardLimits.MAX_CONTROLLER_READ_TIMEOUT_MILLIS) {
+            violations.put(
+                    "controllerReadTimeoutMillis",
+                    "must be between 1 and " + HardLimits.MAX_CONTROLLER_READ_TIMEOUT_MILLIS + " ms");
+        }
+        if (controllerMaxResponseBytes < 1 || controllerMaxResponseBytes > HardLimits.MAX_CONTROLLER_RESPONSE_BYTES) {
+            violations.put(
+                    "controllerMaxResponseBytes",
+                    "must not exceed hard ceiling " + HardLimits.MAX_CONTROLLER_RESPONSE_BYTES + " bytes");
+        }
+    }
+
+    /**
+     * Parses a Kubernetes CPU quantity into millicores. Supports plain cores (e.g. {@code "1"},
+     * {@code "0.5"}) and millicores ({@code "100m"}); rejects negatives and any other suffix, which is
+     * not a valid CPU unit.
+     */
+    private static Long parseCpuMillicores(String value) {
+        String trimmed = value.trim();
+        if (trimmed.endsWith("m")) {
+            return Long.parseLong(trimmed.substring(0, trimmed.length() - 1));
+        }
+        double cores = Double.parseDouble(trimmed);
+        if (cores < 0) {
+            throw new IllegalArgumentException("negative cpu");
+        }
+        return Math.round(cores * 1000L);
+    }
+
+    /**
+     * Parses a Kubernetes storage/byte quantity into bytes. Supports binary (Ki/Mi/Gi/Ti) and decimal
+     * (K/M/G/T, case-insensitive for kilo) suffixes as well as plain bytes; rejects unknown suffixes
+     * and negatives so misconfiguration fails loudly rather than being advertised as a valid limit.
+     */
+    private static Long parseByteQuantity(String value) {
+        String trimmed = value.trim();
+        if (trimmed.isEmpty()) {
+            return null;
+        }
+        java.util.regex.Matcher matcher = java.util.regex.Pattern.compile("^([+-]?\\d+(?:\\.\\d+)?)([A-Za-z]*)$")
+                .matcher(trimmed);
+        if (!matcher.matches()) {
+            throw new IllegalArgumentException("unparseable quantity: " + value);
+        }
+        double mantissa = Double.parseDouble(matcher.group(1));
+        if (mantissa < 0) {
+            throw new IllegalArgumentException("negative quantity");
+        }
+        long multiplier =
+                switch (matcher.group(2)) {
+                    case "" -> 1L;
+                    case "Ki" -> 1L << 10;
+                    case "Mi" -> 1L << 20;
+                    case "Gi" -> 1L << 30;
+                    case "Ti" -> 1L << 40;
+                    case "k", "K" -> 1_000L;
+                    case "M" -> 1_000_000L;
+                    case "G" -> 1_000_000_000L;
+                    case "T" -> 1_000_000_000_000L;
+                    default -> throw new IllegalArgumentException("unknown quantity suffix: " + matcher.group(2));
+                };
+        return Math.round(mantissa * multiplier);
     }
 
     /**

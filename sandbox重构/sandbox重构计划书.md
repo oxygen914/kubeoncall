@@ -488,6 +488,18 @@ helm lint deploy/helm/kubeoncall
 - 关闭 Sandbox 时 `KubeOnCallApplicationTests.contextLoads` 与 `V1ApiContractTest` 通过；
   既有失败（`ApiTokensControllerTest`、`LegacyApiDeprecationWebTest`）在父提交已存在，与本单元无关。
 
+Codex 审核补充（提交 `7712ccb` 后审核，补丁提交 `[SBX-01-fix]`）：
+
+- CPU/内存/临时存储原先仅校验非空，`cpu=2`、`memory=2Gi`、`cpu=banana` 可越过 §7.1 硬上限
+  通过启动校验并被回显为已校验限制。新增轻量 Kubernetes 量纲解析（CPU millicores、字节
+  二进制/十进制后缀），在 `validate()` 中对 CPU≤1 核、内存≤1Gi、临时存储≤2Gi 强校验，
+  越限或畸形（负值、未知后缀）一律收集为违规字段；SBX-08 JobSpec Builder 仍二次校验。
+- Controller 调用超时/最大响应原先未校验，零/负超时或无界响应可在总开关开启时启动成功。
+  新增 `controllerConnectTimeoutMillis`≤30s、`controllerReadTimeoutMillis`≤60s、
+  `controllerMaxResponseBytes`≤16MiB 的硬上限与正数校验。
+- 测试新增 4 例：K8s 量纲越限、畸形量纲、边界与交替形式（`1000m`/`1024Mi`/`2048Mi`）、
+  Controller 调用限制越限。`KubeOnCallPropertiesTest` 共 12 例全通过。
+
 回滚：
 
 - 直接 revert；无数据影响。
