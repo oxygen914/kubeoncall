@@ -8,8 +8,8 @@
 | 制定日期 | 2026-07-27 |
 | 目标项目 | KubeOnCall |
 | 实施状态 | IN_PROGRESS |
-| 代码实现进度 | 38% |
-| 自动化验证进度 | 38% |
+| 代码实现进度 | 42% |
+| 自动化验证进度 | 42% |
 | 真实环境验收进度 | 0%，按阶段单独记录 |
 | 计划提交数 | 24 个，`SBX-00`～`SBX-23` |
 
@@ -420,7 +420,7 @@ helm lint deploy/helm/kubeoncall
 | SBX-06 | `feat(api): add sandbox run lifecycle endpoints` | 创建、查询、取消 API 与审计 | COMPLETED |
 | SBX-07 | `feat(sandbox-controller): scaffold internal service` | 独立 Controller 基座 | COMPLETED |
 | SBX-08 | `feat(sandbox-controller): build hardened jobs` | 安全 JobSpec 生成器 | COMPLETED |
-| SBX-09 | `feat(sandbox-controller): manage job lifecycle` | 幂等创建、查询和取消 | PLANNED |
+| SBX-09 | `feat(sandbox-controller): manage job lifecycle` | 幂等创建、查询和取消 | COMPLETED |
 | SBX-10 | `feat(sandbox-controller): collect results and cleanup` | 结果收集、超时和 TTL 清理 | PLANNED |
 | SBX-11 | `feat(deploy): isolate sandbox runtime` | Namespace、RBAC、Quota、NetworkPolicy | PLANNED |
 | SBX-12 | `feat(sandbox): dispatch runs through controller` | Backend Client、短时派发和断路器 | PLANNED |
@@ -837,6 +837,34 @@ Codex 审核补充（提交 `420bf60` 后审核，补丁提交 `[SBX-05-fix]`）
 
 - 先关闭 Controller 创建入口，再 revert；不主动删除无法确认归属的 Job。
 
+完成记录：
+
+- 新增 `internal/kubernetes` 包：`Manager`（持 `kubernetes.Interface` + namespace + `jobs.Builder`，
+  测试注入 fake clientset）+ `HTTPAdapter`（实现 `httpapi.LifecycleManager`，把 typed `Status` 转
+  transport struct）+ helpers（run-id 正则、sentinel 错误、`NewMilliQuantity`/`NewQuantity` 资源量纲）。
+- `EnsureJob`：先按 `sandbox.kubeoncall.io/run-id` label 查既有 Job，存在则返回其状态（create 重放
+  不创建第二个 Job）；不存在则 `builder.Build` 生成 JobSpec，构造 `batchv1.Job`（completions=1/
+  parallelism=1/BackoffLimit=0 一次性/ActiveDeadlineSeconds=超时/TTLSecondsAfterFinished=清理/
+  AutomountServiceAccountToken=false/RunAsNonRoot/ReadOnlyRootFilesystem/AllowPrivilegeEscalation=false/
+  SeccompProfile RuntimeDefault/Capabilities drop ALL/hostNetwork=false），Create 冲突（AlreadyExists）
+  回查 winner 返回状态。Job 带 run-id/tool-version/expires-at(RFC3339) label，controller 重启可从集群
+  状态恢复 scope。
+- `Status`：按 Job conditions + active/succeeded/failed 归一化为 PENDING/RUNNING/SUCCEEDED/FAILED/
+  TIMED_OUT（DeadlineExceeded）/CANCELLED（DeletionTimestamp!=nil）；无 Job 返回 Exists=false/UNKNOWN。
+- `Cancel`：`Delete`(Background 传播) 幂等；缺失 Job 返回 CANCELLED 成功（late retry 不报错）。
+- `httpapi.Server`：`NewServerWithManager` 注入可选 `LifecycleManager`；`POST /internal/v1/runs`→EnsureJob、
+  `GET /internal/v1/runs/{runId}`→Status、`DELETE /internal/v1/runs/{runId}`→Cancel、
+  `GET /internal/v1/runs/{runId}/logs`→NOT_READY（SBX-10 收口）。GET/DELETE 用空 body HMAC 校验。
+  `Config` 增 `SandboxNamespace`/`Tools`/`JobCeiling`（默认 pod-inspect:v1 + §7.1 上限）。
+  `main.go` 用 `rest.InClusterConfig` 构造 clientset + Manager，无 in-cluster config 时降级 scaffold
+  模式（lifecycle 端点 CONTROLLER_NOT_READY，health/auth 仍服务）。
+- 测试：`manager_test.go`（fake clientset，create 幂等/重放只产 1 Job、非法 run-id 拒绝、
+  PENDING/RUNNING/SUCCEEDED/UNKNOWN 归一、TIMED_OUT vs FAILED 区分、cancel 幂等+缺失 Job 成功、
+  hardened SecurityContext/TTL/ActiveDeadline/label 断言）；`lifecycle_test.go`（HTTP 层 fake manager，
+  各端点未签名拒绝、POST 经 manager 创建、GET/DELETE 委托、nil manager 返回 NOT_READY、logs NOT_READY）。
+  `go test ./...` + `go vet ./...` + `gofmt -l .` 全通过。
+- 依赖：新增 `k8s.io/api`/`apimachinery`/`client-go` v0.36.3（经 goproxy.cn + sum.golang.google.cn 拉取）。
+
 ### SBX-10：结果、日志和清理
 
 改动：
@@ -1171,12 +1199,18 @@ Codex 审核补充（提交 `420bf60` 后审核，补丁提交 `[SBX-05-fix]`）
 
 ## 13. 当前停止点
 
-SBX-05 已完成：新增独立 `SandboxArtifactStore`——对象 key 服务端按
-`sandbox/{runId}/{inputs|outputs|logs|reports}/` 派生且 filename 归一防穿越；写入先有界缓冲校验上限
-（超限在进 MinIO 前拒绝）再上传并算 SHA-256，MIME 固定 allowlist；presigned GET URL≤5min 且限
-`sandbox/` 前缀；delete 幂等；list 仅返回 run 前缀。4 例 key 单测 + 6 例真实 MinIO IT 通过
-（failsafe 全 65 例绿）；`spotless`/`checkstyle`/`git diff --check` 通过。尚未触碰 Run API
-（SBX-06）、Controller、部署或 CI。
+SBX-09 已完成：sandbox-controller 新增 `internal/kubernetes` 包（`Manager` 幂等创建/状态归一化/
+取消，`HTTPAdapter` 适配 `httpapi.LifecycleManager`）；`httpapi.Server` 接入可选 Manager 并开放
+`POST/GET/DELETE /internal/v1/runs[/{runId}]` 与 `GET /{runId}/logs`（logs 留 SBX-10）；`main.go`
+用 in-cluster config 构造 clientset+Manager，无配置降级 scaffold。Job 一次性（BackoffLimit=0）、
+ActiveDeadline=超时、TTL=清理、hardened SecurityContext，run-id/tool-version/expires-at label 绑定。
+fake clientset 单测（create 幂等/重放、状态归一、TIMED_OUT vs FAILED、cancel 幂等、安全字段断言）
++ HTTP 层 fake manager 测试全通过；`go test`/`go vet`/`gofmt` 通过。新增 k8s.io v0.36.3 依赖。
+
+截至此处 SBX-00～09 已完成（含 SBX-01/02/04/05 的 codex 审核 fix）。Backend 侧 Run/Artifact/
+API/权限/存储已落地；Controller 侧基座+hardened JobSpec+Job 生命周期已落地。尚未触碰：
+结果收集与日志清理（SBX-10）、部署隔离（SBX-11）、Backend↔Controller 派发与收敛（SBX-12/13）、
+诊断能力（SBX-14～17）、仿真与 Agent（SBX-18～20）、Console/可观测/CI（SBX-21～23）。
 
 此后每次只提交一个 SBX 单元，验证通过并产生本地 commit 后再进入下一个单元；远端推送
-仍需用户单独授权。下一个单元为 `SBX-06`。
+仍需用户单独授权。下一个单元为 `SBX-10`。

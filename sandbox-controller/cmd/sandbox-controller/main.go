@@ -11,6 +11,11 @@ import (
 	"time"
 
 	"github.com/kubeoncall/sandbox-controller/internal/httpapi"
+	"github.com/kubeoncall/sandbox-controller/internal/jobs"
+	sbxk8s "github.com/kubeoncall/sandbox-controller/internal/kubernetes"
+
+	k8sclient "k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
 )
 
 func main() {
@@ -19,7 +24,8 @@ func main() {
 		slog.Error("invalid sandbox controller configuration", "error", err)
 		os.Exit(1)
 	}
-	server := httpapi.NewServer(config)
+	manager := buildLifecycleManager(config)
+	server := httpapi.NewServerWithManager(config, manager)
 	httpServer := &http.Server{
 		Addr:              config.ListenAddress,
 		Handler:           server.Handler(),
@@ -46,4 +52,27 @@ func main() {
 		slog.Error("sandbox controller graceful shutdown failed", "error", err)
 		os.Exit(1)
 	}
+}
+
+// buildLifecycleManager constructs the Kubernetes Job manager when an in-cluster config is present.
+// When KUBERNETUS_SERVICE_HOST is unset (no in-cluster config) the controller starts in scaffold
+// mode with a nil manager: lifecycle endpoints report CONTROLLER_NOT_READY, but health and auth
+// still serve. This keeps the image deployable without cluster credentials during rollout.
+func buildLifecycleManager(config httpapi.Config) httpapi.LifecycleManager {
+	restConfig, err := rest.InClusterConfig()
+	if err != nil {
+		slog.Warn("sandbox controller starting without in-cluster config; lifecycle endpoints disabled", "error", err)
+		return nil
+	}
+	clientset, err := k8sclient.NewForConfig(restConfig)
+	if err != nil {
+		slog.Error("cannot build kubernetes clientset", "error", err)
+		return nil
+	}
+	builder := jobs.Builder{
+		Namespace: config.SandboxNamespace,
+		Tools:     config.Tools,
+		Ceiling:   config.JobCeiling,
+	}
+	return sbxk8s.NewHTTPAdapter(sbxk8s.NewManager(clientset, config.SandboxNamespace, builder))
 }

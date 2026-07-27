@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
@@ -10,6 +11,8 @@ import (
 	"os"
 	"strconv"
 	"time"
+
+	"github.com/kubeoncall/sandbox-controller/internal/jobs"
 )
 
 // Config contains only internal transport controls. Kubernetes credentials and Job construction
@@ -23,6 +26,12 @@ type Config struct {
 	ShutdownTimeout   time.Duration
 	MaxRequestBytes   int64
 	MaxConcurrent     int
+	// SandboxNamespace is the isolated namespace one-shot Jobs run in (§7.1).
+	SandboxNamespace string
+	// Tools is the server-owned tool catalog keyed by "id:version".
+	Tools map[string]jobs.Tool
+	// JobCeiling is the immutable resource ceiling applied to every Job.
+	JobCeiling jobs.Limits
 }
 
 func LoadConfigFromEnv() (Config, error) {
@@ -35,6 +44,15 @@ func LoadConfigFromEnv() (Config, error) {
 		ShutdownTimeout:   durationEnv("SANDBOX_CONTROLLER_SHUTDOWN_TIMEOUT", 15*time.Second),
 		MaxRequestBytes:   int64Env("SANDBOX_CONTROLLER_MAX_REQUEST_BYTES", 1<<20),
 		MaxConcurrent:     intEnv("SANDBOX_CONTROLLER_MAX_CONCURRENT", 16),
+		SandboxNamespace:  env("SANDBOX_CONTROLLER_NAMESPACE", "kubeoncall-sandbox"),
+		Tools:             defaultTools(),
+		JobCeiling: jobs.Limits{
+			CPUMilli:       1000,
+			MemoryMiB:      1024,
+			EphemeralMiB:   2048,
+			TimeoutSeconds: 300,
+			TTLSeconds:     86400,
+		},
 	}
 	if config.BackendHMACSecret == "" || config.MaxRequestBytes < 1024 || config.MaxConcurrent < 1 {
 		return Config{}, fmt.Errorf("backend HMAC secret, request limit and concurrency must be configured safely")
@@ -42,17 +60,60 @@ func LoadConfigFromEnv() (Config, error) {
 	return config, nil
 }
 
+// defaultTools returns the built-in tool catalog. SBX-15 expands this from a versioned YAML file;
+// the seed entry keeps the controller self-contained for SBX-09 lifecycle tests.
+func defaultTools() map[string]jobs.Tool {
+	return map[string]jobs.Tool{
+		"pod-inspect:v1": {
+			ID:         "pod-inspect",
+			Version:    "v1",
+			Image:      "registry.kubeoncall.io/sandbox/pod-inspect@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+			Entrypoint: []string{"/tool"},
+		},
+	}
+}
+
 type Server struct {
 	config        Config
 	authenticator *authenticator
 	semaphore     chan struct{}
 	mux           *http.ServeMux
+	manager       LifecycleManager
+}
+
+// LifecycleManager is the subset of the Kubernetes manager the HTTP layer needs. The concrete
+// implementation lives in internal/kubernetes; tests inject a fake.
+type LifecycleManager interface {
+	EnsureJob(ctx context.Context, request jobs.Request, expiresAt time.Time) (LifecycleStatus, error)
+	Status(ctx context.Context, runID string) (LifecycleStatus, error)
+	Cancel(ctx context.Context, runID string) (LifecycleStatus, error)
+}
+
+// LifecycleStatus mirrors kubernetes.Status without importing that package here.
+type LifecycleStatus struct {
+	RunID      string
+	Phase      string
+	Exists     bool
+	StartTime  *time.Time
+	EndTime    *time.Time
+	FailedPods []struct {
+		Name, Reason string
+	}
 }
 
 func NewServer(config Config) *Server {
-	server := &Server{config: config, authenticator: newAuthenticator(config), semaphore: make(chan struct{}, config.MaxConcurrent), mux: http.NewServeMux()}
+	return NewServerWithManager(config, nil)
+}
+
+// NewServerWithManager wires a Kubernetes lifecycle manager. When manager is nil the lifecycle
+// endpoints report not-ready, preserving the scaffold's safe default from SBX-07.
+func NewServerWithManager(config Config, manager LifecycleManager) *Server {
+	server := &Server{config: config, authenticator: newAuthenticator(config), semaphore: make(chan struct{}, config.MaxConcurrent), mux: http.NewServeMux(), manager: manager}
 	server.mux.HandleFunc("GET /healthz", server.health)
 	server.mux.HandleFunc("POST /internal/v1/runs", server.acceptRun)
+	server.mux.HandleFunc("GET /internal/v1/runs/{runId}", server.getRun)
+	server.mux.HandleFunc("DELETE /internal/v1/runs/{runId}", server.cancelRun)
+	server.mux.HandleFunc("GET /internal/v1/runs/{runId}/logs", server.getRunLogs)
 	return server
 }
 
@@ -72,9 +133,82 @@ func (server *Server) acceptRun(writer http.ResponseWriter, request *http.Reques
 		writeError(writer, http.StatusUnauthorized, "UNAUTHENTICATED", err.Error())
 		return
 	}
-	// SBX-08/09 own Job validation and lifecycle. Accepting no work here prevents the scaffold from
-	// looking operational before the hardened runtime path exists.
-	writeError(writer, http.StatusNotImplemented, "CONTROLLER_NOT_READY", "sandbox job lifecycle is not enabled")
+	if server.manager == nil {
+		writeError(writer, http.StatusNotImplemented, "CONTROLLER_NOT_READY", "sandbox job lifecycle is not enabled")
+		return
+	}
+	var payload struct {
+		RunID, ToolID, ToolVersion, InputArtifactURI string
+		Labels                                       map[string]string
+		ExpiresAt                                    time.Time
+	}
+	if err := json.Unmarshal(body, &payload); err != nil {
+		writeError(writer, http.StatusBadRequest, "INVALID_PAYLOAD", "request body is not valid JSON")
+		return
+	}
+	expiresAt := payload.ExpiresAt
+	if expiresAt.IsZero() {
+		expiresAt = time.Now().Add(24 * time.Hour)
+	}
+	status, err := server.manager.EnsureJob(request.Context(), jobs.Request{
+		RunID:            payload.RunID,
+		ToolID:           payload.ToolID,
+		ToolVersion:      payload.ToolVersion,
+		InputArtifactURI: payload.InputArtifactURI,
+		Labels:           payload.Labels,
+	}, expiresAt)
+	server.writeLifecycleResult(writer, status, err)
+}
+
+func (server *Server) getRun(writer http.ResponseWriter, request *http.Request) {
+	runID := request.PathValue("runId")
+	if !server.authenticateGet(request) {
+		writeError(writer, http.StatusUnauthorized, "UNAUTHENTICATED", "signature verification failed")
+		return
+	}
+	if server.manager == nil {
+		writeError(writer, http.StatusNotImplemented, "CONTROLLER_NOT_READY", "sandbox job lifecycle is not enabled")
+		return
+	}
+	status, err := server.manager.Status(request.Context(), runID)
+	server.writeLifecycleResult(writer, status, err)
+}
+
+func (server *Server) cancelRun(writer http.ResponseWriter, request *http.Request) {
+	runID := request.PathValue("runId")
+	if !server.authenticateGet(request) {
+		writeError(writer, http.StatusUnauthorized, "UNAUTHENTICATED", "signature verification failed")
+		return
+	}
+	if server.manager == nil {
+		writeError(writer, http.StatusNotImplemented, "CONTROLLER_NOT_READY", "sandbox job lifecycle is not enabled")
+		return
+	}
+	status, err := server.manager.Cancel(request.Context(), runID)
+	server.writeLifecycleResult(writer, status, err)
+}
+
+// getRunLogs streams truncated pod logs. SBX-10 owns result collection and log scrubbing; until then
+// the endpoint exists with a stable contract so the backend client is not blocked on routing.
+func (server *Server) getRunLogs(writer http.ResponseWriter, request *http.Request) {
+	if !server.authenticateGet(request) {
+		writeError(writer, http.StatusUnauthorized, "UNAUTHENTICATED", "signature verification failed")
+		return
+	}
+	writeError(writer, http.StatusNotImplemented, "LOGS_NOT_READY", "sandbox log collection is not enabled")
+}
+
+// authenticateGet verifies the HMAC signature on GET/DELETE requests that carry no body.
+func (server *Server) authenticateGet(request *http.Request) bool {
+	return server.authenticator.verify(request, nil) == nil
+}
+
+func (server *Server) writeLifecycleResult(writer http.ResponseWriter, status LifecycleStatus, err error) {
+	if err != nil {
+		writeError(writer, http.StatusInternalServerError, "LIFECYCLE_ERROR", err.Error())
+		return
+	}
+	writeJSON(writer, http.StatusOK, status)
 }
 
 func (server *Server) limit(next http.Handler) http.Handler {
