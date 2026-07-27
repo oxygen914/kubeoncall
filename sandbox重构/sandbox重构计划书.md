@@ -543,6 +543,19 @@ Codex 审核补充（提交 `7712ccb` 后审核，补丁提交 `[SBX-01-fix]`、
   `IdentityMySqlIT` 增 1 例（真实 MySQL 容器验证四权限 seeded 且角色映射符合 §6.5），
   Failsafe 通过，V15 迁移成功应用至 v15。
 
+Codex 审核补充（提交 `42c469e` 后审核，补丁提交 `[SBX-02-fix]`）：
+
+- `V1AuthenticationFilter.legacyPermissions()` 未同步四项 sandbox 权限，而 legacy-token
+  兼容默认开启，配置的 Viewer/Operator/Admin token 会绕过 §6.5 矩阵。按映射补齐：Viewer
+  `sandbox:read`，Operator `sandbox:read/execute/cancel`，Admin 全部四项。
+- `TaskPermissionPolicy` 顺序 bug：sandbox 识别排在 skill/knowledge/memory 之后，资源名同时
+  含两者的任务（如 `sandbox_skill`）会被降级为 `skill:read`，Viewer 即可越权读取任务/SSE。
+  将 sandbox 分类提前到只读域之前，确保 `sandbox:*` 资源恒映射 `sandbox:execute`。
+- 测试新增 3 个文件/用例：`V1AuthenticationFilterSandboxPermissionsTest`（3 例验证 legacy
+  三角色 §6.5 sandbox 权限）、`ApiTokenAuthenticationServiceSandboxTest`（3 例验证 scope 交集、
+  角色撤销后下一请求立即失效、已撤销 token 永不认证）、`TaskPermissionPolicyTest` 增 1 例
+  （混合信号资源仍映射 `sandbox:execute` 且非 sandbox 任务不受影响）。
+
 回滚：
 
 - 代码可 revert；数据库中的新增权限保留但不再被应用引用。

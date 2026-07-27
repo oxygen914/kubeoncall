@@ -190,7 +190,8 @@ public class V1AuthenticationFilter extends OncePerRequestFilter {
                         PermissionCode.USER_READ,
                         PermissionCode.TOKEN_READ_OWN,
                         PermissionCode.AUDIT_READ,
-                        PermissionCode.SYSTEM_READ);
+                        PermissionCode.SYSTEM_READ,
+                        PermissionCode.SANDBOX_READ);
             case OPERATOR ->
                 java.util.Set.of(
                         PermissionCode.DASHBOARD_READ,
@@ -218,7 +219,10 @@ public class V1AuthenticationFilter extends OncePerRequestFilter {
                         PermissionCode.TOKEN_READ_OWN,
                         PermissionCode.TOKEN_MANAGE_OWN,
                         PermissionCode.AUDIT_READ,
-                        PermissionCode.SYSTEM_READ);
+                        PermissionCode.SYSTEM_READ,
+                        PermissionCode.SANDBOX_READ,
+                        PermissionCode.SANDBOX_EXECUTE,
+                        PermissionCode.SANDBOX_CANCEL);
             case ADMIN ->
                 java.util.Set.of(
                         PermissionCode.DASHBOARD_READ,
@@ -259,7 +263,11 @@ public class V1AuthenticationFilter extends OncePerRequestFilter {
                         PermissionCode.AUDIT_READ,
                         PermissionCode.AUDIT_EXPORT,
                         PermissionCode.SYSTEM_READ,
-                        PermissionCode.SYSTEM_MANAGE);
+                        PermissionCode.SYSTEM_MANAGE,
+                        PermissionCode.SANDBOX_READ,
+                        PermissionCode.SANDBOX_EXECUTE,
+                        PermissionCode.SANDBOX_CANCEL,
+                        PermissionCode.SANDBOX_MANAGE);
         };
     }
 

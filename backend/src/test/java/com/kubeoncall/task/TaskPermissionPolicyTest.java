@@ -34,4 +34,19 @@ class TaskPermissionPolicyTest {
         assertThat(TaskPermissionPolicy.requiredPermission("ASYNC_DISPATCH", "sandbox"))
                 .isEqualTo(PermissionCode.SANDBOX_EXECUTE);
     }
+
+    @Test
+    void sandboxClassificationPrecedesOverlappingReadOnlyDomains() {
+        // A sandbox task whose resource also names a read-only domain must stay classified as
+        // sandbox:execute, not downgrade to skill/knowledge/memory read.
+        assertThat(TaskPermissionPolicy.requiredPermission("SANDBOX_DISPATCH", "sandbox_skill"))
+                .isEqualTo(PermissionCode.SANDBOX_EXECUTE);
+        assertThat(TaskPermissionPolicy.requiredPermission("SANDBOX_DISPATCH", "sandbox_knowledge"))
+                .isEqualTo(PermissionCode.SANDBOX_EXECUTE);
+        assertThat(TaskPermissionPolicy.requiredPermission("SANDBOX_DISPATCH", "sandbox_memory"))
+                .isEqualTo(PermissionCode.SANDBOX_EXECUTE);
+        // Non-sandbox tasks on the same domains still resolve to their read permission.
+        assertThat(TaskPermissionPolicy.requiredPermission("SKILL_RELOAD", "skill"))
+                .isEqualTo(PermissionCode.SKILL_READ);
+    }
 }
