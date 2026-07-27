@@ -193,6 +193,30 @@ public class SandboxRunReconciler {
                     now.plus(Duration.ofHours(properties.getSandbox().getArtifactRetentionHours()))));
             summary.put("outputArtifactSha256", output.sha256());
         }
+        if (collecting.mode() == SandboxRunMode.MANIFEST_VALIDATION) {
+            if (!result.outputFound() || !ManifestValidationResultValidator.isValid(result.output(), objectMapper)) {
+                return fail(collecting, SandboxRunStatus.FAILED, "MANIFEST_OUTPUT_CONTRACT_INVALID", now);
+            }
+            SandboxArtifactStore.StoredArtifact output = artifactStore.store(
+                    collecting.publicId(),
+                    SandboxArtifactType.OUTPUT,
+                    "validation-result.json",
+                    "application/json",
+                    result.output().getBytes(StandardCharsets.UTF_8),
+                    SandboxClassification.UNTRUSTED);
+            repository.createArtifact(new SandboxRunRepository.CreateArtifact(
+                    null,
+                    collecting.id(),
+                    SandboxArtifactType.OUTPUT,
+                    output.bucket(),
+                    output.objectKey(),
+                    output.contentType(),
+                    output.sizeBytes(),
+                    output.sha256(),
+                    SandboxClassification.UNTRUSTED,
+                    now.plus(Duration.ofHours(properties.getSandbox().getArtifactRetentionHours()))));
+            summary.put("outputArtifactSha256", output.sha256());
+        }
         if (!result.logs().isBlank()) {
             SandboxArtifactStore.StoredArtifact artifact = artifactStore.store(
                     collecting.publicId(),

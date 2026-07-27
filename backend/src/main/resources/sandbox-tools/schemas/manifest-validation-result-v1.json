@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "KubeOnCall manifest validation result v1",
+  "type": "object",
+  "required": ["schemaVersion", "valid", "findings", "toolVersions"],
+  "properties": {
+    "schemaVersion": {"const": "v1"},
+    "valid": {"type": "boolean"},
+    "findings": {"type": "array", "items": {"type": "object"}},
+    "renderedOrPatched": {"type": "string", "maxLength": 1048576},
+    "toolVersions": {"type": "object"}
+  },
+  "additionalProperties": false
+}

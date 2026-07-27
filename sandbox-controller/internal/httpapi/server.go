@@ -93,6 +93,13 @@ func defaultTools() map[string]jobs.Tool {
 			MaxProcesses:   32,
 			OutputMaxBytes: 1024 * 1024,
 		},
+		"manifest-validation:v1": {
+			ID:         "manifest-validation",
+			Version:    "v1",
+			Image:      "registry.kubeoncall.io/sandbox/manifest-validation@sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+			Entrypoint: []string{"/usr/local/bin/koc-validate-manifest"},
+			Runtime:    jobs.RuntimeFixedDiagnostic,
+		},
 	}
 }
 

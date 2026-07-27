@@ -8,8 +8,8 @@
 | 制定日期 | 2026-07-27 |
 | 目标项目 | KubeOnCall |
 | 实施状态 | IN_PROGRESS |
-| 代码实现进度 | 71%（SBX-00～16 已完成） |
-| 自动化验证进度 | 71%（SBX-00～16 代码级验证通过；真实集群待验收） |
+| 代码实现进度 | 75%（SBX-00～17 已完成） |
+| 自动化验证进度 | 75%（SBX-00～17 代码级验证通过；真实集群待验收） |
 | 真实环境验收进度 | 0%，按阶段单独记录 |
 | 计划提交数 | 24 个，`SBX-00`～`SBX-23` |
 
@@ -428,7 +428,7 @@ helm lint deploy/helm/kubeoncall
 | SBX-14 | `feat(sandbox): build diagnostic evidence packages` | 证据采集、裁剪、脱敏和哈希 | COMPLETED |
 | SBX-15 | `feat(sandbox): add fixed diagnostic tools` | 固定工具目录与首批工具 | COMPLETED |
 | SBX-16 | `feat(sandbox): isolate generated code execution` | Python/Shell 受限执行 | COMPLETED |
-| SBX-17 | `feat(sandbox): validate manifests and runbooks` | YAML、Helm、Patch、Runbook 校验 | PLANNED |
+| SBX-17 | `feat(sandbox): validate manifests and runbooks` | YAML、Helm、Patch、Runbook 校验 | COMPLETED |
 | SBX-18 | `feat(sandbox): simulate remediation plans` | 独立仿真集群验证 | PLANNED |
 | SBX-19 | `feat(agent): route diagnostics through sandbox` | Planner/Executor 异步路由 | PLANNED |
 | SBX-20 | `feat(verifier): gate remediation with sandbox evidence` | 恢复工作流与生产动作硬边界 | PLANNED |
@@ -1107,6 +1107,20 @@ Codex 审核补充（提交 `ae94ebb` 后审核，补丁提交 `[SBX-09-fix]`）
 
 - 关闭 `manifest-validation`；不影响固定诊断和生成代码。
 
+完成记录：
+
+- 新增 `manifest-validation:v1` 固定工具与版本化输入/输出 Schema；固定运行时镜像包含 Helm、kubeconform
+  和 Conftest，且无生产凭据、ServiceAccount Token 或生产写路径。
+- 新增只读 `ManifestValidationService`：解析内置 Kubernetes Kind、拒绝未知 CRD、校验 Helm 控制块、检查
+  hostNetwork/privileged 策略；它只做预检，绝不调用 Helm、kubectl、OPA 或集群。
+- JSON Patch 和 Strategic Merge Patch 始终基于显式快照应用并返回 canonical 差异；Runbook 校验 frontmatter、
+  Steps/Rollback 段落、工具引用危险动作及 approvalRequired 元数据。
+- `ManifestValidationArtifactService` 将输入、规则集版本和预检结果写入固定 Artifact；Controller 返回的结果
+  必须通过严格 allowlist Schema 后才会成为 `UNTRUSTED` 输出 Artifact。
+- Java 定向测试覆盖合法/非法 YAML、未知 CRD、Helm 模板错误、策略拒绝、Patch 快照、危险/已审批 Runbook
+  及 Artifact 契约；Controller Go 测试/`go vet` 和 Helm lint 均通过。真实镜像构建、kubeconform/Conftest
+  二进制运行和集群内 NetworkPolicy/Artifact 通道属于环境验收项。
+
 ### SBX-18：修复方案仿真
 
 改动：
@@ -1294,9 +1308,9 @@ Codex 审核补充（提交 `ae94ebb` 后审核，补丁提交 `[SBX-09-fix]`）
 
 ## 13. 当前停止点
 
-SBX-00～16 已完成（含此前的审核修复）。Backend 已具备 Run/Artifact/API/权限、短时派发任务、
+SBX-00～17 已完成（含此前的审核修复）。Backend 已具备 Run/Artifact/API/权限、短时派发任务、
 HMAC Controller Client、断路器、短轮询状态收敛和脱敏诊断证据包；Controller 已具备基座、hardened JobSpec、
 生命周期、结果收集清理与隔离部署。首批固定诊断工具目录、受限 Python/Shell Runtime、生成代码 Artifact 与结构化
-结果契约已落地。下一单元为 SBX-17：YAML、Helm、Patch 与 Runbook 校验。
+结果契约、YAML/Helm/Patch/Runbook 校验及固定验证 Runtime 已落地。下一单元为 SBX-18：修复方案仿真。
 
 每次只提交一个 SBX 单元，代码验证通过并产生本地 commit 后再进入下一个单元；远端推送仍需用户单独授权。

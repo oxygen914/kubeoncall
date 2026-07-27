@@ -108,6 +108,21 @@ class SandboxControllerClientTest {
     }
 
     @Test
+    void usesTheManifestValidationArtifactForValidationRuns() throws Exception {
+        AtomicReference<byte[]> capturedBody = new AtomicReference<>();
+        start(exchange -> {
+            capturedBody.set(exchange.getRequestBody().readAllBytes());
+            respond(exchange, 200, "{\"runId\":\"sbx_abc\",\"phase\":\"PENDING\"}");
+        });
+
+        client(500).dispatch(run(com.kubeoncall.sandbox.domain.SandboxRunMode.MANIFEST_VALIDATION));
+
+        assertThat(new String(capturedBody.get(), StandardCharsets.UTF_8))
+                .contains("https://artifact.example/sandbox/sbx_abc/inputs/manifest-validation.json")
+                .doesNotContain("evidence.json");
+    }
+
+    @Test
     void failsFastForPermanentControllerRejectionAndOpensCircuitForTransientFailures() throws Exception {
         AtomicInteger calls = new AtomicInteger();
         start(exchange -> {
@@ -182,9 +197,11 @@ class SandboxControllerClientTest {
                 null,
                 null,
                 mode,
-                mode == com.kubeoncall.sandbox.domain.SandboxRunMode.GENERATED_CODE
-                        ? "generated-python"
-                        : "pod-inspect",
+                switch (mode) {
+                    case GENERATED_CODE -> "generated-python";
+                    case MANIFEST_VALIDATION -> "manifest-validation";
+                    default -> "pod-inspect";
+                },
                 "v1",
                 "registry.example/tool@sha256:" + "a".repeat(64),
                 com.kubeoncall.sandbox.domain.SandboxRunStatus.DISPATCHING,

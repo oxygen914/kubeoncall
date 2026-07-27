@@ -239,12 +239,14 @@ public class SandboxControllerClient {
         if (bucket == null || bucket.isBlank()) {
             throw new SandboxControllerClientException("SANDBOX_ARTIFACT_BUCKET_NOT_CONFIGURED", false, 0);
         }
+        String inputFilename =
+                switch (run.mode()) {
+                    case GENERATED_CODE -> "generated-code.json";
+                    case MANIFEST_VALIDATION -> "manifest-validation.json";
+                    default -> "evidence.json";
+                };
         String objectKey = SandboxArtifactStore.objectKey(
-                run.publicId(),
-                com.kubeoncall.sandbox.domain.SandboxArtifactType.INPUT,
-                run.mode() == com.kubeoncall.sandbox.domain.SandboxRunMode.GENERATED_CODE
-                        ? "generated-code.json"
-                        : "evidence.json");
+                run.publicId(), com.kubeoncall.sandbox.domain.SandboxArtifactType.INPUT, inputFilename);
         // A Job receives one short-lived, read-only artifact capability rather than MinIO access
         // credentials. The capability is sent only in the signed Controller request and is neither
         // stored in MySQL nor written to logs.

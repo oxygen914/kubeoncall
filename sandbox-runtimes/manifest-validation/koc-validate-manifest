@@ -1,0 +1,64 @@
+#!/usr/bin/env python3
+import json
+import os
+import pathlib
+import subprocess
+import sys
+import urllib.parse
+import urllib.request
+
+MAX_RESULT = 1024 * 1024
+RULESET = "sandbox-manifest-rules-v1"
+
+
+def fail(code, summary):
+    return {"schemaVersion": "v1", "valid": False, "findings": [{"code": code, "message": summary, "error": True}], "toolVersions": versions()}
+
+
+def versions():
+    return {"helm": version("helm", "version", "--short"), "kubeconform": version("kubeconform", "-v"), "conftest": version("conftest", "--version"), "rulesetVersion": RULESET}
+
+
+def version(*command):
+    try:
+        return subprocess.check_output(command, text=True, stderr=subprocess.STDOUT, timeout=10).strip()[:256]
+    except Exception:
+        return "unavailable"
+
+
+def main():
+    uri = os.environ.get("SANDBOX_INPUT_ARTIFACT_URI", "")
+    if urllib.parse.urlparse(uri).scheme not in {"http", "https"}:
+        result = fail("INPUT_URI_INVALID", "input must be an object-scoped HTTP(S) URL")
+    else:
+        try:
+            with urllib.request.urlopen(uri, timeout=15) as response:
+                payload = json.loads(response.read(50 * 1024 * 1024 + 1))
+            if payload.get("schemaVersion") != "v1" or payload.get("rulesetVersion") != RULESET:
+                raise ValueError("input contract mismatch")
+            preflight = payload.get("preflight", {})
+            result = {"schemaVersion": "v1", "valid": bool(preflight.get("valid")), "findings": preflight.get("findings", []), "toolVersions": versions()}
+            if payload.get("type") in {"MANIFEST", "HELM"} and result["valid"]:
+                document = payload.get("document", "")
+                sandbox = pathlib.Path("/sandbox/input")
+                sandbox.mkdir(parents=True, exist_ok=True)
+                target = sandbox / ("Chart.yaml" if payload["type"] == "HELM" else "manifest.yaml")
+                target.write_text(document, encoding="utf-8")
+                if payload["type"] == "MANIFEST":
+                    check = subprocess.run(["kubeconform", "-strict", str(target)], text=True, capture_output=True, timeout=60)
+                    if check.returncode:
+                        result = fail("KUBECONFORM_REJECTED", (check.stderr or check.stdout)[:4096])
+        except Exception as exc:
+            result = fail("VALIDATOR_FAILURE", type(exc).__name__)
+    encoded = json.dumps(result, separators=(",", ":"), ensure_ascii=True)
+    if len(encoded.encode("utf-8")) > MAX_RESULT:
+        result = fail("RESULT_TOO_LARGE", "validator result exceeds output ceiling")
+        encoded = json.dumps(result, separators=(",", ":"), ensure_ascii=True)
+    pathlib.Path("/sandbox/output").mkdir(parents=True, exist_ok=True)
+    pathlib.Path("/sandbox/output/result.json").write_text(encoded, encoding="utf-8")
+    print("KOC_RESULT_JSON:" + encoded)
+    return 0 if result["valid"] else 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())

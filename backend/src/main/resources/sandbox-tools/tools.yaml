@@ -44,3 +44,12 @@ tools:
     inputSchemaRef: sandbox-tools/schemas/generated-code-input-v1.json
     outputSchemaRef: sandbox-tools/schemas/generated-code-result-v1.json
     resources: {cpu: 500m, memory: 512Mi, ephemeralStorage: 512Mi, inputMaxBytes: 52428800, outputMaxBytes: 1048576, logMaxBytes: 2097152, scriptMaxBytes: 262144, timeoutSeconds: 120, maxTimeoutSeconds: 300}
+  - id: manifest-validation
+    version: v1
+    mode: MANIFEST_VALIDATION
+    imageDigest: registry.kubeoncall.io/sandbox/manifest-validation@sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff
+    entrypoint: /usr/local/bin/koc-validate-manifest
+    networkEgressPolicy: DENY_ALL
+    inputSchemaRef: sandbox-tools/schemas/manifest-validation-input-v1.json
+    outputSchemaRef: sandbox-tools/schemas/manifest-validation-result-v1.json
+    resources: {cpu: 500m, memory: 512Mi, ephemeralStorage: 1Gi, inputMaxBytes: 52428800, outputMaxBytes: 1048576, logMaxBytes: 2097152, scriptMaxBytes: 262144, timeoutSeconds: 180, maxTimeoutSeconds: 300}
