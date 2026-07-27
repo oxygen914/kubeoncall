@@ -8,8 +8,8 @@
 | 制定日期 | 2026-07-27 |
 | 目标项目 | KubeOnCall |
 | 实施状态 | IN_PROGRESS |
-| 代码实现进度 | 29% |
-| 自动化验证进度 | 29% |
+| 代码实现进度 | 33% |
+| 自动化验证进度 | 33% |
 | 真实环境验收进度 | 0%，按阶段单独记录 |
 | 计划提交数 | 24 个，`SBX-00`～`SBX-23` |
 
@@ -418,7 +418,7 @@ helm lint deploy/helm/kubeoncall
 | SBX-04 | `feat(sandbox): persist runs and artifacts` | MySQL 事实表与 Repository | COMPLETED |
 | SBX-05 | `feat(sandbox): add artifact storage boundary` | MinIO Artifact 隔离与校验 | COMPLETED |
 | SBX-06 | `feat(api): add sandbox run lifecycle endpoints` | 创建、查询、取消 API 与审计 | COMPLETED |
-| SBX-07 | `feat(sandbox-controller): scaffold internal service` | 独立 Controller 基座 | PLANNED |
+| SBX-07 | `feat(sandbox-controller): scaffold internal service` | 独立 Controller 基座 | COMPLETED |
 | SBX-08 | `feat(sandbox-controller): build hardened jobs` | 安全 JobSpec 生成器 | PLANNED |
 | SBX-09 | `feat(sandbox-controller): manage job lifecycle` | 幂等创建、查询和取消 | PLANNED |
 | SBX-10 | `feat(sandbox-controller): collect results and cleanup` | 结果收集、超时和 TTL 清理 | PLANNED |
@@ -775,6 +775,20 @@ Codex 审核补充（提交 `420bf60` 后审核，补丁提交 `[SBX-05-fix]`）
 回滚：
 
 - 独立目录可 revert，不影响 Backend。
+
+完成记录：
+
+- 新增独立 `sandbox-controller/` Go module 与多阶段、nonroot Dockerfile；该模块不依赖 Backend
+  代码、AgentSpace API 或 Kubernetes 凭据。
+- 新增 `/healthz` 与内部 `/internal/v1/runs` 契约。每个响应携带 `X-Request-Id`；内部 API 使用
+  `X-Sandbox-Key-Id`、Unix 时间戳、nonce 与 HMAC-SHA256 签名，签名覆盖方法、路径、时间戳、nonce
+  与请求体摘要。
+- nonce 在验签成功后进入带过期清理的内存重放窗口；未签名、错误/过期签名和重复 nonce 统一返回
+  无敏感细节的 `UNAUTHENTICATED`。请求大小、并发、读写超时和优雅关闭均由服务端固定配置控制。
+- 尚未进入 SBX-08/09 的 JobSpec 与生命周期实现，已签名的 Run 请求明确返回
+  `CONTROLLER_NOT_READY`，不会执行或接触集群。
+- 验证：`go test ./...` 与 `go vet ./...` 通过；覆盖未签名、有效签名、重复 nonce、过期签名和超大
+  请求。
 
 ### SBX-08：安全 JobSpec
 
