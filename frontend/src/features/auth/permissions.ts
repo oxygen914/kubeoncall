@@ -31,6 +31,10 @@ export const PERMISSIONS = {
   TOKEN_READ_OWN: 'token:read-own',
   TOKEN_MANAGE_OWN: 'token:manage-own',
   TOKEN_MANAGE_ALL: 'token:manage-all',
+  SANDBOX_READ: 'sandbox:read',
+  SANDBOX_EXECUTE: 'sandbox:execute',
+  SANDBOX_CANCEL: 'sandbox:cancel',
+  SANDBOX_MANAGE: 'sandbox:manage',
 } as const
 
 export type Permission = (typeof PERMISSIONS)[keyof typeof PERMISSIONS]

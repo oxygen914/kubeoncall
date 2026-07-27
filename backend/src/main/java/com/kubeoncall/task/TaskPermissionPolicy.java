@@ -26,6 +26,11 @@ public final class TaskPermissionPolicy {
         if (normalizedResource.contains("skill") || normalizedTask.startsWith("SKILL_")) {
             return PermissionCode.SKILL_READ;
         }
+        // Sandbox dispatch/run tasks execute isolated jobs, so they require sandbox:execute rather
+        // than a read grant; cancel is enforced at the run-lifecycle API, not the generic task layer.
+        if (normalizedResource.contains("sandbox") || normalizedTask.startsWith("SANDBOX_")) {
+            return PermissionCode.SANDBOX_EXECUTE;
+        }
         return PermissionCode.EXECUTION_READ;
     }
 

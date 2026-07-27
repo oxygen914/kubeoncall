@@ -8,8 +8,8 @@
 | 制定日期 | 2026-07-27 |
 | 目标项目 | KubeOnCall |
 | 实施状态 | IN_PROGRESS |
-| 代码实现进度 | 4% |
-| 自动化验证进度 | 4% |
+| 代码实现进度 | 8% |
+| 自动化验证进度 | 8% |
 | 真实环境验收进度 | 0%，按阶段单独记录 |
 | 计划提交数 | 24 个，`SBX-00`～`SBX-23` |
 
@@ -413,7 +413,7 @@ helm lint deploy/helm/kubeoncall
 | --- | --- | --- | --- |
 | SBX-00 | `docs(sandbox): define isolated diagnosis refactor plan` | 冻结范围、边界与提交顺序 | COMPLETED |
 | SBX-01 | `feat(sandbox): add feature flags and limits` | 默认关闭的配置与能力发现 | COMPLETED |
-| SBX-02 | `feat(identity): add sandbox permissions` | Sandbox 权限和角色映射 | PLANNED |
+| SBX-02 | `feat(identity): add sandbox permissions` | Sandbox 权限和角色映射 | COMPLETED |
 | SBX-03 | `feat(sandbox): add run policy contracts` | 领域类型、状态机和策略契约 | PLANNED |
 | SBX-04 | `feat(sandbox): persist runs and artifacts` | MySQL 事实表与 Repository | PLANNED |
 | SBX-05 | `feat(sandbox): add artifact storage boundary` | MinIO Artifact 隔离与校验 | PLANNED |
@@ -526,6 +526,22 @@ Codex 审核补充（提交 `7712ccb` 后审核，补丁提交 `[SBX-01-fix]`、
 
 - Viewer 只能读，Operator 可执行/取消，Admin 可管理。
 - 被撤销角色和 Token scope 立即失效。
+
+完成记录：
+
+- `PermissionCode` 增 `sandbox:read/execute/cancel/manage` 四个稳定权限码。
+- 新增 `V15__sandbox_permissions.sql`：向前兼容增量插入四条权限，并按 §6.5 映射内置角色
+  —— Viewer 仅 `sandbox:read`，Operator `sandbox:read/execute/cancel`，Admin 全部四项；
+  无 down 迁移、不触碰既有行。
+- API Token scope 校验无需改动：`ApiTokensController.normalizeScopes` 已用
+  `actor.hasPermission(scope)` 校验，`ApiTokenAuthenticationService` 取 token scope 与
+  owner 当前权限的交集，因此新增权限随 owner 角色自动生效，撤销角色或 scope 立即失效。
+- `TaskPermissionPolicy` 识别 Sandbox 任务（资源含 `sandbox` 或任务以 `SANDBOX_` 开头）→
+  要求 `sandbox:execute`；取消由 Run 生命周期 API（SBX-06）单独强制。
+- 前端 `permissions.ts` 增四个常量；`npm run typecheck` 通过。
+- 测试：`TaskPermissionPolicyTest` 增 1 例（Sandbox 任务映射 `sandbox:execute`）；
+  `IdentityMySqlIT` 增 1 例（真实 MySQL 容器验证四权限 seeded 且角色映射符合 §6.5），
+  Failsafe 通过，V15 迁移成功应用至 v15。
 
 回滚：
 
@@ -993,12 +1009,12 @@ Codex 审核补充（提交 `7712ccb` 后审核，补丁提交 `[SBX-01-fix]`、
 
 ## 13. 当前停止点
 
-SBX-01 已完成：在 `KubeOnCallProperties` 新增 `sandbox` 配置组（`SandboxProperties`），
-含总开关、四个运行模式开关、`agent-auto-route-enabled`、Controller endpoint/超时/最大响应、
-硬上限与保留期；`/api/v1/capabilities` 在 `features.sandbox` 回显能力、总开关开启时在
-`limits.sandbox` 回显限制，Controller endpoint 与 Secret 永不回显；默认全部关闭，现有行为不变。
-`KubeOnCallPropertiesTest` 与新增 `CapabilitiesServiceTest` 通过；关闭 Sandbox 时 Spring Context
-与现有 API 契约测试不受影响。尚未触碰 Sandbox 业务代码、数据库、部署或 CI。
+SBX-02 已完成：`PermissionCode` 增四个 sandbox 权限码，`V15__sandbox_permissions.sql`
+向前兼容增量写入权限与内置角色映射（Viewer 只读、Operator 读/执行/取消、Admin 全部），
+API Token scope 校验随 owner 权限自动识别新权限，`TaskPermissionPolicy` 将 Sandbox 任务
+映射到 `sandbox:execute`，前端权限常量同步。`TaskPermissionPolicyTest` 与真实 MySQL 容器
+下的 `IdentityMySqlIT`（V15 迁移 + 角色映射）通过；前端 typecheck 通过。尚未触碰 Sandbox
+业务代码（Run/Artifact/Controller）、部署或 CI。
 
 此后每次只提交一个 SBX 单元，验证通过并产生本地 commit 后再进入下一个单元；远端推送
-仍需用户单独授权。下一个单元为 `SBX-02`。
+仍需用户单独授权。下一个单元为 `SBX-03`。

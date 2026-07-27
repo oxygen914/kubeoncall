@@ -139,6 +139,40 @@ class IdentityMySqlIT {
         assertThat(after.authVersion()).isEqualTo(2);
     }
 
+    @Test
+    void sandboxPermissionsAreSeededAndGrantedToBuiltInRoles() throws Exception {
+        DataSource dataSource = DataSourceBuilder.create()
+                .url(MYSQL.getJdbcUrl() + "?allowPublicKeyRetrieval=true&useSSL=false")
+                .username(MYSQL.getUsername())
+                .password(MYSQL.getPassword())
+                .build();
+        JdbcTemplate jdbcTemplate = new JdbcTemplate(dataSource);
+        runMigration(jdbcTemplate);
+
+        // The four sandbox permission codes exist (SBX-02).
+        for (String code : new String[] {"sandbox:read", "sandbox:execute", "sandbox:cancel", "sandbox:manage"}) {
+            Integer count = jdbcTemplate.queryForObject(
+                    "SELECT COUNT(*) FROM koc_permission WHERE code = ?", Integer.class, code);
+            assertThat(count).as("permission %s seeded", code).isEqualTo(1);
+        }
+
+        // §6.5 role mapping: Viewer reads, Operator reads/executes/cancels, Admin manages all four.
+        assertThat(permissionsFor(jdbcTemplate, "VIEWER")).containsExactlyInAnyOrder("sandbox:read");
+        assertThat(permissionsFor(jdbcTemplate, "OPERATOR"))
+                .containsExactlyInAnyOrder("sandbox:read", "sandbox:execute", "sandbox:cancel");
+        assertThat(permissionsFor(jdbcTemplate, "ADMIN"))
+                .containsExactlyInAnyOrder("sandbox:read", "sandbox:execute", "sandbox:cancel", "sandbox:manage");
+    }
+
+    private static java.util.List<String> permissionsFor(JdbcTemplate jdbcTemplate, String roleCode) {
+        return jdbcTemplate.queryForList(
+                "SELECT p.code FROM koc_role_permission rp "
+                        + "JOIN koc_role r ON r.id = rp.role_id "
+                        + "JOIN koc_permission p ON p.id = rp.permission_id "
+                        + "WHERE r.code = ? AND p.code LIKE 'sandbox:%' ORDER BY p.code",
+                String.class, roleCode);
+    }
+
     private void runMigration(JdbcTemplate jdbcTemplate) throws Exception {
         org.flywaydb.core.Flyway flyway = org.flywaydb.core.Flyway.configure()
                 .dataSource(

@@ -44,6 +44,10 @@ public final class PermissionCode {
     public static final String AUDIT_EXPORT = "audit:export";
     public static final String SYSTEM_READ = "system:read";
     public static final String SYSTEM_MANAGE = "system:manage";
+    public static final String SANDBOX_READ = "sandbox:read";
+    public static final String SANDBOX_EXECUTE = "sandbox:execute";
+    public static final String SANDBOX_CANCEL = "sandbox:cancel";
+    public static final String SANDBOX_MANAGE = "sandbox:manage";
 
     private PermissionCode() {}
 }

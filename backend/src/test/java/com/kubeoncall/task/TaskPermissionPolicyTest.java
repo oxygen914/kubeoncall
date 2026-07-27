@@ -26,4 +26,12 @@ class TaskPermissionPolicyTest {
                 .isEqualTo(PermissionCode.KNOWLEDGE_READ);
         assertThat(TaskPermissionPolicy.requiredPermission(null, "memory")).isEqualTo(PermissionCode.MEMORY_READ);
     }
+
+    @Test
+    void sandboxTasksRequireSandboxExecute() {
+        assertThat(TaskPermissionPolicy.requiredPermission("SANDBOX_DISPATCH", "sandbox_run"))
+                .isEqualTo(PermissionCode.SANDBOX_EXECUTE);
+        assertThat(TaskPermissionPolicy.requiredPermission("ASYNC_DISPATCH", "sandbox"))
+                .isEqualTo(PermissionCode.SANDBOX_EXECUTE);
+    }
 }
