@@ -264,6 +264,89 @@ public class SandboxRunRepository {
         return findByPublicId(publicId);
     }
 
+    /**
+     * Claims one non-terminal run for short reconciliation without consuming its dispatch-attempt
+     * budget. The caller must release the claim after one Controller request so every Backend
+     * instance can safely share polling work through the fencing token.
+     */
+    @Transactional
+    public Optional<SandboxRunRecord> claimForReconciliation(String ownerToken, Instant now, Duration leaseDuration) {
+        requireOwner(ownerToken);
+        Instant leaseUntil = requireLease(now, leaseDuration);
+        List<Long> candidates = jdbcTemplate.query("""
+                SELECT id FROM koc_sandbox_run
+                 WHERE run_status NOT IN ('SUCCEEDED', 'FAILED', 'TIMED_OUT', 'CANCELLED')
+                   AND (owner_token IS NULL OR lease_until <= ?)
+                 ORDER BY updated_at ASC, id ASC LIMIT 1 FOR UPDATE SKIP LOCKED
+                """, (rs, rowNum) -> rs.getLong("id"), now);
+        if (candidates.isEmpty()) {
+            return Optional.empty();
+        }
+        long runId = candidates.get(0);
+        int updated = jdbcTemplate.update("""
+                UPDATE koc_sandbox_run
+                   SET owner_token = ?, lease_until = ?, fencing_token = fencing_token + 1, version = version + 1
+                 WHERE id = ?
+                   AND run_status NOT IN ('SUCCEEDED', 'FAILED', 'TIMED_OUT', 'CANCELLED')
+                   AND (owner_token IS NULL OR lease_until <= ?)
+                """, ownerToken, leaseUntil, runId, now);
+        return updated == 1 ? findById(runId) : Optional.empty();
+    }
+
+    /** Releases a non-terminal reconciliation claim so the next short poll can be claimed promptly. */
+    public boolean releaseReconciliationClaim(String publicId, String ownerToken, long fencingToken) {
+        requireOwnership(ownerToken, fencingToken);
+        return jdbcTemplate.update("""
+                UPDATE koc_sandbox_run
+                   SET owner_token = NULL, lease_until = NULL, version = version + 1
+                 WHERE public_id = ?
+                   AND owner_token = ?
+                   AND fencing_token = ?
+                   AND run_status NOT IN ('SUCCEEDED', 'FAILED', 'TIMED_OUT', 'CANCELLED')
+                """, publicId, ownerToken, fencingToken) == 1;
+    }
+
+    /** Claims one terminal Run whose Kubernetes cleanup still needs convergence. */
+    @Transactional
+    public Optional<SandboxRunRecord> claimCleanupForReconciliation(
+            String ownerToken, Instant now, Duration leaseDuration) {
+        requireOwner(ownerToken);
+        Instant leaseUntil = requireLease(now, leaseDuration);
+        List<Long> candidates = jdbcTemplate.query("""
+                SELECT id FROM koc_sandbox_run
+                 WHERE run_status IN ('SUCCEEDED', 'FAILED', 'TIMED_OUT', 'CANCELLED')
+                   AND cleanup_status IN ('PENDING', 'RUNNING')
+                   AND (owner_token IS NULL OR lease_until <= ?)
+                 ORDER BY updated_at ASC, id ASC LIMIT 1 FOR UPDATE SKIP LOCKED
+                """, (rs, rowNum) -> rs.getLong("id"), now);
+        if (candidates.isEmpty()) {
+            return Optional.empty();
+        }
+        long runId = candidates.get(0);
+        int updated = jdbcTemplate.update("""
+                UPDATE koc_sandbox_run
+                   SET owner_token = ?, lease_until = ?, fencing_token = fencing_token + 1, version = version + 1
+                 WHERE id = ?
+                   AND run_status IN ('SUCCEEDED', 'FAILED', 'TIMED_OUT', 'CANCELLED')
+                   AND cleanup_status IN ('PENDING', 'RUNNING')
+                   AND (owner_token IS NULL OR lease_until <= ?)
+                """, ownerToken, leaseUntil, runId, now);
+        return updated == 1 ? findById(runId) : Optional.empty();
+    }
+
+    /** Releases a cleanup claim when the Controller is temporarily unavailable. */
+    public boolean releaseCleanupClaim(String publicId, String ownerToken, long fencingToken) {
+        requireOwnership(ownerToken, fencingToken);
+        return jdbcTemplate.update("""
+                UPDATE koc_sandbox_run
+                   SET owner_token = NULL, lease_until = NULL, version = version + 1
+                 WHERE public_id = ?
+                   AND owner_token = ?
+                   AND fencing_token = ?
+                   AND cleanup_status IN ('PENDING', 'RUNNING')
+                """, publicId, ownerToken, fencingToken) == 1;
+    }
+
     /** Renews the lease of a run the caller still owns. */
     public boolean heartbeat(
             String publicId, String ownerToken, long fencingToken, Instant now, Duration leaseDuration) {
@@ -329,6 +412,7 @@ public class SandboxRunRepository {
         return jdbcTemplate.update("""
                 UPDATE koc_sandbox_run
                    SET run_status = 'CANCELLED',
+                       cleanup_status = CASE WHEN cleanup_status = 'NOT_REQUIRED' THEN 'PENDING' ELSE cleanup_status END,
                        finished_at = ?,
                        version = version + 1
                  WHERE public_id = ?

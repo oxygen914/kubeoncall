@@ -8,8 +8,8 @@
 | 制定日期 | 2026-07-27 |
 | 目标项目 | KubeOnCall |
 | 实施状态 | IN_PROGRESS |
-| 代码实现进度 | 54%（SBX-00～12 已完成） |
-| 自动化验证进度 | 54%（代码级验证；真实集群待验收） |
+| 代码实现进度 | 58%（SBX-00～13 已完成） |
+| 自动化验证进度 | 58%（代码级验证；真实集群待验收） |
 | 真实环境验收进度 | 0%，按阶段单独记录 |
 | 计划提交数 | 24 个，`SBX-00`～`SBX-23` |
 
@@ -424,7 +424,7 @@ helm lint deploy/helm/kubeoncall
 | SBX-10 | `feat(sandbox-controller): collect results and cleanup` | 结果收集、超时和 TTL 清理 | COMPLETED |
 | SBX-11 | `feat(deploy): isolate sandbox runtime` | Namespace、RBAC、Quota、NetworkPolicy | COMPLETED |
 | SBX-12 | `feat(sandbox): dispatch runs through controller` | Backend Client、短时派发和断路器 | COMPLETED |
-| SBX-13 | `feat(sandbox): reconcile run convergence` | 多实例安全的状态收敛与清理重试 | PLANNED |
+| SBX-13 | `feat(sandbox): reconcile run convergence` | 多实例安全的状态收敛与清理重试 | COMPLETED |
 | SBX-14 | `feat(sandbox): build diagnostic evidence packages` | 证据采集、裁剪、脱敏和哈希 | PLANNED |
 | SBX-15 | `feat(sandbox): add fixed diagnostic tools` | 固定工具目录与首批工具 | PLANNED |
 | SBX-16 | `feat(sandbox): isolate generated code execution` | Python/Shell 受限执行 | PLANNED |
@@ -983,6 +983,19 @@ Codex 审核补充（提交 `ae94ebb` 后审核，补丁提交 `[SBX-09-fix]`）
 
 - 停止新建，等待非终态 Run 或显式取消，再 revert Reconciler。
 
+完成记录：
+
+- 新增 `SandboxRunReconciler`：每轮只 claim 一个 Run，持久化 run-level lease/fencing 后执行一次
+  Controller 查询；非终态 Run 在本轮结束释放 claim，多个 Backend 实例可安全接力，且不会消耗
+  `max_attempts` 的派发重试预算。
+- 收敛 `DISPATCHING -> RUNNING -> COLLECTING -> SUCCEEDED`，Controller 结果仅保存摘要；控制器
+  日志转换为大小受限、`UNTRUSTED` 的 MinIO Artifact，并只在 Run 结果中引用其 SHA-256。
+- Run 到期时先写 `TIMED_OUT` 再尽力取消 Controller Job，保证迟到成功不能覆盖超时；Controller
+  不可达时维持可恢复 Run/cleanup 状态，不伪造失败。终态 Run 进入独立 cleanup 状态机，Controller
+  确认 Job 消失后才标记 cleanup 成功，仍存在时重复发起幂等取消。
+- 自动化验证：覆盖 Controller 不可达、超时优先、成功收集、无内联日志及 cleanup 重试；真实多副本
+  Backend、Controller 重启和 Kubernetes Job/TTL 生命周期仍待环境验收。
+
 ### SBX-14：诊断证据包
 
 改动：
@@ -1243,9 +1256,9 @@ Codex 审核补充（提交 `ae94ebb` 后审核，补丁提交 `[SBX-09-fix]`）
 
 ## 13. 当前停止点
 
-SBX-00～12 已完成（含此前的审核修复）。Backend 已具备 Run/Artifact/API/权限、短时派发任务、
-HMAC Controller Client 和断路器；Controller 已具备基座、hardened JobSpec、生命周期、结果收集清理与
-隔离部署。尚未触碰的下一单元为 SBX-13：多 Backend 实例安全的 Run 状态收敛、Controller 重启恢复、
-Artifact 状态校验和 cleanup 重试；其后依次为诊断证据包（SBX-14）和固定诊断工具目录（SBX-15）。
+SBX-00～13 已完成（含此前的审核修复）。Backend 已具备 Run/Artifact/API/权限、短时派发任务、
+HMAC Controller Client、断路器和短轮询状态收敛；Controller 已具备基座、hardened JobSpec、生命周期、
+结果收集清理与隔离部署。下一单元为 SBX-14：诊断证据包的采集、裁剪、脱敏和稳定哈希；随后是
+SBX-15 的固定诊断工具目录与可重放样例。
 
 每次只提交一个 SBX 单元，代码验证通过并产生本地 commit 后再进入下一个单元；远端推送仍需用户单独授权。

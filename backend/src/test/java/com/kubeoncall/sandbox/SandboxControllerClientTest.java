@@ -65,6 +65,7 @@ class SandboxControllerClientTest {
                 + HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(capturedBody.get()));
         assertThat(first(headers, "X-sandbox-signature")).isEqualTo(hmac(canonical, "test-secret"));
         assertThat(first(headers, "X-sandbox-key-id")).isEqualTo("backend-test");
+        assertThat(client.status(run()).phase()).isEqualTo("PENDING");
     }
 
     @Test

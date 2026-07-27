@@ -66,6 +66,47 @@ public class SandboxControllerClient {
         return result;
     }
 
+    /** Reads one normalized controller status; it never waits for a Job transition. */
+    public ControllerStatus status(SandboxRunRecord run) {
+        if (run == null) {
+            throw new IllegalArgumentException("sandbox run is required");
+        }
+        return lifecycle("GET", CREATE_PATH + "/" + run.publicId(), run);
+    }
+
+    /** Requests asynchronous Job cancellation and returns the Controller's immediate status. */
+    public ControllerStatus cancel(SandboxRunRecord run) {
+        if (run == null) {
+            throw new IllegalArgumentException("sandbox run is required");
+        }
+        return lifecycle("DELETE", CREATE_PATH + "/" + run.publicId(), run);
+    }
+
+    /** Collects the controller's normalized bounded result once a Job is terminal. */
+    public CollectedResult collect(SandboxRunRecord run) {
+        if (run == null) {
+            throw new IllegalArgumentException("sandbox run is required");
+        }
+        ControllerResponse response = call("GET", CREATE_PATH + "/" + run.publicId() + "/logs", null, run.requestId());
+        Map<String, Object> payload = response.payload();
+        requireMatchingRunId(run.publicId(), payload, response.statusCode());
+        return new CollectedResult(
+                run.publicId(),
+                stringValue(payload.get("phase")),
+                numberValue(payload.get("exitCode")),
+                stringValue(payload.get("reason")),
+                stringValue(payload.get("logs")),
+                Boolean.TRUE.equals(payload.get("outputFound")));
+    }
+
+    private ControllerStatus lifecycle(String method, String path, SandboxRunRecord run) {
+        ControllerResponse response = call(method, path, null, run.requestId());
+        Map<String, Object> payload = response.payload();
+        requireMatchingRunId(run.publicId(), payload, response.statusCode());
+        return new ControllerStatus(
+                run.publicId(), stringValue(payload.get("phase")), Boolean.TRUE.equals(payload.get("exists")));
+    }
+
     private DispatchResult send(SandboxRunRecord run) {
         KubeOnCallProperties.Sandbox sandbox = properties.getSandbox();
         URI endpoint = endpoint(sandbox.getControllerEndpoint());
@@ -109,6 +150,54 @@ public class SandboxControllerClient {
                 controllerRunId = run.publicId();
             }
             return new DispatchResult(controllerRunId, stringValue(payload.get("phase")), status);
+        } catch (SandboxControllerClientException ex) {
+            throw ex;
+        } catch (java.net.http.HttpTimeoutException ex) {
+            throw new SandboxControllerClientException("CONTROLLER_TIMEOUT", true, 0, ex);
+        } catch (IOException ex) {
+            throw new SandboxControllerClientException("CONTROLLER_IO_FAILURE", true, 0, ex);
+        } catch (InterruptedException ex) {
+            Thread.currentThread().interrupt();
+            throw new SandboxControllerClientException("CONTROLLER_INTERRUPTED", true, 0, ex);
+        }
+    }
+
+    private ControllerResponse call(String method, String path, byte[] body, String requestId) {
+        KubeOnCallProperties.Sandbox sandbox = properties.getSandbox();
+        URI endpoint = endpoint(sandbox.getControllerEndpoint());
+        String secret = requireText(sandbox.getControllerHmacSecret(), "CONTROLLER_AUTH_NOT_CONFIGURED");
+        String keyId = requireText(sandbox.getControllerKeyId(), "CONTROLLER_AUTH_NOT_CONFIGURED");
+        byte[] safeBody = body == null ? new byte[0] : body;
+        String timestamp = Long.toString(Instant.now().getEpochSecond());
+        String nonce = UUID.randomUUID().toString();
+        String signature = signature(method, path, timestamp, nonce, safeBody, secret);
+        HttpRequest.Builder builder = HttpRequest.newBuilder(endpoint.resolve(path))
+                .timeout(java.time.Duration.ofMillis(sandbox.getControllerReadTimeoutMillis()))
+                .header("X-Request-Id", safeRequestId(requestId))
+                .header("X-Sandbox-Key-Id", keyId)
+                .header("X-Sandbox-Timestamp", timestamp)
+                .header("X-Sandbox-Nonce", nonce)
+                .header("X-Sandbox-Signature", signature);
+        if (body != null) {
+            builder.header("Content-Type", "application/json");
+        }
+        HttpRequest request = builder.method(method, HttpRequest.BodyPublishers.ofByteArray(safeBody))
+                .build();
+        try {
+            HttpResponse<InputStream> response = HttpClient.newBuilder()
+                    .connectTimeout(java.time.Duration.ofMillis(sandbox.getControllerConnectTimeoutMillis()))
+                    .build()
+                    .send(request, HttpResponse.BodyHandlers.ofInputStream());
+            int status = response.statusCode();
+            if (status < 200 || status >= 300) {
+                drainBounded(response.body(), sandbox.getControllerMaxResponseBytes());
+                if (isRetryableStatus(status)) {
+                    throw new SandboxControllerClientException("CONTROLLER_HTTP_" + status, true, status);
+                }
+                throw new SandboxControllerClientException("CONTROLLER_HTTP_" + status, false, status);
+            }
+            return new ControllerResponse(
+                    status, parseBounded(response.body(), sandbox.getControllerMaxResponseBytes()));
         } catch (SandboxControllerClientException ex) {
             throw ex;
         } catch (java.net.http.HttpTimeoutException ex) {
@@ -227,5 +316,33 @@ public class SandboxControllerClient {
         return value == null ? "" : String.valueOf(value).trim();
     }
 
+    private static Integer numberValue(Object value) {
+        if (value instanceof Number number) {
+            return number.intValue();
+        }
+        try {
+            return value == null ? null : Integer.valueOf(String.valueOf(value));
+        } catch (NumberFormatException ignored) {
+            return null;
+        }
+    }
+
+    private static void requireMatchingRunId(String expected, Map<String, Object> payload, int statusCode) {
+        String actual = stringValue(payload.get("runId"));
+        if (actual.isBlank()) {
+            actual = stringValue(payload.get("RunID"));
+        }
+        if (!expected.equals(actual)) {
+            throw new SandboxControllerClientException("CONTROLLER_RUN_ID_MISMATCH", false, statusCode);
+        }
+    }
+
     public record DispatchResult(String controllerRunId, String phase, int statusCode) {}
+
+    public record ControllerStatus(String runId, String phase, boolean exists) {}
+
+    public record CollectedResult(
+            String runId, String phase, Integer exitCode, String reason, String logs, boolean outputFound) {}
+
+    private record ControllerResponse(int statusCode, Map<String, Object> payload) {}
 }
