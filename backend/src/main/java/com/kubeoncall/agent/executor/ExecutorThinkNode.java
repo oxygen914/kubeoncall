@@ -9,6 +9,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import com.kubeoncall.agent.node.ThinkNode;
+import com.kubeoncall.agent.sandbox.SandboxAgentRunSubmissionService;
+import com.kubeoncall.agent.sandbox.SandboxRoutingPolicy;
 import com.kubeoncall.domain.graph.ExecutionPlan;
 import com.kubeoncall.domain.graph.GraphState;
 import com.kubeoncall.domain.graph.NodeResult;
@@ -28,19 +30,32 @@ public class ExecutorThinkNode extends ThinkNode {
     private final AgentToolCatalog agentToolCatalog;
     private final ExecutorPlanFactory planFactory;
     private final KubeOnCallMetricsService metricsService;
+    private final SandboxRoutingPolicy sandboxRoutingPolicy;
+    private final SandboxAgentRunSubmissionService sandboxSubmissionService;
 
     public ExecutorThinkNode(AgentToolCatalog agentToolCatalog, ExecutorPlanFactory planFactory) {
-        this(agentToolCatalog, planFactory, null);
+        this(agentToolCatalog, planFactory, null, null, null);
+    }
+
+    public ExecutorThinkNode(
+            AgentToolCatalog agentToolCatalog,
+            ExecutorPlanFactory planFactory,
+            KubeOnCallMetricsService metricsService) {
+        this(agentToolCatalog, planFactory, metricsService, null, null);
     }
 
     @Autowired
     public ExecutorThinkNode(
             AgentToolCatalog agentToolCatalog,
             ExecutorPlanFactory planFactory,
-            KubeOnCallMetricsService metricsService) {
+            KubeOnCallMetricsService metricsService,
+            SandboxRoutingPolicy sandboxRoutingPolicy,
+            SandboxAgentRunSubmissionService sandboxSubmissionService) {
         this.agentToolCatalog = agentToolCatalog;
         this.planFactory = planFactory;
         this.metricsService = metricsService;
+        this.sandboxRoutingPolicy = sandboxRoutingPolicy;
+        this.sandboxSubmissionService = sandboxSubmissionService;
     }
 
     @Override
@@ -53,6 +68,42 @@ public class ExecutorThinkNode extends ThinkNode {
         Task task = state.getCurrentTask();
         if (task == null) {
             return new NodeResult(getName(), NodeStatus.FAILURE, "No task available for execution", Map.of());
+        }
+
+        if (sandboxRoutingPolicy != null) {
+            SandboxRoutingPolicy.Decision decision =
+                    sandboxRoutingPolicy.decide(task, state.getUserRequest(), state.getContext());
+            if (decision.routed()) {
+                if (sandboxSubmissionService == null) {
+                    return new NodeResult(
+                            getName(), NodeStatus.FAILURE, "Sandbox routing service is unavailable", Map.of());
+                }
+                SandboxAgentRunSubmissionService.Submission submission =
+                        sandboxSubmissionService.submit(state, task, decision);
+                if (!submission.submitted()) {
+                    return new NodeResult(
+                            getName(),
+                            NodeStatus.FAILURE,
+                            "Sandbox route was not submitted",
+                            Map.of("reason", submission.reason()));
+                }
+                Map<String, Object> route = Map.of(
+                        "mode",
+                        decision.mode().name(),
+                        "reason",
+                        decision.reason(),
+                        "taskId",
+                        task.taskId(),
+                        "runId",
+                        submission.runId());
+                state.getContext().put("sandboxRoute", route);
+                state.addObservation("Executor: sandbox route selected mode=" + decision.mode());
+                return new NodeResult(
+                        getName(),
+                        NodeStatus.WAITING,
+                        "Sandbox route selected; waiting for durable Sandbox Run creation",
+                        route);
+            }
         }
 
         String executorKind = planFactory.executorKind(task.taskType());

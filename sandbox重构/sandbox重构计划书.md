@@ -8,8 +8,8 @@
 | 制定日期 | 2026-07-27 |
 | 目标项目 | KubeOnCall |
 | 实施状态 | IN_PROGRESS |
-| 代码实现进度 | 79%（SBX-00～18 已完成） |
-| 自动化验证进度 | 79%（SBX-00～18 代码级验证通过；真实集群待验收） |
+| 代码实现进度 | 83%（SBX-00～19 已完成） |
+| 自动化验证进度 | 83%（SBX-00～19 代码级验证通过；真实集群待验收） |
 | 真实环境验收进度 | 0%，按阶段单独记录 |
 | 计划提交数 | 24 个，`SBX-00`～`SBX-23` |
 
@@ -430,7 +430,7 @@ helm lint deploy/helm/kubeoncall
 | SBX-16 | `feat(sandbox): isolate generated code execution` | Python/Shell 受限执行 | COMPLETED |
 | SBX-17 | `feat(sandbox): validate manifests and runbooks` | YAML、Helm、Patch、Runbook 校验 | COMPLETED |
 | SBX-18 | `feat(sandbox): simulate remediation plans` | 独立仿真集群验证 | COMPLETED |
-| SBX-19 | `feat(agent): route diagnostics through sandbox` | Planner/Executor 异步路由 | PLANNED |
+| SBX-19 | `feat(agent): route diagnostics through sandbox` | Planner/Executor 异步路由 | COMPLETED |
 | SBX-20 | `feat(verifier): gate remediation with sandbox evidence` | 恢复工作流与生产动作硬边界 | PLANNED |
 | SBX-21 | `feat(console): add sandbox run operations` | Run 列表、详情、Artifact 和取消 | PLANNED |
 | SBX-22 | `feat(observability): monitor sandbox operations` | 指标、Dashboard 和告警 | PLANNED |
@@ -1150,23 +1150,26 @@ Codex 审核补充（提交 `ae94ebb` 后审核，补丁提交 `[SBX-09-fix]`）
 
 ### SBX-19：Agent 路由
 
-改动：
+完成记录：
 
-- 新增明确任务类型，不复用当前设备侧 `EXECUTE_SCRIPT` 语义。
-- Planner 只在证据不足且工具匹配时选择 Sandbox。
-- Executor 创建 Sandbox Run 后挂起当前 Workflow，不同步等待。
-- 防止相同告警循环创建 Run；受 `max-loops`、并发和预算限制。
-- 普通日志查询和 Prometheus 查询继续走现有只读工具。
+- 新增 `SandboxRoutingPolicy`：默认关闭；只有已开启自动路由、Planner 明确标记证据不足、请求显式要求
+  隔离诊断且当前任务不是只读查询时，才选择固定诊断 Sandbox。日志与指标查询继续走既有只读工具。
+- 生成代码、清单校验和修复仿真必须通过独立 API 提交它们各自的受控输入 Artifact；自动路由拒绝这些
+  尚无 Agent 输入构造器的模式，避免生成空 Run 或把 Agent 文本直接作为代码/资源配置执行。
+- `ASK_EXECUTION` 将已持久化的真实发起人最小投影写入 `GraphState.workflowActor`。`ExecutorThinkNode`
+  创建关联 execution 的固定诊断 Run，并在同一事务写入脱敏 `evidence.json` 后返回 `WAITING`；它不阻塞
+  Worker 等待控制器执行结果，也不会落入 Kubernetes/设备/数据库执行器。
+- 路由 Idempotency Key 由 execution 与 task 派生；既有 Sandbox 每告警并发、全局并发、异步任务和
+  ReAct `max-loops` 限制继续生效。SBX-20 将消费 Run 终态并恢复该暂停 Workflow。
 
 验证：
 
-- 不需要 Sandbox 的请求不被错误路由。
-- 固定诊断、生成代码、Manifest 校验和仿真选择测试。
-- 同一告警去重与循环上限测试。
+- 定向测试覆盖默认关闭、只读查询不路由、证据不足与显式请求的固定诊断路由、身份传播、Run 创建后
+  Artifact 写入、未支持模式拒绝、Executor `WAITING` 及现有 Ask/Executor 行为。
 
 回滚：
 
-- 关闭 `agent-auto-route-enabled`，独立 Sandbox API 仍可使用。
+- 关闭 `agent-auto-route-enabled`；独立 Sandbox API 与既有执行器保持可用。
 
 ### SBX-20：Workflow 恢复与生产动作硬边界
 
@@ -1320,6 +1323,7 @@ SBX-00～18 已完成（含此前的审核修复）。Backend 已具备 Run/Arti
 HMAC Controller Client、断路器、短轮询状态收敛和脱敏诊断证据包；Controller 已具备基座、hardened JobSpec、
 生命周期、结果收集清理与隔离部署。首批固定诊断工具目录、受限 Python/Shell Runtime、生成代码 Artifact 与结构化
 结果契约、YAML/Helm/Patch/Runbook 校验及固定验证 Runtime 已落地。独立仿真入口、临时 namespace、受限身份、
-配额/默认拒绝网络、脱敏 Artifact 与清理边界也已落地。下一单元为 SBX-19：Agent 路由。
+配额/默认拒绝网络、脱敏 Artifact 与清理边界也已落地。固定诊断的保守 Agent 自动路由、真实用户归属、
+Artifact 先行写入和异步挂起已落地。下一单元为 SBX-20：Workflow 恢复与生产动作硬边界。
 
 每次只提交一个 SBX 单元，代码验证通过并产生本地 commit 后再进入下一个单元；远端推送仍需用户单独授权。

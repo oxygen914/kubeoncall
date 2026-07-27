@@ -78,20 +78,42 @@ public class AskService {
      * a second planner/tool execution.
      */
     public AskExecutionResult handleDurably(String question, String requestedSessionId, String executionId) {
+        return handleDurably(question, requestedSessionId, executionId, Map.of());
+    }
+
+    /**
+     * Durable workers supply the already-authorized request actor here. Persisting this minimal
+     * identity projection in GraphState lets later asynchronous boundaries (Sandbox/approval) keep
+     * user attribution without re-reading a browser session or inventing a system account.
+     */
+    public AskExecutionResult handleDurably(
+            String question, String requestedSessionId, String executionId, Map<String, Object> actor) {
         if (executionId == null || executionId.isBlank()) {
             throw new IllegalArgumentException("A durable execution id is required");
         }
-        return handle(question, requestedSessionId, executionId, true);
+        return handle(question, requestedSessionId, executionId, true, actor);
     }
 
     private AskExecutionResult handle(
             String question, String requestedSessionId, String executionId, boolean retainCheckpoint) {
+        return handle(question, requestedSessionId, executionId, retainCheckpoint, Map.of());
+    }
+
+    private AskExecutionResult handle(
+            String question,
+            String requestedSessionId,
+            String executionId,
+            boolean retainCheckpoint,
+            Map<String, Object> actor) {
         Instant startedAt = Instant.now();
         GraphState state = new GraphState();
         if (executionId != null && !executionId.isBlank()) {
             state.setExecutionId(executionId);
         }
         state.setUserRequest(question);
+        if (actor != null && !actor.isEmpty()) {
+            state.getContext().put("workflowActor", Map.copyOf(actor));
+        }
         String sessionId = contextLifecycle.prepare(state, question, requestedSessionId);
 
         plannerAgent.run(state);
