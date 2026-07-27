@@ -79,6 +79,16 @@ public class RealtimeConfiguration {
     }
 
     @Bean
+    public OutboxEventHandler sandboxRunCreatedRealtimeHandler(ObjectMapper objectMapper, RealtimeEventHub eventHub) {
+        return handler("sandbox.run.created", objectMapper, eventHub);
+    }
+
+    @Bean
+    public OutboxEventHandler sandboxRunCancelledRealtimeHandler(ObjectMapper objectMapper, RealtimeEventHub eventHub) {
+        return handler("sandbox.run.cancelled", objectMapper, eventHub);
+    }
+
+    @Bean
     public OutboxEventHandler taskCreatedRealtimeHandler(ObjectMapper objectMapper, RealtimeEventHub eventHub) {
         return handler("task.created", objectMapper, eventHub);
     }

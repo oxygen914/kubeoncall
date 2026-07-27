@@ -8,8 +8,8 @@
 | 制定日期 | 2026-07-27 |
 | 目标项目 | KubeOnCall |
 | 实施状态 | IN_PROGRESS |
-| 代码实现进度 | 25% |
-| 自动化验证进度 | 25% |
+| 代码实现进度 | 29% |
+| 自动化验证进度 | 29% |
 | 真实环境验收进度 | 0%，按阶段单独记录 |
 | 计划提交数 | 24 个，`SBX-00`～`SBX-23` |
 
@@ -417,7 +417,7 @@ helm lint deploy/helm/kubeoncall
 | SBX-03 | `feat(sandbox): add run policy contracts` | 领域类型、状态机和策略契约 | COMPLETED |
 | SBX-04 | `feat(sandbox): persist runs and artifacts` | MySQL 事实表与 Repository | COMPLETED |
 | SBX-05 | `feat(sandbox): add artifact storage boundary` | MinIO Artifact 隔离与校验 | COMPLETED |
-| SBX-06 | `feat(api): add sandbox run lifecycle endpoints` | 创建、查询、取消 API 与审计 | PLANNED |
+| SBX-06 | `feat(api): add sandbox run lifecycle endpoints` | 创建、查询、取消 API 与审计 | COMPLETED |
 | SBX-07 | `feat(sandbox-controller): scaffold internal service` | 独立 Controller 基座 | PLANNED |
 | SBX-08 | `feat(sandbox-controller): build hardened jobs` | 安全 JobSpec 生成器 | PLANNED |
 | SBX-09 | `feat(sandbox-controller): manage job lifecycle` | 幂等创建、查询和取消 | PLANNED |
@@ -739,6 +739,24 @@ Codex 审核补充（提交 `420bf60` 后审核，补丁提交 `[SBX-05-fix]`）
 回滚：
 
 - 关闭总开关后 revert API；表和 Artifact 保留。
+
+完成记录：
+
+- 新增 `/api/v1/sandbox-runs`：创建、列表、详情、取消、Artifact 元数据五个接口。创建强制
+  `Idempotency-Key`（16～128 字符），取消强制 `If-Match` 正版本；列表/详情/Artifact 要求
+  `sandbox:read`，创建要求 `sandbox:execute`，取消要求 `sandbox:cancel`。
+- 新增 `SandboxRunCommandService`：在单一事务内写入 Run、操作审计、Outbox 与幂等响应；请求线程
+  不调用 Controller。创建事件为 `sandbox.run.created`，取消事件为 `sandbox.run.cancelled`；二者
+  已注册至既有 Outbox→SSE 通道，新增 `sandbox-runs` 订阅主题并要求 `sandbox:read`。
+- API 永不接收镜像、entrypoint、网络策略、对象 bucket/key、租约、fencing 或完整请求/结果内容。
+  创建仅以 `toolId`/`toolVersion` 引用服务端 `SandboxToolCatalog`；SBX-15 注入固定工具前，空目录
+  会拒绝未知工具，确保新接口不会成为任意镜像执行入口。
+- OpenAPI 合同已由本地 Spring Boot 合同生成任务重新生成至 `api/openapi.json`，前端
+  `openapi-typescript` 类型 Client 同步生成至 `frontend/src/api/generated/schema.ts`。
+- 验证：`SandboxRunsControllerContractTest` 覆盖创建身份绑定、幂等键、取消 CAS 前置条件与
+  Artifact 存储位置脱敏；`RealtimeConfigurationTest`/`RealtimeOutboxEventHandlerTest` 覆盖新增
+  SSE 事件路由。相关定向测试共 31 项通过；OpenAPI 合同生成 `verify -Popenapi-contract -DskipTests`
+  通过。
 
 ### SBX-07：Controller 服务基座
 

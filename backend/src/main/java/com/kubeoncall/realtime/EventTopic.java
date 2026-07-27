@@ -12,6 +12,7 @@ public enum EventTopic {
     ALARM("alarms", Set.of(PermissionCode.ALARM_READ)),
     APPROVAL("approvals", Set.of(PermissionCode.APPROVAL_READ)),
     EXECUTION("executions", Set.of(PermissionCode.EXECUTION_READ)),
+    SANDBOX("sandbox-runs", Set.of(PermissionCode.SANDBOX_READ)),
     TASK(
             "tasks",
             Set.of(

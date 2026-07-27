@@ -29,6 +29,9 @@ class RealtimeOutboxEventHandlerTest {
                 .isEqualTo("approvals");
         assertThat(EventTopic.fromAggregate("execution", "execution.updated").wireName())
                 .isEqualTo("executions");
+        assertThat(EventTopic.fromAggregate("sandbox-run", "sandbox.run.created")
+                        .wireName())
+                .isEqualTo("sandbox-runs");
         assertThat(EventTopic.fromAggregate("task", "task.updated").wireName()).isEqualTo("tasks");
         assertThat(EventTopic.parse("alarm")).isEmpty();
     }

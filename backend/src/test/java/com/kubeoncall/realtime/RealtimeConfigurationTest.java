@@ -32,6 +32,8 @@ class RealtimeConfigurationTest {
                 configuration.approvalRequestedRealtimeHandler(objectMapper, hub),
                 configuration.executionCreatedRealtimeHandler(objectMapper, hub),
                 configuration.executionUpdatedRealtimeHandler(objectMapper, hub),
+                configuration.sandboxRunCreatedRealtimeHandler(objectMapper, hub),
+                configuration.sandboxRunCancelledRealtimeHandler(objectMapper, hub),
                 configuration.taskCreatedRealtimeHandler(objectMapper, hub),
                 configuration.taskUpdatedRealtimeHandler(objectMapper, hub));
 
@@ -45,6 +47,8 @@ class RealtimeConfigurationTest {
                         "approval.requested",
                         "execution.created",
                         "execution.updated",
+                        "sandbox.run.created",
+                        "sandbox.run.cancelled",
                         "task.created",
                         "task.updated")
                 .doesNotHaveDuplicates();
