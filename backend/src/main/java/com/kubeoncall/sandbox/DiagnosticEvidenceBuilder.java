@@ -13,6 +13,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.regex.Pattern;
 
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -47,6 +48,7 @@ public class DiagnosticEvidenceBuilder {
     private final SensitiveDataRedactor redactor;
     private final ObjectMapper canonicalMapper;
 
+    @Autowired
     public DiagnosticEvidenceBuilder(ObjectMapper objectMapper) {
         this(SensitiveDataRedactor.STANDARD, objectMapper);
     }

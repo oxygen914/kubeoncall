@@ -59,6 +59,7 @@ const TOPIC_PERMISSION: Record<RealtimeTopic, string> = {
   alarms: PERMISSIONS.ALARM_READ,
   approvals: PERMISSIONS.APPROVAL_READ,
   executions: PERMISSIONS.EXECUTION_READ,
+  'sandbox-runs': PERMISSIONS.SANDBOX_READ,
   tasks: PERMISSIONS.EXECUTION_READ,
 }
 

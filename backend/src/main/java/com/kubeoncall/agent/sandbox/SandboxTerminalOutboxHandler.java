@@ -3,6 +3,7 @@ package com.kubeoncall.agent.sandbox;
 import java.time.Instant;
 import java.util.Map;
 
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Component;
@@ -11,6 +12,9 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.kubeoncall.audit.outbox.OutboxEvent;
 import com.kubeoncall.audit.outbox.OutboxEventHandler;
+import com.kubeoncall.realtime.EventEnvelope;
+import com.kubeoncall.realtime.EventTopic;
+import com.kubeoncall.realtime.RealtimeEventHub;
 import com.kubeoncall.task.AsyncTaskRepository;
 
 /** Converts one terminal Sandbox outbox event into a bounded asynchronous recovery task. */
@@ -24,10 +28,13 @@ public class SandboxTerminalOutboxHandler implements OutboxEventHandler {
 
     private final AsyncTaskRepository tasks;
     private final ObjectMapper objectMapper;
+    private final ObjectProvider<RealtimeEventHub> eventHubProvider;
 
-    public SandboxTerminalOutboxHandler(AsyncTaskRepository tasks, ObjectMapper objectMapper) {
+    public SandboxTerminalOutboxHandler(
+            AsyncTaskRepository tasks, ObjectMapper objectMapper, ObjectProvider<RealtimeEventHub> eventHubProvider) {
         this.tasks = tasks;
         this.objectMapper = objectMapper;
+        this.eventHubProvider = eventHubProvider;
     }
 
     @Override
@@ -58,6 +65,17 @@ public class SandboxTerminalOutboxHandler implements OutboxEventHandler {
                     null));
         } catch (DuplicateKeyException ignored) {
             // The durable unique key (task_type, dedupe_key) makes an Outbox redelivery safe.
+        }
+        RealtimeEventHub eventHub = eventHubProvider.getIfAvailable();
+        if (eventHub != null) {
+            eventHub.publish(new EventEnvelope(
+                    event.eventId(),
+                    EventTopic.SANDBOX.wireName(),
+                    event.eventType(),
+                    runId,
+                    event.createdAt(),
+                    objectMapper.valueToTree(payload),
+                    event.schemaVersion()));
         }
     }
 

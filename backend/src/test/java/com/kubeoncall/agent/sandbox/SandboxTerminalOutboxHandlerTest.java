@@ -13,6 +13,7 @@ import java.util.Map;
 
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.dao.DuplicateKeyException;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -24,7 +25,7 @@ class SandboxTerminalOutboxHandlerTest {
     @Test
     void createsOneIdempotentRecoveryTaskForTerminalRun() throws Exception {
         AsyncTaskRepository tasks = mock(AsyncTaskRepository.class);
-        SandboxTerminalOutboxHandler handler = new SandboxTerminalOutboxHandler(tasks, new ObjectMapper());
+        SandboxTerminalOutboxHandler handler = handler(tasks);
 
         handler.handle(event(Map.of("runId", "sbx_123", "executionId", "wfe_123")));
 
@@ -44,8 +45,7 @@ class SandboxTerminalOutboxHandlerTest {
         AsyncTaskRepository tasks = mock(AsyncTaskRepository.class);
         when(tasks.create(any())).thenThrow(new DuplicateKeyException("uk_async_task_dedupe"));
 
-        new SandboxTerminalOutboxHandler(tasks, new ObjectMapper())
-                .handle(event(Map.of("runId", "sbx_123", "executionId", "wfe_123")));
+        handler(tasks).handle(event(Map.of("runId", "sbx_123", "executionId", "wfe_123")));
 
         verify(tasks).create(any());
     }
@@ -53,7 +53,7 @@ class SandboxTerminalOutboxHandlerTest {
     @Test
     void rejectsMalformedTerminalEventBeforeCreatingTask() {
         AsyncTaskRepository tasks = mock(AsyncTaskRepository.class);
-        SandboxTerminalOutboxHandler handler = new SandboxTerminalOutboxHandler(tasks, new ObjectMapper());
+        SandboxTerminalOutboxHandler handler = handler(tasks);
 
         assertThatThrownBy(() -> handler.handle(event(Map.of("runId", "sbx_123"))))
                 .isInstanceOf(IllegalArgumentException.class)
@@ -75,5 +75,11 @@ class SandboxTerminalOutboxHandlerTest {
                 5,
                 Instant.parse("2026-07-27T00:00:00Z"),
                 null);
+    }
+
+    private static SandboxTerminalOutboxHandler handler(AsyncTaskRepository tasks) {
+        @SuppressWarnings("unchecked")
+        ObjectProvider<com.kubeoncall.realtime.RealtimeEventHub> realtime = mock(ObjectProvider.class);
+        return new SandboxTerminalOutboxHandler(tasks, new ObjectMapper(), realtime);
     }
 }

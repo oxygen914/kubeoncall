@@ -1,5 +1,7 @@
 package com.kubeoncall.web.api.v1.sandbox;
 
+import java.net.URL;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
@@ -25,6 +27,7 @@ import org.springframework.web.bind.annotation.RestController;
 import com.kubeoncall.idempotency.IdempotencyService;
 import com.kubeoncall.identity.PermissionCode;
 import com.kubeoncall.sandbox.SandboxArtifactRecord;
+import com.kubeoncall.sandbox.SandboxArtifactStore;
 import com.kubeoncall.sandbox.SandboxRunCommandException;
 import com.kubeoncall.sandbox.SandboxRunCommandService;
 import com.kubeoncall.sandbox.SandboxRunRecord;
@@ -56,14 +59,17 @@ public class SandboxRunsController {
 
     private final ObjectProvider<SandboxRunCommandService> commandServiceProvider;
     private final ObjectProvider<SandboxRunRepository> repositoryProvider;
+    private final ObjectProvider<SandboxArtifactStore> artifactStoreProvider;
     private final V1Security security;
 
     public SandboxRunsController(
             ObjectProvider<SandboxRunCommandService> commandServiceProvider,
             ObjectProvider<SandboxRunRepository> repositoryProvider,
+            ObjectProvider<SandboxArtifactStore> artifactStoreProvider,
             V1Security security) {
         this.commandServiceProvider = commandServiceProvider;
         this.repositoryProvider = repositoryProvider;
+        this.artifactStoreProvider = artifactStoreProvider;
         this.security = security;
     }
 
@@ -146,6 +152,22 @@ public class SandboxRunsController {
         return ApiResponse.ok(artifacts, RequestIdFilter.currentRequestId());
     }
 
+    /** Issues a short-lived, single-artifact URL only after confirming run ownership. */
+    @GetMapping("/{runId}/artifacts/{artifactId}/download")
+    public ApiResponse<ArtifactDownloadView> downloadArtifact(
+            @PathVariable String runId, @PathVariable String artifactId) {
+        security.requirePermission(PermissionCode.SANDBOX_READ);
+        SandboxRunRecord run = repository().findByPublicId(runId).orElseThrow(() -> notFound(runId));
+        SandboxArtifactRecord artifact = repository()
+                .findArtifactByPublicId(artifactId)
+                .filter(candidate -> candidate.sandboxRunId() == run.id())
+                .orElseThrow(() -> notFound("Sandbox artifact not found: " + artifactId));
+        URL url = artifactStore().presignedGetUrl(artifact.bucket(), artifact.objectKey(), Duration.ofMinutes(1));
+        return ApiResponse.ok(
+                new ArtifactDownloadView(url.toExternalForm(), Instant.now().plus(Duration.ofMinutes(1))),
+                RequestIdFilter.currentRequestId());
+    }
+
     @PostMapping("/{runId}/cancel")
     public ApiResponse<Map<String, Object>> cancel(
             @PathVariable String runId,
@@ -190,6 +212,17 @@ public class SandboxRunsController {
                     "Sandbox read model is not available");
         }
         return repository;
+    }
+
+    private SandboxArtifactStore artifactStore() {
+        SandboxArtifactStore store = artifactStoreProvider.getIfAvailable();
+        if (store == null) {
+            throw new V1ApiException(
+                    HttpStatus.SERVICE_UNAVAILABLE.value(),
+                    V1ApiErrorCode.SERVICE_UNAVAILABLE,
+                    "Sandbox artifact store is not available");
+        }
+        return store;
     }
 
     private V1Principal requireUser(String permission, String action) {
@@ -300,4 +333,7 @@ public class SandboxRunsController {
                     artifact.createdAt());
         }
     }
+
+    /** The browser must use this value immediately and never persist it. */
+    public record ArtifactDownloadView(String url, Instant expiresAt) {}
 }

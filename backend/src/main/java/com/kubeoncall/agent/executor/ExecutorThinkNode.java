@@ -5,6 +5,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
@@ -50,12 +51,13 @@ public class ExecutorThinkNode extends ThinkNode {
             ExecutorPlanFactory planFactory,
             KubeOnCallMetricsService metricsService,
             SandboxRoutingPolicy sandboxRoutingPolicy,
-            SandboxAgentRunSubmissionService sandboxSubmissionService) {
+            ObjectProvider<SandboxAgentRunSubmissionService> sandboxSubmissionServiceProvider) {
         this.agentToolCatalog = agentToolCatalog;
         this.planFactory = planFactory;
         this.metricsService = metricsService;
         this.sandboxRoutingPolicy = sandboxRoutingPolicy;
-        this.sandboxSubmissionService = sandboxSubmissionService;
+        this.sandboxSubmissionService =
+                sandboxSubmissionServiceProvider == null ? null : sandboxSubmissionServiceProvider.getIfAvailable();
     }
 
     @Override

@@ -4,6 +4,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -19,6 +20,7 @@ import com.kubeoncall.sandbox.domain.SandboxRunMode;
 
 /** Creates an Agent-routed fixed diagnostic Run with its required input Artifact in one transaction. */
 @Service
+@ConditionalOnProperty(prefix = "kubeoncall", name = "mysql-enabled", havingValue = "true")
 public class SandboxAgentRunSubmissionService {
 
     private final SandboxRunCommandService commandService;

@@ -1,4 +1,10 @@
-export const REALTIME_TOPICS = ['alarms', 'approvals', 'executions', 'tasks'] as const
+export const REALTIME_TOPICS = [
+  'alarms',
+  'approvals',
+  'executions',
+  'sandbox-runs',
+  'tasks',
+] as const
 
 export type RealtimeTopic = (typeof REALTIME_TOPICS)[number]
 

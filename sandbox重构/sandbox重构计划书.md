@@ -8,8 +8,8 @@
 | 制定日期 | 2026-07-27 |
 | 目标项目 | KubeOnCall |
 | 实施状态 | IN_PROGRESS |
-| 代码实现进度 | 87%（SBX-00～20 已完成） |
-| 自动化验证进度 | 87%（SBX-00～20 代码级验证通过；真实集群待验收） |
+| 代码实现进度 | 91%（SBX-00～21 已完成） |
+| 自动化验证进度 | 91%（SBX-00～21 代码级验证通过；真实集群待验收） |
 | 真实环境验收进度 | 0%，按阶段单独记录 |
 | 计划提交数 | 24 个，`SBX-00`～`SBX-23` |
 
@@ -432,7 +432,7 @@ helm lint deploy/helm/kubeoncall
 | SBX-18 | `feat(sandbox): simulate remediation plans` | 独立仿真集群验证 | COMPLETED |
 | SBX-19 | `feat(agent): route diagnostics through sandbox` | Planner/Executor 异步路由 | COMPLETED |
 | SBX-20 | `feat(verifier): gate remediation with sandbox evidence` | 恢复工作流与生产动作硬边界 | COMPLETED |
-| SBX-21 | `feat(console): add sandbox run operations` | Run 列表、详情、Artifact 和取消 | PLANNED |
+| SBX-21 | `feat(console): add sandbox run operations` | Run 列表、详情、Artifact 和取消 | COMPLETED |
 | SBX-22 | `feat(observability): monitor sandbox operations` | 指标、Dashboard 和告警 | PLANNED |
 | SBX-23 | `build(sandbox): close ci security and operations gates` | CI、安全契约、部署和运行手册 | PLANNED |
 
@@ -1223,6 +1223,20 @@ Codex 审核补充（提交 `ae94ebb` 后审核，补丁提交 `[SBX-09-fix]`）
 
 - 移除路由和菜单；Backend API 不受影响。
 
+完成记录：
+
+- 新增 `/sandbox-runs` 和 `/sandbox-runs/{runId}`：按状态、关联 Execution/告警筛选，展示模式、工具版本、
+  状态、阶段、进度、风险、清理状态及错误摘要；具备关联 Execution/告警的权限时可安全钻取。
+- 取消操作仅对未终态 Run 且具备 `sandbox:cancel` 的用户显示，并携带当前版本 `If-Match`；后端仍保留 CAS 权威。
+- Artifact 列表只显示类型、大小、分类、校验和与保留期，不返回 bucket/object key。下载入口校验 Artifact 属于当前
+  Run 后才签发 1 分钟临时 URL；前端仅在点击时使用 URL，不写入查询缓存或页面状态。
+- SSE 新增 `sandbox-runs` 授权主题并在创建、取消、终态时失效 Run/Artifact 查询；列表和非终态详情同时保留 5/3 秒
+  轮询回退。终态 Outbox 恢复处理与实时发布均允许实时组件缺失，避免阻塞核心恢复。
+- 修复无 MySQL 的本地/OpenAPI 合同启动：Sandbox Agent 提交及 Artifact 写服务与 MySQL 事实库同条件注册，
+  `ExecutorThinkNode` 在服务缺失时安全拒绝自动路由；显式标注证据 Builder 的 Spring 注入构造器。
+- 自动化验证覆盖后端授权下载、终态 Outbox、OpenAPI/前端类型生成、API/SSE 单测及 Mock API Playwright
+  列表→详情→版本化取消。真实 SSE 断线恢复、对象下载和集群数据仍待环境验收。
+
 ### SBX-22：可观测性
 
 改动：
@@ -1332,12 +1346,13 @@ Codex 审核补充（提交 `ae94ebb` 后审核，补丁提交 `[SBX-09-fix]`）
 
 ## 13. 当前停止点
 
-SBX-00～20 已完成（含此前的审核修复）。Backend 已具备 Run/Artifact/API/权限、短时派发任务、
+SBX-00～21 已完成（含此前的审核修复）。Backend 已具备 Run/Artifact/API/权限、短时派发任务、
 HMAC Controller Client、断路器、短轮询状态收敛和脱敏诊断证据包；Controller 已具备基座、hardened JobSpec、
 生命周期、结果收集清理与隔离部署。首批固定诊断工具目录、受限 Python/Shell Runtime、生成代码 Artifact 与结构化
 结果契约、YAML/Helm/Patch/Runbook 校验及固定验证 Runtime 已落地。独立仿真入口、临时 namespace、受限身份、
 配额/默认拒绝网络、脱敏 Artifact 与清理边界也已落地。固定诊断的保守 Agent 自动路由、真实用户归属、
 Artifact 先行写入和异步挂起已落地。Sandbox 终态现可通过 Outbox 恢复到固定只读复核、Verifier 与人工审批，
-且不会直通生产执行器。下一单元为 SBX-21：Console。
+且不会直通生产执行器。Console 已具备 Sandbox Run 的筛选、详情、Artifact 受限下载和版本化取消。
+下一单元为 SBX-22：可观测性。
 
 每次只提交一个 SBX 单元，代码验证通过并产生本地 commit 后再进入下一个单元；远端推送仍需用户单独授权。

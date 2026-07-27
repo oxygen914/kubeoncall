@@ -3,6 +3,7 @@ package com.kubeoncall.sandbox;
 import java.time.Duration;
 import java.time.Instant;
 
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -12,6 +13,7 @@ import com.kubeoncall.sandbox.domain.SandboxClassification;
 
 /** Persists one canonical diagnostic evidence package at the Controller's fixed input location. */
 @Service
+@ConditionalOnProperty(prefix = "kubeoncall", name = "mysql-enabled", havingValue = "true")
 public class DiagnosticEvidenceArtifactService {
 
     private final DiagnosticEvidenceBuilder builder;

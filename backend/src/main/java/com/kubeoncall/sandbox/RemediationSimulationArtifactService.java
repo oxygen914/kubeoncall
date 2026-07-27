@@ -7,6 +7,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -23,6 +24,7 @@ import com.kubeoncall.sandbox.policy.SandboxToolCatalog;
  * they can enter either the validation-cluster namespace or object storage.
  */
 @Service
+@ConditionalOnProperty(prefix = "kubeoncall", name = "mysql-enabled", havingValue = "true")
 public class RemediationSimulationArtifactService {
 
     private static final int MAX_RESOURCES = 64;

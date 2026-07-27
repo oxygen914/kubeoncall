@@ -32,6 +32,7 @@ const NAV_ITEMS: NavItem[] = [
   },
   { to: '/changes', label: '变更事件', permission: PERMISSIONS.CHANGE_READ },
   { to: '/integrations', label: '集成通知', permission: PERMISSIONS.INTEGRATION_READ },
+  { to: '/sandbox-runs', label: 'Sandbox 运行', permission: PERMISSIONS.SANDBOX_READ },
   { to: '/audit', label: '审计', permission: PERMISSIONS.AUDIT_READ },
   { to: '/users', label: '用户', permission: PERMISSIONS.SYSTEM_MANAGE },
   { to: '/tokens', label: 'API Token', permission: PERMISSIONS.TOKEN_READ_OWN },

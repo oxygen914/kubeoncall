@@ -8,6 +8,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -21,6 +22,7 @@ import com.kubeoncall.sandbox.policy.SandboxToolSpec;
 
 /** Saves an Agent-produced program as a bounded, untrusted input Artifact before it can be dispatched. */
 @Service
+@ConditionalOnProperty(prefix = "kubeoncall", name = "mysql-enabled", havingValue = "true")
 public class GeneratedCodeArtifactService {
 
     static final int MAX_PROCESSES = 32;

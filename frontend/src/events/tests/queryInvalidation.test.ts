@@ -81,6 +81,28 @@ describe('realtime query invalidation', () => {
     })
   })
 
+  it('invalidates sandbox list, detail and artifacts for sandbox lifecycle events', () => {
+    const { queryClient, invalidateQueries } = queryClientSpy()
+
+    invalidateForRealtimeEvent(
+      queryClient,
+      event({
+        eventType: 'sandbox.run.terminal',
+        resourceType: 'sandbox-run',
+        resourceId: 'sbx_1',
+      }),
+    )
+
+    expect(invalidateQueries).toHaveBeenCalledTimes(3)
+    expect(invalidateQueries).toHaveBeenNthCalledWith(1, { queryKey: ['sandbox-runs', 'list'] })
+    expect(invalidateQueries).toHaveBeenNthCalledWith(2, {
+      queryKey: ['sandbox-runs', 'detail', 'sbx_1'],
+    })
+    expect(invalidateQueries).toHaveBeenNthCalledWith(3, {
+      queryKey: ['sandbox-runs', 'artifacts', 'sbx_1'],
+    })
+  })
+
   it('invalidates the complete query cache after a cursor gap', () => {
     const { queryClient, invalidateQueries } = queryClientSpy()
 

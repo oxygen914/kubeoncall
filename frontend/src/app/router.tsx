@@ -25,6 +25,8 @@ import { ToolsPage } from '@/features/tools/ToolsPage'
 import { OperationsPage } from '@/features/operations/OperationsPage'
 import { ChangeEventsPage } from '@/features/changes/ChangeEventsPage'
 import { IntegrationsPage } from '@/features/integrations/IntegrationsPage'
+import { SandboxRunsListPage } from '@/features/sandbox/SandboxRunsListPage'
+import { SandboxRunDetailPage } from '@/features/sandbox/SandboxRunDetailPage'
 import { AppShell } from '@/components/layout/AppShell'
 import { ForbiddenPage } from '@/components/feedback/ForbiddenPage'
 import { NotFoundPage } from '@/components/feedback/NotFoundPage'
@@ -234,6 +236,22 @@ export function AppRouter() {
           element={
             <Restricted permission={PERMISSIONS.INTEGRATION_READ}>
               <IntegrationsPage />
+            </Restricted>
+          }
+        />
+        <Route
+          path="/sandbox-runs"
+          element={
+            <Restricted permission={PERMISSIONS.SANDBOX_READ}>
+              <SandboxRunsListPage />
+            </Restricted>
+          }
+        />
+        <Route
+          path="/sandbox-runs/:runId"
+          element={
+            <Restricted permission={PERMISSIONS.SANDBOX_READ}>
+              <SandboxRunDetailPage />
             </Restricted>
           }
         />

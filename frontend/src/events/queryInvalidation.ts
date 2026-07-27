@@ -41,6 +41,13 @@ export function invalidateForRealtimeEvent(queryClient: QueryClient, event: Real
         void queryClient.invalidateQueries({ queryKey: ['tasks', 'detail', resourceId] })
       }
       break
+    case 'sandbox':
+      void queryClient.invalidateQueries({ queryKey: ['sandbox-runs', 'list'] })
+      if (resourceId) {
+        void queryClient.invalidateQueries({ queryKey: ['sandbox-runs', 'detail', resourceId] })
+        void queryClient.invalidateQueries({ queryKey: ['sandbox-runs', 'artifacts', resourceId] })
+      }
+      break
     case 'system':
       void queryClient.invalidateQueries({ queryKey: ['system'] })
       void queryClient.invalidateQueries({ queryKey: ['capabilities'] })
@@ -52,7 +59,7 @@ export function invalidateAllRealtimeQueries(queryClient: QueryClient): void {
   void queryClient.invalidateQueries()
 }
 
-type EventFamily = 'alarm' | 'approval' | 'execution' | 'task' | 'system' | undefined
+type EventFamily = 'alarm' | 'approval' | 'execution' | 'sandbox' | 'task' | 'system' | undefined
 
 function eventFamily(event: RealtimeEvent): EventFamily {
   const prefix = event.eventType.toLowerCase().split('.')[0]
@@ -60,6 +67,7 @@ function eventFamily(event: RealtimeEvent): EventFamily {
     prefix === 'alarm' ||
     prefix === 'approval' ||
     prefix === 'execution' ||
+    prefix === 'sandbox' ||
     prefix === 'task' ||
     prefix === 'system'
   ) {
@@ -70,6 +78,7 @@ function eventFamily(event: RealtimeEvent): EventFamily {
   if (resourceType.includes('alarm')) return 'alarm'
   if (resourceType.includes('approval')) return 'approval'
   if (resourceType.includes('execution')) return 'execution'
+  if (resourceType.includes('sandbox')) return 'sandbox'
   if (resourceType.includes('task')) return 'task'
   if (resourceType.includes('system')) return 'system'
   return undefined

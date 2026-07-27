@@ -5,6 +5,7 @@ import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -17,6 +18,7 @@ import com.kubeoncall.sandbox.policy.SandboxToolCatalog;
 
 /** Stores a manifest-validation request as an immutable input Artifact before a fixed runtime is dispatched. */
 @Service
+@ConditionalOnProperty(prefix = "kubeoncall", name = "mysql-enabled", havingValue = "true")
 public class ManifestValidationArtifactService {
 
     static final String RULESET_VERSION = "sandbox-manifest-rules-v1";

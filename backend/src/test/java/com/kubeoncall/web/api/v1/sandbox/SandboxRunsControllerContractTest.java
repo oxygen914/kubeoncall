@@ -27,6 +27,7 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import com.kubeoncall.identity.PermissionCode;
 import com.kubeoncall.identity.UserAccount;
 import com.kubeoncall.sandbox.SandboxArtifactRecord;
+import com.kubeoncall.sandbox.SandboxArtifactStore;
 import com.kubeoncall.sandbox.SandboxRunCommandService;
 import com.kubeoncall.sandbox.SandboxRunRecord;
 import com.kubeoncall.sandbox.SandboxRunRepository;
@@ -47,19 +48,21 @@ class SandboxRunsControllerContractTest {
     private MockMvc mockMvc;
     private SandboxRunCommandService commandService;
     private SandboxRunRepository repository;
+    private SandboxArtifactStore artifactStore;
     private V1Security security;
 
     @BeforeEach
     void setUp() {
         commandService = mock(SandboxRunCommandService.class);
         repository = mock(SandboxRunRepository.class);
+        artifactStore = mock(SandboxArtifactStore.class);
         security = mock(V1Security.class);
         when(commandService.isAvailable()).thenReturn(true);
         when(repository.isAvailable()).thenReturn(true);
         when(security.requirePermission(PermissionCode.SANDBOX_EXECUTE)).thenReturn(principal());
         when(security.requirePermission(PermissionCode.SANDBOX_CANCEL)).thenReturn(principal());
-        mockMvc = MockMvcBuilders.standaloneSetup(
-                        new SandboxRunsController(provider(commandService), provider(repository), security))
+        mockMvc = MockMvcBuilders.standaloneSetup(new SandboxRunsController(
+                        provider(commandService), provider(repository), provider(artifactStore), security))
                 .addFilters(new RequestIdFilter())
                 .setControllerAdvice(new V1ApiExceptionHandler())
                 .build();
@@ -106,6 +109,21 @@ class SandboxRunsControllerContractTest {
                 .andExpect(jsonPath("$.data[0].sha256").value("a".repeat(64)))
                 .andExpect(jsonPath("$.data[0].bucket").doesNotExist())
                 .andExpect(jsonPath("$.data[0].objectKey").doesNotExist());
+        verify(security).requirePermission(PermissionCode.SANDBOX_READ);
+    }
+
+    @Test
+    void artifactDownloadIsShortLivedAndBoundToItsRun() throws Exception {
+        when(repository.findByPublicId("sbx_1")).thenReturn(Optional.of(run()));
+        when(repository.findArtifactByPublicId("sba_1")).thenReturn(Optional.of(artifact()));
+        when(artifactStore.presignedGetUrl(
+                        eq("private-sandbox-bucket"), eq("sandbox/sbx_1/reports/report.json"), any()))
+                .thenReturn(new java.net.URL("https://minio.example/signed-artifact"));
+
+        mockMvc.perform(get("/api/v1/sandbox-runs/sbx_1/artifacts/sba_1/download"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.url").value("https://minio.example/signed-artifact"))
+                .andExpect(jsonPath("$.data.expiresAt").exists());
         verify(security).requirePermission(PermissionCode.SANDBOX_READ);
     }
 
