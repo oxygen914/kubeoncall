@@ -8,8 +8,8 @@
 | 制定日期 | 2026-07-27 |
 | 目标项目 | KubeOnCall |
 | 实施状态 | IN_PROGRESS |
-| 代码实现进度 | 0% |
-| 自动化验证进度 | 0% |
+| 代码实现进度 | 4% |
+| 自动化验证进度 | 4% |
 | 真实环境验收进度 | 0%，按阶段单独记录 |
 | 计划提交数 | 24 个，`SBX-00`～`SBX-23` |
 
@@ -412,7 +412,7 @@ helm lint deploy/helm/kubeoncall
 | 编号 | 预期 Commit | 交付结果 | 状态 |
 | --- | --- | --- | --- |
 | SBX-00 | `docs(sandbox): define isolated diagnosis refactor plan` | 冻结范围、边界与提交顺序 | COMPLETED |
-| SBX-01 | `feat(sandbox): add feature flags and limits` | 默认关闭的配置与能力发现 | PLANNED |
+| SBX-01 | `feat(sandbox): add feature flags and limits` | 默认关闭的配置与能力发现 | COMPLETED |
 | SBX-02 | `feat(identity): add sandbox permissions` | Sandbox 权限和角色映射 | PLANNED |
 | SBX-03 | `feat(sandbox): add run policy contracts` | 领域类型、状态机和策略契约 | PLANNED |
 | SBX-04 | `feat(sandbox): persist runs and artifacts` | MySQL 事实表与 Repository | PLANNED |
@@ -469,6 +469,24 @@ helm lint deploy/helm/kubeoncall
 
 - 配置绑定、默认值、非法上限和 Capabilities 契约测试。
 - 关闭 Sandbox 时 Spring Context 与现有测试不受影响。
+
+完成记录：
+
+- 新增 `SandboxProperties`：总开关与四模式开关、`agent-auto-route-enabled`、
+  Controller endpoint/超时/最大响应、硬上限（超时 5/15 分钟、输入 50MiB、输出 10MiB、
+  日志 2MiB、脚本 256KiB、Artifact 保留 24h、单告警并发 1、全局并发 4），CPU/内存/临时存储
+  以 Kubernetes 量纲字符串保存，跨资源上限校验留待 SBX-08 JobSpec Builder。
+- `KubeOnCallProperties.Sandbox` 组合复用，`application.yml` 增 `sandbox:` 配置块，
+  全部经 `KUBEONCALL_SANDBOX_*` 环境变量覆盖，默认全关。
+- `CapabilitiesService` 在 `features.sandbox` 回显总开关与四模式开关及自动路由标志；
+  总开关开启时在 `limits.sandbox` 回显校验后的限制；Controller endpoint 与 Secret 永不回显。
+- `CapabilitiesService` 构造期在总开关开启时调用 `SandboxProperties.validate()` 快速失败，
+  收集全部越限字段而非静默裁剪。
+- 测试：`KubeOnCallPropertiesTest` 增 6 例（默认全关、绑定覆盖、非法超时上限、非法
+  max-timeout 上限、输出/脚本/并发/保留期越限、默认值通过校验）；新增 `CapabilitiesServiceTest`
+  3 例（默认回显能力不含敏感字段、启用时回显能力与限制、Controller endpoint 与 Secret 不泄漏）。
+- 关闭 Sandbox 时 `KubeOnCallApplicationTests.contextLoads` 与 `V1ApiContractTest` 通过；
+  既有失败（`ApiTokensControllerTest`、`LegacyApiDeprecationWebTest`）在父提交已存在，与本单元无关。
 
 回滚：
 
@@ -954,9 +972,12 @@ helm lint deploy/helm/kubeoncall
 
 ## 13. 当前停止点
 
-SBX-00 已完成：计划书已冻结并作为首个 commit 提交，KubeOnCall 与 AgentSpace 保持
-完全解耦，三条红线（无生产凭据、无任意镜像、无直接生产动作）已冻结。尚未修改 Sandbox
-业务代码、数据库、部署或 CI。
+SBX-01 已完成：在 `KubeOnCallProperties` 新增 `sandbox` 配置组（`SandboxProperties`），
+含总开关、四个运行模式开关、`agent-auto-route-enabled`、Controller endpoint/超时/最大响应、
+硬上限与保留期；`/api/v1/capabilities` 在 `features.sandbox` 回显能力、总开关开启时在
+`limits.sandbox` 回显限制，Controller endpoint 与 Secret 永不回显；默认全部关闭，现有行为不变。
+`KubeOnCallPropertiesTest` 与新增 `CapabilitiesServiceTest` 通过；关闭 Sandbox 时 Spring Context
+与现有 API 契约测试不受影响。尚未触碰 Sandbox 业务代码、数据库、部署或 CI。
 
 此后每次只提交一个 SBX 单元，验证通过并产生本地 commit 后再进入下一个单元；远端推送
-仍需用户单独授权。下一个单元为 `SBX-01`。
+仍需用户单独授权。下一个单元为 `SBX-02`。

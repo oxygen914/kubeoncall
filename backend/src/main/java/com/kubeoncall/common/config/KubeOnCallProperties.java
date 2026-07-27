@@ -25,6 +25,7 @@ public class KubeOnCallProperties {
     private final LegacyApi legacyApi = new LegacyApi();
     private final Knowledge knowledge = new Knowledge();
     private final DependencyCircuitBreaker dependencyCircuitBreaker = new DependencyCircuitBreaker();
+    private final Sandbox sandbox = new Sandbox();
 
     public Agent getAgent() {
         return agent;
@@ -106,6 +107,10 @@ public class KubeOnCallProperties {
         return dependencyCircuitBreaker;
     }
 
+    public Sandbox getSandbox() {
+        return sandbox;
+    }
+
     public static class Agent extends AgentProperties {}
 
     public static class Approval extends ApprovalProperties {}
@@ -150,4 +155,6 @@ public class KubeOnCallProperties {
     public static class Integrations extends IntegrationsProperties {}
 
     public static class Endpoint extends EndpointProperties {}
+
+    public static class Sandbox extends SandboxProperties {}
 }

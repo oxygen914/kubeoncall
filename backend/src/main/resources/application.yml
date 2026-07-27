@@ -189,6 +189,32 @@ kubeoncall:
     enabled: ${KUBEONCALL_DEPENDENCY_CIRCUIT_BREAKER_ENABLED:true}
     failure-threshold: ${KUBEONCALL_DEPENDENCY_CIRCUIT_BREAKER_FAILURE_THRESHOLD:5}
     reset-timeout-seconds: ${KUBEONCALL_DEPENDENCY_CIRCUIT_BREAKER_RESET_TIMEOUT_SECONDS:30}
+  sandbox:
+    # Master switch and every per-mode toggle default to off; existing behavior is unchanged until an
+    # operator explicitly opts in. Configured values must stay within the server-side hard ceilings.
+    enabled: ${KUBEONCALL_SANDBOX_ENABLED:false}
+    fixed-diagnostic: ${KUBEONCALL_SANDBOX_FIXED_DIAGNOSTIC:false}
+    generated-code: ${KUBEONCALL_SANDBOX_GENERATED_CODE:false}
+    manifest-validation: ${KUBEONCALL_SANDBOX_MANIFEST_VALIDATION:false}
+    remediation-simulation: ${KUBEONCALL_SANDBOX_REMEDIATION_SIMULATION:false}
+    agent-auto-route-enabled: ${KUBEONCALL_SANDBOX_AGENT_AUTO_ROUTE_ENABLED:false}
+    # Internal Sandbox Controller endpoint; never echoed through /api/v1/capabilities.
+    controller-endpoint: ${KUBEONCALL_SANDBOX_CONTROLLER_ENDPOINT:}
+    controller-connect-timeout-millis: ${KUBEONCALL_SANDBOX_CONTROLLER_CONNECT_TIMEOUT_MILLIS:3000}
+    controller-read-timeout-millis: ${KUBEONCALL_SANDBOX_CONTROLLER_READ_TIMEOUT_MILLIS:5000}
+    controller-max-response-bytes: ${KUBEONCALL_SANDBOX_CONTROLLER_MAX_RESPONSE_BYTES:2097152}
+    timeout-seconds: ${KUBEONCALL_SANDBOX_TIMEOUT_SECONDS:300}
+    max-timeout-seconds: ${KUBEONCALL_SANDBOX_MAX_TIMEOUT_SECONDS:900}
+    cpu: ${KUBEONCALL_SANDBOX_CPU:1}
+    memory: ${KUBEONCALL_SANDBOX_MEMORY:1Gi}
+    ephemeral-storage: ${KUBEONCALL_SANDBOX_EPHEMERAL_STORAGE:2Gi}
+    input-max-bytes: ${KUBEONCALL_SANDBOX_INPUT_MAX_BYTES:52428800}
+    output-max-bytes: ${KUBEONCALL_SANDBOX_OUTPUT_MAX_BYTES:10485760}
+    log-max-bytes: ${KUBEONCALL_SANDBOX_LOG_MAX_BYTES:2097152}
+    script-max-bytes: ${KUBEONCALL_SANDBOX_SCRIPT_MAX_BYTES:262144}
+    artifact-retention-hours: ${KUBEONCALL_SANDBOX_ARTIFACT_RETENTION_HOURS:24}
+    per-alarm-concurrency: ${KUBEONCALL_SANDBOX_PER_ALARM_CONCURRENCY:1}
+    global-concurrency: ${KUBEONCALL_SANDBOX_GLOBAL_CONCURRENCY:4}
   knowledge:
     orphan-grace-seconds: ${KUBEONCALL_KNOWLEDGE_ORPHAN_GRACE_SECONDS:3600}
   mcp:

@@ -7,6 +7,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import com.kubeoncall.common.config.KubeOnCallProperties;
+import com.kubeoncall.common.config.KubeOnCallProperties.Sandbox;
 
 /**
  * Builds the deployment capability snapshot. Reads feature toggles from {@link KubeOnCallProperties}
@@ -42,6 +43,11 @@ public class CapabilitiesService {
         this.maxPageSize = maxPageSize;
         this.maxUploadBytes = maxUploadBytes;
         this.maxJsonlLines = maxJsonlLines;
+        // Fail fast at startup when the sandbox is enabled with misconfigured ceilings, rather than
+        // silently clamping or rejecting a production Run later. When disabled the defaults are inert.
+        if (properties.getSandbox().isEnabled()) {
+            properties.getSandbox().validate();
+        }
     }
 
     public Map<String, Object> release() {
@@ -75,6 +81,7 @@ public class CapabilitiesService {
         features.put(
                 "executionAuditFactSource",
                 properties.getDataMigration().getExecutionAudit().factSource());
+        features.put("sandbox", sandboxFeatures());
         return features;
     }
 
@@ -84,6 +91,11 @@ public class CapabilitiesService {
         limits.put("maxPageSize", maxPageSize);
         limits.put("maxUploadBytes", maxUploadBytes);
         limits.put("maxJsonlLines", maxJsonlLines);
+        // Only expose sandbox limits when the capability is wired on; secrets and the internal
+        // controller endpoint are never included.
+        if (properties.getSandbox().isEnabled()) {
+            limits.put("sandbox", properties.getSandbox().limits());
+        }
         return limits;
     }
 
@@ -94,6 +106,23 @@ public class CapabilitiesService {
         auth.put("apiTokens", true);
         auth.put("sessionCookie", true);
         return auth;
+    }
+
+    /**
+     * Sandbox capability surface: the master switch, the four run-mode toggles and the agent
+     * auto-route flag. Per-mode toggles are reported verbatim so the frontend can show exactly what
+     * the deployment supports; the master switch still gates whether any mode is actually usable.
+     */
+    private Map<String, Object> sandboxFeatures() {
+        Sandbox sandbox = properties.getSandbox();
+        Map<String, Object> sandboxFeatures = new LinkedHashMap<>();
+        sandboxFeatures.put("enabled", sandbox.isEnabled());
+        sandboxFeatures.put("fixedDiagnostic", sandbox.isFixedDiagnostic());
+        sandboxFeatures.put("generatedCode", sandbox.isGeneratedCode());
+        sandboxFeatures.put("manifestValidation", sandbox.isManifestValidation());
+        sandboxFeatures.put("remediationSimulation", sandbox.isRemediationSimulation());
+        sandboxFeatures.put("agentAutoRouteEnabled", sandbox.isAgentAutoRouteEnabled());
+        return sandboxFeatures;
     }
 
     public Map<String, Object> links() {
