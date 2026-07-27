@@ -63,16 +63,18 @@ func LoadConfigFromEnv() (Config, error) {
 	return config, nil
 }
 
-// defaultTools returns the built-in tool catalog. SBX-15 expands this from a versioned YAML file;
-// the seed entry keeps the controller self-contained for SBX-09 lifecycle tests.
+// defaultTools mirrors the versioned Backend fixed-diagnostic catalog. The Controller owns only
+// these exact ID/version/image tuples so a signed request cannot select an arbitrary image.
 func defaultTools() map[string]jobs.Tool {
 	return map[string]jobs.Tool{
-		"pod-inspect:v1": {
-			ID:         "pod-inspect",
+		"log-pattern-analysis:v1": {
+			ID:         "log-pattern-analysis",
 			Version:    "v1",
-			Image:      "registry.kubeoncall.io/sandbox/pod-inspect@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+			Image:      "registry.kubeoncall.io/sandbox/log-pattern-analysis@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
 			Entrypoint: []string{"/tool"},
 		},
+		"kubernetes-consistency:v1": {ID: "kubernetes-consistency", Version: "v1", Image: "registry.kubeoncall.io/sandbox/kubernetes-consistency@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", Entrypoint: []string{"/tool"}},
+		"configuration-diff:v1":     {ID: "configuration-diff", Version: "v1", Image: "registry.kubeoncall.io/sandbox/configuration-diff@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc", Entrypoint: []string{"/tool"}},
 	}
 }
 

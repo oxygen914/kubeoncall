@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "KubeOnCall sandbox diagnosis v1",
+  "type": "object",
+  "required": ["schemaVersion", "findings", "evidenceReferences", "confidence", "recommendations"],
+  "properties": {
+    "schemaVersion": {"const": "v1"},
+    "findings": {"type": "array", "items": {"type": "string"}},
+    "evidenceReferences": {"type": "array", "items": {"type": "string"}},
+    "confidence": {"type": "number", "minimum": 0, "maximum": 1},
+    "recommendations": {"type": "array", "items": {"type": "string"}}
+  },
+  "additionalProperties": false
+}

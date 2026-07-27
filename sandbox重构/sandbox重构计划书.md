@@ -8,8 +8,8 @@
 | 制定日期 | 2026-07-27 |
 | 目标项目 | KubeOnCall |
 | 实施状态 | IN_PROGRESS |
-| 代码实现进度 | 63%（SBX-00～14 已完成） |
-| 自动化验证进度 | 63%（代码级验证；真实集群待验收） |
+| 代码实现进度 | 67%（SBX-00～15 已完成） |
+| 自动化验证进度 | 67%（代码级验证；真实集群待验收） |
 | 真实环境验收进度 | 0%，按阶段单独记录 |
 | 计划提交数 | 24 个，`SBX-00`～`SBX-23` |
 
@@ -426,7 +426,7 @@ helm lint deploy/helm/kubeoncall
 | SBX-12 | `feat(sandbox): dispatch runs through controller` | Backend Client、短时派发和断路器 | COMPLETED |
 | SBX-13 | `feat(sandbox): reconcile run convergence` | 多实例安全的状态收敛与清理重试 | COMPLETED |
 | SBX-14 | `feat(sandbox): build diagnostic evidence packages` | 证据采集、裁剪、脱敏和哈希 | COMPLETED |
-| SBX-15 | `feat(sandbox): add fixed diagnostic tools` | 固定工具目录与首批工具 | PLANNED |
+| SBX-15 | `feat(sandbox): add fixed diagnostic tools` | 固定工具目录与首批工具 | COMPLETED |
 | SBX-16 | `feat(sandbox): isolate generated code execution` | Python/Shell 受限执行 | PLANNED |
 | SBX-17 | `feat(sandbox): validate manifests and runbooks` | YAML、Helm、Patch、Runbook 校验 | PLANNED |
 | SBX-18 | `feat(sandbox): simulate remediation plans` | 独立仿真集群验证 | PLANNED |
@@ -1044,6 +1044,18 @@ Codex 审核补充（提交 `ae94ebb` 后审核，补丁提交 `[SBX-09-fix]`）
 
 - 关闭 `fixed-diagnostic` 开关并 revert 工具目录。
 
+完成记录：
+
+- 新增版本化 `sandbox-tools/tools.yaml`，只允许三种 `FIXED_DIAGNOSTIC` 工具：日志模式分析、Kubernetes
+  资源一致性检查和配置差异分析；调用方仍只能引用工具 ID 与版本。
+- 每个条目固定 64 位 SHA-256 镜像 digest、`/tool` 入口、输入/输出 Schema、资源上限及
+  `DNS_AND_ARTIFACT_CHANNEL` 网络策略。Backend 在启动时拒绝重复 ID/版本、缺失 Schema、非固定模式或不合规 digest。
+- Controller 内置白名单与 Backend 目录使用相同的 ID、版本、入口和镜像 digest，签名请求不能改选任意镜像。
+- 新增 `evidence-v1` 和 `diagnosis-v1` 契约及三组可重放 `diagnosis.json` 样例；统一输出只包含发现、证据引用、置信度
+  和建议，显式排除 `command`、`commands`、`shell` 与 `exec` 字段。
+- 自动化验证覆盖目录加载、重复 ID、缺失 Schema、精确 digest/入口/资源/网络约束、Schema 字段及三组回放样例。
+  镜像构建、漏洞扫描、签名校验和真实 Job 运行仍待环境验收。
+
 ### SBX-16：Agent 生成代码
 
 改动：
@@ -1267,8 +1279,9 @@ Codex 审核补充（提交 `ae94ebb` 后审核，补丁提交 `[SBX-09-fix]`）
 
 ## 13. 当前停止点
 
-SBX-00～14 已完成（含此前的审核修复）。Backend 已具备 Run/Artifact/API/权限、短时派发任务、
+SBX-00～15 已完成（含此前的审核修复）。Backend 已具备 Run/Artifact/API/权限、短时派发任务、
 HMAC Controller Client、断路器、短轮询状态收敛和脱敏诊断证据包；Controller 已具备基座、hardened JobSpec、
-生命周期、结果收集清理与隔离部署。下一单元为 SBX-15：固定诊断工具目录、Schema 校验与可重放样例。
+生命周期、结果收集清理与隔离部署。首批固定诊断工具目录、契约与可重放样例已落地。下一单元为
+SBX-16：Agent 生成 Python/Shell 的受限执行。
 
 每次只提交一个 SBX 单元，代码验证通过并产生本地 commit 后再进入下一个单元；远端推送仍需用户单独授权。

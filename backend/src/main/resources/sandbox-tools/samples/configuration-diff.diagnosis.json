@@ -1,0 +1,1 @@
+{"schemaVersion":"v1","findings":["configuration checksum differs"],"evidenceReferences":["yaml:configmap/api"],"confidence":0.76,"recommendations":["review the redacted configuration diff"]}
