@@ -28,7 +28,8 @@ class ArchitectureRulesTest {
                     "..rag..",
                     "..skill..",
                     "..tool..",
-                    "..workflow..")
+                    "..workflow..",
+                    "..sandbox..")
             .should()
             .dependOnClassesThat()
             .resideInAnyPackage("..web..");
@@ -61,7 +62,8 @@ class ArchitectureRulesTest {
                             || pkg.startsWith("com.kubeoncall.realtime")
                             || pkg.startsWith("com.kubeoncall.task")
                             || pkg.startsWith("com.kubeoncall.worker")
-                            || pkg.startsWith("com.kubeoncall.observability");
+                            || pkg.startsWith("com.kubeoncall.observability")
+                            || pkg.startsWith("com.kubeoncall.sandbox");
                 }
             };
 

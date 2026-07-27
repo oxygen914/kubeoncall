@@ -8,8 +8,8 @@
 | 制定日期 | 2026-07-27 |
 | 目标项目 | KubeOnCall |
 | 实施状态 | IN_PROGRESS |
-| 代码实现进度 | 8% |
-| 自动化验证进度 | 8% |
+| 代码实现进度 | 17% |
+| 自动化验证进度 | 17% |
 | 真实环境验收进度 | 0%，按阶段单独记录 |
 | 计划提交数 | 24 个，`SBX-00`～`SBX-23` |
 
@@ -414,7 +414,7 @@ helm lint deploy/helm/kubeoncall
 | SBX-00 | `docs(sandbox): define isolated diagnosis refactor plan` | 冻结范围、边界与提交顺序 | COMPLETED |
 | SBX-01 | `feat(sandbox): add feature flags and limits` | 默认关闭的配置与能力发现 | COMPLETED |
 | SBX-02 | `feat(identity): add sandbox permissions` | Sandbox 权限和角色映射 | COMPLETED |
-| SBX-03 | `feat(sandbox): add run policy contracts` | 领域类型、状态机和策略契约 | PLANNED |
+| SBX-03 | `feat(sandbox): add run policy contracts` | 领域类型、状态机和策略契约 | COMPLETED |
 | SBX-04 | `feat(sandbox): persist runs and artifacts` | MySQL 事实表与 Repository | PLANNED |
 | SBX-05 | `feat(sandbox): add artifact storage boundary` | MinIO Artifact 隔离与校验 | PLANNED |
 | SBX-06 | `feat(api): add sandbox run lifecycle endpoints` | 创建、查询、取消 API 与审计 | PLANNED |
@@ -578,6 +578,32 @@ Codex 审核补充（提交 `42c469e` 后审核，补丁提交 `[SBX-02-fix]`）
 回滚：
 
 - 纯领域代码，可独立 revert。
+
+完成记录：
+
+- 新增 `com.kubeoncall.sandbox.domain`：`SandboxRunMode`（四模式 + 默认审批/凭据/风险姿态）、
+  `SandboxRunStatus`（PENDING→…→四终态，`allowedNext()` 显式迁移表 + `isTerminal()`）、
+  `SandboxCleanupStatus`（NOT_REQUIRED→…→SUCCEEDED/FAILED，与运行状态分离）、
+  `SandboxArtifactType`（INPUT/OUTPUT/LOG/REPORT，前缀由类型固定防穿越）、
+  `SandboxClassification`（PUBLIC/INTERNAL/UNTRUSTED）、`SandboxRiskLevel`（LOW/MEDIUM/HIGH 有序比较）、
+  `SandboxRunStateException`（域异常，留待 web 层映射统一信封）、`SandboxStateMachine`（无状态纯策略，
+  `resolveRunStatus`/`resolveCleanupStatus`/`callbackIsApplicable`，终态不可倒退，迟到回调不覆盖终态）。
+- 新增 `com.kubeoncall.sandbox.policy`：`SandboxResourceLimits`（值类型，CPU/内存/临时存储为
+  Kubernetes 量纲串，标量上限在构造期强校验非正即拒）、`SandboxToolSpec`（digest-pinned 镜像强制，
+  `isDigestPinned` 拒 tag/`latest`/非 sha256/过短 hex；entrypoint/schema/网络策略非空；默认
+  `NetworkEgressPolicy.DENY_ALL`）、`SandboxExecutionPolicy`（无状态评估器，返回 `Decision`：
+  模式开关/凭据红线/审批规则——FIXED_DIAGNOSTIC、MANIFEST_VALIDATION 不审批；GENERATED_CODE
+  满足 auto-run 免审批；REMEDIATION_SIMULATION 默认审批；HIGH 风险恒审批且不可豁免）。
+- 将 SBX-01 的 `SandboxProperties.RunMode` 提升为权威域类型 `SandboxRunMode`，删除重复枚举；
+  `isModeEnabled(SandboxRunMode)` 改用域类型，`KubeOnCallPropertiesTest` 同步更新（17 例仍通过）。
+- ArchUnit：`coreBusinessDomainsDoNotDependOnWeb` 与 `newCorePackagesHoldNoWebFields` 均补
+  `..sandbox..`，确保 sandbox 域不依赖 web 层；`ArchitectureRulesTest` 通过。
+- 测试：`SandboxStateMachineTest`（9 例，全组合迁移表 + 终态不可逆 + 迟到回调不覆盖取消）、
+  `SandboxToolSpecTest`（8 例，digest 拒 tag/无 digest/非 sha256/空字段/非正资源/空 mode、
+  最短 32 hex 接受）、`SandboxExecutionPolicyTest`（6 例，模式禁用拒绝、低中高风险审批矩阵、
+  豁免只放宽非高风险）。共 23 例全通过。
+- 既有失败（`ApiTokensControllerTest` ×3、`LegacyApiDeprecationWebTest` ×1）在父提交已存在，
+  与本单元无关；`spotless:apply`、`checkstyle:check`、`git diff --check` 通过。
 
 ### SBX-04：Run 与 Artifact 持久化
 
@@ -1022,12 +1048,13 @@ Codex 审核补充（提交 `42c469e` 后审核，补丁提交 `[SBX-02-fix]`）
 
 ## 13. 当前停止点
 
-SBX-02 已完成：`PermissionCode` 增四个 sandbox 权限码，`V15__sandbox_permissions.sql`
-向前兼容增量写入权限与内置角色映射（Viewer 只读、Operator 读/执行/取消、Admin 全部），
-API Token scope 校验随 owner 权限自动识别新权限，`TaskPermissionPolicy` 将 Sandbox 任务
-映射到 `sandbox:execute`，前端权限常量同步。`TaskPermissionPolicyTest` 与真实 MySQL 容器
-下的 `IdentityMySqlIT`（V15 迁移 + 角色映射）通过；前端 typecheck 通过。尚未触碰 Sandbox
-业务代码（Run/Artifact/Controller）、部署或 CI。
+SBX-03 已完成：新增 `sandbox/domain`（RunMode/RunStatus/CleanupStatus/ArtifactType/
+Classification/RiskLevel/StateException/StateMachine）与 `sandbox/policy`（ResourceLimits/
+ToolSpec/ExecutionPolicy），固化四模式、显式状态迁移表（终态不可倒退、迟到回调不覆盖）、
+digest-pinned 镜像强制、资源上限构造期校验、审批与风险矩阵。SBX-01 的 `SandboxProperties.RunMode`
+提升为权威域类型 `SandboxRunMode`；ArchUnit 两条规则补 `..sandbox..`。23 例域/策略测试通过，
+`spotless`/`checkstyle`/`git diff --check` 通过；既有 4 例失败在父提交已存在，与本单元无关。
+尚未触碰 Sandbox 持久化（Run/Artifact 表）、Controller、部署或 CI。
 
 此后每次只提交一个 SBX 单元，验证通过并产生本地 commit 后再进入下一个单元；远端推送
-仍需用户单独授权。下一个单元为 `SBX-03`。
+仍需用户单独授权。下一个单元为 `SBX-04`。

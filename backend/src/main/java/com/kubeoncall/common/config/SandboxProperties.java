@@ -3,6 +3,8 @@ package com.kubeoncall.common.config;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
+import com.kubeoncall.sandbox.domain.SandboxRunMode;
+
 /**
  * Sandbox capability configuration. Every toggle defaults to off and the deployment-wide hard
  * ceilings are immutable, so introducing this group never changes existing behavior until operators
@@ -251,7 +253,7 @@ class SandboxProperties {
      * sandbox is globally enabled and its dedicated toggle is on, so disabling the master switch
      * always reverts every capability regardless of per-mode configuration.
      */
-    public boolean isModeEnabled(RunMode mode) {
+    public boolean isModeEnabled(SandboxRunMode mode) {
         if (!enabled) {
             return false;
         }
@@ -496,13 +498,5 @@ class SandboxProperties {
         limits.put("perAlarmConcurrency", perAlarmConcurrency);
         limits.put("globalConcurrency", globalConcurrency);
         return limits;
-    }
-
-    /** Sandbox run modes, mirroring the four capability families in the refactor plan. */
-    enum RunMode {
-        FIXED_DIAGNOSTIC,
-        GENERATED_CODE,
-        MANIFEST_VALIDATION,
-        REMEDIATION_SIMULATION
     }
 }

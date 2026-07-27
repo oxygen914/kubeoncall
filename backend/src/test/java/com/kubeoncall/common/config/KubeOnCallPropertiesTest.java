@@ -13,6 +13,8 @@ import org.springframework.boot.context.properties.bind.Bindable;
 import org.springframework.boot.context.properties.bind.Binder;
 import org.springframework.boot.context.properties.source.MapConfigurationPropertySource;
 
+import com.kubeoncall.sandbox.domain.SandboxRunMode;
+
 class KubeOnCallPropertiesTest {
 
     @Test
@@ -79,7 +81,7 @@ class KubeOnCallPropertiesTest {
         assertEquals(1, sandbox.getPerAlarmConcurrency());
         assertEquals(4, sandbox.getGlobalConcurrency());
         // No mode is reachable while the master switch is off, regardless of per-mode toggles.
-        for (SandboxProperties.RunMode mode : SandboxProperties.RunMode.values()) {
+        for (SandboxRunMode mode : SandboxRunMode.values()) {
             assertFalse(sandbox.isModeEnabled(mode));
         }
     }
@@ -106,10 +108,10 @@ class KubeOnCallPropertiesTest {
         assertEquals(120, sandbox.getTimeoutSeconds());
         assertEquals(600, sandbox.getMaxTimeoutSeconds());
         assertEquals("http://controller:8090/internal/v1", sandbox.getControllerEndpoint());
-        assertTrue(sandbox.isModeEnabled(SandboxProperties.RunMode.FIXED_DIAGNOSTIC));
-        assertTrue(sandbox.isModeEnabled(SandboxProperties.RunMode.GENERATED_CODE));
-        assertFalse(sandbox.isModeEnabled(SandboxProperties.RunMode.MANIFEST_VALIDATION));
-        assertFalse(sandbox.isModeEnabled(SandboxProperties.RunMode.REMEDIATION_SIMULATION));
+        assertTrue(sandbox.isModeEnabled(SandboxRunMode.FIXED_DIAGNOSTIC));
+        assertTrue(sandbox.isModeEnabled(SandboxRunMode.GENERATED_CODE));
+        assertFalse(sandbox.isModeEnabled(SandboxRunMode.MANIFEST_VALIDATION));
+        assertFalse(sandbox.isModeEnabled(SandboxRunMode.REMEDIATION_SIMULATION));
     }
 
     @Test
