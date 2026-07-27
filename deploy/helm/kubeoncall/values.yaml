@@ -202,3 +202,26 @@ grafanaDashboard:
   enabled: true
   labelKey: grafana_dashboard
   labelValue: "1"
+
+# SBX-11: isolated runtime, disabled until a cluster operator provisions the dedicated namespace.
+sandboxController:
+  enabled: false
+  namespace: kubeoncall-sandbox
+  image:
+    repository: kubeoncall-sandbox-controller
+    tag: latest
+    digest: ""
+    pullPolicy: IfNotPresent
+  service:
+    port: 8088
+  resources:
+    requests: {cpu: 100m, memory: 128Mi}
+    limits: {cpu: "1", memory: 1Gi}
+  quota:
+    pods: "8"
+    requestsCpu: "2"
+    requestsMemory: 2Gi
+    limitsCpu: "4"
+    limitsMemory: 4Gi
+  backendKeyId: backend
+  backendHmacSecretKey: sandbox-controller-hmac

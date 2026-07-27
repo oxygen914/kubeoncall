@@ -8,8 +8,8 @@
 | 制定日期 | 2026-07-27 |
 | 目标项目 | KubeOnCall |
 | 实施状态 | IN_PROGRESS |
-| 代码实现进度 | 42% |
-| 自动化验证进度 | 42% |
+| 代码实现进度 | 46% |
+| 自动化验证进度 | 46% |
 | 真实环境验收进度 | 0%，按阶段单独记录 |
 | 计划提交数 | 24 个，`SBX-00`～`SBX-23` |
 
@@ -422,7 +422,7 @@ helm lint deploy/helm/kubeoncall
 | SBX-08 | `feat(sandbox-controller): build hardened jobs` | 安全 JobSpec 生成器 | COMPLETED |
 | SBX-09 | `feat(sandbox-controller): manage job lifecycle` | 幂等创建、查询和取消 | COMPLETED |
 | SBX-10 | `feat(sandbox-controller): collect results and cleanup` | 结果收集、超时和 TTL 清理 | COMPLETED |
-| SBX-11 | `feat(deploy): isolate sandbox runtime` | Namespace、RBAC、Quota、NetworkPolicy | PLANNED |
+| SBX-11 | `feat(deploy): isolate sandbox runtime` | Namespace、RBAC、Quota、NetworkPolicy | COMPLETED |
 | SBX-12 | `feat(sandbox): dispatch runs through controller` | Backend Client、短时派发和断路器 | PLANNED |
 | SBX-13 | `feat(sandbox): reconcile run convergence` | 多实例安全的状态收敛与清理重试 | PLANNED |
 | SBX-14 | `feat(sandbox): build diagnostic evidence packages` | 证据采集、裁剪、脱敏和哈希 | PLANNED |
@@ -922,6 +922,15 @@ Codex 审核补充（提交 `ae94ebb` 后审核，补丁提交 `[SBX-09-fix]`）
 回滚：
 
 - values 关闭 Controller；保留 namespace 中仍需清理的 Run 资源。
+
+完成记录：
+
+- Helm 新增默认关闭的 `sandboxController`：Controller 部署在独立 namespace，使用独立 ServiceAccount、
+  namespace-scoped Role/RoleBinding（仅 Jobs、Pods、Pods/log，绝不读取 Secret 或使用 ClusterRole）。
+- 新增 ResourceQuota、LimitRange、Controller 和 Job NetworkPolicy；Job 默认拒绝所有入站/外网出站，仅允许
+  集群 DNS，Controller 仅允许 Release namespace 入站与 DNS/Kubernetes API 出站。
+- HMAC Secret 仅注入 Controller；Job 不接收 Secret 挂载或 Docker Socket。`helm lint`、启用 Controller 的
+  `helm template`、RBAC 静态检查和 `docker compose config --quiet` 均通过。
 
 ### SBX-12：Backend 派发
 
