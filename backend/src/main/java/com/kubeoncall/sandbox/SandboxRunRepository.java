@@ -184,9 +184,11 @@ public class SandboxRunRepository {
 
     /**
      * Claims a run that is either freshly {@code PENDING} (no lease yet) or whose lease has expired,
-     * advancing the fencing token so the previous owner's writes are rejected. Newly created runs
-     * have a {@code NULL} lease and are claimed here on first reconciliation; expired leases are
-     * reclaimed on subsequent passes. Mirrors {@code AsyncTaskRepository.claimNext}.
+     * advancing the fencing token and the attempt counter so the previous owner's writes are rejected
+     * and the configured retry ceiling is honored. Newly created runs have a {@code NULL} lease and
+     * are claimed here on first reconciliation; expired leases are reclaimed on subsequent passes.
+     * Runs that have exhausted {@code max_attempts} are skipped so a repeatedly failing run cannot be
+     * retried indefinitely. Mirrors {@code AsyncTaskRepository.claimNext}.
      */
     @Transactional
     public Optional<SandboxRunRecord> claim(String ownerToken, Instant now, Duration leaseDuration) {
@@ -195,6 +197,7 @@ public class SandboxRunRepository {
         List<Long> candidates = jdbcTemplate.query("""
                 SELECT id FROM koc_sandbox_run
                  WHERE run_status NOT IN ('SUCCEEDED', 'FAILED', 'TIMED_OUT', 'CANCELLED')
+                   AND attempt < max_attempts
                    AND (
                      (run_status = 'PENDING' AND owner_token IS NULL)
                      OR (lease_until IS NOT NULL AND lease_until <= ?)
@@ -210,9 +213,11 @@ public class SandboxRunRepository {
                    SET owner_token = ?,
                        lease_until = ?,
                        fencing_token = fencing_token + 1,
+                       attempt = attempt + 1,
                        version = version + 1
                  WHERE id = ?
                    AND run_status NOT IN ('SUCCEEDED', 'FAILED', 'TIMED_OUT', 'CANCELLED')
+                   AND attempt < max_attempts
                    AND (
                      (run_status = 'PENDING' AND owner_token IS NULL)
                      OR (lease_until IS NOT NULL AND lease_until <= ?)
@@ -226,8 +231,9 @@ public class SandboxRunRepository {
 
     /**
      * Claims a specific run by public id (first claim or reclaim of an expired lease), advancing the
-     * fencing token. Used for targeted recovery of a known run; the global {@link #claim} is the
-     * reconciler's scanning entry point.
+     * fencing token and the attempt counter. Used for targeted recovery of a known run; the global
+     * {@link #claim} is the reconciler's scanning entry point. Honors {@code max_attempts} the same
+     * way {@link #claim} does.
      */
     @Transactional
     public Optional<SandboxRunRecord> claimByPublicId(
@@ -242,9 +248,11 @@ public class SandboxRunRepository {
                    SET owner_token = ?,
                        lease_until = ?,
                        fencing_token = fencing_token + 1,
+                       attempt = attempt + 1,
                        version = version + 1
                  WHERE public_id = ?
                    AND run_status NOT IN ('SUCCEEDED', 'FAILED', 'TIMED_OUT', 'CANCELLED')
+                   AND attempt < max_attempts
                    AND (
                      (run_status = 'PENDING' AND owner_token IS NULL)
                      OR (lease_until IS NOT NULL AND lease_until <= ?)
@@ -300,6 +308,7 @@ public class SandboxRunRepository {
                    AND owner_token = ?
                    AND fencing_token = ?
                    AND version = ?
+                   AND lease_until > ?
                 """,
                 target.name(),
                 target.name(),
@@ -311,7 +320,8 @@ public class SandboxRunRepository {
                 publicId,
                 ownerToken,
                 fencingToken,
-                expectedVersion);
+                expectedVersion,
+                now);
     }
 
     /** CAS-style cancellation: accepts the cancel only from a non-terminal state. */
@@ -349,7 +359,8 @@ public class SandboxRunRepository {
                    AND owner_token = ?
                    AND fencing_token = ?
                    AND version = ?
-                """, controllerRunId, now, publicId, ownerToken, fencingToken, expectedVersion);
+                   AND lease_until > ?
+                """, controllerRunId, now, publicId, ownerToken, fencingToken, expectedVersion, now);
     }
 
     public boolean updateProgress(
@@ -394,7 +405,8 @@ public class SandboxRunRepository {
                    AND owner_token = ?
                    AND fencing_token = ?
                    AND version = ?
-                """, json(resultJson), now, publicId, ownerToken, fencingToken, expectedVersion);
+                   AND lease_until > ?
+                """, json(resultJson), now, publicId, ownerToken, fencingToken, expectedVersion, now);
     }
 
     public boolean fail(
@@ -427,6 +439,7 @@ public class SandboxRunRepository {
                    AND owner_token = ?
                    AND fencing_token = ?
                    AND version = ?
+                   AND lease_until > ?
                 """,
                 terminal.name(),
                 errorCode,
@@ -435,7 +448,8 @@ public class SandboxRunRepository {
                 publicId,
                 ownerToken,
                 fencingToken,
-                expectedVersion);
+                expectedVersion,
+                now);
     }
 
     /** Transitions the cleanup lifecycle; terminal cleanup states cannot regress. */

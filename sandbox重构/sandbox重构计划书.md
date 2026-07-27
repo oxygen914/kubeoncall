@@ -653,6 +653,20 @@ Codex 审核补充（提交 `42c469e` 后审核，补丁提交 `[SBX-02-fix]`）
   ×1）在父提交（SBX-03 HEAD）已存在，与本单元无关；`spotless:apply`、`checkstyle:check`、
   `git diff --check` 通过。MySQL 关闭时 Repository bean 不创建，Spring Context 与现有行为不变。
 
+Codex 审核补充（提交 `2813b51` 后审核，补丁提交 `[SBX-04-fix]`）：
+
+- claim/claimByPublicId 原先不递增 `attempt` 也不校验 `max_attempts`，反复失租的 run 会被无限
+  重试，绕过配置上限。补丁在 SELECT 与 UPDATE 谓词均加 `attempt < max_attempts`，并在 claim
+  时 `attempt = attempt + 1`（与 `AsyncTaskRepository.claimNext` 一致）；耗尽的 run 不再被 claim。
+- `markDispatching`/`transitionRunStatus`/`complete`/`fail` 的 CAS 谓词原先只校验 owner+fencing+
+  version，未要求 `lease_until > now`。若 owner 的 lease 已过期但尚无后继 reclaim，旧 owner 仍能
+  写入/终态化 run，破坏 lease 即时吊销语义（`heartbeat`/`updateProgress` 原本已有该谓词）。
+  补丁在这四个写入的 WHERE 子句统一补 `AND lease_until > ?`，lease 过期立即吊销写入权。
+- 测试新增 2 例：`claimShouldHonorMaxAttemptsAndStopReclaimingExhaustedRuns`（max_attempts=2，
+  两次 claim 各耗一次 attempt，第三次 claim 被拒）、`expiredOwnerCannotMutateRunBeforeReclaim`
+  （owner lease 过期后、后继未 reclaim 前，markDispatching 被拒）。`SandboxRunRepositoryIT` 共
+  10 例全通过，failsafe 全 57 例绿。
+
 ### SBX-05：Artifact 存储边界
 
 改动：

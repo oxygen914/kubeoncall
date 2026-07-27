@@ -67,6 +67,10 @@ class SandboxRunRepositoryIT {
     }
 
     private static SandboxRunRecord createRun(String idempotencyKey) {
+        return createRunWithAttempts(idempotencyKey, 5);
+    }
+
+    private static SandboxRunRecord createRunWithAttempts(String idempotencyKey, int maxAttempts) {
         String suffix = UUID.randomUUID().toString().replace("-", "").substring(0, 24);
         return repository.create(new SandboxRunRepository.CreateRun(
                 null,
@@ -80,7 +84,7 @@ class SandboxRunRepositoryIT {
                 "operator-1",
                 idempotencyKey,
                 Map.of("target", "pod/foo"),
-                1,
+                maxAttempts,
                 Instant.now().plus(Duration.ofHours(1)),
                 "req_" + suffix,
                 "trace_" + suffix));
@@ -275,5 +279,50 @@ class SandboxRunRepositoryIT {
         assertThat(expired)
                 .extracting(SandboxArtifactRecord::objectKey)
                 .contains("sandbox/" + run.publicId() + "/logs/run.log");
+    }
+
+    @Test
+    void claimShouldHonorMaxAttemptsAndStopReclaimingExhaustedRuns() {
+        String key = "attempts-" + UUID.randomUUID();
+        SandboxRunRecord run = createRunWithAttempts(key, 2);
+        Instant now = Instant.now();
+
+        // Two claims are permitted; each consumes one attempt.
+        SandboxRunRecord first = repository
+                .claimByPublicId(run.publicId(), "owner-1", now, Duration.ofMillis(1))
+                .orElseThrow();
+        assertThat(first.attempt()).isEqualTo(1);
+        SandboxRunRecord second = repository
+                .claimByPublicId(run.publicId(), "owner-2", now.plus(Duration.ofSeconds(5)), Duration.ofMillis(1))
+                .orElseThrow();
+        assertThat(second.attempt()).isEqualTo(2);
+
+        // A third claim is rejected: the run has exhausted max_attempts and must not be retried again.
+        assertThat(repository.claimByPublicId(
+                        run.publicId(), "owner-3", now.plus(Duration.ofSeconds(10)), Duration.ofMinutes(1)))
+                .as("exhausted run must not be reclaimed again")
+                .isEmpty();
+    }
+
+    @Test
+    void expiredOwnerCannotMutateRunBeforeReclaim() {
+        String key = "lease-" + UUID.randomUUID();
+        SandboxRunRecord run = createRun(key);
+        Instant now = Instant.now();
+
+        // Acquire ownership with a very short lease, then advance past it.
+        SandboxRunRecord owned = repository
+                .claimByPublicId(run.publicId(), "owner-L", now, Duration.ofMillis(1))
+                .orElseThrow();
+        long fencing = fencingOf(owned);
+        Instant afterExpiry = now.plus(Duration.ofSeconds(5));
+
+        // The owner's fencing token and version still match, but the lease has lapsed and no successor
+        // has reclaimed yet. The transition must still be rejected: lease expiry revokes mutation
+        // authority immediately, rather than only once another worker reclaims.
+        assertThat(repository.markDispatching(
+                        run.publicId(), "owner-L", fencing, owned.version(), "ctrl-L", afterExpiry))
+                .as("expired-lease owner must not be able to mutate the run")
+                .isFalse();
     }
 }
