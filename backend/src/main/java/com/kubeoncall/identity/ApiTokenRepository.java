@@ -25,7 +25,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 /**
  * MySQL-backed API token store (WBS-4 GAP-04-01). Only active when {@code kubeoncall.mysql-enabled=true}.
  * The plaintext token is generated on create, returned to the caller once, and never persisted: the
- * table holds only its SHA-256 hash (for future authentication lookup) and a short prefix (for display).
+ * table holds only its SHA-256 hash (for authentication lookup) and a short prefix (for display).
  * Revoke uses {@code (id, version, revoked_at IS NULL)} as a compare-and-set predicate.
  */
 @Repository
@@ -37,7 +37,7 @@ public class ApiTokenRepository {
     private static final int SECRET_BYTES = 32;
 
     private static final String SELECT_COLUMNS = """
-            t.public_id, t.owner_user_id, u.public_id AS owner_public_id, u.username AS owner_username,
+            t.id, t.public_id, t.owner_user_id, u.public_id AS owner_public_id, u.username AS owner_username,
             t.name, t.token_prefix, t.token_hash, t.scopes_json, t.expires_at, t.last_used_at,
             t.revoked_at, t.version, t.created_at
             """;
@@ -114,7 +114,7 @@ public class ApiTokenRepository {
     public GeneratedToken create(long ownerId, String name, List<String> scopes, Instant expiresAt) {
         String plaintext = generatePlaintext();
         String publicId = "tok_" + UUID.randomUUID().toString().replace("-", "");
-        byte[] hash = sha256(plaintext);
+        byte[] hash = hashPlaintext(plaintext);
         jdbcTemplate.update(
                 INSERT_TOKEN,
                 publicId,
@@ -154,7 +154,7 @@ public class ApiTokenRepository {
                         """, Timestamp.from(Instant.now()), revokedBy, publicId, expectedVersion) == 1;
     }
 
-    /** Looks up a live token by its SHA-256 hash (for the future authentication path). */
+    /** Looks up a live token by its SHA-256 hash. */
     public Optional<ApiTokenRow> findByHash(byte[] hash) {
         if (hash == null || hash.length == 0) {
             return Optional.empty();
@@ -172,7 +172,7 @@ public class ApiTokenRepository {
         }
     }
 
-    /** Records the last use of a token (for the future authentication path). */
+    /** Records the last successful authentication time and source address. */
     public void recordUsage(long internalId, String sourceIp) {
         jdbcTemplate.update(
                 "UPDATE koc_api_token SET last_used_at = ?, last_used_ip = INET6_ATON(?) WHERE id = ?",
@@ -200,7 +200,10 @@ public class ApiTokenRepository {
         return plaintext.length() <= 12 ? plaintext : plaintext.substring(0, 12);
     }
 
-    private static byte[] sha256(String value) {
+    public static byte[] hashPlaintext(String value) {
+        if (value == null || value.isBlank()) {
+            throw new IllegalArgumentException("API token must not be blank");
+        }
         try {
             return MessageDigest.getInstance("SHA-256").digest(value.getBytes(StandardCharsets.UTF_8));
         } catch (Exception ex) {
@@ -219,6 +222,7 @@ public class ApiTokenRepository {
         @Override
         public ApiTokenRow mapRow(ResultSet rs, int rowNum) throws SQLException {
             return new ApiTokenRow(
+                    rs.getLong("id"),
                     rs.getString("public_id"),
                     rs.getLong("owner_user_id"),
                     rs.getString("owner_public_id"),
@@ -252,6 +256,7 @@ public class ApiTokenRepository {
 
     /** Persisted token row. Never carries the plaintext or the raw hash bytes. */
     public record ApiTokenRow(
+            long internalId,
             String publicId,
             long ownerUserId,
             String ownerPublicId,
@@ -264,6 +269,36 @@ public class ApiTokenRepository {
             Instant revokedAt,
             long version,
             Instant createdAt) {
+
+        /** Compatibility constructor retained for controller-focused callers and fixtures. */
+        public ApiTokenRow(
+                String publicId,
+                long ownerUserId,
+                String ownerPublicId,
+                String ownerUsername,
+                String name,
+                String tokenPrefix,
+                List<String> scopes,
+                Instant expiresAt,
+                Instant lastUsedAt,
+                Instant revokedAt,
+                long version,
+                Instant createdAt) {
+            this(
+                    0,
+                    publicId,
+                    ownerUserId,
+                    ownerPublicId,
+                    ownerUsername,
+                    name,
+                    tokenPrefix,
+                    scopes,
+                    expiresAt,
+                    lastUsedAt,
+                    revokedAt,
+                    version,
+                    createdAt);
+        }
 
         public boolean revoked() {
             return revokedAt != null;

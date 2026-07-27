@@ -227,6 +227,26 @@ public class WorkflowExecutionRepository {
                 executionPublicId);
     }
 
+    /** Paged operational view used for notification and other node-delivery histories. */
+    public NodePage listNodesByName(String nodeName, int requestedPage, int requestedSize) {
+        int page = Math.max(1, requestedPage);
+        int size = Math.max(1, Math.min(requestedSize, 100));
+        int offset = (page - 1) * size;
+        Long count = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM koc_workflow_node_execution WHERE node_name = ?", Long.class, nodeName);
+        List<WorkflowNodeExecutionRecord> rows = jdbcTemplate.query(
+                "SELECT " + NODE_COLUMNS
+                        + " FROM koc_workflow_node_execution n"
+                        + " JOIN koc_workflow_execution e ON e.id = n.execution_id"
+                        + " WHERE n.node_name = ?"
+                        + " ORDER BY n.created_at DESC, n.id DESC LIMIT ? OFFSET ?",
+                new NodeRowMapper(),
+                nodeName,
+                size,
+                offset);
+        return new NodePage(rows, count == null ? 0 : count);
+    }
+
     private static void appendInFilter(StringBuilder where, List<Object> args, String column, List<String> values) {
         if (values == null || values.isEmpty()) {
             return;
@@ -368,4 +388,6 @@ public class WorkflowExecutionRepository {
             String triggerPublicId) {}
 
     public record ExecutionPage(List<WorkflowExecutionRecord> rows, long total) {}
+
+    public record NodePage(List<WorkflowNodeExecutionRecord> rows, long total) {}
 }

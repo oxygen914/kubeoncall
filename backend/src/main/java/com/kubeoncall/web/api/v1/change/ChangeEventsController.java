@@ -6,18 +6,23 @@ import java.util.Map;
 
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.kubeoncall.alarm.correlation.ChangeCorrelation;
 import com.kubeoncall.alarm.correlation.ChangeCorrelationService;
 import com.kubeoncall.alarm.correlation.ChangeEvent;
+import com.kubeoncall.alarm.ingest.AlarmNormalizer;
 import com.kubeoncall.identity.PermissionCode;
 import com.kubeoncall.web.api.v1.PageMeta;
 import com.kubeoncall.web.api.v1.RequestIdFilter;
 import com.kubeoncall.web.api.v1.V1ApiErrorCode;
 import com.kubeoncall.web.api.v1.V1ApiException;
 import com.kubeoncall.web.api.v1.V1Security;
+import com.kubeoncall.web.dto.AlarmRequest;
 
 /**
  * {@code /api/v1/change-events} — read-only change-event timeline (WBS-11 GAP-11-01). Requires
@@ -33,10 +38,13 @@ public class ChangeEventsController {
 
     private final ChangeCorrelationService correlationService;
     private final V1Security security;
+    private final AlarmNormalizer alarmNormalizer;
 
-    public ChangeEventsController(ChangeCorrelationService correlationService, V1Security security) {
+    public ChangeEventsController(
+            ChangeCorrelationService correlationService, V1Security security, AlarmNormalizer alarmNormalizer) {
         this.correlationService = correlationService;
         this.security = security;
+        this.alarmNormalizer = alarmNormalizer;
     }
 
     @GetMapping
@@ -55,13 +63,24 @@ public class ChangeEventsController {
         int normalizedSize = Math.max(1, Math.min(size, MAX_PAGE_SIZE));
         List<ChangeEvent> events = correlationService.findBetween(from, to, cluster, namespace);
         long total = events.size();
-        int offset = Math.max(0, (normalizedPage - 1) * normalizedSize);
+        long offset = (long) (normalizedPage - 1) * normalizedSize;
         List<ChangeEventView> pageItems = events.stream()
                 .skip(offset)
                 .limit(normalizedSize)
                 .map(ChangeEventsController::toView)
                 .toList();
         return PageMeta.ListEnvelope.of(pageItems, normalizedPage, normalizedSize, total, currentRequestId());
+    }
+
+    @PostMapping("/correlations")
+    public com.kubeoncall.web.api.v1.ApiResponse<List<ChangeCorrelation>> correlations(
+            @RequestBody AlarmRequest alarm) {
+        security.requirePermission(PermissionCode.CHANGE_READ);
+        if (alarm == null) {
+            throw V1ApiException.of(400, V1ApiErrorCode.INVALID_REQUEST, "alarm request is required");
+        }
+        return com.kubeoncall.web.api.v1.ApiResponse.ok(
+                correlationService.findRelatedChanges(alarmNormalizer.normalize(alarm)), currentRequestId());
     }
 
     private static String currentRequestId() {

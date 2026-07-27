@@ -2,6 +2,7 @@ package com.kubeoncall.observability;
 
 import java.time.Clock;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -64,6 +65,13 @@ public class DependencyCircuitBreaker {
         }
     }
 
+    /** Read-only bounded snapshot for the operator Console. No dependency call is made here. */
+    public Map<String, CircuitState> snapshot() {
+        Map<String, CircuitState> snapshot = new java.util.TreeMap<>();
+        circuits.forEach((dependency, circuit) -> snapshot.put(dependency, circuit.snapshot()));
+        return Map.copyOf(snapshot);
+    }
+
     private long resetTimeoutMillis() {
         return Duration.ofSeconds(
                         Math.max(1, properties.getDependencyCircuitBreaker().getResetTimeoutSeconds()))
@@ -117,7 +125,15 @@ public class DependencyCircuitBreaker {
             openedAtMillis = now;
             return true;
         }
+
+        synchronized CircuitState snapshot() {
+            String state = open ? (halfOpenProbeInFlight ? "HALF_OPEN" : "OPEN") : "CLOSED";
+            Instant openedAt = openedAtMillis <= 0 ? null : Instant.ofEpochMilli(openedAtMillis);
+            return new CircuitState(state, consecutiveFailures, openedAt);
+        }
     }
+
+    public record CircuitState(String state, int consecutiveFailures, Instant openedAt) {}
 
     public static final class CircuitOpenException extends IllegalStateException {
 

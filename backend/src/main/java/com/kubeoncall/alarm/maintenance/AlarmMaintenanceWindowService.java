@@ -1,6 +1,7 @@
 package com.kubeoncall.alarm.maintenance;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
@@ -86,6 +87,10 @@ public class AlarmMaintenanceWindowService {
                     ex.getClass().getSimpleName());
             return Optional.empty();
         }
+    }
+
+    public List<AlarmMaintenanceWindow> listCurrentAndUpcoming() {
+        return store.scheduledAfter(Instant.now());
     }
 
     public boolean revoke(String id) {

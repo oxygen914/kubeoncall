@@ -22,6 +22,9 @@ import { AuditListPage } from '@/features/audit/AuditListPage'
 import { AuditDetailPage } from '@/features/audit/AuditDetailPage'
 import { ApiTokensPage } from '@/features/tokens/ApiTokensPage'
 import { ToolsPage } from '@/features/tools/ToolsPage'
+import { OperationsPage } from '@/features/operations/OperationsPage'
+import { ChangeEventsPage } from '@/features/changes/ChangeEventsPage'
+import { IntegrationsPage } from '@/features/integrations/IntegrationsPage'
 import { AppShell } from '@/components/layout/AppShell'
 import { ForbiddenPage } from '@/components/feedback/ForbiddenPage'
 import { NotFoundPage } from '@/components/feedback/NotFoundPage'
@@ -210,6 +213,30 @@ export function AppRouter() {
             </Restricted>
           }
         />
+        <Route
+          path="/operations"
+          element={
+            <RestrictedAny permissions={[PERMISSIONS.POLICY_READ, PERMISSIONS.MAINTENANCE_READ]}>
+              <OperationsPage />
+            </RestrictedAny>
+          }
+        />
+        <Route
+          path="/changes"
+          element={
+            <Restricted permission={PERMISSIONS.CHANGE_READ}>
+              <ChangeEventsPage />
+            </Restricted>
+          }
+        />
+        <Route
+          path="/integrations"
+          element={
+            <Restricted permission={PERMISSIONS.INTEGRATION_READ}>
+              <IntegrationsPage />
+            </Restricted>
+          }
+        />
       </Route>
 
       <Route path="*" element={<NotFoundPage />} />
@@ -225,4 +252,14 @@ function Restricted({
   children: React.ReactNode
 }) {
   return <PermissionBoundary permission={permission}>{children}</PermissionBoundary>
+}
+
+function RestrictedAny({
+  permissions,
+  children,
+}: {
+  permissions: Permission[]
+  children: React.ReactNode
+}) {
+  return <PermissionBoundary permissions={permissions}>{children}</PermissionBoundary>
 }

@@ -2,6 +2,7 @@ package com.kubeoncall.web.api.v1.tokens;
 
 import java.time.Instant;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 
@@ -86,6 +87,8 @@ public class ApiTokensController {
             @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
             @Valid @RequestBody CreateTokenRequest request) {
         V1Principal actor = security.requirePermission(PermissionCode.TOKEN_MANAGE_OWN);
+        List<String> scopes = normalizeScopes(request.scopes(), actor);
+        request = new CreateTokenRequest(request.name(), scopes, request.expiresAt());
         CommandIdempotency command = begin(
                 actor,
                 "POST:/api/v1/api-tokens",
@@ -189,6 +192,29 @@ public class ApiTokensController {
         view.put("ownerId", actor.user().publicId());
         view.put("version", 1);
         return view;
+    }
+
+    private static List<String> normalizeScopes(List<String> requested, V1Principal actor) {
+        LinkedHashSet<String> scopes = new LinkedHashSet<>();
+        if (requested != null) {
+            requested.stream()
+                    .filter(scope -> scope != null && !scope.isBlank())
+                    .map(String::trim)
+                    .forEach(scopes::add);
+        }
+        if (scopes.isEmpty()) {
+            throw new V1ApiException(
+                    HttpStatus.BAD_REQUEST.value(),
+                    V1ApiErrorCode.INVALID_REQUEST,
+                    "At least one API token scope is required");
+        }
+        List<String> unauthorized =
+                scopes.stream().filter(scope -> !actor.hasPermission(scope)).toList();
+        if (!unauthorized.isEmpty()) {
+            throw V1ApiException.forbidden(
+                    "API token scopes exceed the caller's permissions: " + String.join(", ", unauthorized));
+        }
+        return List.copyOf(scopes);
     }
 
     private static Map<String, Object> toView(ApiTokenRow row) {

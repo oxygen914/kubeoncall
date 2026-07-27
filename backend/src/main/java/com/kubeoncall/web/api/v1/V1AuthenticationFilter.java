@@ -9,12 +9,14 @@ import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import com.kubeoncall.common.config.KubeOnCallProperties;
+import com.kubeoncall.identity.ApiTokenAuthenticationService;
 import com.kubeoncall.identity.AuthService;
 import com.kubeoncall.identity.BuiltInRole;
 import com.kubeoncall.identity.PermissionCode;
@@ -23,10 +25,10 @@ import com.kubeoncall.observability.CorrelationContext;
 
 /**
  * Resolves the {@code /api/v1} authenticated principal for each request. Tries, in order: the
- * {@code KOC_SESSION} cookie (browser domain), then a legacy static role token (compatibility shim
- * during the deprecation window). The result is stored as a {@link V1AuthenticationToken} in the
- * {@link SecurityContextHolder}; unauthenticated requests still proceed as anonymous and rely on
- * route-level authorization to reject them.
+ * {@code KOC_SESSION} cookie (browser domain), a persisted scoped API token, then a legacy static
+ * role token (compatibility shim during the deprecation window). The result is stored as a
+ * {@link V1AuthenticationToken} in the {@link SecurityContextHolder}; unauthenticated requests
+ * still proceed as anonymous and rely on route-level authorization to reject them.
  */
 @Component
 public class V1AuthenticationFilter extends OncePerRequestFilter {
@@ -34,14 +36,23 @@ public class V1AuthenticationFilter extends OncePerRequestFilter {
     private final AuthService authService;
     private final KubeOnCallProperties properties;
     private final boolean legacyTokenCompat;
+    private final ApiTokenAuthenticationService apiTokenAuthenticationService;
 
+    @Autowired
     public V1AuthenticationFilter(
             AuthService authService,
             KubeOnCallProperties properties,
-            @Value("${kubeoncall.auth.legacy-token-compat:true}") boolean legacyTokenCompat) {
+            @Value("${kubeoncall.auth.legacy-token-compat:true}") boolean legacyTokenCompat,
+            ApiTokenAuthenticationService apiTokenAuthenticationService) {
         this.authService = authService;
         this.properties = properties;
         this.legacyTokenCompat = legacyTokenCompat;
+        this.apiTokenAuthenticationService = apiTokenAuthenticationService;
+    }
+
+    /** Compatibility constructor for focused filter tests that do not bootstrap MySQL identity. */
+    public V1AuthenticationFilter(AuthService authService, KubeOnCallProperties properties, boolean legacyTokenCompat) {
+        this(authService, properties, legacyTokenCompat, null);
     }
 
     @Override
@@ -58,7 +69,9 @@ public class V1AuthenticationFilter extends OncePerRequestFilter {
         if (resolved != null) {
             principal = resolved.principal;
         } else {
-            principal = resolveLegacyToken(request).orElse(V1Principal.anonymous());
+            principal = resolveApiToken(request)
+                    .or(() -> resolveLegacyToken(request))
+                    .orElse(V1Principal.anonymous());
         }
         V1AuthenticationToken authentication = new V1AuthenticationToken(principal);
         if (resolved != null && resolved.csrfSecret != null) {
@@ -94,16 +107,23 @@ public class V1AuthenticationFilter extends OncePerRequestFilter {
 
     private record ResolvedPrincipal(V1Principal principal, String csrfSecret) {}
 
+    private Optional<V1Principal> resolveApiToken(HttpServletRequest request) {
+        if (apiTokenAuthenticationService == null) {
+            return Optional.empty();
+        }
+        String token = bearerToken(request);
+        if (token == null || !token.startsWith("koc_")) {
+            return Optional.empty();
+        }
+        return apiTokenAuthenticationService.authenticate(token, request.getRemoteAddr());
+    }
+
     private Optional<V1Principal> resolveLegacyToken(HttpServletRequest request) {
         if (!legacyTokenCompat) {
             return Optional.empty();
         }
-        String header = request.getHeader("Authorization");
-        if (header == null || !header.regionMatches(true, 0, "Bearer ", 0, 7)) {
-            return Optional.empty();
-        }
-        String token = header.substring(7).trim();
-        if (token.isBlank()) {
+        String token = bearerToken(request);
+        if (token == null || token.startsWith("koc_")) {
             return Optional.empty();
         }
         KubeOnCallProperties.ApiSecurity apiSecurity = properties.getApiSecurity();
@@ -117,6 +137,15 @@ public class V1AuthenticationFilter extends OncePerRequestFilter {
             return Optional.of(legacyPrincipal(BuiltInRole.VIEWER));
         }
         return Optional.empty();
+    }
+
+    private static String bearerToken(HttpServletRequest request) {
+        String header = request.getHeader("Authorization");
+        if (header == null || !header.regionMatches(true, 0, "Bearer ", 0, 7)) {
+            return null;
+        }
+        String token = header.substring(7).trim();
+        return token.isBlank() ? null : token;
     }
 
     /** Legacy tokens map to a synthetic user with the full permission set of the matched role. */

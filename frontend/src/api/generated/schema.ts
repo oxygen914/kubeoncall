@@ -132,6 +132,118 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/operations/suppression-rules/reload": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["reloadSuppressionRules"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/operations/policies/rollback": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["rollbackPolicy"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/operations/policies/replay": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["replay"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/operations/policies/reload": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["reloadPolicies"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/operations/policies/prometheus-rules/dry-run": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["compilePrometheusRules"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/operations/policies/dry-run": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["dryRun"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/operations/maintenance-windows": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["maintenanceWindows"];
+        put?: never;
+        post: operations["createMaintenanceWindow"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/migration/diffs/{diffId}/resolution": {
         parameters: {
             query?: never;
@@ -382,6 +494,22 @@ export interface paths {
         get?: never;
         put?: never;
         post: operations["report"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/change-events/correlations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["correlations"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1021,7 +1149,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        post: operations["replay"];
+        post: operations["replay_1"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1069,7 +1197,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        post: operations["dryRun"];
+        post: operations["dryRun_1"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1086,6 +1214,70 @@ export interface paths {
         get?: never;
         put?: never;
         post: operations["create_3"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/tools": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["all"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/tools/verifier": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["verifier"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/tools/planner": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["planner"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/tools/executor": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["executor"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -1164,6 +1356,38 @@ export interface paths {
             cookie?: never;
         };
         get: operations["overview"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/operations/suppression-rules": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["suppressionRules"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/operations/policies": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["policies"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1380,6 +1604,38 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/integrations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["catalog"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/integrations/notifications": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["notifications"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/executions/{executionId}": {
         parameters: {
             query?: never;
@@ -1435,7 +1691,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get: operations["all"];
+        get: operations["all_1"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1796,6 +2052,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/operations/maintenance-windows/{windowId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete: operations["revokeMaintenanceWindow"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/api-tokens/{tokenId}": {
         parameters: {
             query?: never;
@@ -1898,6 +2170,185 @@ export interface components {
         ReloadAccepted: {
             taskId?: string;
             status?: string;
+        };
+        ApiResponseReloadResult: {
+            data?: components["schemas"]["ReloadResult"];
+            meta?: components["schemas"]["ResponseMeta"];
+        };
+        ReloadResult: {
+            previousVersion?: string;
+            activeVersion?: string;
+            /** Format: int32 */
+            ruleCount?: number;
+        };
+        AlarmPolicyRollbackRequest: {
+            version?: string;
+        };
+        AlarmAction: {
+            workflowTemplate?: string;
+            notificationChannel?: string;
+            approvalRequiredForActions?: boolean;
+            autoSilence?: boolean;
+            allowedTools?: string[];
+        };
+        AlarmCondition: {
+            alertName?: string;
+            metricName?: string;
+            /** @enum {string} */
+            resourceType?: "NODE" | "POD" | "DEPLOYMENT" | "STATEFULSET" | "NAMESPACE" | "CLUSTER" | "SERVICE" | "HOST" | "WORKLOAD";
+            operator?: string;
+            /** Format: double */
+            threshold?: number;
+            duration?: string;
+            matchLabels?: {
+                [key: string]: string;
+            };
+        };
+        AlarmPolicy: {
+            id?: string;
+            name?: string;
+            category?: string;
+            metricName?: string;
+            /** @enum {string} */
+            resourceType?: "NODE" | "POD" | "DEPLOYMENT" | "STATEFULSET" | "NAMESPACE" | "CLUSTER" | "SERVICE" | "HOST" | "WORKLOAD";
+            /** @enum {string} */
+            severity?: "P0" | "P1" | "P2" | "P3" | "INFO";
+            condition?: components["schemas"]["AlarmCondition"];
+            promql?: string;
+            window?: string;
+            recover?: string;
+            runbookId?: string;
+            owner?: string;
+            actions?: components["schemas"]["AlarmAction"];
+            labels?: {
+                [key: string]: string;
+            };
+            ragFilters?: {
+                [key: string]: string;
+            };
+            version?: string;
+        };
+        ApiResponsePolicySnapshot: {
+            data?: components["schemas"]["PolicySnapshot"];
+            meta?: components["schemas"]["ResponseMeta"];
+        };
+        PolicySnapshot: {
+            version?: string;
+            previousVersion?: string;
+            /** Format: date-time */
+            loadedAt?: string;
+            policies?: components["schemas"]["AlarmPolicy"][];
+        };
+        AlarmPolicyReplayRequest: {
+            alarms?: components["schemas"]["AlarmRequest"][];
+        };
+        AlarmRequest: {
+            alarmId?: string;
+            dedupKey?: string;
+            source?: string;
+            severity?: string;
+            nodeName?: string;
+            summary?: string;
+            /** Format: date-time */
+            occurredAt?: string;
+            metadata?: {
+                [key: string]: Record<string, never>;
+            };
+            fingerprint?: string;
+            alertName?: string;
+            resourceType?: string;
+            resourceName?: string;
+            cluster?: string;
+            namespace?: string;
+            service?: string;
+            metricName?: string;
+            /** Format: double */
+            currentValue?: number;
+            /** Format: double */
+            threshold?: number;
+            unit?: string;
+            duration?: string;
+            labels?: {
+                [key: string]: string;
+            };
+            annotations?: {
+                [key: string]: string;
+            };
+            runbookId?: string;
+            status?: string;
+        };
+        AlarmPolicyEvaluationResponse: {
+            alarmId?: string;
+            fingerprint?: string;
+            alertName?: string;
+            matched?: boolean;
+            policyId?: string;
+            policyVersion?: string;
+            severity?: string;
+            workflowTemplate?: string;
+            runbookId?: string;
+            reason?: string;
+        };
+        AlarmPolicyReplayResponse: {
+            policyVersion?: string;
+            /** Format: int32 */
+            total?: number;
+            /** Format: int32 */
+            matched?: number;
+            /** Format: int32 */
+            unmatched?: number;
+            results?: components["schemas"]["AlarmPolicyEvaluationResponse"][];
+        };
+        ApiResponseAlarmPolicyReplayResponse: {
+            data?: components["schemas"]["AlarmPolicyReplayResponse"];
+            meta?: components["schemas"]["ResponseMeta"];
+        };
+        ApiResponseCompiledPrometheusRules: {
+            data?: components["schemas"]["CompiledPrometheusRules"];
+            meta?: components["schemas"]["ResponseMeta"];
+        };
+        CompiledPrometheusRules: {
+            policyVersion?: string;
+            checksum?: string;
+            content?: string;
+            /** Format: int32 */
+            ruleCount?: number;
+        };
+        ApiResponseAlarmPolicyEvaluationResponse: {
+            data?: components["schemas"]["AlarmPolicyEvaluationResponse"];
+            meta?: components["schemas"]["ResponseMeta"];
+        };
+        MaintenanceWindowRequest: {
+            /** Format: date-time */
+            startsAt?: string;
+            /** Format: date-time */
+            endsAt?: string;
+            matchers?: {
+                [key: string]: string;
+            };
+            reason?: string;
+            approvedBy?: string;
+            approvalReference?: string;
+        };
+        AlarmMaintenanceWindow: {
+            id?: string;
+            /** Format: date-time */
+            startsAt?: string;
+            /** Format: date-time */
+            endsAt?: string;
+            matchers?: {
+                [key: string]: string;
+            };
+            reason?: string;
+            createdBy?: string;
+            approvedBy?: string;
+            approvalReference?: string;
+            /** Format: date-time */
+            createdAt?: string;
+        };
+        ApiResponseAlarmMaintenanceWindow: {
+            data?: components["schemas"]["AlarmMaintenanceWindow"];
+            meta?: components["schemas"]["ResponseMeta"];
         };
         ApiResponseMigrationTaskAccepted: {
             data?: components["schemas"]["MigrationTaskAccepted"];
@@ -2041,6 +2492,33 @@ export interface components {
             };
             meta?: components["schemas"]["ResponseMeta"];
         };
+        ApiResponseListChangeCorrelation: {
+            data?: components["schemas"]["ChangeCorrelation"][];
+            meta?: components["schemas"]["ResponseMeta"];
+        };
+        ChangeCorrelation: {
+            changeEvent?: components["schemas"]["ChangeEvent"];
+            /** Format: double */
+            correlationScore?: number;
+            correlationReason?: string;
+            suggestions?: string[];
+        };
+        ChangeEvent: {
+            changeId?: string;
+            changeType?: string;
+            changedBy?: string;
+            /** Format: date-time */
+            changedAt?: string;
+            resourceType?: string;
+            resourceName?: string;
+            namespace?: string;
+            cluster?: string;
+            diff?: {
+                [key: string]: Record<string, never>;
+            };
+            changeSource?: string;
+            correlationId?: string;
+        };
         LoginRequest: {
             username: string;
             password: string;
@@ -2095,13 +2573,6 @@ export interface components {
         SkillStateResponse: {
             skillId?: string;
             enabled?: boolean;
-        };
-        ReloadResult: {
-            /** Format: int32 */
-            loaded?: number;
-            /** Format: int32 */
-            projectOverrides?: number;
-            errors?: string[];
         };
         MemoryRestoreResponse: {
             memoryId?: string;
@@ -2362,64 +2833,6 @@ export interface components {
             rejected?: number;
             batchId?: string;
         };
-        ChangeEvent: {
-            changeId?: string;
-            changeType?: string;
-            changedBy?: string;
-            /** Format: date-time */
-            changedAt?: string;
-            resourceType?: string;
-            resourceName?: string;
-            namespace?: string;
-            cluster?: string;
-            diff?: {
-                [key: string]: Record<string, never>;
-            };
-            changeSource?: string;
-            correlationId?: string;
-        };
-        AlarmRequest: {
-            alarmId?: string;
-            dedupKey?: string;
-            source?: string;
-            severity?: string;
-            nodeName?: string;
-            summary?: string;
-            /** Format: date-time */
-            occurredAt?: string;
-            metadata?: {
-                [key: string]: Record<string, never>;
-            };
-            fingerprint?: string;
-            alertName?: string;
-            resourceType?: string;
-            resourceName?: string;
-            cluster?: string;
-            namespace?: string;
-            service?: string;
-            metricName?: string;
-            /** Format: double */
-            currentValue?: number;
-            /** Format: double */
-            threshold?: number;
-            unit?: string;
-            duration?: string;
-            labels?: {
-                [key: string]: string;
-            };
-            annotations?: {
-                [key: string]: string;
-            };
-            runbookId?: string;
-            status?: string;
-        };
-        ChangeCorrelation: {
-            changeEvent?: components["schemas"]["ChangeEvent"];
-            /** Format: double */
-            correlationScore?: number;
-            correlationReason?: string;
-            suggestions?: string[];
-        };
         AskResponse: {
             executionId?: string;
             status?: string;
@@ -2495,92 +2908,6 @@ export interface components {
             expiresAt?: string;
             acknowledgementKey?: string;
         };
-        AlarmAction: {
-            workflowTemplate?: string;
-            notificationChannel?: string;
-            approvalRequiredForActions?: boolean;
-            autoSilence?: boolean;
-            allowedTools?: string[];
-        };
-        AlarmCondition: {
-            alertName?: string;
-            metricName?: string;
-            /** @enum {string} */
-            resourceType?: "NODE" | "POD" | "DEPLOYMENT" | "STATEFULSET" | "NAMESPACE" | "CLUSTER" | "SERVICE" | "HOST" | "WORKLOAD";
-            operator?: string;
-            /** Format: double */
-            threshold?: number;
-            duration?: string;
-            matchLabels?: {
-                [key: string]: string;
-            };
-        };
-        AlarmPolicy: {
-            id?: string;
-            name?: string;
-            category?: string;
-            metricName?: string;
-            /** @enum {string} */
-            resourceType?: "NODE" | "POD" | "DEPLOYMENT" | "STATEFULSET" | "NAMESPACE" | "CLUSTER" | "SERVICE" | "HOST" | "WORKLOAD";
-            /** @enum {string} */
-            severity?: "P0" | "P1" | "P2" | "P3" | "INFO";
-            condition?: components["schemas"]["AlarmCondition"];
-            promql?: string;
-            window?: string;
-            recover?: string;
-            runbookId?: string;
-            owner?: string;
-            actions?: components["schemas"]["AlarmAction"];
-            labels?: {
-                [key: string]: string;
-            };
-            ragFilters?: {
-                [key: string]: string;
-            };
-            version?: string;
-        };
-        PolicySnapshot: {
-            version?: string;
-            previousVersion?: string;
-            /** Format: date-time */
-            loadedAt?: string;
-            policies?: components["schemas"]["AlarmPolicy"][];
-        };
-        AlarmPolicyRollbackRequest: {
-            version?: string;
-        };
-        AlarmPolicyReplayRequest: {
-            alarms?: components["schemas"]["AlarmRequest"][];
-        };
-        AlarmPolicyEvaluationResponse: {
-            alarmId?: string;
-            fingerprint?: string;
-            alertName?: string;
-            matched?: boolean;
-            policyId?: string;
-            policyVersion?: string;
-            severity?: string;
-            workflowTemplate?: string;
-            runbookId?: string;
-            reason?: string;
-        };
-        AlarmPolicyReplayResponse: {
-            policyVersion?: string;
-            /** Format: int32 */
-            total?: number;
-            /** Format: int32 */
-            matched?: number;
-            /** Format: int32 */
-            unmatched?: number;
-            results?: components["schemas"]["AlarmPolicyEvaluationResponse"][];
-        };
-        CompiledPrometheusRules: {
-            policyVersion?: string;
-            checksum?: string;
-            content?: string;
-            /** Format: int32 */
-            ruleCount?: number;
-        };
         AlarmMaintenanceWindowRequest: {
             /** Format: date-time */
             startsAt?: string;
@@ -2594,24 +2921,43 @@ export interface components {
             approvedBy?: string;
             approvalReference?: string;
         };
-        AlarmMaintenanceWindow: {
-            id?: string;
-            /** Format: date-time */
-            startsAt?: string;
-            /** Format: date-time */
-            endsAt?: string;
-            matchers?: {
-                [key: string]: string;
-            };
-            reason?: string;
-            createdBy?: string;
-            approvedBy?: string;
-            approvalReference?: string;
-            /** Format: date-time */
-            createdAt?: string;
-        };
         ApiResponseListUserView: {
             data?: components["schemas"]["UserView"][];
+            meta?: components["schemas"]["ResponseMeta"];
+        };
+        ApiResponseToolCatalogView: {
+            data?: components["schemas"]["ToolCatalogView"];
+            meta?: components["schemas"]["ResponseMeta"];
+        };
+        ToolCatalogView: {
+            planner?: components["schemas"]["ToolView"][];
+            executor?: components["schemas"]["ToolView"][];
+            verifier?: components["schemas"]["VerifierCapability"][];
+        };
+        ToolView: {
+            name?: string;
+            executorKind?: string;
+            description?: string;
+            readOnly?: boolean;
+            requiresApproval?: boolean;
+            supportedTaskTypes?: string[];
+            requiredParameters?: string[];
+            targetSystems?: string[];
+            inputSchema?: {
+                [key: string]: Record<string, never>;
+            };
+        };
+        VerifierCapability: {
+            node?: string;
+            type?: string;
+            description?: string;
+        };
+        ApiResponseListVerifierCapability: {
+            data?: components["schemas"]["VerifierCapability"][];
+            meta?: components["schemas"]["ResponseMeta"];
+        };
+        ApiResponseListToolView: {
+            data?: components["schemas"]["ToolView"][];
             meta?: components["schemas"]["ResponseMeta"];
         };
         ApiResponseTaskView: {
@@ -2658,6 +3004,48 @@ export interface components {
             /** Format: int32 */
             totalPages?: number;
             hasNext?: boolean;
+        };
+        AlarmSuppressionRule: {
+            id?: string;
+            source?: components["schemas"]["Match"];
+            target?: components["schemas"]["Match"];
+            correlateBy?: string[];
+            /** Format: int64 */
+            ttlSeconds?: number;
+            reason?: string;
+        };
+        ApiResponseSuppressionCatalogView: {
+            data?: components["schemas"]["SuppressionCatalogView"];
+            meta?: components["schemas"]["ResponseMeta"];
+        };
+        Match: {
+            resourceTypes?: ("NODE" | "POD" | "DEPLOYMENT" | "STATEFULSET" | "NAMESPACE" | "CLUSTER" | "SERVICE" | "HOST" | "WORKLOAD")[];
+            alertNamePatterns?: string[];
+        };
+        SuppressionCatalogView: {
+            activeVersion?: string;
+            rules?: components["schemas"]["AlarmSuppressionRule"][];
+        };
+        ApiResponsePolicyCatalogView: {
+            data?: components["schemas"]["PolicyCatalogView"];
+            meta?: components["schemas"]["ResponseMeta"];
+        };
+        PolicyCatalogView: {
+            activeVersion?: string;
+            policies?: components["schemas"]["AlarmPolicy"][];
+            versions?: components["schemas"]["PolicyVersionView"][];
+        };
+        PolicyVersionView: {
+            version?: string;
+            previousVersion?: string;
+            /** Format: date-time */
+            loadedAt?: string;
+            /** Format: int32 */
+            policyCount?: number;
+        };
+        ApiResponseListAlarmMaintenanceWindow: {
+            data?: components["schemas"]["AlarmMaintenanceWindow"][];
+            meta?: components["schemas"]["ResponseMeta"];
         };
         ApiResponsePreflightReport: {
             data?: components["schemas"]["PreflightReport"];
@@ -2873,6 +3261,57 @@ export interface components {
             data?: components["schemas"]["DocumentView"][];
             page?: components["schemas"]["PageMeta"];
             meta?: components["schemas"]["ResponseMeta"];
+        };
+        ApiResponseIntegrationCatalogView: {
+            data?: components["schemas"]["IntegrationCatalogView"];
+            meta?: components["schemas"]["ResponseMeta"];
+        };
+        CircuitState: {
+            state?: string;
+            /** Format: int32 */
+            consecutiveFailures?: number;
+            /** Format: date-time */
+            openedAt?: string;
+        };
+        IntegrationCatalogView: {
+            integrations?: components["schemas"]["IntegrationView"][];
+            circuits?: {
+                [key: string]: components["schemas"]["CircuitState"];
+            };
+        };
+        IntegrationView: {
+            id?: string;
+            name?: string;
+            configured?: boolean;
+            endpoint?: string;
+            /** Format: int32 */
+            timeoutMillis?: number;
+            circuitState?: string;
+            /** Format: int32 */
+            consecutiveFailures?: number;
+            /** Format: date-time */
+            circuitOpenedAt?: string;
+        };
+        ListEnvelopeNotificationDeliveryView: {
+            data?: components["schemas"]["NotificationDeliveryView"][];
+            page?: components["schemas"]["PageMeta"];
+            meta?: components["schemas"]["ResponseMeta"];
+        };
+        NotificationDeliveryView: {
+            id?: string;
+            executionId?: string;
+            status?: string;
+            summary?: string;
+            errorCode?: string;
+            errorSummary?: string;
+            /** Format: date-time */
+            startedAt?: string;
+            /** Format: date-time */
+            finishedAt?: string;
+            /** Format: int64 */
+            durationMs?: number;
+            /** Format: int32 */
+            attempt?: number;
         };
         ExecutionListItem: {
             id?: string;
@@ -3202,11 +3641,6 @@ export interface components {
             requiredParameters?: string[];
             targetSystems?: string[];
         };
-        VerifierCapability: {
-            node?: string;
-            type?: string;
-            description?: string;
-        };
         ServiceStatusResponse: {
             service?: string;
             status?: string;
@@ -3343,22 +3777,9 @@ export interface components {
                 [key: string]: Record<string, never>;
             };
         };
-        AlarmSuppressionRule: {
-            id?: string;
-            source?: components["schemas"]["Match"];
-            target?: components["schemas"]["Match"];
-            correlateBy?: string[];
-            /** Format: int64 */
-            ttlSeconds?: number;
-            reason?: string;
-        };
         AlarmSuppressionRuleListResponse: {
             activeVersion?: string;
             rules?: components["schemas"]["AlarmSuppressionRule"][];
-        };
-        Match: {
-            resourceTypes?: ("NODE" | "POD" | "DEPLOYMENT" | "STATEFULSET" | "NAMESPACE" | "CLUSTER" | "SERVICE" | "HOST" | "WORKLOAD")[];
-            alertNamePatterns?: string[];
         };
         DeleteRequest: {
             reason: string;
@@ -3599,6 +4020,182 @@ export interface operations {
                 };
                 content: {
                     "*/*": components["schemas"]["ApiResponseReloadAccepted"];
+                };
+            };
+        };
+    };
+    reloadSuppressionRules: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseReloadResult"];
+                };
+            };
+        };
+    };
+    rollbackPolicy: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AlarmPolicyRollbackRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponsePolicySnapshot"];
+                };
+            };
+        };
+    };
+    replay: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AlarmPolicyReplayRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseAlarmPolicyReplayResponse"];
+                };
+            };
+        };
+    };
+    reloadPolicies: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseReloadResult"];
+                };
+            };
+        };
+    };
+    compilePrometheusRules: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseCompiledPrometheusRules"];
+                };
+            };
+        };
+    };
+    dryRun: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AlarmRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseAlarmPolicyEvaluationResponse"];
+                };
+            };
+        };
+    };
+    maintenanceWindows: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseListAlarmMaintenanceWindow"];
+                };
+            };
+        };
+    };
+    createMaintenanceWindow: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MaintenanceWindowRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseAlarmMaintenanceWindow"];
                 };
             };
         };
@@ -4067,6 +4664,30 @@ export interface operations {
                 };
                 content: {
                     "*/*": components["schemas"]["ApiResponseMapStringBoolean"];
+                };
+            };
+        };
+    };
+    correlations: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AlarmRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseListChangeCorrelation"];
                 };
             };
         };
@@ -5072,7 +5693,7 @@ export interface operations {
             };
         };
     };
-    replay: {
+    replay_1: {
         parameters: {
             query?: never;
             header?: never;
@@ -5136,7 +5757,7 @@ export interface operations {
             };
         };
     };
-    dryRun: {
+    dryRun_1: {
         parameters: {
             query?: never;
             header?: never;
@@ -5180,6 +5801,86 @@ export interface operations {
                 };
                 content: {
                     "*/*": components["schemas"]["AlarmMaintenanceWindow"];
+                };
+            };
+        };
+    };
+    all: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseToolCatalogView"];
+                };
+            };
+        };
+    };
+    verifier: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseListVerifierCapability"];
+                };
+            };
+        };
+    };
+    planner: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseListToolView"];
+                };
+            };
+        };
+    };
+    executor: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseListToolView"];
                 };
             };
         };
@@ -5316,6 +6017,46 @@ export interface operations {
                 };
                 content: {
                     "*/*": components["schemas"]["ApiResponseMapStringObject"];
+                };
+            };
+        };
+    };
+    suppressionRules: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseSuppressionCatalogView"];
+                };
+            };
+        };
+    };
+    policies: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponsePolicyCatalogView"];
                 };
             };
         };
@@ -5683,6 +6424,49 @@ export interface operations {
             };
         };
     };
+    catalog: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseIntegrationCatalogView"];
+                };
+            };
+        };
+    };
+    notifications: {
+        parameters: {
+            query?: {
+                page?: number;
+                size?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ListEnvelopeNotificationDeliveryView"];
+                };
+            };
+        };
+    };
     detail_3: {
         parameters: {
             query?: never;
@@ -5752,7 +6536,7 @@ export interface operations {
             };
         };
     };
-    all: {
+    all_1: {
         parameters: {
             query?: never;
             header?: never;
@@ -6251,6 +7035,28 @@ export interface operations {
             path: {
                 userId: string;
                 role: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseMapStringObject"];
+                };
+            };
+        };
+    };
+    revokeMaintenanceWindow: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                windowId: string;
             };
             cookie?: never;
         };

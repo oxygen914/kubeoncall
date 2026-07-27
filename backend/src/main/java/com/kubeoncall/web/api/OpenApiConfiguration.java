@@ -21,4 +21,5 @@ import io.swagger.v3.oas.annotations.security.SecurityScheme;
         in = SecuritySchemeIn.COOKIE,
         paramName = "KOC_SESSION")
 @SecurityScheme(name = "legacyBearer", type = SecuritySchemeType.HTTP, scheme = "bearer")
+@SecurityScheme(name = "apiToken", type = SecuritySchemeType.HTTP, scheme = "bearer", bearerFormat = "koc_<base64url>")
 public class OpenApiConfiguration {}

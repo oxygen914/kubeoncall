@@ -61,6 +61,13 @@ public class AlarmMaintenanceWindowStore {
     }
 
     public List<AlarmMaintenanceWindow> activeAt(Instant now) {
+        return scheduledAfter(now).stream()
+                .filter(window -> window.activeAt(now))
+                .toList();
+    }
+
+    /** Returns active and future windows whose end time has not passed, ordered by start time. */
+    public List<AlarmMaintenanceWindow> scheduledAfter(Instant now) {
         long epochMillis = now.toEpochMilli();
         redisTemplate.opsForZSet().removeRangeByScore(ACTIVE_INDEX, 0, epochMillis);
         Set<String> ids = redisTemplate
@@ -71,9 +78,11 @@ public class AlarmMaintenanceWindowStore {
         }
         List<AlarmMaintenanceWindow> windows = new ArrayList<>();
         for (String id : ids) {
-            find(id).filter(window -> window.activeAt(now)).ifPresent(windows::add);
+            find(id).ifPresent(windows::add);
         }
-        return List.copyOf(windows);
+        return windows.stream()
+                .sorted(java.util.Comparator.comparing(AlarmMaintenanceWindow::startsAt))
+                .toList();
     }
 
     public boolean delete(String id) {
