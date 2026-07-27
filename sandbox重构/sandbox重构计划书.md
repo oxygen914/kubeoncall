@@ -708,6 +708,19 @@ Codex 审核补充（提交 `2813b51` 后审核，补丁提交 `[SBX-04-fix]`）
 - ArchUnit：`..sandbox..` 已纳入两条规则，store 不依赖 web 层；`spotless`/`checkstyle`/
   `git diff --check` 通过。MinIO 关闭时 store bean 仍创建但调用报 `bucket not configured`，不影响现有行为。
 
+Codex 审核补充（提交 `420bf60` 后审核，补丁提交 `[SBX-05-fix]`）：
+
+- `presignedGetUrl`/`delete` 原先只要 objectKey 以 `sandbox/` 开头就接受任意 bucket。共享 MinIO
+  凭据可访问多 bucket，恶意/受损元数据记录可授权读取或删除配置 sandbox bucket 之外的对象。
+  补丁将 `requireBucketReference` 改为实例方法，强制 `bucket.equals(requireBucket())`，否则拒绝。
+- `objectKey`/`runPrefix` 原先只校验 runPublicId 非空，含 `/` 的 id（如 `a/inputs`）会与 run `a`
+  产生嵌套前缀，cleanup run `a` 会误删另一 run 的 artifact。补丁新增 `requireRunId` 强制
+  `sbx_[0-9a-f]{1,128}` 规范格式（Repository 生成的 publicId 即此格式），杜绝路径分隔符。
+- 测试新增 2 例：`objectKeyShouldRejectRunIdWithPathSeparatorOrNonCanonicalForm`（`sbx_a/inputs`、
+  `a/inputs`、`run-1` 均拒，`sbx_abc123` 接受）；`presignedGetUrlAndDeleteShouldRejectForeignBucket`
+  （其他 bucket + 合法 sandbox key 仍被 presigned/delete 拒绝）。`SandboxArtifactStoreKeyTest` 5 例、
+  `SandboxArtifactStoreIT` 7 例全通过，failsafe 全 66 例绿。
+
 ### SBX-06：Run API、审计与事件
 
 改动：

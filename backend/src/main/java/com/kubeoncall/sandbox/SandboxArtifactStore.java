@@ -206,20 +206,42 @@ public class SandboxArtifactStore {
         return bucket;
     }
 
-    private static void requireBucketReference(String bucket, String objectKey) {
+    /**
+     * Validates a stored artifact reference for read/delete. The bucket must match the configured
+     * sandbox bucket (the shared MinIO credentials may access other buckets, so a malformed metadata
+     * record must not authorize or delete objects outside the sandbox) and the object key must start
+     * with the canonical {@code sandbox/} prefix.
+     */
+    private void requireBucketReference(String bucket, String objectKey) {
         if (bucket == null || bucket.isBlank() || objectKey == null || objectKey.isBlank()) {
             throw new IllegalArgumentException("bucket and objectKey are required");
+        }
+        if (!bucket.equals(requireBucket())) {
+            throw new IllegalArgumentException("bucket is not the configured sandbox bucket");
         }
         if (!objectKey.startsWith(PREFIX)) {
             throw new IllegalArgumentException("object key must be inside the sandbox prefix");
         }
     }
 
+    /**
+     * Validates a run public id before it is embedded in an object prefix. The id must match the
+     * canonical {@code sbx_<hex>} form the repository generates, so it can never contain a path
+     * separator and two runs can never create nested prefixes that a cleanup could confuse.
+     */
+    static String requireRunId(String runPublicId) {
+        if (runPublicId == null || !RUN_ID_PATTERN.matcher(runPublicId).matches()) {
+            throw new IllegalArgumentException("runPublicId must be sbx_<hex>");
+        }
+        return runPublicId;
+    }
+
+    private static final java.util.regex.Pattern RUN_ID_PATTERN =
+            java.util.regex.Pattern.compile("^sbx_[0-9a-f]{1,128}$");
+
     /** Canonical key: sandbox/{runPublicId}/{typeFolder}/{flatFilename}. */
     static String objectKey(String runPublicId, SandboxArtifactType type, String filename) {
-        if (runPublicId == null || runPublicId.isBlank()) {
-            throw new IllegalArgumentException("runPublicId is required");
-        }
+        requireRunId(runPublicId);
         if (type == null) {
             throw new IllegalArgumentException("artifact type is required");
         }
@@ -238,9 +260,7 @@ public class SandboxArtifactStore {
     }
 
     private static String runPrefix(String runPublicId) {
-        if (runPublicId == null || runPublicId.isBlank()) {
-            throw new IllegalArgumentException("runPublicId is required");
-        }
+        requireRunId(runPublicId);
         return PREFIX + runPublicId + "/";
     }
 

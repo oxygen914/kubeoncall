@@ -51,4 +51,19 @@ class SandboxArtifactStoreKeyTest {
         assertThatThrownBy(() -> SandboxArtifactStore.objectKey("sbx_1", null, "f"))
                 .isInstanceOf(IllegalArgumentException.class);
     }
+
+    @Test
+    void objectKeyShouldRejectRunIdWithPathSeparatorOrNonCanonicalForm() {
+        // A run id containing '/' would create a nested prefix and let cleanup of one run touch
+        // another's artifacts, so only the canonical sbx_<hex> form is accepted.
+        assertThatThrownBy(() -> SandboxArtifactStore.objectKey("sbx_a/inputs", SandboxArtifactType.INPUT, "f"))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> SandboxArtifactStore.objectKey("a/inputs", SandboxArtifactType.INPUT, "f"))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> SandboxArtifactStore.objectKey("run-1", SandboxArtifactType.INPUT, "f"))
+                .isInstanceOf(IllegalArgumentException.class);
+        // Canonical form is accepted and produces a single run segment.
+        assertThat(SandboxArtifactStore.objectKey("sbx_abc123", SandboxArtifactType.INPUT, "f.json"))
+                .isEqualTo("sandbox/sbx_abc123/inputs/f.json");
+    }
 }

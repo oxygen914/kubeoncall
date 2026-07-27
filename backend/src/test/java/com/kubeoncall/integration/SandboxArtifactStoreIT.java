@@ -133,6 +133,30 @@ class SandboxArtifactStoreIT {
     }
 
     @Test
+    void presignedGetUrlAndDeleteShouldRejectForeignBucket() {
+        String runId = "sbx_" + UUID.randomUUID().toString().replace("-", "");
+        SandboxArtifactStore.StoredArtifact artifact = store.store(
+                runId,
+                SandboxArtifactType.OUTPUT,
+                "out.json",
+                "application/json",
+                "{}".getBytes(StandardCharsets.UTF_8),
+                SandboxClassification.UNTRUSTED);
+        try {
+            // A bucket other than the configured sandbox bucket must be rejected even with a valid
+            // sandbox-prefixed key, so a malformed metadata record cannot authorize reads/deletes of
+            // objects in another bucket reachable by the shared credentials.
+            assertThatThrownBy(() -> store.presignedGetUrl(
+                            "other-bucket", artifact.objectKey(), java.time.Duration.ofMinutes(1)))
+                    .isInstanceOf(IllegalArgumentException.class);
+            assertThatThrownBy(() -> store.delete("other-bucket", artifact.objectKey()))
+                    .isInstanceOf(IllegalArgumentException.class);
+        } finally {
+            cleanup(artifact.objectKey());
+        }
+    }
+
+    @Test
     void presignedGetUrlShouldBeShortLivedAndScopedToSandboxPrefix() throws Exception {
         String runId = "sbx_" + UUID.randomUUID().toString().replace("-", "");
         SandboxArtifactStore.StoredArtifact artifact = store.store(
