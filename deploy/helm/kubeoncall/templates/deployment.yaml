@@ -54,6 +54,21 @@ spec:
               value: {{ .Values.config.dependencyCircuitBreakerFailureThreshold | quote }}
             - name: KUBEONCALL_DEPENDENCY_CIRCUIT_BREAKER_RESET_TIMEOUT_SECONDS
               value: {{ .Values.config.dependencyCircuitBreakerResetTimeoutSeconds | quote }}
+            - name: KUBEONCALL_SANDBOX_ENABLED
+              value: {{ .Values.config.sandboxEnabled | quote }}
+            - name: KUBEONCALL_SANDBOX_FIXED_DIAGNOSTIC
+              value: {{ .Values.config.sandboxFixedDiagnostic | quote }}
+            {{- if .Values.sandboxController.enabled }}
+            - name: KUBEONCALL_SANDBOX_CONTROLLER_ENDPOINT
+              value: {{ .Values.sandboxController.backendEndpoint | quote }}
+            - name: KUBEONCALL_SANDBOX_CONTROLLER_KEY_ID
+              value: {{ .Values.sandboxController.backendKeyId | quote }}
+            - name: KUBEONCALL_SANDBOX_CONTROLLER_HMAC_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secrets.existingSecret }}
+                  key: {{ .Values.sandboxController.backendHmacSecretKey }}
+            {{- end }}
             - name: SPRING_DATA_REDIS_HOST
               value: {{ .Values.config.redisHost | quote }}
             - name: SPRING_ELASTICSEARCH_URIS

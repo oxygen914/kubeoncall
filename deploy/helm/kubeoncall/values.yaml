@@ -24,6 +24,8 @@ config:
   dependencyCircuitBreakerEnabled: true
   dependencyCircuitBreakerFailureThreshold: 5
   dependencyCircuitBreakerResetTimeoutSeconds: 30
+  sandboxEnabled: false
+  sandboxFixedDiagnostic: false
   redisHost: redis
   elasticsearchUri: http://elasticsearch:9200
   minioEndpoint: http://minio:9000
@@ -225,3 +227,5 @@ sandboxController:
     limitsMemory: 4Gi
   backendKeyId: backend
   backendHmacSecretKey: sandbox-controller-hmac
+  # Internal ClusterIP endpoint used only when sandboxEnabled is explicitly enabled.
+  backendEndpoint: http://sandbox-controller.kubeoncall-sandbox.svc.cluster.local:8088

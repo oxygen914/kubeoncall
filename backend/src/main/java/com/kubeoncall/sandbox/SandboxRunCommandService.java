@@ -22,13 +22,14 @@ import com.kubeoncall.sandbox.domain.SandboxRunMode;
 import com.kubeoncall.sandbox.policy.SandboxExecutionPolicy;
 import com.kubeoncall.sandbox.policy.SandboxToolCatalog;
 import com.kubeoncall.sandbox.policy.SandboxToolSpec;
+import com.kubeoncall.task.AsyncTaskRepository;
 
 /**
  * Transactional command boundary for sandbox Run creation and cancellation.
  *
  * <p>This service persists only the durable control-plane fact and emits an outbox event. It never
- * contacts the Sandbox Controller on an HTTP request thread; SBX-12/13 will consume the event and
- * reconcile the run asynchronously.
+ * contacts the Sandbox Controller on an HTTP request thread. It queues a bounded SBX-12 dispatch
+ * task in the same transaction; SBX-13 later reconciles the long-running Job asynchronously.
  */
 @Service
 @ConditionalOnProperty(prefix = "kubeoncall", name = "mysql-enabled", havingValue = "true")
@@ -37,6 +38,7 @@ public class SandboxRunCommandService {
     private static final TypeReference<LinkedHashMap<String, Object>> MAP_TYPE = new TypeReference<>() {};
 
     private final ObjectProvider<SandboxRunRepository> repositoryProvider;
+    private final ObjectProvider<AsyncTaskRepository> taskRepositoryProvider;
     private final ObjectProvider<SandboxToolCatalog> toolCatalogProvider;
     private final KubeOnCallProperties properties;
     private final SandboxExecutionPolicy policy;
@@ -47,6 +49,7 @@ public class SandboxRunCommandService {
 
     public SandboxRunCommandService(
             ObjectProvider<SandboxRunRepository> repositoryProvider,
+            ObjectProvider<AsyncTaskRepository> taskRepositoryProvider,
             ObjectProvider<SandboxToolCatalog> toolCatalogProvider,
             KubeOnCallProperties properties,
             SandboxExecutionPolicy policy,
@@ -55,6 +58,7 @@ public class SandboxRunCommandService {
             IdempotencyService idempotencyService,
             ObjectMapper objectMapper) {
         this.repositoryProvider = repositoryProvider;
+        this.taskRepositoryProvider = taskRepositoryProvider;
         this.toolCatalogProvider = toolCatalogProvider;
         this.properties = properties;
         this.policy = policy;
@@ -68,6 +72,8 @@ public class SandboxRunCommandService {
         SandboxRunRepository repository = repositoryProvider.getIfAvailable();
         return repository != null
                 && repository.isAvailable()
+                && taskRepositoryProvider.getIfAvailable() != null
+                && taskRepositoryProvider.getIfAvailable().isAvailable()
                 && auditWriter.isAvailable()
                 && outboxWriter.isAvailable()
                 && idempotencyService.isAvailable();
@@ -115,8 +121,25 @@ public class SandboxRunCommandService {
                 command.actorPublicId(),
                 repositoryIdempotencyKey(command.actorPublicId(), key),
                 safeRequest(command),
-                1,
+                3,
                 command.expiresAt(),
+                command.requestId(),
+                command.traceId()));
+        AsyncTaskRepository taskRepository = requiredTaskRepository();
+        taskRepository.create(new AsyncTaskRepository.CreateTask(
+                dispatchTaskPublicId(run.publicId()),
+                SandboxDispatchTaskHandler.TASK_TYPE,
+                "SANDBOX_RUN",
+                run.publicId(),
+                "sandbox-dispatch:" + run.publicId(),
+                "queued",
+                Map.of(
+                        "runId",
+                        run.publicId(),
+                        "timeoutSeconds",
+                        Math.max(1, properties.getSandbox().getControllerReadTimeoutMillis() / 1000 + 5)),
+                3,
+                Instant.now(),
                 command.requestId(),
                 command.traceId()));
         Map<String, Object> response = view(run, decision.isApprovalRequired());
@@ -224,6 +247,24 @@ public class SandboxRunCommandService {
                     SandboxRunCommandException.Code.SERVICE_UNAVAILABLE, "Sandbox repository is not available");
         }
         return repository;
+    }
+
+    private AsyncTaskRepository requiredTaskRepository() {
+        AsyncTaskRepository repository = taskRepositoryProvider.getIfAvailable();
+        if (repository == null || !repository.isAvailable()) {
+            throw new SandboxRunCommandException(
+                    SandboxRunCommandException.Code.SERVICE_UNAVAILABLE,
+                    "Sandbox dispatch task repository is not available");
+        }
+        return repository;
+    }
+
+    private static String dispatchTaskPublicId(String runPublicId) {
+        String taskId = "tsk_" + runPublicId;
+        if (taskId.length() > 40) {
+            throw new IllegalArgumentException("sandbox run id is too long for a dispatch task id");
+        }
+        return taskId;
     }
 
     private static void validate(CreateCommand command) {

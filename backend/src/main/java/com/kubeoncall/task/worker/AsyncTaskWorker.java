@@ -187,6 +187,8 @@ public final class AsyncTaskWorker {
                     return RunResult.cancelled(task);
                 } catch (AsyncTaskContext.TaskTimedOutException timedOut) {
                     return recordTerminalFailure(task, heartbeat, "TIMEOUT", safeMessage(timedOut));
+                } catch (NonRetryableTaskException nonRetryable) {
+                    return recordTerminalFailure(task, heartbeat, nonRetryable.errorCode(), safeMessage(nonRetryable));
                 } catch (Exception exception) {
                     return recordFailure(
                             task,

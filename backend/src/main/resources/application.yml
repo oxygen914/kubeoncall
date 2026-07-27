@@ -200,6 +200,8 @@ kubeoncall:
     agent-auto-route-enabled: ${KUBEONCALL_SANDBOX_AGENT_AUTO_ROUTE_ENABLED:false}
     # Internal Sandbox Controller endpoint; never echoed through /api/v1/capabilities.
     controller-endpoint: ${KUBEONCALL_SANDBOX_CONTROLLER_ENDPOINT:}
+    controller-key-id: ${KUBEONCALL_SANDBOX_CONTROLLER_KEY_ID:backend}
+    controller-hmac-secret: ${KUBEONCALL_SANDBOX_CONTROLLER_HMAC_SECRET:}
     controller-connect-timeout-millis: ${KUBEONCALL_SANDBOX_CONTROLLER_CONNECT_TIMEOUT_MILLIS:3000}
     controller-read-timeout-millis: ${KUBEONCALL_SANDBOX_CONTROLLER_READ_TIMEOUT_MILLIS:5000}
     controller-max-response-bytes: ${KUBEONCALL_SANDBOX_CONTROLLER_MAX_RESPONSE_BYTES:2097152}

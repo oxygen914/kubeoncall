@@ -75,7 +75,7 @@ func TestPostRunCreatesJobThroughManager(t *testing.T) {
 	manager := &fakeManager{status: LifecycleStatus{RunID: "sbx_a1b2", Phase: "PENDING", Exists: true}}
 	server := NewServerWithManager(config, manager)
 
-	body := []byte(`{"RunID":"sbx_a1b2","ToolID":"pod-inspect","ToolVersion":"v1","InputArtifactURI":"minio://sandbox/sbx_a1b2/inputs/request.json"}`)
+	body := []byte(`{"runId":"sbx_a1b2","toolId":"pod-inspect","toolVersion":"v1","inputArtifactUri":"minio://sandbox/sbx_a1b2/inputs/request.json"}`)
 	response := httptest.NewRecorder()
 	server.Handler().ServeHTTP(response, signedLifecycle(config, http.MethodPost, "/internal/v1/runs", body, "nonce-lifecycle-0001"))
 	if response.Code != http.StatusOK {
@@ -83,6 +83,9 @@ func TestPostRunCreatesJobThroughManager(t *testing.T) {
 	}
 	if len(manager.created) != 1 || manager.created[0].RunID != "sbx_a1b2" {
 		t.Fatalf("manager received = %+v", manager.created)
+	}
+	if !strings.Contains(response.Body.String(), `"runId":"sbx_a1b2"`) || strings.Contains(response.Body.String(), `"RunID"`) {
+		t.Fatalf("lifecycle response does not use lower-camel contract: %s", response.Body.String())
 	}
 	var result LifecycleStatus
 	if err := json.Unmarshal(response.Body.Bytes(), &result); err != nil {
@@ -119,7 +122,7 @@ func TestNilManagerReportsNotReadyForLifecycle(t *testing.T) {
 	config := testConfig()
 	server := NewServer(config) // no manager wired
 
-	body := []byte(`{"RunID":"sbx_a1b2","ToolID":"pod-inspect","ToolVersion":"v1","InputArtifactURI":"minio://sandbox/sbx_a1b2/inputs/request.json"}`)
+	body := []byte(`{"runId":"sbx_a1b2","toolId":"pod-inspect","toolVersion":"v1","inputArtifactUri":"minio://sandbox/sbx_a1b2/inputs/request.json"}`)
 	response := httptest.NewRecorder()
 	server.Handler().ServeHTTP(response, signedLifecycle(config, http.MethodPost, "/internal/v1/runs", body, "nonce-notready-001"))
 	if response.Code != http.StatusNotImplemented {

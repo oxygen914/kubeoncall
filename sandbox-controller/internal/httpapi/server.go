@@ -95,26 +95,26 @@ type LifecycleManager interface {
 
 // LifecycleStatus mirrors kubernetes.Status without importing that package here.
 type LifecycleStatus struct {
-	RunID      string
-	Phase      string
-	Exists     bool
-	StartTime  *time.Time
-	EndTime    *time.Time
+	RunID      string     `json:"runId"`
+	Phase      string     `json:"phase"`
+	Exists     bool       `json:"exists"`
+	StartTime  *time.Time `json:"startTime,omitempty"`
+	EndTime    *time.Time `json:"endTime,omitempty"`
 	FailedPods []struct {
 		Name, Reason string
-	}
+	} `json:"failedPods,omitempty"`
 }
 
 // LifecycleResult mirrors kubernetes.Result: normalized outcome with redacted, size-bounded logs.
 type LifecycleResult struct {
-	RunID       string
-	Phase       string
-	ExitCode    *int32
-	Reason      string
-	Logs        string
-	StartedAt   *time.Time
-	FinishedAt  *time.Time
-	OutputFound bool
+	RunID       string     `json:"runId"`
+	Phase       string     `json:"phase"`
+	ExitCode    *int32     `json:"exitCode,omitempty"`
+	Reason      string     `json:"reason,omitempty"`
+	Logs        string     `json:"logs,omitempty"`
+	StartedAt   *time.Time `json:"startedAt,omitempty"`
+	FinishedAt  *time.Time `json:"finishedAt,omitempty"`
+	OutputFound bool       `json:"outputFound"`
 }
 
 func NewServer(config Config) *Server {
@@ -154,9 +154,12 @@ func (server *Server) acceptRun(writer http.ResponseWriter, request *http.Reques
 		return
 	}
 	var payload struct {
-		RunID, ToolID, ToolVersion, InputArtifactURI string
-		Labels                                       map[string]string
-		ExpiresAt                                    time.Time
+		RunID            string            `json:"runId"`
+		ToolID           string            `json:"toolId"`
+		ToolVersion      string            `json:"toolVersion"`
+		InputArtifactURI string            `json:"inputArtifactUri"`
+		Labels           map[string]string `json:"labels"`
+		ExpiresAt        time.Time         `json:"expiresAt"`
 	}
 	if err := json.Unmarshal(body, &payload); err != nil {
 		writeError(writer, http.StatusBadRequest, "INVALID_PAYLOAD", "request body is not valid JSON")

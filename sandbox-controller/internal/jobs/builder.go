@@ -19,8 +19,11 @@ type Tool struct {
 
 type Limits struct{ CPUMilli, MemoryMiB, EphemeralMiB, TimeoutSeconds, TTLSeconds int64 }
 type Request struct {
-	RunID, ToolID, ToolVersion, InputArtifactURI string
-	Labels                                       map[string]string
+	RunID            string            `json:"runId"`
+	ToolID           string            `json:"toolId"`
+	ToolVersion      string            `json:"toolVersion"`
+	InputArtifactURI string            `json:"inputArtifactUri"`
+	Labels           map[string]string `json:"labels"`
 }
 
 // JobSpec is a serializable projection deliberately limited to fields the security contract permits.

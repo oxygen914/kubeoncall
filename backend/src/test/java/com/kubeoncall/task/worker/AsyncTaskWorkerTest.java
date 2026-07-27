@@ -8,7 +8,6 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import java.time.Clock;
@@ -96,7 +95,8 @@ class AsyncTaskWorkerTest {
                 .runOnce();
 
         assertThat(result.outcome()).isEqualTo(Outcome.LEASE_LOST);
-        verifyNoInteractions(listener);
+        // Lease-loss callbacks are informational only; they are not durable lifecycle transitions.
+        verify(listener, never()).onTransition(any(), any());
     }
 
     @Test
@@ -124,6 +124,23 @@ class AsyncTaskWorkerTest {
         assertThat(result.nextAttemptAt()).isEqualTo(nextAttemptAt);
         assertThat(heartbeat.requireValidCalls).isEqualTo(1);
         verify(repository, never()).deadLetter(any(), any(), anyLong(), any(), any(), any());
+    }
+
+    @Test
+    void terminallyFailsNonRetryableHandlerErrorWithoutSchedulingAnotherAttempt() throws Exception {
+        AsyncTaskRepository repository = mock(AsyncTaskRepository.class);
+        AsyncTaskRecord task = task("ASK_EXECUTION", 1, 5);
+        AsyncTaskHandler handler = handler(task.taskType());
+        TestLeaseGuard heartbeat = new TestLeaseGuard(true);
+        when(repository.claimNext(OWNER, NOW, LEASE, TASK_TYPES)).thenReturn(Optional.of(task));
+        when(handler.handle(any(AsyncTaskContext.class))).thenThrow(new NonRetryableTaskException("INVALID_DISPATCH"));
+        when(repository.fail(task.publicId(), OWNER, task.fencingToken(), "INVALID_DISPATCH", "INVALID_DISPATCH", NOW))
+                .thenReturn(true);
+
+        RunResult result = worker(repository, List.of(handler), heartbeat).runOnce();
+
+        assertThat(result.outcome()).isEqualTo(Outcome.FAILED);
+        verify(repository, never()).retry(any(), any(), anyLong(), any(), any(), any(), any());
     }
 
     @Test

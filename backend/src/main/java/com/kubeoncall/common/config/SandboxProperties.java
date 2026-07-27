@@ -55,6 +55,8 @@ class SandboxProperties {
     private boolean agentAutoRouteEnabled = false;
 
     private String controllerEndpoint = "";
+    private String controllerKeyId = "backend";
+    private String controllerHmacSecret = "";
     private long controllerConnectTimeoutMillis = 3000;
     private long controllerReadTimeoutMillis = 5000;
     private long controllerMaxResponseBytes = 2L * 1024 * 1024;
@@ -126,6 +128,22 @@ class SandboxProperties {
 
     public void setControllerEndpoint(String controllerEndpoint) {
         this.controllerEndpoint = controllerEndpoint;
+    }
+
+    public String getControllerKeyId() {
+        return controllerKeyId;
+    }
+
+    public void setControllerKeyId(String controllerKeyId) {
+        this.controllerKeyId = controllerKeyId;
+    }
+
+    public String getControllerHmacSecret() {
+        return controllerHmacSecret;
+    }
+
+    public void setControllerHmacSecret(String controllerHmacSecret) {
+        this.controllerHmacSecret = controllerHmacSecret;
     }
 
     public long getControllerConnectTimeoutMillis() {
@@ -376,6 +394,17 @@ class SandboxProperties {
     }
 
     private void validateControllerCall(Map<String, String> violations) {
+        if (enabled) {
+            if (controllerEndpoint == null || controllerEndpoint.isBlank()) {
+                violations.put("controllerEndpoint", "is required when sandbox is enabled");
+            }
+            if (controllerKeyId == null || controllerKeyId.isBlank()) {
+                violations.put("controllerKeyId", "is required when sandbox is enabled");
+            }
+            if (controllerHmacSecret == null || controllerHmacSecret.isBlank()) {
+                violations.put("controllerHmacSecret", "is required when sandbox is enabled");
+            }
+        }
         if (controllerConnectTimeoutMillis < 1
                 || controllerConnectTimeoutMillis > HardLimits.MAX_CONTROLLER_CONNECT_TIMEOUT_MILLIS) {
             violations.put(

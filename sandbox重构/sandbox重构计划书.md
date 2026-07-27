@@ -8,8 +8,8 @@
 | 制定日期 | 2026-07-27 |
 | 目标项目 | KubeOnCall |
 | 实施状态 | IN_PROGRESS |
-| 代码实现进度 | 46% |
-| 自动化验证进度 | 46% |
+| 代码实现进度 | 54%（SBX-00～12 已完成） |
+| 自动化验证进度 | 54%（代码级验证；真实集群待验收） |
 | 真实环境验收进度 | 0%，按阶段单独记录 |
 | 计划提交数 | 24 个，`SBX-00`～`SBX-23` |
 
@@ -423,7 +423,7 @@ helm lint deploy/helm/kubeoncall
 | SBX-09 | `feat(sandbox-controller): manage job lifecycle` | 幂等创建、查询和取消 | COMPLETED |
 | SBX-10 | `feat(sandbox-controller): collect results and cleanup` | 结果收集、超时和 TTL 清理 | COMPLETED |
 | SBX-11 | `feat(deploy): isolate sandbox runtime` | Namespace、RBAC、Quota、NetworkPolicy | COMPLETED |
-| SBX-12 | `feat(sandbox): dispatch runs through controller` | Backend Client、短时派发和断路器 | PLANNED |
+| SBX-12 | `feat(sandbox): dispatch runs through controller` | Backend Client、短时派发和断路器 | COMPLETED |
 | SBX-13 | `feat(sandbox): reconcile run convergence` | 多实例安全的状态收敛与清理重试 | PLANNED |
 | SBX-14 | `feat(sandbox): build diagnostic evidence packages` | 证据采集、裁剪、脱敏和哈希 | PLANNED |
 | SBX-15 | `feat(sandbox): add fixed diagnostic tools` | 固定工具目录与首批工具 | PLANNED |
@@ -929,7 +929,7 @@ Codex 审核补充（提交 `ae94ebb` 后审核，补丁提交 `[SBX-09-fix]`）
   namespace-scoped Role/RoleBinding（仅 Jobs、Pods、Pods/log，绝不读取 Secret 或使用 ClusterRole）。
 - 新增 ResourceQuota、LimitRange、Controller 和 Job NetworkPolicy；Job 默认拒绝所有入站/外网出站，仅允许
   集群 DNS，Controller 仅允许 Release namespace 入站与 DNS/Kubernetes API 出站。
-- HMAC Secret 仅注入 Controller；Job 不接收 Secret 挂载或 Docker Socket。`helm lint`、启用 Controller 的
+- HMAC Secret 仅注入 Backend 与 Controller；Job 不接收 Secret 挂载或 Docker Socket。`helm lint`、启用 Controller 的
   `helm template`、RBAC 静态检查和 `docker compose config --quiet` 均通过。
 
 ### SBX-12：Backend 派发
@@ -949,6 +949,21 @@ Codex 审核补充（提交 `ae94ebb` 后审核，补丁提交 `[SBX-09-fix]`）
 回滚：
 
 - 关闭总开关并 revert Client/Handler；已派发 Run 由 Controller TTL 处理。
+
+完成记录：
+
+- 新增 `SandboxControllerClient`：只调用 `POST /internal/v1/runs` 一次，不轮询 Job；使用与 Go Controller
+  一致的 HMAC-SHA256 签名（method/path/timestamp/nonce/body digest），连接/读取/响应大小均受 Sandbox
+  配置硬上限约束。Controller 错误正文、HMAC Secret 与内部 Artifact URL 均不写入异常或日志。
+- 创建 Run 的同一事务内新增 `SANDBOX_DISPATCH` 任务；任务以 Run ID 为唯一幂等键。首次派发通过 Run lease/
+  fencing 将状态置为 `DISPATCHING`，网络异常可重试并复用相同 Run ID，永久 4xx 拒绝会终止任务而不继续重试。
+  该 Handler 只做一次派发，状态轮询、结果收集与清理仍由 SBX-13 负责。
+- Helm 同时向 Backend 和 Controller 注入同一个 HMAC Secret，Backend 仅通过内部 ClusterIP 调用 Controller，
+  Job 仍无 Secret 挂载。Go 控制器契约改为显式 lower-camel JSON tag，避免跨语言字段命名漂移。
+- 自动化验证：`SandboxControllerClientTest` 覆盖成功签名、超时、断路器、4xx 非重试和错误内容脱敏；
+  `SandboxDispatchTaskHandlerTest`/`AsyncTaskWorkerTest` 覆盖初次 claim、重复 Run ID 派发、非重试任务终止，
+  定向 Maven 测试、Controller `go test ./...`/`go vet ./...`、`helm lint` 与启用 Controller 的 `helm template`
+  均通过。真实 Kubernetes Job 生命周期、NetworkPolicy 和跨 Pod 调用仍待环境验收。
 
 ### SBX-13：状态收敛
 
@@ -1228,18 +1243,9 @@ Codex 审核补充（提交 `ae94ebb` 后审核，补丁提交 `[SBX-09-fix]`）
 
 ## 13. 当前停止点
 
-SBX-09 已完成：sandbox-controller 新增 `internal/kubernetes` 包（`Manager` 幂等创建/状态归一化/
-取消，`HTTPAdapter` 适配 `httpapi.LifecycleManager`）；`httpapi.Server` 接入可选 Manager 并开放
-`POST/GET/DELETE /internal/v1/runs[/{runId}]` 与 `GET /{runId}/logs`（logs 留 SBX-10）；`main.go`
-用 in-cluster config 构造 clientset+Manager，无配置降级 scaffold。Job 一次性（BackoffLimit=0）、
-ActiveDeadline=超时、TTL=清理、hardened SecurityContext，run-id/tool-version/expires-at label 绑定。
-fake clientset 单测（create 幂等/重放、状态归一、TIMED_OUT vs FAILED、cancel 幂等、安全字段断言）
-+ HTTP 层 fake manager 测试全通过；`go test`/`go vet`/`gofmt` 通过。新增 k8s.io v0.36.3 依赖。
+SBX-00～12 已完成（含此前的审核修复）。Backend 已具备 Run/Artifact/API/权限、短时派发任务、
+HMAC Controller Client 和断路器；Controller 已具备基座、hardened JobSpec、生命周期、结果收集清理与
+隔离部署。尚未触碰的下一单元为 SBX-13：多 Backend 实例安全的 Run 状态收敛、Controller 重启恢复、
+Artifact 状态校验和 cleanup 重试；其后依次为诊断证据包（SBX-14）和固定诊断工具目录（SBX-15）。
 
-截至此处 SBX-00～09 已完成（含 SBX-01/02/04/05 的 codex 审核 fix）。Backend 侧 Run/Artifact/
-API/权限/存储已落地；Controller 侧基座+hardened JobSpec+Job 生命周期已落地。尚未触碰：
-结果收集与日志清理（SBX-10）、部署隔离（SBX-11）、Backend↔Controller 派发与收敛（SBX-12/13）、
-诊断能力（SBX-14～17）、仿真与 Agent（SBX-18～20）、Console/可观测/CI（SBX-21～23）。
-
-此后每次只提交一个 SBX 单元，验证通过并产生本地 commit 后再进入下一个单元；远端推送
-仍需用户单独授权。下一个单元为 `SBX-10`。
+每次只提交一个 SBX 单元，代码验证通过并产生本地 commit 后再进入下一个单元；远端推送仍需用户单独授权。

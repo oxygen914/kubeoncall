@@ -283,6 +283,21 @@ class KubeOnCallPropertiesTest {
         assertTrue(message.contains("controllerMaxResponseBytes"), message);
     }
 
+    @Test
+    void sandboxValidateRequiresAuthenticatedControllerWhenMasterSwitchIsEnabled() {
+        KubeOnCallProperties.Sandbox sandbox = new KubeOnCallProperties().getSandbox();
+        sandbox.setEnabled(true);
+
+        IllegalStateException missing = assertThrows(IllegalStateException.class, sandbox::validate);
+        assertTrue(missing.getMessage().contains("controllerEndpoint"), missing.getMessage());
+        assertTrue(missing.getMessage().contains("controllerHmacSecret"), missing.getMessage());
+
+        sandbox.setControllerEndpoint("http://sandbox-controller:8088");
+        sandbox.setControllerKeyId("backend");
+        sandbox.setControllerHmacSecret("test-only-secret");
+        assertDoesNotThrowValidate(sandbox);
+    }
+
     private static void assertDoesNotThrowValidate(KubeOnCallProperties.Sandbox sandbox) {
         sandbox.validate();
     }
