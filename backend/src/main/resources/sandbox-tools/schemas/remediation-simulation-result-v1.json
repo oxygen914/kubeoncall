@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "outcome", "checks", "cleanupRequired"],
+  "properties": {
+    "schemaVersion": {"const": "v1"},
+    "outcome": {"enum": ["PASSED", "FAILED", "TIMED_OUT"]},
+    "checks": {"type": "object"},
+    "cleanupRequired": {"const": true},
+    "findings": {"type": "array", "items": {"type": "string", "maxLength": 1024}}
+  }
+}

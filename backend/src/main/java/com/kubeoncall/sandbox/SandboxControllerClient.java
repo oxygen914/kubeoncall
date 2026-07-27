@@ -38,6 +38,7 @@ public class SandboxControllerClient {
 
     static final String DEPENDENCY = "sandbox_controller";
     private static final String CREATE_PATH = "/internal/v1/runs";
+    private static final String SIMULATION_PATH = "/internal/v1/simulations";
     private static final TypeReference<LinkedHashMap<String, Object>> MAP_TYPE = new TypeReference<>() {};
 
     private final KubeOnCallProperties properties;
@@ -77,7 +78,7 @@ public class SandboxControllerClient {
         if (run == null) {
             throw new IllegalArgumentException("sandbox run is required");
         }
-        return lifecycle("GET", CREATE_PATH + "/" + run.publicId(), run);
+        return lifecycle("GET", lifecyclePath(run) + "/" + run.publicId(), run);
     }
 
     /** Requests asynchronous Job cancellation and returns the Controller's immediate status. */
@@ -85,7 +86,7 @@ public class SandboxControllerClient {
         if (run == null) {
             throw new IllegalArgumentException("sandbox run is required");
         }
-        return lifecycle("DELETE", CREATE_PATH + "/" + run.publicId(), run);
+        return lifecycle("DELETE", lifecyclePath(run) + "/" + run.publicId(), run);
     }
 
     /** Collects the controller's normalized bounded result once a Job is terminal. */
@@ -93,7 +94,8 @@ public class SandboxControllerClient {
         if (run == null) {
             throw new IllegalArgumentException("sandbox run is required");
         }
-        ControllerResponse response = call("GET", CREATE_PATH + "/" + run.publicId() + "/logs", null, run.requestId());
+        ControllerResponse response =
+                call("GET", lifecyclePath(run) + "/" + run.publicId() + "/logs", null, run.requestId());
         Map<String, Object> payload = response.payload();
         requireMatchingRunId(run.publicId(), payload, response.statusCode());
         return new CollectedResult(
@@ -122,8 +124,9 @@ public class SandboxControllerClient {
         byte[] body = requestBody(run);
         String timestamp = Long.toString(Instant.now().getEpochSecond());
         String nonce = UUID.randomUUID().toString();
-        String signature = signature("POST", CREATE_PATH, timestamp, nonce, body, secret);
-        HttpRequest request = HttpRequest.newBuilder(endpoint.resolve(CREATE_PATH))
+        String path = lifecyclePath(run);
+        String signature = signature("POST", path, timestamp, nonce, body, secret);
+        HttpRequest request = HttpRequest.newBuilder(endpoint.resolve(path))
                 .timeout(java.time.Duration.ofMillis(sandbox.getControllerReadTimeoutMillis()))
                 .header("Content-Type", "application/json")
                 .header("X-Request-Id", safeRequestId(run.requestId()))
@@ -243,6 +246,7 @@ public class SandboxControllerClient {
                 switch (run.mode()) {
                     case GENERATED_CODE -> "generated-code.json";
                     case MANIFEST_VALIDATION -> "manifest-validation.json";
+                    case REMEDIATION_SIMULATION -> "remediation-simulation.json";
                     default -> "evidence.json";
                 };
         String objectKey = SandboxArtifactStore.objectKey(
@@ -297,6 +301,12 @@ public class SandboxControllerClient {
         } catch (IllegalArgumentException ex) {
             throw new SandboxControllerClientException("CONTROLLER_ENDPOINT_NOT_CONFIGURED", false, 0, ex);
         }
+    }
+
+    private static String lifecyclePath(SandboxRunRecord run) {
+        return run.mode() == com.kubeoncall.sandbox.domain.SandboxRunMode.REMEDIATION_SIMULATION
+                ? SIMULATION_PATH
+                : CREATE_PATH;
     }
 
     private static String requireText(String value, String code) {

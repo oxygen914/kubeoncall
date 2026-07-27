@@ -34,6 +34,12 @@ type Config struct {
 	JobCeiling jobs.Limits
 	// LogLimitBytes is the byte ceiling on collected pod logs (§7.1 default 2 MiB).
 	LogLimitBytes int64
+	// SimulationKubeconfigPath is an explicit credential for an independent validation cluster. An
+	// empty path disables remediation simulation; it must never fall back to this controller's
+	// in-cluster production-facing credentials.
+	SimulationKubeconfigPath  string
+	SimulationClusterID       string
+	SimulationNamespacePrefix string
 }
 
 func LoadConfigFromEnv() (Config, error) {
@@ -55,7 +61,10 @@ func LoadConfigFromEnv() (Config, error) {
 			TimeoutSeconds: 300,
 			TTLSeconds:     86400,
 		},
-		LogLimitBytes: int64Env("SANDBOX_CONTROLLER_LOG_LIMIT_BYTES", 2*1024*1024),
+		LogLimitBytes:             int64Env("SANDBOX_CONTROLLER_LOG_LIMIT_BYTES", 2*1024*1024),
+		SimulationKubeconfigPath:  os.Getenv("SANDBOX_CONTROLLER_SIMULATION_KUBECONFIG"),
+		SimulationClusterID:       env("SANDBOX_CONTROLLER_SIMULATION_CLUSTER_ID", ""),
+		SimulationNamespacePrefix: env("SANDBOX_CONTROLLER_SIMULATION_NAMESPACE_PREFIX", "koc-sim-"),
 	}
 	if config.BackendHMACSecret == "" || config.MaxRequestBytes < 1024 || config.MaxConcurrent < 1 {
 		return Config{}, fmt.Errorf("backend HMAC secret, request limit and concurrency must be configured safely")
@@ -100,15 +109,23 @@ func defaultTools() map[string]jobs.Tool {
 			Entrypoint: []string{"/usr/local/bin/koc-validate-manifest"},
 			Runtime:    jobs.RuntimeFixedDiagnostic,
 		},
+		"remediation-simulation:v1": {
+			ID:         "remediation-simulation",
+			Version:    "v1",
+			Image:      "registry.kubeoncall.io/sandbox/remediation-simulation@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+			Entrypoint: []string{"/usr/local/bin/koc-simulate-remediation"},
+			Runtime:    jobs.RuntimeFixedDiagnostic,
+		},
 	}
 }
 
 type Server struct {
-	config        Config
-	authenticator *authenticator
-	semaphore     chan struct{}
-	mux           *http.ServeMux
-	manager       LifecycleManager
+	config            Config
+	authenticator     *authenticator
+	semaphore         chan struct{}
+	mux               *http.ServeMux
+	manager           LifecycleManager
+	simulationManager LifecycleManager
 }
 
 // LifecycleManager is the subset of the Kubernetes manager the HTTP layer needs. The concrete
@@ -146,18 +163,29 @@ type LifecycleResult struct {
 }
 
 func NewServer(config Config) *Server {
-	return NewServerWithManager(config, nil)
+	return NewServerWithManagers(config, nil, nil)
 }
 
 // NewServerWithManager wires a Kubernetes lifecycle manager. When manager is nil the lifecycle
 // endpoints report not-ready, preserving the scaffold's safe default from SBX-07.
 func NewServerWithManager(config Config, manager LifecycleManager) *Server {
-	server := &Server{config: config, authenticator: newAuthenticator(config), semaphore: make(chan struct{}, config.MaxConcurrent), mux: http.NewServeMux(), manager: manager}
+	return NewServerWithManagers(config, manager, nil)
+}
+
+// NewServerWithManagers wires ordinary sandbox Jobs and remediation simulation to distinct
+// lifecycle managers. Keeping the latter separate makes an absent validation-cluster credential a
+// safe 501 instead of an accidental fallback to the ordinary cluster.
+func NewServerWithManagers(config Config, manager, simulationManager LifecycleManager) *Server {
+	server := &Server{config: config, authenticator: newAuthenticator(config), semaphore: make(chan struct{}, config.MaxConcurrent), mux: http.NewServeMux(), manager: manager, simulationManager: simulationManager}
 	server.mux.HandleFunc("GET /healthz", server.health)
 	server.mux.HandleFunc("POST /internal/v1/runs", server.acceptRun)
 	server.mux.HandleFunc("GET /internal/v1/runs/{runId}", server.getRun)
 	server.mux.HandleFunc("DELETE /internal/v1/runs/{runId}", server.cancelRun)
 	server.mux.HandleFunc("GET /internal/v1/runs/{runId}/logs", server.getRunLogs)
+	server.mux.HandleFunc("POST /internal/v1/simulations", server.acceptSimulation)
+	server.mux.HandleFunc("GET /internal/v1/simulations/{runId}", server.getSimulation)
+	server.mux.HandleFunc("DELETE /internal/v1/simulations/{runId}", server.cancelSimulation)
+	server.mux.HandleFunc("GET /internal/v1/simulations/{runId}/logs", server.getSimulationLogs)
 	return server
 }
 
@@ -168,6 +196,14 @@ func (server *Server) health(writer http.ResponseWriter, _ *http.Request) {
 }
 
 func (server *Server) acceptRun(writer http.ResponseWriter, request *http.Request) {
+	server.acceptRunWithManager(writer, request, server.manager)
+}
+
+func (server *Server) acceptSimulation(writer http.ResponseWriter, request *http.Request) {
+	server.acceptRunWithManager(writer, request, server.simulationManager)
+}
+
+func (server *Server) acceptRunWithManager(writer http.ResponseWriter, request *http.Request, manager LifecycleManager) {
 	body, err := io.ReadAll(http.MaxBytesReader(writer, request.Body, server.config.MaxRequestBytes))
 	if err != nil {
 		writeError(writer, http.StatusRequestEntityTooLarge, "REQUEST_TOO_LARGE", "request body exceeds configured limit")
@@ -177,7 +213,7 @@ func (server *Server) acceptRun(writer http.ResponseWriter, request *http.Reques
 		writeError(writer, http.StatusUnauthorized, "UNAUTHENTICATED", err.Error())
 		return
 	}
-	if server.manager == nil {
+	if manager == nil {
 		writeError(writer, http.StatusNotImplemented, "CONTROLLER_NOT_READY", "sandbox job lifecycle is not enabled")
 		return
 	}
@@ -197,7 +233,7 @@ func (server *Server) acceptRun(writer http.ResponseWriter, request *http.Reques
 	if expiresAt.IsZero() {
 		expiresAt = time.Now().Add(24 * time.Hour)
 	}
-	status, err := server.manager.EnsureJob(request.Context(), jobs.Request{
+	status, err := manager.EnsureJob(request.Context(), jobs.Request{
 		RunID:            payload.RunID,
 		ToolID:           payload.ToolID,
 		ToolVersion:      payload.ToolVersion,
@@ -208,30 +244,46 @@ func (server *Server) acceptRun(writer http.ResponseWriter, request *http.Reques
 }
 
 func (server *Server) getRun(writer http.ResponseWriter, request *http.Request) {
+	server.getRunWithManager(writer, request, server.manager)
+}
+
+func (server *Server) getSimulation(writer http.ResponseWriter, request *http.Request) {
+	server.getRunWithManager(writer, request, server.simulationManager)
+}
+
+func (server *Server) getRunWithManager(writer http.ResponseWriter, request *http.Request, manager LifecycleManager) {
 	runID := request.PathValue("runId")
 	if !server.authenticateGet(request) {
 		writeError(writer, http.StatusUnauthorized, "UNAUTHENTICATED", "signature verification failed")
 		return
 	}
-	if server.manager == nil {
+	if manager == nil {
 		writeError(writer, http.StatusNotImplemented, "CONTROLLER_NOT_READY", "sandbox job lifecycle is not enabled")
 		return
 	}
-	status, err := server.manager.Status(request.Context(), runID)
+	status, err := manager.Status(request.Context(), runID)
 	server.writeLifecycleResult(writer, status, err)
 }
 
 func (server *Server) cancelRun(writer http.ResponseWriter, request *http.Request) {
+	server.cancelRunWithManager(writer, request, server.manager)
+}
+
+func (server *Server) cancelSimulation(writer http.ResponseWriter, request *http.Request) {
+	server.cancelRunWithManager(writer, request, server.simulationManager)
+}
+
+func (server *Server) cancelRunWithManager(writer http.ResponseWriter, request *http.Request, manager LifecycleManager) {
 	runID := request.PathValue("runId")
 	if !server.authenticateGet(request) {
 		writeError(writer, http.StatusUnauthorized, "UNAUTHENTICATED", "signature verification failed")
 		return
 	}
-	if server.manager == nil {
+	if manager == nil {
 		writeError(writer, http.StatusNotImplemented, "CONTROLLER_NOT_READY", "sandbox job lifecycle is not enabled")
 		return
 	}
-	status, err := server.manager.Cancel(request.Context(), runID)
+	status, err := manager.Cancel(request.Context(), runID)
 	server.writeLifecycleResult(writer, status, err)
 }
 
@@ -239,16 +291,24 @@ func (server *Server) cancelRun(writer http.ResponseWriter, request *http.Reques
 // logs — for a run. The controller never streams raw pod logs; logs are truncated and scrubbed of
 // secret-bearing patterns before leaving the cluster.
 func (server *Server) getRunLogs(writer http.ResponseWriter, request *http.Request) {
+	server.getRunLogsWithManager(writer, request, server.manager)
+}
+
+func (server *Server) getSimulationLogs(writer http.ResponseWriter, request *http.Request) {
+	server.getRunLogsWithManager(writer, request, server.simulationManager)
+}
+
+func (server *Server) getRunLogsWithManager(writer http.ResponseWriter, request *http.Request, manager LifecycleManager) {
 	runID := request.PathValue("runId")
 	if !server.authenticateGet(request) {
 		writeError(writer, http.StatusUnauthorized, "UNAUTHENTICATED", "signature verification failed")
 		return
 	}
-	if server.manager == nil {
+	if manager == nil {
 		writeError(writer, http.StatusNotImplemented, "CONTROLLER_NOT_READY", "sandbox job lifecycle is not enabled")
 		return
 	}
-	result, err := server.manager.Collect(request.Context(), runID, server.config.LogLimitBytes)
+	result, err := manager.Collect(request.Context(), runID, server.config.LogLimitBytes)
 	if err != nil {
 		writeError(writer, http.StatusInternalServerError, "LIFECYCLE_ERROR", err.Error())
 		return

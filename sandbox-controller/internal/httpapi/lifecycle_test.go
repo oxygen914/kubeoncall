@@ -96,6 +96,36 @@ func TestPostRunCreatesJobThroughManager(t *testing.T) {
 	}
 }
 
+func TestSimulationEndpointsUseOnlyTheDedicatedManager(t *testing.T) {
+	config := testConfig()
+	ordinary := &fakeManager{status: LifecycleStatus{RunID: "sbx_a1b2", Phase: "PENDING", Exists: true}}
+	simulation := &fakeManager{status: LifecycleStatus{RunID: "sbx_a1b2", Phase: "PENDING", Exists: true}}
+	server := NewServerWithManagers(config, ordinary, simulation)
+	body := []byte(`{"runId":"sbx_a1b2","toolId":"remediation-simulation","toolVersion":"v1","inputArtifactUri":"minio://sandbox/sbx_a1b2/inputs/remediation-simulation.json","labels":{"sandbox.kubeoncall.io/mode":"remediation_simulation"}}`)
+	response := httptest.NewRecorder()
+	server.Handler().ServeHTTP(response, signedLifecycle(config, http.MethodPost, "/internal/v1/simulations", body, "nonce-simulation-001"))
+	if response.Code != http.StatusOK {
+		t.Fatalf("simulation create status = %d body=%s", response.Code, response.Body.String())
+	}
+	if len(simulation.created) != 1 || simulation.created[0].ToolID != "remediation-simulation" {
+		t.Fatalf("simulation manager received = %+v", simulation.created)
+	}
+	if len(ordinary.created) != 0 {
+		t.Fatalf("ordinary manager must not receive a simulation: %+v", ordinary.created)
+	}
+}
+
+func TestSimulationEndpointIsNotReadyWithoutValidationClusterManager(t *testing.T) {
+	config := testConfig()
+	server := NewServerWithManager(config, &fakeManager{})
+	body := []byte(`{"runId":"sbx_a1b2","toolId":"remediation-simulation","toolVersion":"v1","inputArtifactUri":"minio://sandbox/sbx_a1b2/inputs/remediation-simulation.json"}`)
+	response := httptest.NewRecorder()
+	server.Handler().ServeHTTP(response, signedLifecycle(config, http.MethodPost, "/internal/v1/simulations", body, "nonce-simulation-002"))
+	if response.Code != http.StatusNotImplemented {
+		t.Fatalf("simulation must not fall back to ordinary manager, status=%d", response.Code)
+	}
+}
+
 func TestGetAndCancelRunDelegateToManager(t *testing.T) {
 	config := testConfig()
 	manager := &fakeManager{status: LifecycleStatus{RunID: "sbx_a1b2", Phase: "RUNNING", Exists: true}}

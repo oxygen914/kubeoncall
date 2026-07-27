@@ -8,8 +8,8 @@
 | 制定日期 | 2026-07-27 |
 | 目标项目 | KubeOnCall |
 | 实施状态 | IN_PROGRESS |
-| 代码实现进度 | 75%（SBX-00～17 已完成） |
-| 自动化验证进度 | 75%（SBX-00～17 代码级验证通过；真实集群待验收） |
+| 代码实现进度 | 79%（SBX-00～18 已完成） |
+| 自动化验证进度 | 79%（SBX-00～18 代码级验证通过；真实集群待验收） |
 | 真实环境验收进度 | 0%，按阶段单独记录 |
 | 计划提交数 | 24 个，`SBX-00`～`SBX-23` |
 
@@ -429,7 +429,7 @@ helm lint deploy/helm/kubeoncall
 | SBX-15 | `feat(sandbox): add fixed diagnostic tools` | 固定工具目录与首批工具 | COMPLETED |
 | SBX-16 | `feat(sandbox): isolate generated code execution` | Python/Shell 受限执行 | COMPLETED |
 | SBX-17 | `feat(sandbox): validate manifests and runbooks` | YAML、Helm、Patch、Runbook 校验 | COMPLETED |
-| SBX-18 | `feat(sandbox): simulate remediation plans` | 独立仿真集群验证 | PLANNED |
+| SBX-18 | `feat(sandbox): simulate remediation plans` | 独立仿真集群验证 | COMPLETED |
 | SBX-19 | `feat(agent): route diagnostics through sandbox` | Planner/Executor 异步路由 | PLANNED |
 | SBX-20 | `feat(verifier): gate remediation with sandbox evidence` | 恢复工作流与生产动作硬边界 | PLANNED |
 | SBX-21 | `feat(console): add sandbox run operations` | Run 列表、详情、Artifact 和取消 | PLANNED |
@@ -1123,22 +1123,30 @@ Codex 审核补充（提交 `ae94ebb` 后审核，补丁提交 `[SBX-09-fix]`）
 
 ### SBX-18：修复方案仿真
 
-改动：
+完成记录：
 
-- 抽象 `SimulationRuntime`，默认连接独立非生产验证集群。
-- 每个 Run 创建临时 namespace 和受限 ServiceAccount。
-- 应用脱敏资源、测试 ConfigMap/Secret 占位和最小依赖。
-- 执行 readiness、startup、资源状态和预期恢复信号检查。
-- 无论成功失败都进入 namespace 清理流程。
+- Controller 新增独立 `/internal/v1/simulations` 生命周期入口和 `internal/simulation.Manager`；它只接受
+  明确配置的外部 kubeconfig 与 `validation-`、`staging-` 或 `nonprod-` 集群标识。未配置时返回
+  `CONTROLLER_NOT_READY`，绝不会回退到 Controller 所在集群。
+- 每个 Run 由 SHA-256 派生短临时 namespace；创建受限 `sandbox-simulation` ServiceAccount、默认拒绝
+  NetworkPolicy、ResourceQuota、脱敏输入 ConfigMap 和非生产 Secret 占位。普通 Job 没有选择
+  ServiceAccount 的调用方入口，仿真身份只由 Controller 的可信配置注入。
+- namespace 已有冲突时拒绝执行；创建阶段错误会清理本 Run 新建的 namespace。取消和清理路径只删除同时
+  匹配 run-id 与 simulation 标签的 namespace，失败会显式返回，以供既有 Reconciler 继续重试。
+- Backend 注册 `remediation-simulation:v1` 固定 Runtime、版本化输入/输出 Schema、脱敏输入 Artifact
+  服务和严格输出校验；仿真结果始终为 `UNTRUSTED`，带 `simulationOnly=true`，不能构成生产执行命令。
+- `SandboxControllerClient` 按 Run mode 选择专用入口和 `remediation-simulation.json`，普通 Controller
+  管理器不接收仿真请求。Go Fake Client 测试覆盖 namespace 冲突、配额准备失败、启动失败、取消清理失败、
+  身份/配额/NetworkPolicy；Java 测试覆盖脱敏拒绝、Artifact、结果契约和专用路由。
 
-验证：
+延期验收：
 
-- Fake Runtime 单测和可选 Kind/K3s 集成测试。
-- namespace 冲突、配额不足、启动失败、超时和清理失败测试。
+- 真实独立 Kind/K3s 集群、镜像构建、Artifact 网络通道和实际工作负载 readiness/startup/recovery 信号
+  属于真实环境验收；它们不阻塞本轮代码收口，但不得据此宣称完成生产仿真验收。
 
 回滚：
 
-- 先关闭 `remediation-simulation` 并清理临时 namespace，再 revert。
+- 关闭 `remediation-simulation`，等待 Controller 清理已归属的临时 namespace 后 revert 本提交。
 
 ### SBX-19：Agent 路由
 
@@ -1308,9 +1316,10 @@ Codex 审核补充（提交 `ae94ebb` 后审核，补丁提交 `[SBX-09-fix]`）
 
 ## 13. 当前停止点
 
-SBX-00～17 已完成（含此前的审核修复）。Backend 已具备 Run/Artifact/API/权限、短时派发任务、
+SBX-00～18 已完成（含此前的审核修复）。Backend 已具备 Run/Artifact/API/权限、短时派发任务、
 HMAC Controller Client、断路器、短轮询状态收敛和脱敏诊断证据包；Controller 已具备基座、hardened JobSpec、
 生命周期、结果收集清理与隔离部署。首批固定诊断工具目录、受限 Python/Shell Runtime、生成代码 Artifact 与结构化
-结果契约、YAML/Helm/Patch/Runbook 校验及固定验证 Runtime 已落地。下一单元为 SBX-18：修复方案仿真。
+结果契约、YAML/Helm/Patch/Runbook 校验及固定验证 Runtime 已落地。独立仿真入口、临时 namespace、受限身份、
+配额/默认拒绝网络、脱敏 Artifact 与清理边界也已落地。下一单元为 SBX-19：Agent 路由。
 
 每次只提交一个 SBX 单元，代码验证通过并产生本地 commit 后再进入下一个单元；远端推送仍需用户单独授权。

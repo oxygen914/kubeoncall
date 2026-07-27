@@ -203,6 +203,7 @@ func (manager *Manager) jobFromSpec(spec jobs.JobSpec, request jobs.Request, exp
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{Labels: labels},
 				Spec: corev1.PodSpec{
+					ServiceAccountName:            spec.ServiceAccountName,
 					RestartPolicy:                 corev1.RestartPolicyNever,
 					AutomountServiceAccountToken:  &automount,
 					HostNetwork:                   spec.HostNetwork,

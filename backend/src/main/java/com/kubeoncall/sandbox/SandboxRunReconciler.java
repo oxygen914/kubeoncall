@@ -217,6 +217,33 @@ public class SandboxRunReconciler {
                     now.plus(Duration.ofHours(properties.getSandbox().getArtifactRetentionHours()))));
             summary.put("outputArtifactSha256", output.sha256());
         }
+        if (collecting.mode() == SandboxRunMode.REMEDIATION_SIMULATION) {
+            if (!result.outputFound() || !RemediationSimulationResultValidator.isValid(result.output(), objectMapper)) {
+                return fail(collecting, SandboxRunStatus.FAILED, "SIMULATION_OUTPUT_CONTRACT_INVALID", now);
+            }
+            // The validation-cluster runtime can only return an untrusted rehearsal observation.
+            // SBX-20 converts it into a proposal and independently re-checks production state.
+            SandboxArtifactStore.StoredArtifact output = artifactStore.store(
+                    collecting.publicId(),
+                    SandboxArtifactType.OUTPUT,
+                    "remediation-simulation-result.json",
+                    "application/json",
+                    result.output().getBytes(StandardCharsets.UTF_8),
+                    SandboxClassification.UNTRUSTED);
+            repository.createArtifact(new SandboxRunRepository.CreateArtifact(
+                    null,
+                    collecting.id(),
+                    SandboxArtifactType.OUTPUT,
+                    output.bucket(),
+                    output.objectKey(),
+                    output.contentType(),
+                    output.sizeBytes(),
+                    output.sha256(),
+                    SandboxClassification.UNTRUSTED,
+                    now.plus(Duration.ofHours(properties.getSandbox().getArtifactRetentionHours()))));
+            summary.put("outputArtifactSha256", output.sha256());
+            summary.put("simulationOnly", true);
+        }
         if (!result.logs().isBlank()) {
             SandboxArtifactStore.StoredArtifact artifact = artifactStore.store(
                     collecting.publicId(),

@@ -13,9 +13,11 @@ import (
 	"github.com/kubeoncall/sandbox-controller/internal/httpapi"
 	"github.com/kubeoncall/sandbox-controller/internal/jobs"
 	sbxk8s "github.com/kubeoncall/sandbox-controller/internal/kubernetes"
+	"github.com/kubeoncall/sandbox-controller/internal/simulation"
 
 	k8sclient "k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
+	"k8s.io/client-go/tools/clientcmd"
 )
 
 func main() {
@@ -25,7 +27,8 @@ func main() {
 		os.Exit(1)
 	}
 	manager := buildLifecycleManager(config)
-	server := httpapi.NewServerWithManager(config, manager)
+	simulationManager := buildSimulationLifecycleManager(config)
+	server := httpapi.NewServerWithManagers(config, manager, simulationManager)
 	httpServer := &http.Server{
 		Addr:              config.ListenAddress,
 		Handler:           server.Handler(),
@@ -75,4 +78,32 @@ func buildLifecycleManager(config httpapi.Config) httpapi.LifecycleManager {
 		Ceiling:   config.JobCeiling,
 	}
 	return sbxk8s.NewHTTPAdapter(sbxk8s.NewManager(clientset, config.SandboxNamespace, builder))
+}
+
+// buildSimulationLifecycleManager deliberately uses an explicit kubeconfig rather than the
+// controller's in-cluster credentials. This makes remediation rehearsal unavailable by default and
+// prevents a chart/configuration mistake from creating temporary namespaces in the workload
+// cluster. The configured cluster identifier is independently checked by simulation.NewManager.
+func buildSimulationLifecycleManager(config httpapi.Config) httpapi.LifecycleManager {
+	if config.SimulationKubeconfigPath == "" || config.SimulationClusterID == "" {
+		slog.Info("remediation simulation disabled; validation-cluster kubeconfig is not configured")
+		return nil
+	}
+	restConfig, err := clientcmd.BuildConfigFromFlags("", config.SimulationKubeconfigPath)
+	if err != nil {
+		slog.Error("cannot build validation-cluster config; remediation simulation disabled", "error", err)
+		return nil
+	}
+	clientset, err := k8sclient.NewForConfig(restConfig)
+	if err != nil {
+		slog.Error("cannot build validation-cluster clientset; remediation simulation disabled", "error", err)
+		return nil
+	}
+	builder := jobs.Builder{Tools: config.Tools, Ceiling: config.JobCeiling}
+	manager, err := simulation.NewManager(clientset, config.SimulationClusterID, config.SimulationNamespacePrefix, builder)
+	if err != nil {
+		slog.Error("invalid remediation simulation configuration; simulation disabled", "error", err)
+		return nil
+	}
+	return simulation.NewHTTPAdapter(manager)
 }

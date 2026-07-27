@@ -42,7 +42,10 @@ type Request struct {
 
 // JobSpec is a serializable projection deliberately limited to fields the security contract permits.
 type JobSpec struct {
-	Name, Namespace, Image                                string
+	Name, Namespace, Image string
+	// ServiceAccountName is controller-owned. Ordinary sandbox Jobs leave it blank and never
+	// receive an API token; simulation Jobs use a namespace-local account that has no bindings.
+	ServiceAccountName                                    string
 	Command                                               []string
 	Environment                                           map[string]string
 	Labels                                                map[string]string
@@ -57,8 +60,11 @@ type SecurityContext struct {
 
 type Builder struct {
 	Namespace string
-	Tools     map[string]Tool
-	Ceiling   Limits
+	// ServiceAccountName may only be selected by the Controller's trusted runtime wiring. It is
+	// deliberately absent from Request so a Backend caller cannot choose a Kubernetes identity.
+	ServiceAccountName string
+	Tools              map[string]Tool
+	Ceiling            Limits
 }
 
 func (builder Builder) Build(request Request) (JobSpec, error) {
@@ -95,7 +101,7 @@ func (builder Builder) Build(request Request) (JobSpec, error) {
 		environment["SANDBOX_MAX_OUTPUT_BYTES"] = fmt.Sprintf("%d", tool.OutputMaxBytes)
 		environment["SANDBOX_NETWORK_EGRESS"] = "DENY_ALL"
 	}
-	return JobSpec{Name: "sandbox-" + request.RunID[4:], Namespace: builder.Namespace, Image: tool.Image, Command: append([]string(nil), tool.Entrypoint...), Environment: environment, Labels: labels, Limits: builder.Ceiling, Security: SecurityContext{RunAsNonRoot: true, ReadOnlyRootFilesystem: true, AllowPrivilegeEscalation: false, DropCapabilities: []string{"ALL"}}, AutomountServiceAccountToken: false, HostNetwork: false, Privileged: false}, nil
+	return JobSpec{Name: "sandbox-" + request.RunID[4:], Namespace: builder.Namespace, Image: tool.Image, ServiceAccountName: builder.ServiceAccountName, Command: append([]string(nil), tool.Entrypoint...), Environment: environment, Labels: labels, Limits: builder.Ceiling, Security: SecurityContext{RunAsNonRoot: true, ReadOnlyRootFilesystem: true, AllowPrivilegeEscalation: false, DropCapabilities: []string{"ALL"}}, AutomountServiceAccountToken: false, HostNetwork: false, Privileged: false}, nil
 }
 
 func safeRuntime(runtime Runtime) bool {

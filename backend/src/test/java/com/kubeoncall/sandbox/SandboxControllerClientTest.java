@@ -123,6 +123,24 @@ class SandboxControllerClientTest {
     }
 
     @Test
+    void routesRemediationSimulationToTheDedicatedValidationClusterEndpoint() throws Exception {
+        AtomicReference<String> path = new AtomicReference<>();
+        AtomicReference<byte[]> capturedBody = new AtomicReference<>();
+        start(exchange -> {
+            path.set(exchange.getRequestURI().getPath());
+            capturedBody.set(exchange.getRequestBody().readAllBytes());
+            respond(exchange, 200, "{\"runId\":\"sbx_abc\",\"phase\":\"PENDING\"}");
+        });
+
+        client(500).dispatch(run(com.kubeoncall.sandbox.domain.SandboxRunMode.REMEDIATION_SIMULATION));
+
+        assertThat(path.get()).isEqualTo("/internal/v1/simulations");
+        assertThat(new String(capturedBody.get(), StandardCharsets.UTF_8))
+                .contains("https://artifact.example/sandbox/sbx_abc/inputs/remediation-simulation.json")
+                .contains("\"sandbox.kubeoncall.io/mode\":\"remediation_simulation\"");
+    }
+
+    @Test
     void failsFastForPermanentControllerRejectionAndOpensCircuitForTransientFailures() throws Exception {
         AtomicInteger calls = new AtomicInteger();
         start(exchange -> {
@@ -183,6 +201,7 @@ class SandboxControllerClientTest {
     private void start(ExchangeHandler handler) throws IOException {
         server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
         server.createContext("/internal/v1/runs", handler::handle);
+        server.createContext("/internal/v1/simulations", handler::handle);
         server.start();
     }
 
@@ -200,6 +219,7 @@ class SandboxControllerClientTest {
                 switch (mode) {
                     case GENERATED_CODE -> "generated-python";
                     case MANIFEST_VALIDATION -> "manifest-validation";
+                    case REMEDIATION_SIMULATION -> "remediation-simulation";
                     default -> "pod-inspect";
                 },
                 "v1",
