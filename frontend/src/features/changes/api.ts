@@ -43,8 +43,6 @@ export function listChangeEvents(params: ChangeEventQuery): Promise<ListEnvelope
   })
 }
 
-export function correlateChanges(
-  alarm: Record<string, unknown>,
-): Promise<ChangeCorrelation[]> {
+export function correlateChanges(alarm: Record<string, unknown>): Promise<ChangeCorrelation[]> {
   return api.post<ChangeCorrelation[]>('/api/v1/change-events/correlations', alarm)
 }

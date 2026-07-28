@@ -59,7 +59,13 @@ const alarmDetail = {
   alertName: '支付接口错误率高',
   severity: 'P1',
   status: 'FIRING',
-  resource: { type: 'SERVICE', name: 'payment', cluster: 'prod', namespace: 'default', service: 'payment' },
+  resource: {
+    type: 'SERVICE',
+    name: 'payment',
+    cluster: 'prod',
+    namespace: 'default',
+    service: 'payment',
+  },
   firstSeen: '2026-07-23T10:00:00Z',
   lastSeen: '2026-07-23T10:01:00Z',
   occurrenceCount: 2,
@@ -156,24 +162,45 @@ async function installMockEventSource(page: Page) {
   await page.route('**/config/runtime.json', async (route) => {
     await route.fulfill({
       contentType: 'application/json',
-      body: JSON.stringify({ apiBaseUrl: '', ssePath: '/api/v1/events/stream', environment: 'test', release: 'e2e', supportUrl: '' }),
+      body: JSON.stringify({
+        apiBaseUrl: '',
+        ssePath: '/api/v1/events/stream',
+        environment: 'test',
+        release: 'e2e',
+        supportUrl: '',
+      }),
     })
   })
 }
 
 /** Waits until the SSE provider has constructed an EventSource connection. */
 async function waitForSse(page: Page) {
-  await expect.poll(async () => await page.evaluate(() => (window as unknown as { __sse?: { ready: () => boolean } }).__sse?.ready() ?? false)).toBe(true)
+  await expect
+    .poll(
+      async () =>
+        await page.evaluate(
+          () => (window as unknown as { __sse?: { ready: () => boolean } }).__sse?.ready() ?? false,
+        ),
+    )
+    .toBe(true)
 }
 
-test('operator acknowledges a firing alarm with version and idempotency headers', async ({ page }) => {
+test('operator acknowledges a firing alarm with version and idempotency headers', async ({
+  page,
+}) => {
   await mockSession(page, { permissions: operatorPermissions })
 
   let acknowledgeRequest: { method: string; headers: Record<string, string> } | undefined
   await page.route('**/api/v1/alarms/alm_e2e', async (route) => {
     await route.fulfill({
       contentType: 'application/json',
-      body: JSON.stringify(envelope({ ...alarmDetail, status: 'FIRING', acknowledgement: { acknowledged: false, by: null, at: null } })),
+      body: JSON.stringify(
+        envelope({
+          ...alarmDetail,
+          status: 'FIRING',
+          acknowledgement: { acknowledged: false, by: null, at: null },
+        }),
+      ),
     })
   })
   await page.route('**/api/v1/alarms/alm_e2e/timeline*', async (route) => {
@@ -184,7 +211,9 @@ test('operator acknowledges a firing alarm with version and idempotency headers'
     acknowledgeRequest = { method: request.method(), headers: request.headers() }
     await route.fulfill({
       contentType: 'application/json',
-      body: JSON.stringify(envelope({ alarmId: 'alm_e2e', status: 'ACKNOWLEDGED', acknowledged: true, version: 4 })),
+      body: JSON.stringify(
+        envelope({ alarmId: 'alm_e2e', status: 'ACKNOWLEDGED', acknowledged: true, version: 4 }),
+      ),
     })
   })
 
@@ -194,7 +223,10 @@ test('operator acknowledges a firing alarm with version and idempotency headers'
   await expect(page.getByRole('button', { name: '确认告警' })).toBeVisible()
 
   await page.getByRole('button', { name: '确认告警' }).click()
-  await page.getByRole('dialog', { name: '确认告警' }).getByLabel('原因（可选）').fill('正在扩容处理')
+  await page
+    .getByRole('dialog', { name: '确认告警' })
+    .getByLabel('原因（可选）')
+    .fill('正在扩容处理')
   await page.getByRole('dialog', { name: '确认告警' }).getByRole('button', { name: '确认' }).click()
 
   // The dialog closes on success and the detail refetch reflects the acknowledged state.
@@ -207,11 +239,16 @@ test('operator acknowledges a firing alarm with version and idempotency headers'
   expect(acknowledgeRequest!.headers['idempotency-key']).toBeTruthy()
 })
 
-test('operator decides an approval and the async task reaches a terminal state', async ({ page }) => {
+test('operator decides an approval and the async task reaches a terminal state', async ({
+  page,
+}) => {
   await mockSession(page, { permissions: operatorPermissions })
 
   await page.route('**/api/v1/approvals/apr_e2e', async (route) => {
-    await route.fulfill({ contentType: 'application/json', body: JSON.stringify(envelope(approvalDetail)) })
+    await route.fulfill({
+      contentType: 'application/json',
+      body: JSON.stringify(envelope(approvalDetail)),
+    })
   })
 
   let decisionRequest: { method: string; body: string } | undefined
@@ -299,7 +336,9 @@ test('SSE alarm.acknowledged event precisely invalidates the alarm query', async
   // the alarm detail; the new version (4) is served and the status flips to ACKNOWLEDGED.
   version = 4
   await page.evaluate(() =>
-    (window as unknown as { __sse: { dispatch: (t: string, p: unknown, id?: string) => void } }).__sse.dispatch(
+    (
+      window as unknown as { __sse: { dispatch: (t: string, p: unknown, id?: string) => void } }
+    ).__sse.dispatch(
       'alarm.acknowledged',
       { resourceType: 'alarm', resourceId: 'alm_e2e', version: 4 },
       'evt_ack',
@@ -320,7 +359,20 @@ test('SSE cursor.expired gap event triggers a full query invalidation', async ({
     overviewFetches.push(new URL(route.request().url()).searchParams.get('window') ?? '')
     await route.fulfill({
       contentType: 'application/json',
-      body: JSON.stringify(envelope({ activeAlarms, pendingApprovals: 1, runningExecutions: 0, failedExecutions: 0, severityCounts: {}, statusCounts: {}, executionStatusCounts: {}, failureReasons: {}, executionTrend: {}, window: '1h' })),
+      body: JSON.stringify(
+        envelope({
+          activeAlarms,
+          pendingApprovals: 1,
+          runningExecutions: 0,
+          failedExecutions: 0,
+          severityCounts: {},
+          statusCounts: {},
+          executionStatusCounts: {},
+          failureReasons: {},
+          executionTrend: {},
+          window: '1h',
+        }),
+      ),
     })
   })
 
@@ -334,9 +386,15 @@ test('SSE cursor.expired gap event triggers a full query invalidation', async ({
   // Bump the server-side state, then dispatch a gap event. A full invalidation must refetch the
   // overview regardless of topic, surfacing the new active-alarms count.
   activeAlarms = 7
-  await page.evaluate(() => (window as unknown as { __sse: { dispatchGap: (id?: string) => void } }).__sse.dispatchGap('evt_gap'))
+  await page.evaluate(() =>
+    (window as unknown as { __sse: { dispatchGap: (id?: string) => void } }).__sse.dispatchGap(
+      'evt_gap',
+    ),
+  )
 
-  await expect.poll(() => overviewFetches.length, { timeout: 15_000 }).toBeGreaterThan(fetchesBeforeGap)
+  await expect
+    .poll(() => overviewFetches.length, { timeout: 15_000 })
+    .toBeGreaterThan(fetchesBeforeGap)
 })
 
 test('viewer without acknowledge permission sees no acknowledge button', async ({ page }) => {
@@ -346,7 +404,10 @@ test('viewer without acknowledge permission sees no acknowledge button', async (
   })
 
   await page.route('**/api/v1/alarms/alm_e2e', async (route) => {
-    await route.fulfill({ contentType: 'application/json', body: JSON.stringify(envelope(alarmDetail)) })
+    await route.fulfill({
+      contentType: 'application/json',
+      body: JSON.stringify(envelope(alarmDetail)),
+    })
   })
   await page.route('**/api/v1/alarms/alm_e2e/timeline*', async (route) => {
     await route.fulfill({ contentType: 'application/json', body: JSON.stringify(envelope([])) })
@@ -365,7 +426,10 @@ test('operator without approval:decide cannot decide a pending approval', async 
   })
 
   await page.route('**/api/v1/approvals/apr_e2e', async (route) => {
-    await route.fulfill({ contentType: 'application/json', body: JSON.stringify(envelope(approvalDetail)) })
+    await route.fulfill({
+      contentType: 'application/json',
+      body: JSON.stringify(envelope(approvalDetail)),
+    })
   })
 
   await page.goto('/approvals/apr_e2e')

@@ -66,8 +66,15 @@ export function MigrationPage() {
     staleTime: 10_000,
   })
   const resolveDiffMutation = useMutation({
-    mutationFn: ({ publicId, status, note }: { publicId: string; status: Exclude<MigrationDiff['resolutionStatus'], 'OPEN'>; note?: string }) =>
-      resolveMigrationDiff(publicId, status, note),
+    mutationFn: ({
+      publicId,
+      status,
+      note,
+    }: {
+      publicId: string
+      status: Exclude<MigrationDiff['resolutionStatus'], 'OPEN'>
+      note?: string
+    }) => resolveMigrationDiff(publicId, status, note),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['migration', 'diffs'] })
       void queryClient.invalidateQueries({ queryKey: ['migration', 'diff-statistics'] })
@@ -81,7 +88,8 @@ export function MigrationPage() {
       <header className="koc-page__header">
         <h1>数据迁移（WBS-11）</h1>
         <p className="koc-page__subtitle">
-          Redis → MySQL 回填与灰度切换运营。回填以可取消、超时受控、限速的持久化任务运行；默认 dry-run，成功后再 apply。
+          Redis → MySQL 回填与灰度切换运营。回填以可取消、超时受控、限速的持久化任务运行；默认
+          dry-run，成功后再 apply。
         </p>
       </header>
 
@@ -100,7 +108,11 @@ export function MigrationPage() {
                 </p>
                 <table className="koc-table">
                   <thead>
-                    <tr><th>分类</th><th>数量</th><th>处理</th></tr>
+                    <tr>
+                      <th>分类</th>
+                      <th>数量</th>
+                      <th>处理</th>
+                    </tr>
                   </thead>
                   <tbody>
                     {Object.entries(inventory.byCategory).map(([cat, count]) => (
@@ -117,7 +129,10 @@ export function MigrationPage() {
                   <table className="koc-table">
                     <tbody>
                       {Object.entries(inventory.byPrefix).map(([prefix, count]) => (
-                        <tr key={prefix}><td className="koc-mono">{prefix}</td><td>{count}</td></tr>
+                        <tr key={prefix}>
+                          <td className="koc-mono">{prefix}</td>
+                          <td>{count}</td>
+                        </tr>
                       ))}
                     </tbody>
                   </table>
@@ -147,42 +162,54 @@ export function MigrationPage() {
             description="approval-request:* → koc_approval_request"
             onBackfill={backfillApproval}
             onDone={setLastResult}
-            onInvalidate={() => void queryClient.invalidateQueries({ queryKey: ['migration', 'batches'] })}
+            onInvalidate={() =>
+              void queryClient.invalidateQueries({ queryKey: ['migration', 'batches'] })
+            }
           />
           <BackfillPanel
             title="Skill State"
             description="skill:disabled → koc_skill_state"
             onBackfill={backfillSkillState}
             onDone={setLastResult}
-            onInvalidate={() => void queryClient.invalidateQueries({ queryKey: ['migration', 'batches'] })}
+            onInvalidate={() =>
+              void queryClient.invalidateQueries({ queryKey: ['migration', 'batches'] })
+            }
           />
           <BackfillPanel
             title="Alarm Acknowledgement"
             description="alarm-ack:* → koc_alarm_acknowledgement"
             onBackfill={backfillAlarmAcknowledgements}
             onDone={setLastResult}
-            onInvalidate={() => void queryClient.invalidateQueries({ queryKey: ['migration', 'batches'] })}
+            onInvalidate={() =>
+              void queryClient.invalidateQueries({ queryKey: ['migration', 'batches'] })
+            }
           />
           <BackfillPanel
             title="Alarm Silence"
             description="alarm-silence-approval:* → koc_alarm_silence"
             onBackfill={backfillAlarmSilences}
             onDone={setLastResult}
-            onInvalidate={() => void queryClient.invalidateQueries({ queryKey: ['migration', 'batches'] })}
+            onInvalidate={() =>
+              void queryClient.invalidateQueries({ queryKey: ['migration', 'batches'] })
+            }
           />
           <BackfillPanel
             title="Alarm Recovery"
             description="alarm-recovery:* → koc_alarm_status_history"
             onBackfill={backfillAlarmRecoveries}
             onDone={setLastResult}
-            onInvalidate={() => void queryClient.invalidateQueries({ queryKey: ['migration', 'batches'] })}
+            onInvalidate={() =>
+              void queryClient.invalidateQueries({ queryKey: ['migration', 'batches'] })
+            }
           />
           <BackfillPanel
             title="Execution Audit"
             description="execution-audit:* → koc_operation_audit"
             onBackfill={backfillExecutionAudit}
             onDone={setLastResult}
-            onInvalidate={() => void queryClient.invalidateQueries({ queryKey: ['migration', 'batches'] })}
+            onInvalidate={() =>
+              void queryClient.invalidateQueries({ queryKey: ['migration', 'batches'] })
+            }
           />
           {lastResult ? (
             <p className="koc-alert koc-alert--error" role="status">
@@ -194,14 +221,37 @@ export function MigrationPage() {
 
       <div className="koc-detail__summary">
         <h2>切换状态</h2>
-        <AsyncState isLoading={statusQuery.isLoading} error={statusQuery.error} isEmpty={!statusQuery.isLoading && !statusQuery.data}>
+        <AsyncState
+          isLoading={statusQuery.isLoading}
+          error={statusQuery.error}
+          isEmpty={!statusQuery.isLoading && !statusQuery.data}
+        >
           {statusQuery.data ? (
             <dl className="koc-fields">
-              <div><dt>读源</dt><dd><StatusBadge tone="info">{statusQuery.data.alarmReadSource}</StatusBadge></dd></div>
-              <div><dt>写模式</dt><dd><StatusBadge tone="warning">{statusQuery.data.alarmWriteMode}</StatusBadge></dd></div>
-              <div><dt>回填 dry-run</dt><dd>{statusQuery.data.backfillDryRun ? '是' : '否'}</dd></div>
-              <div><dt>legacy API</dt><dd>{statusQuery.data.legacyApiEnabled ? '启用' : '已退役'}</dd></div>
-              <div><dt>账本可用</dt><dd>{statusQuery.data.ledgerAvailable ? '是' : '否'}</dd></div>
+              <div>
+                <dt>读源</dt>
+                <dd>
+                  <StatusBadge tone="info">{statusQuery.data.alarmReadSource}</StatusBadge>
+                </dd>
+              </div>
+              <div>
+                <dt>写模式</dt>
+                <dd>
+                  <StatusBadge tone="warning">{statusQuery.data.alarmWriteMode}</StatusBadge>
+                </dd>
+              </div>
+              <div>
+                <dt>回填 dry-run</dt>
+                <dd>{statusQuery.data.backfillDryRun ? '是' : '否'}</dd>
+              </div>
+              <div>
+                <dt>legacy API</dt>
+                <dd>{statusQuery.data.legacyApiEnabled ? '启用' : '已退役'}</dd>
+              </div>
+              <div>
+                <dt>账本可用</dt>
+                <dd>{statusQuery.data.ledgerAvailable ? '是' : '否'}</dd>
+              </div>
             </dl>
           ) : null}
         </AsyncState>
@@ -209,13 +259,41 @@ export function MigrationPage() {
 
       <div className="koc-detail__summary">
         <h2>SHADOW 差异门槛（近 60 分钟）</h2>
-        <AsyncState isLoading={diffStatisticsQuery.isLoading} error={diffStatisticsQuery.error} isEmpty={!diffStatisticsQuery.isLoading && !diffStatisticsQuery.data}>
+        <AsyncState
+          isLoading={diffStatisticsQuery.isLoading}
+          error={diffStatisticsQuery.error}
+          isEmpty={!diffStatisticsQuery.isLoading && !diffStatisticsQuery.data}
+        >
           {diffStatisticsQuery.data ? (
             <dl className="koc-fields">
-              <div><dt>比对 / 不一致</dt><dd>{diffStatisticsQuery.data.comparisonCount} / {diffStatisticsQuery.data.mismatchCount}</dd></div>
-              <div><dt>不一致率 / 阈值</dt><dd>{diffStatisticsQuery.data.mismatchRatePercent.toFixed(3)}% / {diffStatisticsQuery.data.thresholdPercent.toFixed(3)}%</dd></div>
-              <div><dt>未处置差异</dt><dd>{diffStatisticsQuery.data.openDiffCount}</dd></div>
-              <div><dt>门槛</dt><dd><StatusBadge tone={diffStatisticsQuery.data.withinThreshold ? 'success' : 'danger'}>{diffStatisticsQuery.data.withinThreshold ? '通过' : '阻断'}</StatusBadge></dd></div>
+              <div>
+                <dt>比对 / 不一致</dt>
+                <dd>
+                  {diffStatisticsQuery.data.comparisonCount} /{' '}
+                  {diffStatisticsQuery.data.mismatchCount}
+                </dd>
+              </div>
+              <div>
+                <dt>不一致率 / 阈值</dt>
+                <dd>
+                  {diffStatisticsQuery.data.mismatchRatePercent.toFixed(3)}% /{' '}
+                  {diffStatisticsQuery.data.thresholdPercent.toFixed(3)}%
+                </dd>
+              </div>
+              <div>
+                <dt>未处置差异</dt>
+                <dd>{diffStatisticsQuery.data.openDiffCount}</dd>
+              </div>
+              <div>
+                <dt>门槛</dt>
+                <dd>
+                  <StatusBadge
+                    tone={diffStatisticsQuery.data.withinThreshold ? 'success' : 'danger'}
+                  >
+                    {diffStatisticsQuery.data.withinThreshold ? '通过' : '阻断'}
+                  </StatusBadge>
+                </dd>
+              </div>
             </dl>
           ) : null}
         </AsyncState>
@@ -231,7 +309,14 @@ export function MigrationPage() {
         >
           <table className="koc-table">
             <thead>
-              <tr><th>批次</th><th>域</th><th>模式</th><th>状态</th><th>扫描/迁移/跳过/失败</th><th>时间</th></tr>
+              <tr>
+                <th>批次</th>
+                <th>域</th>
+                <th>模式</th>
+                <th>状态</th>
+                <th>扫描/迁移/跳过/失败</th>
+                <th>时间</th>
+              </tr>
             </thead>
             <tbody>
               {(batchesQuery.data?.data ?? []).map((b) => (
@@ -239,8 +324,14 @@ export function MigrationPage() {
                   <td className="koc-mono">{b.batchId.slice(0, 16)}</td>
                   <td>{b.domain}</td>
                   <td>{b.mode}</td>
-                  <td><StatusBadge tone={b.status === 'COMPLETED' ? 'success' : 'warning'}>{b.status}</StatusBadge></td>
-                  <td>{b.scanned}/{b.migrated}/{b.skipped}/{b.failed}</td>
+                  <td>
+                    <StatusBadge tone={b.status === 'COMPLETED' ? 'success' : 'warning'}>
+                      {b.status}
+                    </StatusBadge>
+                  </td>
+                  <td>
+                    {b.scanned}/{b.migrated}/{b.skipped}/{b.failed}
+                  </td>
                   <td>{b.startedAt ?? '—'}</td>
                 </tr>
               ))}
@@ -251,15 +342,35 @@ export function MigrationPage() {
 
       <div className="koc-detail__summary">
         <h2>迁移 Item</h2>
-        <AsyncState isLoading={itemsQuery.isLoading} error={itemsQuery.error} isEmpty={!itemsQuery.isLoading && (itemsQuery.data?.data.length ?? 0) === 0} emptyMessage="暂无 item 记录">
+        <AsyncState
+          isLoading={itemsQuery.isLoading}
+          error={itemsQuery.error}
+          isEmpty={!itemsQuery.isLoading && (itemsQuery.data?.data.length ?? 0) === 0}
+          emptyMessage="暂无 item 记录"
+        >
           <table className="koc-table">
-            <thead><tr><th>域</th><th>结果</th><th>源 Key</th><th>目标</th><th>原因</th><th>时间</th></tr></thead>
-            <tbody>{(itemsQuery.data?.data ?? []).map((item) => (
-              <tr key={`${item.batchId}:${item.sourceKey}`}>
-                <td>{item.domain}</td><td>{item.result}</td><td className="koc-mono">{item.sourceKey}</td>
-                <td className="koc-mono">{item.targetPublicId ?? '—'}</td><td>{item.reason ?? '—'}</td><td>{item.occurredAt ?? '—'}</td>
+            <thead>
+              <tr>
+                <th>域</th>
+                <th>结果</th>
+                <th>源 Key</th>
+                <th>目标</th>
+                <th>原因</th>
+                <th>时间</th>
               </tr>
-            ))}</tbody>
+            </thead>
+            <tbody>
+              {(itemsQuery.data?.data ?? []).map((item) => (
+                <tr key={`${item.batchId}:${item.sourceKey}`}>
+                  <td>{item.domain}</td>
+                  <td>{item.result}</td>
+                  <td className="koc-mono">{item.sourceKey}</td>
+                  <td className="koc-mono">{item.targetPublicId ?? '—'}</td>
+                  <td>{item.reason ?? '—'}</td>
+                  <td>{item.occurredAt ?? '—'}</td>
+                </tr>
+              ))}
+            </tbody>
           </table>
         </AsyncState>
       </div>
@@ -274,25 +385,54 @@ export function MigrationPage() {
         >
           <table className="koc-table">
             <thead>
-              <tr><th>类型</th><th>域</th><th>资源</th><th>Redis</th><th>MySQL</th><th>处置</th><th>时间</th></tr>
+              <tr>
+                <th>类型</th>
+                <th>域</th>
+                <th>资源</th>
+                <th>Redis</th>
+                <th>MySQL</th>
+                <th>处置</th>
+                <th>时间</th>
+              </tr>
             </thead>
             <tbody>
               {(diffsQuery.data?.data ?? []).map((d) => (
                 <tr key={d.publicId}>
-                  <td><StatusBadge tone="danger">{d.diffType}</StatusBadge></td>
+                  <td>
+                    <StatusBadge tone="danger">{d.diffType}</StatusBadge>
+                  </td>
                   <td>{d.domain}</td>
                   <td className="koc-mono">{d.resourcePublicId ?? '—'}</td>
                   <td className="koc-mono">{d.redisSummary ?? '—'}</td>
                   <td className="koc-mono">{d.mysqlSummary ?? '—'}</td>
                   <td>
                     {d.resolutionStatus === 'OPEN' ? (
-                      <Button size="sm" disabled={resolveDiffMutation.isPending} onClick={() => {
-                        const status = window.prompt('处置状态：EXPLAINED、RESOLVED 或 ACCEPTED_RISK', 'RESOLVED')
-                        if (status !== 'EXPLAINED' && status !== 'RESOLVED' && status !== 'ACCEPTED_RISK') return
-                        const note = window.prompt('处置说明（可选）') ?? undefined
-                        resolveDiffMutation.mutate({ publicId: d.publicId, status, note })
-                      }}>处置</Button>
-                    ) : <span>{d.resolutionStatus}{d.resolvedBy ? ` · ${d.resolvedBy}` : ''}</span>}
+                      <Button
+                        size="sm"
+                        disabled={resolveDiffMutation.isPending}
+                        onClick={() => {
+                          const status = window.prompt(
+                            '处置状态：EXPLAINED、RESOLVED 或 ACCEPTED_RISK',
+                            'RESOLVED',
+                          )
+                          if (
+                            status !== 'EXPLAINED' &&
+                            status !== 'RESOLVED' &&
+                            status !== 'ACCEPTED_RISK'
+                          )
+                            return
+                          const note = window.prompt('处置说明（可选）') ?? undefined
+                          resolveDiffMutation.mutate({ publicId: d.publicId, status, note })
+                        }}
+                      >
+                        处置
+                      </Button>
+                    ) : (
+                      <span>
+                        {d.resolutionStatus}
+                        {d.resolvedBy ? ` · ${d.resolvedBy}` : ''}
+                      </span>
+                    )}
                   </td>
                   <td>{d.occurredAt ?? '—'}</td>
                 </tr>
@@ -347,7 +487,10 @@ function BackfillPanel({
   const currentTaskId = taskQuery.data?.id
   const currentTaskStatus = taskQuery.data?.status
   const currentTaskErrorSummary = taskQuery.data?.errorSummary
-  const dryRunSucceeded = dryRunTaskId !== null && taskQuery.data?.id === dryRunTaskId && taskQuery.data.status === 'SUCCEEDED'
+  const dryRunSucceeded =
+    dryRunTaskId !== null &&
+    taskQuery.data?.id === dryRunTaskId &&
+    taskQuery.data.status === 'SUCCEEDED'
   const mutation = useMutation({
     mutationFn: (dryRun: boolean) => onBackfill(dryRun),
     onSuccess: (result) => {
@@ -366,14 +509,17 @@ function BackfillPanel({
       void taskQuery.refetch()
       onInvalidate()
     },
-    onError: (err) => onDone(err instanceof Error ? `${title} 取消失败: ${err.message}` : `${title} 取消失败`),
+    onError: (err) =>
+      onDone(err instanceof Error ? `${title} 取消失败: ${err.message}` : `${title} 取消失败`),
   })
 
   useEffect(() => {
     if (!currentTaskId || !currentTaskStatus || !isTaskTerminal(currentTaskStatus)) return
     onInvalidateRef.current()
     if (currentTaskStatus !== 'SUCCEEDED') {
-      onDoneRef.current(`${title} 任务结束：${currentTaskStatus}${currentTaskErrorSummary ? ` — ${currentTaskErrorSummary}` : ''}`)
+      onDoneRef.current(
+        `${title} 任务结束：${currentTaskStatus}${currentTaskErrorSummary ? ` — ${currentTaskErrorSummary}` : ''}`,
+      )
     }
   }, [currentTaskErrorSummary, currentTaskId, currentTaskStatus, title])
 
@@ -394,7 +540,11 @@ function BackfillPanel({
           size="sm"
           disabled={mutation.isPending || !dryRunSucceeded}
           onClick={() => {
-            if (window.confirm(`确认对 ${title} 执行真实回填？此操作会写入 MySQL，且 dry-run 已成功完成。`)) {
+            if (
+              window.confirm(
+                `确认对 ${title} 执行真实回填？此操作会写入 MySQL，且 dry-run 已成功完成。`,
+              )
+            ) {
               mutation.mutate(false)
             }
           }}

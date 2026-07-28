@@ -124,7 +124,10 @@ function CreateTokenForm({ onCreated }: { onCreated: (token: CreatedToken) => vo
   const [error, setError] = useState<string | null>(null)
   const mutation = useMutation({
     mutationFn: () =>
-      createToken({ name, scopes: DEFAULT_SCOPES, expiresAt: new Date(expiresAt).toISOString() }, commandKey()),
+      createToken(
+        { name, scopes: DEFAULT_SCOPES, expiresAt: new Date(expiresAt).toISOString() },
+        commandKey(),
+      ),
     onSuccess: onCreated,
     onError: (err) => setError(err instanceof ApiError ? err.message : '创建失败'),
   })
@@ -176,7 +179,11 @@ function CreatedTokenBanner({ token, onDismiss }: { token: CreatedToken; onDismi
             请立即复制保存，<strong>关闭后将不再显示</strong>。
           </p>
           <p className="koc-mono koc-break">{token.token}</p>
-          <Button variant="ghost" size="sm" onClick={() => navigator.clipboard?.writeText(token.token)}>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => navigator.clipboard?.writeText(token.token)}
+          >
             复制
           </Button>
         </>

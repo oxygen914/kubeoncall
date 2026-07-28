@@ -1,11 +1,8 @@
 package com.kubeoncall.sandbox;
 
-import java.sql.ResultSet;
-import java.sql.SQLException;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -16,12 +13,10 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.dao.EmptyResultDataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.jdbc.core.RowMapper;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.kubeoncall.sandbox.domain.SandboxArtifactType;
 import com.kubeoncall.sandbox.domain.SandboxClassification;
@@ -47,20 +42,11 @@ import com.kubeoncall.sandbox.domain.SandboxStateMachine;
 @ConditionalOnProperty(prefix = "kubeoncall", name = "mysql-enabled", havingValue = "true")
 public class SandboxRunRepository {
 
-    private static final String RUN_COLUMNS = """
-            r.id, r.public_id, r.execution_public_id, r.alarm_public_id, r.mode, r.tool_id,
-            r.tool_version, r.runtime_image_digest, r.run_status, r.cleanup_status, r.stage,
-            r.progress, r.risk_level, r.requested_by, r.idempotency_key, r.request_json,
-            r.result_json, r.error_code, r.error_summary, r.controller_run_id, r.owner_token,
-            r.lease_until, r.fencing_token, r.attempt, r.max_attempts, r.expires_at, r.request_id,
-            r.trace_id, r.version, r.started_at, r.finished_at, r.created_at, r.updated_at
-            """;
-
-    private static final TypeReference<LinkedHashMap<String, Object>> MAP_TYPE = new TypeReference<>() {};
-
     private final JdbcTemplate jdbcTemplate;
     private final ObjectMapper objectMapper;
     private final SandboxStateMachine stateMachine;
+    private final SandboxArtifactMetadataStore artifactStore;
+    private final SandboxRunLeaseStore leaseStore;
     private final boolean mysqlEnabled;
 
     public SandboxRunRepository(
@@ -71,6 +57,8 @@ public class SandboxRunRepository {
         this.jdbcTemplate = jdbcTemplate;
         this.objectMapper = objectMapper;
         this.stateMachine = stateMachine;
+        this.artifactStore = new SandboxArtifactMetadataStore(jdbcTemplate);
+        this.leaseStore = new SandboxRunLeaseStore(jdbcTemplate);
         this.mysqlEnabled = mysqlEnabled;
     }
 
@@ -122,8 +110,8 @@ public class SandboxRunRepository {
     public Optional<SandboxRunRecord> findByPublicId(String publicId) {
         try {
             return Optional.ofNullable(jdbcTemplate.queryForObject(
-                    "SELECT " + RUN_COLUMNS + " FROM koc_sandbox_run r WHERE r.public_id = ?",
-                    new RunRowMapper(objectMapper),
+                    "SELECT " + SandboxRunRowMapper.COLUMNS + " FROM koc_sandbox_run r WHERE r.public_id = ?",
+                    new SandboxRunRowMapper(objectMapper),
                     publicId));
         } catch (EmptyResultDataAccessException ex) {
             return Optional.empty();
@@ -133,8 +121,10 @@ public class SandboxRunRepository {
     public Optional<SandboxRunRecord> findByModeAndIdempotencyKey(SandboxRunMode mode, String idempotencyKey) {
         try {
             return Optional.ofNullable(jdbcTemplate.queryForObject(
-                    "SELECT " + RUN_COLUMNS + " FROM koc_sandbox_run r WHERE r.mode = ? AND r.idempotency_key = ?",
-                    new RunRowMapper(objectMapper),
+                    "SELECT "
+                            + SandboxRunRowMapper.COLUMNS
+                            + " FROM koc_sandbox_run r WHERE r.mode = ? AND r.idempotency_key = ?",
+                    new SandboxRunRowMapper(objectMapper),
                     mode.name(),
                     idempotencyKey));
         } catch (EmptyResultDataAccessException ex) {
@@ -150,7 +140,8 @@ public class SandboxRunRepository {
         if (limit <= 0 || limit > 200) {
             throw new IllegalArgumentException("limit must be between 1 and 200");
         }
-        StringBuilder sql = new StringBuilder("SELECT " + RUN_COLUMNS + " FROM koc_sandbox_run r WHERE 1=1");
+        StringBuilder sql =
+                new StringBuilder("SELECT " + SandboxRunRowMapper.COLUMNS + " FROM koc_sandbox_run r WHERE 1=1");
         List<Object> args = new ArrayList<>();
         if (query.mode() != null) {
             sql.append(" AND r.mode = ?");
@@ -179,7 +170,7 @@ public class SandboxRunRepository {
         sql.append(" ORDER BY r.created_at ASC, r.id ASC LIMIT ? OFFSET ?");
         args.add(limit);
         args.add(offset);
-        return jdbcTemplate.query(sql.toString(), new RunRowMapper(objectMapper), args.toArray());
+        return jdbcTemplate.query(sql.toString(), new SandboxRunRowMapper(objectMapper), args.toArray());
     }
 
     /**
@@ -192,41 +183,7 @@ public class SandboxRunRepository {
      */
     @Transactional
     public Optional<SandboxRunRecord> claim(String ownerToken, Instant now, Duration leaseDuration) {
-        requireOwner(ownerToken);
-        Instant leaseUntil = requireLease(now, leaseDuration);
-        List<Long> candidates = jdbcTemplate.query("""
-                SELECT id FROM koc_sandbox_run
-                 WHERE run_status NOT IN ('SUCCEEDED', 'FAILED', 'TIMED_OUT', 'CANCELLED')
-                   AND attempt < max_attempts
-                   AND (
-                     (run_status = 'PENDING' AND owner_token IS NULL)
-                     OR (lease_until IS NOT NULL AND lease_until <= ?)
-                   )
-                 ORDER BY lease_until ASC, id ASC LIMIT 1 FOR UPDATE SKIP LOCKED
-                """, (rs, rowNum) -> rs.getLong("id"), now);
-        if (candidates.isEmpty()) {
-            return Optional.empty();
-        }
-        long runId = candidates.get(0);
-        int updated = jdbcTemplate.update("""
-                UPDATE koc_sandbox_run
-                   SET owner_token = ?,
-                       lease_until = ?,
-                       fencing_token = fencing_token + 1,
-                       attempt = attempt + 1,
-                       version = version + 1
-                 WHERE id = ?
-                   AND run_status NOT IN ('SUCCEEDED', 'FAILED', 'TIMED_OUT', 'CANCELLED')
-                   AND attempt < max_attempts
-                   AND (
-                     (run_status = 'PENDING' AND owner_token IS NULL)
-                     OR (lease_until IS NOT NULL AND lease_until <= ?)
-                   )
-                """, ownerToken, leaseUntil, runId, now);
-        if (updated != 1) {
-            return Optional.empty();
-        }
-        return findById(runId);
+        return leaseStore.claim(ownerToken, now, leaseDuration).flatMap(this::findById);
     }
 
     /**
@@ -238,27 +195,7 @@ public class SandboxRunRepository {
     @Transactional
     public Optional<SandboxRunRecord> claimByPublicId(
             String publicId, String ownerToken, Instant now, Duration leaseDuration) {
-        requireOwner(ownerToken);
-        if (publicId == null || publicId.isBlank()) {
-            throw new IllegalArgumentException("publicId is required");
-        }
-        Instant leaseUntil = requireLease(now, leaseDuration);
-        int updated = jdbcTemplate.update("""
-                UPDATE koc_sandbox_run
-                   SET owner_token = ?,
-                       lease_until = ?,
-                       fencing_token = fencing_token + 1,
-                       attempt = attempt + 1,
-                       version = version + 1
-                 WHERE public_id = ?
-                   AND run_status NOT IN ('SUCCEEDED', 'FAILED', 'TIMED_OUT', 'CANCELLED')
-                   AND attempt < max_attempts
-                   AND (
-                     (run_status = 'PENDING' AND owner_token IS NULL)
-                     OR (lease_until IS NOT NULL AND lease_until <= ?)
-                   )
-                """, ownerToken, leaseUntil, publicId, now);
-        if (updated != 1) {
+        if (!leaseStore.claimByPublicId(publicId, ownerToken, now, leaseDuration)) {
             return Optional.empty();
         }
         return findByPublicId(publicId);
@@ -271,95 +208,32 @@ public class SandboxRunRepository {
      */
     @Transactional
     public Optional<SandboxRunRecord> claimForReconciliation(String ownerToken, Instant now, Duration leaseDuration) {
-        requireOwner(ownerToken);
-        Instant leaseUntil = requireLease(now, leaseDuration);
-        List<Long> candidates = jdbcTemplate.query("""
-                SELECT id FROM koc_sandbox_run
-                 WHERE run_status NOT IN ('SUCCEEDED', 'FAILED', 'TIMED_OUT', 'CANCELLED')
-                   AND (owner_token IS NULL OR lease_until <= ?)
-                 ORDER BY updated_at ASC, id ASC LIMIT 1 FOR UPDATE SKIP LOCKED
-                """, (rs, rowNum) -> rs.getLong("id"), now);
-        if (candidates.isEmpty()) {
-            return Optional.empty();
-        }
-        long runId = candidates.get(0);
-        int updated = jdbcTemplate.update("""
-                UPDATE koc_sandbox_run
-                   SET owner_token = ?, lease_until = ?, fencing_token = fencing_token + 1, version = version + 1
-                 WHERE id = ?
-                   AND run_status NOT IN ('SUCCEEDED', 'FAILED', 'TIMED_OUT', 'CANCELLED')
-                   AND (owner_token IS NULL OR lease_until <= ?)
-                """, ownerToken, leaseUntil, runId, now);
-        return updated == 1 ? findById(runId) : Optional.empty();
+        return leaseStore.claimForReconciliation(ownerToken, now, leaseDuration).flatMap(this::findById);
     }
 
     /** Releases a non-terminal reconciliation claim so the next short poll can be claimed promptly. */
     public boolean releaseReconciliationClaim(String publicId, String ownerToken, long fencingToken) {
-        requireOwnership(ownerToken, fencingToken);
-        return jdbcTemplate.update("""
-                UPDATE koc_sandbox_run
-                   SET owner_token = NULL, lease_until = NULL, version = version + 1
-                 WHERE public_id = ?
-                   AND owner_token = ?
-                   AND fencing_token = ?
-                   AND run_status NOT IN ('SUCCEEDED', 'FAILED', 'TIMED_OUT', 'CANCELLED')
-                """, publicId, ownerToken, fencingToken) == 1;
+        return leaseStore.releaseReconciliationClaim(publicId, ownerToken, fencingToken);
     }
 
     /** Claims one terminal Run whose Kubernetes cleanup still needs convergence. */
     @Transactional
     public Optional<SandboxRunRecord> claimCleanupForReconciliation(
             String ownerToken, Instant now, Duration leaseDuration) {
-        requireOwner(ownerToken);
-        Instant leaseUntil = requireLease(now, leaseDuration);
-        List<Long> candidates = jdbcTemplate.query("""
-                SELECT id FROM koc_sandbox_run
-                 WHERE run_status IN ('SUCCEEDED', 'FAILED', 'TIMED_OUT', 'CANCELLED')
-                   AND cleanup_status IN ('PENDING', 'RUNNING')
-                   AND (owner_token IS NULL OR lease_until <= ?)
-                 ORDER BY updated_at ASC, id ASC LIMIT 1 FOR UPDATE SKIP LOCKED
-                """, (rs, rowNum) -> rs.getLong("id"), now);
-        if (candidates.isEmpty()) {
-            return Optional.empty();
-        }
-        long runId = candidates.get(0);
-        int updated = jdbcTemplate.update("""
-                UPDATE koc_sandbox_run
-                   SET owner_token = ?, lease_until = ?, fencing_token = fencing_token + 1, version = version + 1
-                 WHERE id = ?
-                   AND run_status IN ('SUCCEEDED', 'FAILED', 'TIMED_OUT', 'CANCELLED')
-                   AND cleanup_status IN ('PENDING', 'RUNNING')
-                   AND (owner_token IS NULL OR lease_until <= ?)
-                """, ownerToken, leaseUntil, runId, now);
-        return updated == 1 ? findById(runId) : Optional.empty();
+        return leaseStore
+                .claimCleanupForReconciliation(ownerToken, now, leaseDuration)
+                .flatMap(this::findById);
     }
 
     /** Releases a cleanup claim when the Controller is temporarily unavailable. */
     public boolean releaseCleanupClaim(String publicId, String ownerToken, long fencingToken) {
-        requireOwnership(ownerToken, fencingToken);
-        return jdbcTemplate.update("""
-                UPDATE koc_sandbox_run
-                   SET owner_token = NULL, lease_until = NULL, version = version + 1
-                 WHERE public_id = ?
-                   AND owner_token = ?
-                   AND fencing_token = ?
-                   AND cleanup_status IN ('PENDING', 'RUNNING')
-                """, publicId, ownerToken, fencingToken) == 1;
+        return leaseStore.releaseCleanupClaim(publicId, ownerToken, fencingToken);
     }
 
     /** Renews the lease of a run the caller still owns. */
     public boolean heartbeat(
             String publicId, String ownerToken, long fencingToken, Instant now, Duration leaseDuration) {
-        requireOwnership(ownerToken, fencingToken);
-        Instant leaseUntil = requireLease(now, leaseDuration);
-        return ownedUpdate("""
-                UPDATE koc_sandbox_run
-                   SET lease_until = ?, version = version + 1
-                 WHERE public_id = ?
-                   AND owner_token = ?
-                   AND fencing_token = ?
-                   AND lease_until > ?
-                """, leaseUntil, publicId, ownerToken, fencingToken, now);
+        return leaseStore.heartbeat(publicId, ownerToken, fencingToken, now, leaseDuration);
     }
 
     /**
@@ -554,73 +428,27 @@ public class SandboxRunRepository {
 
     /** Inserts an artifact reference; the object body must already be in MinIO. */
     public SandboxArtifactRecord createArtifact(CreateArtifact command) {
-        String publicId = publicId(command.publicId());
-        jdbcTemplate.update(
-                """
-                INSERT INTO koc_sandbox_artifact
-                  (public_id, sandbox_run_id, artifact_type, bucket, object_key, content_type,
-                   size_bytes, sha256, classification, retention_until)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                publicId,
-                command.sandboxRunId(),
-                command.artifactType().name(),
-                command.bucket(),
-                command.objectKey(),
-                command.contentType(),
-                command.sizeBytes(),
-                command.sha256(),
-                command.classification().name(),
-                command.retentionUntil());
-        return findArtifactByPublicId(publicId)
-                .orElseThrow(() -> new IllegalStateException("Created sandbox artifact is not readable: " + publicId));
+        return artifactStore.create(command);
     }
 
     public List<SandboxArtifactRecord> findArtifactsByRun(long sandboxRunId) {
-        return jdbcTemplate.query(
-                "SELECT "
-                        + ARTIFACT_COLUMNS
-                        + " FROM koc_sandbox_artifact a WHERE a.sandbox_run_id = ? ORDER BY a.id ASC",
-                new ArtifactRowMapper(),
-                sandboxRunId);
+        return artifactStore.findByRun(sandboxRunId);
     }
 
     public Optional<SandboxArtifactRecord> findArtifactByPublicId(String publicId) {
-        try {
-            return Optional.ofNullable(jdbcTemplate.queryForObject(
-                    "SELECT " + ARTIFACT_COLUMNS + " FROM koc_sandbox_artifact a WHERE a.public_id = ?",
-                    new ArtifactRowMapper(),
-                    publicId));
-        } catch (EmptyResultDataAccessException ex) {
-            return Optional.empty();
-        }
+        return artifactStore.findByPublicId(publicId);
     }
 
     /** Artifact references past their retention, for the TTL janitor. */
     public List<SandboxArtifactRecord> findExpiredArtifacts(Instant now, int limit) {
-        if (limit <= 0 || limit > 1000) {
-            throw new IllegalArgumentException("limit must be between 1 and 1000");
-        }
-        return jdbcTemplate.query(
-                "SELECT "
-                        + ARTIFACT_COLUMNS
-                        + " FROM koc_sandbox_artifact a WHERE a.retention_until IS NOT NULL AND a.retention_until <= ? "
-                        + "ORDER BY a.retention_until ASC LIMIT ?",
-                new ArtifactRowMapper(),
-                now,
-                limit);
+        return artifactStore.findExpired(now, limit);
     }
-
-    private static final String ARTIFACT_COLUMNS = """
-            a.id, a.public_id, a.sandbox_run_id, a.artifact_type, a.bucket, a.object_key,
-            a.content_type, a.size_bytes, a.sha256, a.classification, a.retention_until, a.created_at
-            """;
 
     private Optional<SandboxRunRecord> findById(long id) {
         try {
             return Optional.ofNullable(jdbcTemplate.queryForObject(
-                    "SELECT " + RUN_COLUMNS + " FROM koc_sandbox_run r WHERE r.id = ?",
-                    new RunRowMapper(objectMapper),
+                    "SELECT " + SandboxRunRowMapper.COLUMNS + " FROM koc_sandbox_run r WHERE r.id = ?",
+                    new SandboxRunRowMapper(objectMapper),
                     id));
         } catch (EmptyResultDataAccessException ex) {
             return Optional.empty();
@@ -652,100 +480,10 @@ public class SandboxRunRepository {
         }
     }
 
-    private static Instant requireLease(Instant now, Duration leaseDuration) {
-        if (now == null) {
-            throw new IllegalArgumentException("now is required");
-        }
-        if (leaseDuration == null || leaseDuration.isZero() || leaseDuration.isNegative()) {
-            throw new IllegalArgumentException("leaseDuration must be positive");
-        }
-        return now.plus(leaseDuration);
-    }
-
     private static String publicId(String requested) {
         return requested == null || requested.isBlank()
                 ? "sbx_" + UUID.randomUUID().toString().replace("-", "")
                 : requested;
-    }
-
-    private static Instant instant(ResultSet rs, String column) throws SQLException {
-        return rs.getTimestamp(column) == null ? null : rs.getTimestamp(column).toInstant();
-    }
-
-    private static final class RunRowMapper implements RowMapper<SandboxRunRecord> {
-        private final ObjectMapper objectMapper;
-
-        private RunRowMapper(ObjectMapper objectMapper) {
-            this.objectMapper = objectMapper;
-        }
-
-        @Override
-        public SandboxRunRecord mapRow(ResultSet rs, int rowNum) throws SQLException {
-            return new SandboxRunRecord(
-                    rs.getLong("id"),
-                    rs.getString("public_id"),
-                    rs.getString("execution_public_id"),
-                    rs.getString("alarm_public_id"),
-                    SandboxRunMode.valueOf(rs.getString("mode")),
-                    rs.getString("tool_id"),
-                    rs.getString("tool_version"),
-                    rs.getString("runtime_image_digest"),
-                    SandboxRunStatus.valueOf(rs.getString("run_status")),
-                    SandboxCleanupStatus.valueOf(rs.getString("cleanup_status")),
-                    rs.getString("stage"),
-                    rs.getInt("progress"),
-                    SandboxRiskLevel.valueOf(rs.getString("risk_level")),
-                    rs.getString("requested_by"),
-                    rs.getString("idempotency_key"),
-                    parseMap(objectMapper, rs.getString("request_json")),
-                    parseMap(objectMapper, rs.getString("result_json")),
-                    rs.getString("error_code"),
-                    rs.getString("error_summary"),
-                    rs.getString("controller_run_id"),
-                    rs.getString("owner_token"),
-                    instant(rs, "lease_until"),
-                    rs.getLong("fencing_token"),
-                    rs.getInt("attempt"),
-                    rs.getInt("max_attempts"),
-                    instant(rs, "expires_at"),
-                    rs.getString("request_id"),
-                    rs.getString("trace_id"),
-                    rs.getLong("version"),
-                    instant(rs, "started_at"),
-                    instant(rs, "finished_at"),
-                    instant(rs, "created_at"),
-                    instant(rs, "updated_at"));
-        }
-
-        private static Map<String, Object> parseMap(ObjectMapper objectMapper, String json) throws SQLException {
-            if (json == null || json.isBlank()) {
-                return Map.of();
-            }
-            try {
-                return objectMapper.readValue(json, MAP_TYPE);
-            } catch (JsonProcessingException ex) {
-                throw new SQLException("Invalid sandbox run JSON", ex);
-            }
-        }
-    }
-
-    private static final class ArtifactRowMapper implements RowMapper<SandboxArtifactRecord> {
-        @Override
-        public SandboxArtifactRecord mapRow(ResultSet rs, int rowNum) throws SQLException {
-            return new SandboxArtifactRecord(
-                    rs.getLong("id"),
-                    rs.getString("public_id"),
-                    rs.getLong("sandbox_run_id"),
-                    SandboxArtifactType.valueOf(rs.getString("artifact_type")),
-                    rs.getString("bucket"),
-                    rs.getString("object_key"),
-                    rs.getString("content_type"),
-                    rs.getLong("size_bytes"),
-                    rs.getString("sha256"),
-                    SandboxClassification.valueOf(rs.getString("classification")),
-                    instant(rs, "retention_until"),
-                    instant(rs, "created_at"));
-        }
     }
 
     /** Command to create a sandbox run. {@code idempotencyKey} deduplicates within {@code mode}. */

@@ -79,11 +79,19 @@ export function ChangeEventsPage() {
         >
           <label className="koc-filter">
             <span>开始</span>
-            <input type="datetime-local" value={from} onChange={(event) => setFrom(event.target.value)} />
+            <input
+              type="datetime-local"
+              value={from}
+              onChange={(event) => setFrom(event.target.value)}
+            />
           </label>
           <label className="koc-filter">
             <span>结束</span>
-            <input type="datetime-local" value={to} onChange={(event) => setTo(event.target.value)} />
+            <input
+              type="datetime-local"
+              value={to}
+              onChange={(event) => setTo(event.target.value)}
+            />
           </label>
           <label className="koc-filter">
             <span>集群</span>
@@ -136,7 +144,9 @@ export function ChangeEventsPage() {
                   <td>
                     <details>
                       <summary>查看</summary>
-                      <pre className="koc-mono koc-break">{JSON.stringify(change.diff, null, 2)}</pre>
+                      <pre className="koc-mono koc-break">
+                        {JSON.stringify(change.diff, null, 2)}
+                      </pre>
                     </details>
                   </td>
                 </tr>
@@ -157,16 +167,10 @@ export function ChangeEventsPage() {
             onChange={(event) => setAlarmJson(event.target.value)}
           />
         </label>
-        <Button
-          size="sm"
-          onClick={() => correlations.mutate()}
-          disabled={correlations.isPending}
-        >
+        <Button size="sm" onClick={() => correlations.mutate()} disabled={correlations.isPending}>
           分析关联变更
         </Button>
-        {correlationError ? (
-          <p className="koc-alert koc-alert--error">{correlationError}</p>
-        ) : null}
+        {correlationError ? <p className="koc-alert koc-alert--error">{correlationError}</p> : null}
         {correlations.data ? (
           correlations.data.length > 0 ? (
             <table className="koc-table">
@@ -191,9 +195,7 @@ export function ChangeEventsPage() {
                     <td>
                       {correlation.changeEvent.changeType}
                       <br />
-                      <span className="koc-mono">
-                        {correlation.changeEvent.resourceName}
-                      </span>
+                      <span className="koc-mono">{correlation.changeEvent.resourceName}</span>
                     </td>
                     <td>{correlation.correlationReason}</td>
                     <td>{correlation.suggestions.join('；') || '复核当前状态'}</td>

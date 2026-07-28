@@ -670,10 +670,18 @@ code {
   font-size: var(--koc-font-2xl);
   font-weight: 700;
 }
-.koc-overview__value[data-tone="danger"] { color: var(--koc-danger); }
-.koc-overview__value[data-tone="warning"] { color: var(--koc-warning); }
-.koc-overview__value[data-tone="info"] { color: var(--koc-primary-600); }
-.koc-overview__value[data-tone="success"] { color: var(--koc-success); }
+.koc-overview__value[data-tone='danger'] {
+  color: var(--koc-danger);
+}
+.koc-overview__value[data-tone='warning'] {
+  color: var(--koc-warning);
+}
+.koc-overview__value[data-tone='info'] {
+  color: var(--koc-primary-600);
+}
+.koc-overview__value[data-tone='success'] {
+  color: var(--koc-success);
+}
 .koc-overview__label {
   color: var(--koc-text-muted);
   font-size: var(--koc-font-sm);

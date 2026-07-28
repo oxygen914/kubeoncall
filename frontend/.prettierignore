@@ -2,6 +2,7 @@
 src/app.js
 src/index.html
 src/styles.css
+src/api/generated
 scripts/build.mjs
 test/console-contract.test.mjs
 

@@ -7,7 +7,10 @@ function jsonResponse(data: unknown): Response {
     status: 200,
     statusText: 'OK',
     headers: { get: () => 'application/json' },
-    json: async () => ({ data, meta: { requestId: 'req_migration', timestamp: '2026-07-22T00:00:00Z' } }),
+    json: async () => ({
+      data,
+      meta: { requestId: 'req_migration', timestamp: '2026-07-22T00:00:00Z' },
+    }),
   } as unknown as Response
 }
 
@@ -17,7 +20,14 @@ describe('migration backfill API', () => {
   beforeEach(() => {
     fetchMock.mockReset()
     vi.stubGlobal('fetch', fetchMock)
-    fetchMock.mockResolvedValue(jsonResponse({ taskId: 'tsk_migration', status: 'PENDING', domain: 'ACTIVE_ALARM', dryRun: false }))
+    fetchMock.mockResolvedValue(
+      jsonResponse({
+        taskId: 'tsk_migration',
+        status: 'PENDING',
+        domain: 'ACTIVE_ALARM',
+        dryRun: false,
+      }),
+    )
   })
 
   afterEach(() => vi.unstubAllGlobals())

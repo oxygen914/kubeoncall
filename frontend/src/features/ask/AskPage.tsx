@@ -19,8 +19,7 @@ export function AskPage() {
   const [result, setResult] = useState<AskResult | null>(null)
 
   const mutation = useMutation({
-    mutationFn: (q: string) =>
-      api.post<AskResult>('/api/v1/ask', { question: q }),
+    mutationFn: (q: string) => api.post<AskResult>('/api/v1/ask', { question: q }),
     onSuccess: setResult,
   })
 
@@ -51,21 +50,39 @@ export function AskPage() {
             placeholder="例如：worker-01 的 CPU 为什么高？"
           />
         </label>
-        <Button type="submit" variant="primary" size="sm" disabled={mutation.isPending || !question.trim()}>
+        <Button
+          type="submit"
+          variant="primary"
+          size="sm"
+          disabled={mutation.isPending || !question.trim()}
+        >
           {mutation.isPending ? '执行中…' : '提交'}
         </Button>
       </form>
 
-      {errorMessage ? <p className="koc-alert koc-alert--error" role="alert">{errorMessage}</p> : null}
+      {errorMessage ? (
+        <p className="koc-alert koc-alert--error" role="alert">
+          {errorMessage}
+        </p>
+      ) : null}
 
       <AsyncState isLoading={mutation.isPending} error={null}>
         {result ? (
           <div className="koc-detail">
             <div className="koc-detail__summary">
               <dl className="koc-fields">
-                <div><dt>执行 ID</dt><dd className="koc-mono">{result.executionId}</dd></div>
-                <div><dt>状态</dt><dd>{result.status}</dd></div>
-                <div><dt>会话</dt><dd className="koc-mono">{result.sessionId ?? '—'}</dd></div>
+                <div>
+                  <dt>执行 ID</dt>
+                  <dd className="koc-mono">{result.executionId}</dd>
+                </div>
+                <div>
+                  <dt>状态</dt>
+                  <dd>{result.status}</dd>
+                </div>
+                <div>
+                  <dt>会话</dt>
+                  <dd className="koc-mono">{result.sessionId ?? '—'}</dd>
+                </div>
               </dl>
             </div>
             <div className="koc-detail__summary">

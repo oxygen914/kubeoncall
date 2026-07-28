@@ -105,5 +105,4 @@ export const revokeMaintenanceWindow = (id: string) =>
 
 export const getSuppressionRules = () =>
   api.get<SuppressionCatalog>('/api/v1/operations/suppression-rules')
-export const reloadSuppressionRules = () =>
-  api.post('/api/v1/operations/suppression-rules/reload')
+export const reloadSuppressionRules = () => api.post('/api/v1/operations/suppression-rules/reload')

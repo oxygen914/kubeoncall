@@ -51,12 +51,8 @@ export function revokeToken(
   version: number,
   idempotencyKey: string,
 ): Promise<{ id: string; revokedAt: string; version: number }> {
-  return api.delete(
-    `/api/v1/api-tokens/${encodeURIComponent(tokenId)}`,
-    undefined,
-    {
-      headers: { 'If-Match': `"${version}"` },
-      idempotencyKey,
-    },
-  )
+  return api.delete(`/api/v1/api-tokens/${encodeURIComponent(tokenId)}`, undefined, {
+    headers: { 'If-Match': `"${version}"` },
+    idempotencyKey,
+  })
 }

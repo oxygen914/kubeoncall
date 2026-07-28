@@ -35,8 +35,7 @@ export interface NotificationDelivery {
   attempt: number
 }
 
-export const getIntegrations = () =>
-  api.get<IntegrationCatalog>('/api/v1/integrations')
+export const getIntegrations = () => api.get<IntegrationCatalog>('/api/v1/integrations')
 
 export const getNotificationDeliveries = (
   page = 1,

@@ -1,6 +1,12 @@
-.PHONY: test backend-test frontend-test backend-format compose-config up down
+.PHONY: test format-check backend-test frontend-test backend-format compose-config up down
 
 test: backend-test frontend-test
+
+format-check:
+	cd backend && ./mvnw spotless:check checkstyle:check -DskipTests
+	cd frontend && npm run format:check && npm run lint
+	test -z "$$(gofmt -l sandbox-controller)"
+	bash scripts/verify-source-size.sh
 
 backend-test:
 	cd backend && ./mvnw --batch-mode --no-transfer-progress verify

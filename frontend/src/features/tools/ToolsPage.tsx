@@ -5,7 +5,11 @@ import { getToolCatalog, type ToolView, type VerifierCapability } from './api'
 
 /** Tool catalog page: lists planner, executor and verifier tools the agent runtime can invoke. */
 export function ToolsPage() {
-  const query = useQuery({ queryKey: ['tools', 'catalog'], queryFn: getToolCatalog, staleTime: 60_000 })
+  const query = useQuery({
+    queryKey: ['tools', 'catalog'],
+    queryFn: getToolCatalog,
+    staleTime: 60_000,
+  })
 
   return (
     <section className="koc-page">

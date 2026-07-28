@@ -54,7 +54,10 @@ test('operator creates a token, sees the plaintext once, then revokes it', async
 
   await page.route('**/api/v1/api-tokens', async (route) => {
     if (route.request().method() === 'GET') {
-      await route.fulfill({ contentType: 'application/json', body: JSON.stringify(envelope(tokens)) })
+      await route.fulfill({
+        contentType: 'application/json',
+        body: JSON.stringify(envelope(tokens)),
+      })
     } else {
       // POST create — returns the plaintext exactly once.
       const created = {
@@ -67,8 +70,18 @@ test('operator creates a token, sees the plaintext once, then revokes it', async
         version: 1,
         token: 'koc_newabcd_secret_plaintext_value',
       }
-      tokens.push({ ...created, token: undefined, lastUsedAt: null, revokedAt: null, ownerUsername: 'operator', createdAt: '2026-07-23T00:00:00Z' })
-      await route.fulfill({ contentType: 'application/json', body: JSON.stringify(envelope(created)) })
+      tokens.push({
+        ...created,
+        token: undefined,
+        lastUsedAt: null,
+        revokedAt: null,
+        ownerUsername: 'operator',
+        createdAt: '2026-07-23T00:00:00Z',
+      })
+      await route.fulfill({
+        contentType: 'application/json',
+        body: JSON.stringify(envelope(created)),
+      })
     }
   })
 
@@ -76,7 +89,9 @@ test('operator creates a token, sees the plaintext once, then revokes it', async
     // DELETE revoke.
     await route.fulfill({
       contentType: 'application/json',
-      body: JSON.stringify(envelope({ id: 'tok_new', revokedAt: '2026-07-23T00:00:00Z', version: 2 })),
+      body: JSON.stringify(
+        envelope({ id: 'tok_new', revokedAt: '2026-07-23T00:00:00Z', version: 2 }),
+      ),
     })
   })
 
@@ -100,5 +115,8 @@ test('operator creates a token, sees the plaintext once, then revokes it', async
 
   // The new token now appears in the list and can be revoked.
   await expect(page.getByText('CI Token')).toBeVisible()
-  await page.getByRole('row', { name: /CI Token/ }).getByRole('button', { name: '撤销' }).click()
+  await page
+    .getByRole('row', { name: /CI Token/ })
+    .getByRole('button', { name: '撤销' })
+    .click()
 })

@@ -83,6 +83,11 @@ jobs:
       - name: Frontend lint
         run: npm run lint
         working-directory: frontend
+      - name: Frontend formatting
+        run: npm run format:check
+        working-directory: frontend
+      - name: Cross-language source responsibility budgets
+        run: bash scripts/verify-source-size.sh
       - name: Frontend unit tests
         run: npm run test
         working-directory: frontend
@@ -105,6 +110,14 @@ jobs:
         with:
           go-version-file: sandbox-controller/go.mod
           cache-dependency-path: sandbox-controller/go.sum
+      - name: Controller formatting
+        shell: bash
+        run: |
+          unformatted="$(gofmt -l .)"
+          if [[ -n "${unformatted}" ]]; then
+            printf 'Go files must be formatted with gofmt:\n%s\n' "${unformatted}" >&2
+            exit 1
+          fi
       - name: Controller test and vet
         run: |
           go test ./...

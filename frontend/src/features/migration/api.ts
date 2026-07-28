@@ -87,7 +87,13 @@ export interface MigrationDiffStatistics {
 
 export interface ListPage<T> {
   data: T[]
-  page: { number: number; size: number; totalElements: number; totalPages: number; hasNext: boolean }
+  page: {
+    number: number
+    size: number
+    totalElements: number
+    totalPages: number
+    hasNext: boolean
+  }
 }
 
 export function getRedisInventory(): Promise<RedisInventoryReport> {
@@ -98,23 +104,37 @@ export function getMigrationStatus(): Promise<MigrationStatus> {
   return api.get<MigrationStatus>('/api/v1/migration/status')
 }
 
-export function getMigrationBatches(params: { page?: number; size?: number; domain?: string } = {}): Promise<ListPage<MigrationBatch>> {
+export function getMigrationBatches(
+  params: { page?: number; size?: number; domain?: string } = {},
+): Promise<ListPage<MigrationBatch>> {
   return api.list<MigrationBatch>('/api/v1/migration/batches', { query: filterUndefined(params) })
 }
 
-export function getMigrationDiffs(params: { page?: number; size?: number; domain?: string; resolutionStatus?: string } = {}): Promise<ListPage<MigrationDiff>> {
+export function getMigrationDiffs(
+  params: { page?: number; size?: number; domain?: string; resolutionStatus?: string } = {},
+): Promise<ListPage<MigrationDiff>> {
   return api.list<MigrationDiff>('/api/v1/migration/diffs', { query: filterUndefined(params) })
 }
 
-export function getMigrationItems(params: { page?: number; size?: number; domain?: string; result?: string; batchId?: string } = {}): Promise<ListPage<MigrationItem>> {
+export function getMigrationItems(
+  params: { page?: number; size?: number; domain?: string; result?: string; batchId?: string } = {},
+): Promise<ListPage<MigrationItem>> {
   return api.list<MigrationItem>('/api/v1/migration/items', { query: filterUndefined(params) })
 }
 
-export function getMigrationDiffStatistics(params: { domain?: string; windowMinutes?: number } = {}): Promise<MigrationDiffStatistics> {
-  return api.get<MigrationDiffStatistics>('/api/v1/migration/diff-statistics', { query: filterUndefined(params) })
+export function getMigrationDiffStatistics(
+  params: { domain?: string; windowMinutes?: number } = {},
+): Promise<MigrationDiffStatistics> {
+  return api.get<MigrationDiffStatistics>('/api/v1/migration/diff-statistics', {
+    query: filterUndefined(params),
+  })
 }
 
-export function resolveMigrationDiff(publicId: string, status: Exclude<MigrationDiff['resolutionStatus'], 'OPEN'>, note?: string): Promise<{ publicId: string; resolutionStatus: string }> {
+export function resolveMigrationDiff(
+  publicId: string,
+  status: Exclude<MigrationDiff['resolutionStatus'], 'OPEN'>,
+  note?: string,
+): Promise<{ publicId: string; resolutionStatus: string }> {
   return api.post(`/api/v1/migration/diffs/${encodeURIComponent(publicId)}/resolution`, undefined, {
     query: filterUndefined({ status, note }),
   })
@@ -155,15 +175,18 @@ export function backfillExecutionAudit(dryRun = true): Promise<MigrationTaskAcce
   return backfill('EXECUTION_AUDIT', dryRun)
 }
 
-function backfill(domain: MigrationBackfillDomain, dryRun: boolean): Promise<MigrationTaskAccepted> {
+function backfill(
+  domain: MigrationBackfillDomain,
+  dryRun: boolean,
+): Promise<MigrationTaskAccepted> {
   return api.post<MigrationTaskAccepted>('/api/v1/migration/backfill/tasks', undefined, {
-    query: dryRun
-      ? { domain, 'dry-run': 1 }
-      : { domain, 'dry-run': 0, 'confirm-apply': 1 },
+    query: dryRun ? { domain, 'dry-run': 1 } : { domain, 'dry-run': 0, 'confirm-apply': 1 },
   })
 }
 
-function filterUndefined(params: Record<string, string | number | undefined | null>): Record<string, string | number> {
+function filterUndefined(
+  params: Record<string, string | number | undefined | null>,
+): Record<string, string | number> {
   const result: Record<string, string | number> = {}
   for (const [key, value] of Object.entries(params)) {
     if (value === undefined || value === null || value === '') continue
