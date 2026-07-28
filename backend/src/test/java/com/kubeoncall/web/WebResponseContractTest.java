@@ -31,15 +31,15 @@ class WebResponseContractTest {
         SkillRegistry registry = mock(SkillRegistry.class);
         when(registry.index())
                 .thenReturn(List.of(new SkillIndexEntry(
-                        "payment-oom-triage",
-                        "Payment OOM triage",
-                        "Investigate payment OOM events",
+                        "pod-oom-triage",
+                        "Pod OOMKilled triage",
+                        "Investigate Pod OOM events",
                         List.of("OOMKilled"),
-                        List.of("payment"),
-                        "MEDIUM",
+                        List.of(),
+                        "LOW",
                         "v1",
                         "BUILTIN",
-                        "classpath:skills/payment-oom-triage/SKILL.md",
+                        "classpath:skills/pod-oom-triage/SKILL.md",
                         true)));
         when(registry.loadErrors()).thenReturn(List.of());
 
@@ -75,8 +75,8 @@ class WebResponseContractTest {
 
         mockMvc.perform(get("/api/skills"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.skills[0].id").value("payment-oom-triage"))
-                .andExpect(jsonPath("$.skills[0].maxRisk").value("MEDIUM"))
+                .andExpect(jsonPath("$.skills[0].id").value("pod-oom-triage"))
+                .andExpect(jsonPath("$.skills[0].maxRisk").value("LOW"))
                 .andExpect(jsonPath("$.skills[0].enabled").value(true))
                 .andExpect(jsonPath("$.loadErrors").isArray());
     }

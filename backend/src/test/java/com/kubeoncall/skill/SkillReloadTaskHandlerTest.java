@@ -49,6 +49,11 @@ class SkillReloadTaskHandlerTest {
                 skill.description(),
                 skill.triggers(),
                 skill.services(),
+                skill.resourceTypes(),
+                skill.alertNames(),
+                skill.metricNames(),
+                skill.runbookIds(),
+                skill.categories(),
                 List.of("QUERY_METRICS"),
                 skill.tags(),
                 "HIGH",
@@ -83,6 +88,10 @@ class SkillReloadTaskHandlerTest {
                 .containsEntry("name", "Diagnose node")
                 .containsEntry("source", "PROJECT")
                 .containsEntry("applicableTasks", List.of("QUERY_METRICS"))
+                .containsEntry("alertNames", List.of("NodeCPUHigh"))
+                .containsEntry("metricNames", List.of("node.cpu.usage_percent"))
+                .containsEntry("runbookIds", List.of("runbook-host-cpu-high"))
+                .containsEntry("categories", List.of("node-monitoring"))
                 .containsEntry("tags", List.of("kubernetes", "node"))
                 .containsEntry("maxRisk", "HIGH")
                 .containsEntry("custom", "value");
@@ -121,6 +130,10 @@ class SkillReloadTaskHandlerTest {
                 List.of("node alert"),
                 List.of("kubernetes"),
                 List.of("node"),
+                List.of("NodeCPUHigh"),
+                List.of("node.cpu.usage_percent"),
+                List.of("runbook-host-cpu-high"),
+                List.of("node-monitoring"),
                 List.of(TaskType.QUERY_METRICS),
                 List.of("kubernetes", "node"),
                 RiskLevel.HIGH,

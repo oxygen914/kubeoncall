@@ -205,6 +205,12 @@ public class AlarmWorkflowAuditRecorder {
             putIfPresent(metadata, "policyMatched", evaluation.matched());
             putIfPresent(metadata, "severity", evaluation.finalSeverity());
             putIfPresent(metadata, "workflowTemplate", evaluation.workflowTemplate());
+            putIfPresent(
+                    metadata,
+                    "policyCategory",
+                    evaluation.matchedPolicy() == null
+                            ? null
+                            : evaluation.matchedPolicy().category());
             putIfPresent(metadata, "policyReason", evaluation.reason());
             putIfPresent(metadata, "policyRagFilters", evaluation.ragFilters());
         }
@@ -243,6 +249,10 @@ public class AlarmWorkflowAuditRecorder {
             putIfPresent(metadata, "alertMemoryConsumed", context.getAttribute("alertMemoryConsumed"));
             putIfPresent(metadata, "alertMemoryConsumedIds", context.getAttribute("alertMemoryConsumedIds"));
             putIfPresent(metadata, "repeatIncident", context.getAttribute("repeatIncident"));
+            putIfPresent(metadata, "activatedSkillIds", context.getAttribute("activatedSkillIds"));
+            putIfPresent(metadata, "activatedSkillMatchSources", context.getAttribute("activatedSkillMatchSources"));
+            putIfPresent(metadata, "activatedSkillMaxRisk", context.getAttribute("activatedSkillMaxRisk"));
+            putIfPresent(metadata, "activatedSkillToolWhitelist", context.getAttribute("activatedSkillToolWhitelist"));
             putIfPresent(metadata, "silenceApproved", context.getAttribute("silenceApproved"));
             putIfPresent(metadata, "silenceApprovedBy", context.getAttribute("silenceApprovedBy"));
             putIfPresent(metadata, "silenceApprovalReason", context.getAttribute("silenceApprovalReason"));

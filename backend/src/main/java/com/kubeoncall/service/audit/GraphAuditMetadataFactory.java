@@ -22,6 +22,7 @@ public class GraphAuditMetadataFactory {
         putIfPresent(metadata, "verifierRiskReasons", context.get("verifierRiskReasons"));
         putIfPresent(metadata, "verifierTool", context.get("verifierTool"));
         putIfPresent(metadata, "activatedSkillIds", context.get("activatedSkillIds"));
+        putIfPresent(metadata, "activatedSkillMatchSources", context.get("activatedSkillMatchSources"));
         putIfPresent(metadata, "activatedSkillMaxRisk", context.get("activatedSkillMaxRisk"));
         putIfPresent(metadata, "activatedSkillToolWhitelist", context.get("activatedSkillToolWhitelist"));
         putIfPresent(metadata, "skillToolWhitelistViolation", context.get("skillToolWhitelistViolation"));

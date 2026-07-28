@@ -238,7 +238,7 @@ class ApprovalAndSkillBackfillRunnerTest {
         StringRedisTemplate redis = mock(StringRedisTemplate.class);
         stubLease(redis);
         SkillStateStore store = mock(SkillStateStore.class);
-        when(store.disabledIds()).thenReturn(Set.of("payment-oom-triage", "disk-capacity-triage"));
+        when(store.disabledIds()).thenReturn(Set.of("pod-oom-triage", "disk-capacity-triage"));
         AtomicBoolean upserted = new AtomicBoolean(false);
         SkillStateRepository repository = mock(SkillStateRepository.class);
         when(repository.isAvailable()).thenReturn(true);

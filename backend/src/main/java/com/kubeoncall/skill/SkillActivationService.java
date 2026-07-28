@@ -1,5 +1,6 @@
 package com.kubeoncall.skill;
 
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -41,32 +42,40 @@ public class SkillActivationService {
 
     public SkillActivation activate(String request, Map<String, Object> context, List<String> requestedSkillIds) {
         if (!properties.getSkill().isEnabled()) {
-            recordActivation(false, 0);
+            recordActivation(false, 0, SkillMatcher.MatchSource.NONE, false);
             return SkillActivation.empty();
         }
-        Map<String, Skill> selected = new LinkedHashMap<>();
-        matcher.match(request, context, registry.all()).forEach(skill -> selected.put(skill.id(), skill));
+        SkillMatcher.MatchResult matchResult = matcher.matchResult(request, context, registry.all());
+        Map<String, SkillMatcher.SkillMatch> selected = new LinkedHashMap<>();
+        matchResult.matches().forEach(match -> selected.put(match.skill().id(), match));
         if (requestedSkillIds != null) {
             requestedSkillIds.stream()
                     .filter(id -> id != null && !id.isBlank())
                     .map(registry::findById)
                     .flatMap(java.util.Optional::stream)
-                    .filter(skill -> matcher.canActivateRequested(request, context, skill))
-                    .forEach(skill -> selected.putIfAbsent(skill.id(), skill));
+                    .map(skill -> matcher.requestedMatch(request, context, skill))
+                    .flatMap(java.util.Optional::stream)
+                    .forEach(match -> selected.putIfAbsent(match.skill().id(), match));
         }
-        List<Skill> matched = selected.values().stream()
+        List<SkillMatcher.SkillMatch> selectedMatches = selected.values().stream()
                 .limit(Math.max(1, properties.getSkill().getMaxActiveSkills()))
                 .toList();
+        List<Skill> matched =
+                selectedMatches.stream().map(SkillMatcher.SkillMatch::skill).toList();
         if (matched.isEmpty()) {
-            recordActivation(false, 0);
+            recordActivation(false, 0, SkillMatcher.MatchSource.NONE, matchResult.candidateConflict());
             return SkillActivation.empty();
         }
         List<Map<String, Object>> summaries =
-                matched.stream().map(Skill::summary).toList();
+                selectedMatches.stream().map(this::summary).toList();
         List<String> ids = matched.stream().map(Skill::id).toList();
         List<String> whitelist = combinedWhitelist(matched);
         RiskLevel maxRisk = mostRestrictiveRisk(matched);
-        recordActivation(true, matched.size());
+        recordActivation(
+                true,
+                matched.size(),
+                selectedMatches.get(0).source(),
+                matchResult.candidateConflict() || selectedMatches.size() > 1);
         return new SkillActivation(
                 matched, summaries, ids, whitelist, maxRisk, buildPrompt(matched, whitelist, maxRisk));
     }
@@ -119,7 +128,19 @@ public class SkillActivationService {
                 + "\nAllowed tools: " + skill.toolWhitelist() + "\n" + skill.body();
     }
 
-    private void recordActivation(boolean active, long count) {
-        metricsService.recordSkillActivation(active, count);
+    private Map<String, Object> summary(SkillMatcher.SkillMatch match) {
+        Map<String, Object> summary = new LinkedHashMap<>(match.skill().summary());
+        summary.put("matchSource", match.source().name());
+        summary.put("matchScore", match.score());
+        return Collections.unmodifiableMap(summary);
+    }
+
+    private void recordActivation(
+            boolean active, long count, SkillMatcher.MatchSource matchSource, boolean candidateConflict) {
+        metricsService.recordSkillActivation(
+                active,
+                count,
+                matchSource == null ? SkillMatcher.MatchSource.NONE.name() : matchSource.name(),
+                candidateConflict);
     }
 }

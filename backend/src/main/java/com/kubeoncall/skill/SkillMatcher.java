@@ -4,6 +4,7 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
 
 import org.springframework.stereotype.Component;
 
@@ -21,77 +22,129 @@ public class SkillMatcher {
     }
 
     public List<Skill> match(String request, Map<String, Object> context, List<Skill> skills) {
-        String haystack = haystack(request, context);
-        TaskType taskType = taskType(haystack, context);
-        int threshold = Math.max(1, properties.getSkill().getActivationThreshold());
-        int limit = Math.max(1, properties.getSkill().getMaxActiveSkills());
-        return skills.stream()
-                .map(skill -> new ScoredSkill(skill, score(skill, haystack, taskType)))
-                .filter(scored -> scored.score() >= threshold)
-                .sorted(Comparator.comparingInt(ScoredSkill::score).reversed().thenComparing(scored -> scored.skill()
-                        .id()))
-                .limit(limit)
-                .map(ScoredSkill::skill)
+        return matchResult(request, context, skills).matches().stream()
+                .map(SkillMatch::skill)
                 .toList();
     }
 
-    public boolean canActivateRequested(String request, Map<String, Object> context, Skill skill) {
-        if (skill == null) {
-            return false;
-        }
-        String haystack = haystack(request, context);
-        TaskType taskType = taskType(haystack, context);
-        if (taskType != null
-                && !skill.applicableTasks().isEmpty()
-                && !skill.applicableTasks().contains(taskType)) {
-            return false;
-        }
-        // A planner-selected Skill still needs a domain-specific signal. Generic tags and
-        // resource types only constrain/rank a Skill and cannot activate it by themselves.
-        return contains(haystack, skill.name())
-                || skill.triggers().stream().anyMatch(value -> contains(haystack, value))
-                || skill.services().stream().anyMatch(value -> contains(haystack, value));
+    public MatchResult matchResult(String request, Map<String, Object> context, List<Skill> skills) {
+        MatchContext matchContext = matchContext(request, context);
+        int threshold = Math.max(1, properties.getSkill().getActivationThreshold());
+        int limit = Math.max(1, properties.getSkill().getMaxActiveSkills());
+        List<SkillMatch> candidates = safeSkills(skills).stream()
+                .map(skill -> score(skill, matchContext))
+                .flatMap(Optional::stream)
+                .filter(scored -> scored.score() >= threshold)
+                .sorted(Comparator.comparingInt(SkillMatch::score).reversed().thenComparing(scored -> scored.skill()
+                        .id()))
+                .toList();
+        boolean hasExactMatch = candidates.stream().anyMatch(SkillMatch::exactIdentifier);
+        List<SkillMatch> selected = candidates.stream()
+                .filter(scored -> !hasExactMatch || scored.exactIdentifier())
+                .limit(limit)
+                .toList();
+        return new MatchResult(selected, candidates.size(), candidates.size() > 1);
     }
 
-    private int score(Skill skill, String haystack, TaskType taskType) {
-        if (taskType != null
+    public boolean canActivateRequested(String request, Map<String, Object> context, Skill skill) {
+        return requestedMatch(request, context, skill).isPresent();
+    }
+
+    public Optional<SkillMatch> requestedMatch(String request, Map<String, Object> context, Skill skill) {
+        if (skill == null) {
+            return Optional.empty();
+        }
+        return score(skill, matchContext(request, context))
+                .map(match -> new SkillMatch(skill, match.score(), MatchSource.REQUESTED, match.exactIdentifier()));
+    }
+
+    private Optional<SkillMatch> score(Skill skill, MatchContext context) {
+        if (context.taskType() != null
                 && !skill.applicableTasks().isEmpty()
-                && !skill.applicableTasks().contains(taskType)) {
-            return Integer.MIN_VALUE;
+                && !skill.applicableTasks().contains(context.taskType())) {
+            return Optional.empty();
         }
+        if (context.resourceType() != null
+                && !skill.resourceTypes().isEmpty()
+                && !containsExact(skill.resourceTypes(), context.resourceType())) {
+            return Optional.empty();
+        }
+
+        boolean alertNameMatch = containsExact(skill.alertNames(), context.alertName());
+        boolean runbookMatch = containsExact(skill.runbookIds(), context.runbookId());
+        boolean metricMatch = containsExact(skill.metricNames(), context.metricName());
+        boolean exactIdentifier = alertNameMatch || runbookMatch || metricMatch;
         int score = 0;
+        MatchSource source = MatchSource.NONE;
+        if (alertNameMatch) {
+            score += 24;
+            source = MatchSource.ALERT_NAME;
+        }
+        if (runbookMatch) {
+            score += 20;
+            if (source == MatchSource.NONE) {
+                source = MatchSource.RUNBOOK_ID;
+            }
+        }
+        if (metricMatch) {
+            score += 16;
+            if (source == MatchSource.NONE) {
+                source = MatchSource.METRIC_NAME;
+            }
+        }
+
+        boolean triggerMatch = false;
         for (String trigger : skill.triggers()) {
-            if (contains(haystack, trigger)) {
+            if (contains(context.haystack(), trigger)) {
                 score += 4;
+                triggerMatch = true;
             }
         }
+        boolean serviceMatch = false;
         for (String service : skill.services()) {
-            if (contains(haystack, service)) {
+            if (contains(context.haystack(), service)) {
                 score += 3;
+                serviceMatch = true;
             }
         }
-        if (contains(haystack, skill.name())) {
+        boolean nameMatch = contains(context.haystack(), skill.name());
+        if (nameMatch) {
             score += 2;
         }
-        // applicableTasks, tags and generic resource types constrain/rank an already relevant
-        // skill. They must not activate an unrelated domain skill by themselves.
-        if (score == 0) {
-            return 0;
+        if (!exactIdentifier && !triggerMatch && !serviceMatch && !nameMatch) {
+            return Optional.empty();
         }
-        for (String resourceType : skill.resourceTypes()) {
-            if (contains(haystack, resourceType)) {
-                score += 2;
-            }
+        if (source == MatchSource.NONE) {
+            source = triggerMatch ? MatchSource.TRIGGER : serviceMatch ? MatchSource.SERVICE : MatchSource.NAME;
         }
-        for (String tag : skill.tags()) {
-            if (contains(haystack, tag)) {
-                score += 2;
-            }
-        }
-        if (taskType != null && skill.applicableTasks().contains(taskType)) {
+
+        if (context.category() != null && containsExact(skill.categories(), context.category())) {
             score += 3;
         }
-        return score;
+        if (context.resourceType() != null && containsExact(skill.resourceTypes(), context.resourceType())) {
+            score += 2;
+        }
+        for (String tag : skill.tags()) {
+            if (contains(context.haystack(), tag)) {
+                score += 1;
+            }
+        }
+        if (context.taskType() != null && skill.applicableTasks().contains(context.taskType())) {
+            score += 3;
+        }
+        return Optional.of(new SkillMatch(skill, score, source, exactIdentifier));
+    }
+
+    private MatchContext matchContext(String request, Map<String, Object> context) {
+        String haystack = haystack(request, context);
+        return new MatchContext(
+                haystack,
+                taskType(haystack, context),
+                contextValue(context, "resourceType", "resource_type"),
+                contextValue(context, "alertName", "alertname", "alert_name"),
+                contextValue(context, "metricName", "metric_name", "kubeoncall_metric"),
+                contextValue(context, "runbookId", "runbook_id"),
+                contextValue(context, "policyCategory", "alarmCategory", "category"));
     }
 
     private TaskType taskType(String haystack, Map<String, Object> context) {
@@ -107,16 +160,18 @@ public class SkillMatcher {
                 return task.taskType();
             }
         }
-        if (containsAny(haystack, "query logs", "logs", "日志")) {
-            return TaskType.QUERY_LOGS;
-        }
-        if (containsAny(haystack, "query metrics", "metrics", "cpu", "memory", "指标", "监控")) {
-            return TaskType.QUERY_METRICS;
-        }
-        if (containsAny(haystack, "restart", "重启")) {
+        if (containsAny(
+                haystack,
+                "restart service",
+                "restart the service",
+                "rollout restart",
+                "please restart",
+                "帮我重启",
+                "执行重启",
+                "重启服务")) {
             return TaskType.RESTART_SERVICE;
         }
-        if (containsAny(haystack, "scale", "扩容", "缩容")) {
+        if (containsAny(haystack, "scale workload", "scale up", "scale down", "帮我扩容", "执行扩容", "执行缩容")) {
             return TaskType.SCALE_WORKLOAD;
         }
         if (containsAny(haystack, "patch config", "配置修改", "改配置")) {
@@ -127,6 +182,12 @@ public class SkillMatcher {
         }
         if (containsAny(haystack, "execute script", "执行脚本")) {
             return TaskType.EXECUTE_SCRIPT;
+        }
+        if (containsAny(haystack, "query logs", "logs", "log", "日志")) {
+            return TaskType.QUERY_LOGS;
+        }
+        if (containsAny(haystack, "query metrics", "metrics", "cpu", "memory", "指标", "监控")) {
+            return TaskType.QUERY_METRICS;
         }
         return null;
     }
@@ -140,6 +201,34 @@ public class SkillMatcher {
         } catch (IllegalArgumentException ex) {
             return null;
         }
+    }
+
+    private String contextValue(Map<String, Object> context, String... keys) {
+        if (context == null) {
+            return null;
+        }
+        for (String key : keys) {
+            String normalized = normalize(context.get(key));
+            if (normalized != null) {
+                return normalized;
+            }
+        }
+        return null;
+    }
+
+    private boolean containsExact(List<String> values, String expected) {
+        if (expected == null || values == null) {
+            return false;
+        }
+        return values.stream().map(this::normalize).anyMatch(expected::equals);
+    }
+
+    private String normalize(Object value) {
+        if (value == null) {
+            return null;
+        }
+        String normalized = String.valueOf(value).trim().toLowerCase(Locale.ROOT);
+        return normalized.isBlank() ? null : normalized;
     }
 
     private boolean containsAny(String haystack, String... values) {
@@ -167,5 +256,35 @@ public class SkillMatcher {
         return builder.toString().toLowerCase(Locale.ROOT);
     }
 
-    private record ScoredSkill(Skill skill, int score) {}
+    private List<Skill> safeSkills(List<Skill> skills) {
+        return skills == null ? List.of() : skills;
+    }
+
+    public enum MatchSource {
+        ALERT_NAME,
+        RUNBOOK_ID,
+        METRIC_NAME,
+        TRIGGER,
+        SERVICE,
+        NAME,
+        REQUESTED,
+        NONE
+    }
+
+    public record SkillMatch(Skill skill, int score, MatchSource source, boolean exactIdentifier) {}
+
+    public record MatchResult(List<SkillMatch> matches, int candidateCount, boolean candidateConflict) {
+        public MatchResult {
+            matches = matches == null ? List.of() : List.copyOf(matches);
+        }
+    }
+
+    private record MatchContext(
+            String haystack,
+            TaskType taskType,
+            String resourceType,
+            String alertName,
+            String metricName,
+            String runbookId,
+            String category) {}
 }

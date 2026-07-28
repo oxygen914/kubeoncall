@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.time.Instant;
@@ -13,6 +14,7 @@ import java.util.List;
 import java.util.Map;
 
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 
 import com.kubeoncall.alarm.domain.AlarmResourceType;
 import com.kubeoncall.alarm.domain.AlarmSeverity;
@@ -104,26 +106,26 @@ class IntelligentDiagnosisNodeTest {
     void shouldActivateSkillForAlarmDiagnosis() {
         SkillActivationService activationService = mock(SkillActivationService.class);
         Skill skill = new Skill(
-                "payment-oom-triage",
-                "Payment OOM triage",
+                "pod-oom-triage",
+                "Pod OOMKilled triage",
                 "v1",
                 SkillSource.BUILTIN,
-                "skills/payment-oom-triage/SKILL.md",
-                "Payment OOM triage",
+                "skills/pod-oom-triage/SKILL.md",
+                "Pod OOMKilled triage",
                 List.of("oom"),
-                List.of("payment-service"),
+                List.of(),
                 List.of("POD"),
-                com.kubeoncall.domain.task.RiskLevel.MEDIUM,
+                com.kubeoncall.domain.task.RiskLevel.LOW,
                 List.of("kubernetes.describeResource"),
                 "verify OOM evidence",
                 Map.of());
         when(activationService.activate(any(String.class), any(Map.class)))
                 .thenReturn(new SkillActivation(
                         List.of(skill),
-                        List.of(Map.of("id", "payment-oom-triage")),
-                        List.of("payment-oom-triage"),
+                        List.of(Map.of("id", "pod-oom-triage", "matchSource", "ALERT_NAME")),
+                        List.of("pod-oom-triage"),
                         List.of("kubernetes.describeResource"),
-                        com.kubeoncall.domain.task.RiskLevel.MEDIUM,
+                        com.kubeoncall.domain.task.RiskLevel.LOW,
                         "verify OOM evidence"));
         IntelligentDiagnosisNode node =
                 new IntelligentDiagnosisNode(new KubeOnCallProperties(), new TokenBudget(), activationService);
@@ -131,8 +133,17 @@ class IntelligentDiagnosisNodeTest {
 
         NodeResult result = node.execute(context);
 
-        assertEquals(List.of("payment-oom-triage"), result.payload().get("activatedSkillIds"));
-        assertEquals(List.of("payment-oom-triage"), context.getAttribute("activatedSkillIds"));
+        assertEquals(List.of("pod-oom-triage"), result.payload().get("activatedSkillIds"));
+        assertEquals(List.of("pod-oom-triage"), context.getAttribute("activatedSkillIds"));
+        assertEquals(List.of("ALERT_NAME"), context.getAttribute("activatedSkillMatchSources"));
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<Map<String, Object>> skillContext = ArgumentCaptor.forClass(Map.class);
+        verify(activationService).activate(any(String.class), skillContext.capture());
+        assertEquals("PodOOMKilled", skillContext.getValue().get("alertName"));
+        assertEquals("kube.pod.oom_killed", skillContext.getValue().get("metricName"));
+        assertEquals("runbook-pod-oom", skillContext.getValue().get("runbookId"));
+        assertEquals("k8s-pod", skillContext.getValue().get("policyCategory"));
+        assertEquals("OOMKilled", skillContext.getValue().get("reason"));
     }
 
     private static AlertWorkflowContext context() {
@@ -150,14 +161,14 @@ class IntelligentDiagnosisNodeTest {
                 "prod",
                 "payments",
                 "payment-service",
-                "container_memory_working_set_bytes",
+                "kube.pod.oom_killed",
                 2.0,
                 1.0,
                 "GiB",
                 "5m",
+                Map.of("category", "k8s-pod", "reason", "OOMKilled", "container", "app"),
                 Map.of(),
-                Map.of(),
-                "runbook-oom",
+                "runbook-pod-oom",
                 AlarmStatus.FIRING,
                 Instant.now(),
                 "oom",

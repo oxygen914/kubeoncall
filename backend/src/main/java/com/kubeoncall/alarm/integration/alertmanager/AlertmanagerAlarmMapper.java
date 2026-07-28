@@ -15,9 +15,8 @@ public class AlertmanagerAlarmMapper {
     public AlarmPayload map(AlertmanagerWebhookRequest webhook, AlertmanagerAlertDto alert) {
         Map<String, String> labels = merge(webhook.commonLabels(), alert.labels());
         Map<String, String> annotations = merge(webhook.commonAnnotations(), alert.annotations());
-        String resourceName =
-                firstNonBlank(labels.get("node"), labels.get("pod"), labels.get("service"), labels.get("instance"));
-        String resourceType = resourceType(labels, resourceName);
+        String resourceType = resourceType(labels);
+        String resourceName = resourceName(labels, resourceType);
         String status = firstNonBlank(alert.status(), webhook.status(), "firing");
         Instant occurredAt = alert.startsAt() == null ? Instant.now() : alert.startsAt();
         Map<String, Object> metadata = new LinkedHashMap<>();
@@ -46,14 +45,18 @@ public class AlertmanagerAlarmMapper {
                 firstNonBlank(labels.get("cluster"), labels.get("kubernetes_cluster")),
                 labels.get("namespace"),
                 firstNonBlank(labels.get("service"), labels.get("job")),
-                firstNonBlank(labels.get("metric"), labels.get("__name__")),
+                firstNonBlank(labels.get("kubeoncall_metric"), labels.get("metric"), labels.get("__name__")),
                 null,
                 null,
                 null,
                 labels.get("for"),
                 labels,
                 annotations,
-                firstNonBlank(annotations.get("runbook_url"), annotations.get("runbook")),
+                firstNonBlank(
+                        annotations.get("runbook_id"),
+                        labels.get("runbook_id"),
+                        annotations.get("runbook_url"),
+                        annotations.get("runbook")),
                 status);
     }
 
@@ -68,26 +71,67 @@ public class AlertmanagerAlarmMapper {
         return Map.copyOf(result);
     }
 
-    private String resourceType(Map<String, String> labels, String resourceName) {
-        if (resourceName == null) {
-            return null;
-        }
-        if (notBlank(labels.get("node"))) {
-            return "node";
+    private String resourceType(Map<String, String> labels) {
+        String declared = labels.get("resource_type");
+        if (notBlank(declared)) {
+            return declared;
         }
         if (notBlank(labels.get("pod"))) {
             return "pod";
         }
-        if (notBlank(labels.get("namespace"))) {
-            return "namespace";
+        if (notBlank(labels.get("deployment"))) {
+            return "deployment";
+        }
+        if (notBlank(labels.get("statefulset"))) {
+            return "statefulset";
+        }
+        if (notBlank(labels.get("daemonset"))) {
+            return "daemonset";
         }
         if (notBlank(labels.get("service"))) {
             return "service";
         }
+        if (notBlank(labels.get("node"))) {
+            return "node";
+        }
+        if (notBlank(labels.get("namespace"))) {
+            return "namespace";
+        }
         if (notBlank(labels.get("instance"))) {
             return "host";
         }
-        return "workload";
+        if (notBlank(firstNonBlank(labels.get("cluster"), labels.get("kubernetes_cluster")))) {
+            return "cluster";
+        }
+        return null;
+    }
+
+    private String resourceName(Map<String, String> labels, String resourceType) {
+        if (resourceType == null) {
+            return null;
+        }
+        return switch (resourceType.trim().toLowerCase(java.util.Locale.ROOT)) {
+            case "pod" -> labels.get("pod");
+            case "deployment" -> labels.get("deployment");
+            case "statefulset" -> labels.get("statefulset");
+            case "daemonset" -> labels.get("daemonset");
+            case "service" -> labels.get("service");
+            case "node" -> firstNonBlank(labels.get("node"), labels.get("instance"));
+            case "namespace" -> labels.get("namespace");
+            case "host" -> firstNonBlank(labels.get("instance"), labels.get("node"));
+            case "cluster" -> firstNonBlank(labels.get("cluster"), labels.get("kubernetes_cluster"));
+            default ->
+                firstNonBlank(
+                        labels.get("pod"),
+                        labels.get("deployment"),
+                        labels.get("statefulset"),
+                        labels.get("daemonset"),
+                        labels.get("service"),
+                        labels.get("node"),
+                        labels.get("instance"),
+                        labels.get("cluster"),
+                        labels.get("kubernetes_cluster"));
+        };
     }
 
     private void putIfPresent(Map<String, Object> target, String key, String value) {

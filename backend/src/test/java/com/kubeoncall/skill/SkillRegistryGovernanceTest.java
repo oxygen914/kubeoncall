@@ -26,11 +26,11 @@ class SkillRegistryGovernanceTest {
 
     @Test
     void shouldLetProjectSkillOverrideBuiltinAndIsolateBrokenFiles() throws Exception {
-        Path overrideDir = Files.createDirectories(tempDir.resolve("payment-oom-triage"));
+        Path overrideDir = Files.createDirectories(tempDir.resolve("pod-oom-triage"));
         Files.writeString(overrideDir.resolve("SKILL.md"), """
                 ---
-                id: payment-oom-triage
-                name: Project Payment OOM
+                id: pod-oom-triage
+                name: Project Pod OOM
                 version: v2
                 description: project override
                 triggers: [OOMKilled]
@@ -53,7 +53,7 @@ class SkillRegistryGovernanceTest {
         SkillRegistry registry = new SkillRegistry(properties, new SkillFrontmatterParser(), enabledStateStore());
 
         SkillRegistry.ReloadResult result = registry.reload();
-        Skill skill = registry.findById("payment-oom-triage").orElseThrow();
+        Skill skill = registry.findById("pod-oom-triage").orElseThrow();
 
         assertEquals(SkillSource.PROJECT, skill.source());
         assertEquals("v2", skill.version());
@@ -69,27 +69,27 @@ class SkillRegistryGovernanceTest {
         KubeOnCallProperties properties = new KubeOnCallProperties();
         properties.getSkill().setProjectLocation("");
         SkillStateStore stateStore = mock(SkillStateStore.class);
-        when(stateStore.disabledIds()).thenReturn(Set.of("payment-oom-triage"));
+        when(stateStore.disabledIds()).thenReturn(Set.of("pod-oom-triage"));
         SkillRegistry registry = new SkillRegistry(properties, new SkillFrontmatterParser(), stateStore);
         registry.reload();
 
-        assertTrue(registry.all().stream().noneMatch(skill -> "payment-oom-triage".equals(skill.id())));
-        SkillIndexEntry payment = registry.index().stream()
-                .filter(item -> "payment-oom-triage".equals(item.id()))
+        assertTrue(registry.all().stream().noneMatch(skill -> "pod-oom-triage".equals(skill.id())));
+        SkillIndexEntry podOom = registry.index().stream()
+                .filter(item -> "pod-oom-triage".equals(item.id()))
                 .findFirst()
                 .orElseThrow();
-        assertFalse(payment.enabled());
+        assertFalse(podOom.enabled());
 
-        registry.enable("payment-oom-triage");
-        verify(stateStore).enable("payment-oom-triage");
+        registry.enable("pod-oom-triage");
+        verify(stateStore).enable("pod-oom-triage");
     }
 
     @Test
     void shouldRejectProjectConflictWhenPolicyRequiresIt() throws Exception {
-        Path overrideDir = Files.createDirectories(tempDir.resolve("payment-oom-triage"));
+        Path overrideDir = Files.createDirectories(tempDir.resolve("pod-oom-triage"));
         Files.writeString(overrideDir.resolve("SKILL.md"), """
                 ---
-                id: payment-oom-triage
+                id: pod-oom-triage
                 name: Rejected Project Override
                 version: v9
                 description: must not override
@@ -109,8 +109,8 @@ class SkillRegistryGovernanceTest {
 
         assertEquals(
                 SkillSource.BUILTIN,
-                registry.findById("payment-oom-triage").orElseThrow().source());
-        assertTrue(result.errors().contains("CONFLICT:payment-oom-triage: rejected by version conflict policy"));
+                registry.findById("pod-oom-triage").orElseThrow().source());
+        assertTrue(result.errors().contains("CONFLICT:pod-oom-triage: rejected by version conflict policy"));
     }
 
     @Test

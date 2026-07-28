@@ -25,7 +25,7 @@ class SkillLoadToolTest {
         registry.reload();
         SkillLoadTool tool = new SkillLoadTool(registry, new TokenBudget());
 
-        Map<String, Object> result = tool.load("payment-oom-triage", 40);
+        Map<String, Object> result = tool.load("pod-oom-triage", 40);
 
         assertEquals("success", result.get("status"));
         assertEquals("load_skill", result.get("tool"));

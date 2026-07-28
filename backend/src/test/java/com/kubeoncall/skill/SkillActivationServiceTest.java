@@ -19,18 +19,24 @@ import com.kubeoncall.service.KubeOnCallMetricsService;
 class SkillActivationServiceTest {
 
     @Test
-    void shouldActivatePaymentOomSkill() {
+    void shouldActivatePodOomSkillFromExactAlertContext() {
         KubeOnCallMetricsService metricsService = mock(KubeOnCallMetricsService.class);
         SkillActivationService service = service(metricsService);
 
-        SkillActivation activation = service.activate("payment-service pod OOMKilled 了，帮我先排查", Map.of());
+        SkillActivation activation = service.activate(
+                "A grouped summary also mentions node memory pressure",
+                Map.of(
+                        "alertName", "PodOOMKilledP1",
+                        "resourceType", "POD",
+                        "taskType", "QUERY_METRICS"));
 
         assertTrue(activation.active());
-        assertEquals(List.of("payment-oom-triage"), activation.skillIds());
-        assertEquals(RiskLevel.MEDIUM, activation.maxRisk());
+        assertEquals(List.of("pod-oom-triage"), activation.skillIds());
+        assertEquals(List.of("ALERT_NAME"), activation.matchSources());
+        assertEquals(RiskLevel.LOW, activation.maxRisk());
         assertTrue(activation.toolWhitelist().contains("kubernetes.describeResource"));
         assertTrue(activation.prompt().contains("Verify current state first"));
-        verify(metricsService).recordSkillActivation(true, 1);
+        verify(metricsService).recordSkillActivation(true, 1, "ALERT_NAME", false);
     }
 
     @Test
@@ -40,7 +46,7 @@ class SkillActivationServiceTest {
 
         assertFalse(activation.active());
         assertTrue(activation.skillIds().isEmpty());
-        verify(metricsService).recordSkillActivation(false, 0);
+        verify(metricsService).recordSkillActivation(false, 0, "NONE", false);
     }
 
     @Test
@@ -50,12 +56,12 @@ class SkillActivationServiceTest {
         SkillActivation activation = service(metricsService)
                 .activate(
                         "inspect the current pod state",
-                        Map.of("taskType", "QUERY_METRICS", "service", "payment-service"),
-                        List.of("payment-oom-triage"));
+                        Map.of("taskType", "QUERY_METRICS", "alertName", "PodOOMKilledP1", "resourceType", "POD"),
+                        List.of("pod-oom-triage"));
 
         assertTrue(activation.active());
-        assertEquals(List.of("payment-oom-triage"), activation.skillIds());
-        assertTrue(activation.prompt().contains("Payment OOM"));
+        assertEquals(List.of("pod-oom-triage"), activation.skillIds());
+        assertTrue(activation.prompt().contains("Pod OOMKilled"));
     }
 
     @Test
@@ -63,7 +69,7 @@ class SkillActivationServiceTest {
         KubeOnCallMetricsService metricsService = mock(KubeOnCallMetricsService.class);
 
         SkillActivation activation =
-                service(metricsService).activate("clean data", Map.of(), List.of("payment-oom-triage"));
+                service(metricsService).activate("clean data", Map.of(), List.of("pod-oom-triage"));
 
         assertFalse(activation.active());
         assertTrue(activation.skillIds().isEmpty());
@@ -75,7 +81,9 @@ class SkillActivationServiceTest {
 
         SkillActivation activation = service(metricsService)
                 .activate(
-                        "inspect a kubernetes pod", Map.of("taskType", "QUERY_METRICS"), List.of("payment-oom-triage"));
+                        "inspect a kubernetes pod",
+                        Map.of("taskType", "QUERY_METRICS", "resourceType", "POD"),
+                        List.of("pod-oom-triage"));
 
         assertFalse(activation.active());
         assertTrue(activation.skillIds().isEmpty());

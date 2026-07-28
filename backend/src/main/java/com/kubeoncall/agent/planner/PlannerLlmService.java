@@ -75,6 +75,7 @@ public class PlannerLlmService {
                     new LinkedHashMap<>(plannerKnowledge == null ? Map.of() : plannerKnowledge);
             expandedKnowledge.put("activatedSkillIds", activation.skillIds());
             expandedKnowledge.put("activatedSkills", activation.skillSummaries());
+            expandedKnowledge.put("activatedSkillMatchSources", activation.matchSources());
             expandedKnowledge.put("activatedSkillToolWhitelist", activation.toolWhitelist());
             expandedKnowledge.put(
                     "activatedSkillMaxRisk",

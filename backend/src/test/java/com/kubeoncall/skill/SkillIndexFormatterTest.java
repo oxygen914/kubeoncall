@@ -10,6 +10,7 @@ import java.util.Map;
 import org.junit.jupiter.api.Test;
 
 import com.kubeoncall.domain.task.RiskLevel;
+import com.kubeoncall.domain.task.TaskType;
 
 class SkillIndexFormatterTest {
 
@@ -23,6 +24,7 @@ class SkillIndexFormatterTest {
 
         assertTrue(formatted.getBytes(StandardCharsets.UTF_8).length <= SkillIndexFormatter.MAX_INDEX_BYTES);
         assertTrue(formatted.contains("skill-0"));
+        assertTrue(formatted.contains("alertNames=[NodeCPUHigh]"));
         assertFalse(formatted.contains("skill-20"));
     }
 
@@ -37,6 +39,12 @@ class SkillIndexFormatterTest {
                 List.of("trigger"),
                 List.of(),
                 List.of(),
+                List.of("NodeCPUHigh"),
+                List.of("node.cpu.usage_percent"),
+                List.of("runbook-host-cpu-high"),
+                List.of("node-monitoring"),
+                List.of(TaskType.QUERY_METRICS),
+                List.of("node"),
                 RiskLevel.LOW,
                 List.of(),
                 "body",

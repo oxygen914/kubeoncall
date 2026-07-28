@@ -134,6 +134,36 @@ class KubeOnCallMetricsServiceTest {
     }
 
     @Test
+    void shouldRecordBoundedSkillMatchSourceAndConflictMetrics() {
+        SimpleMeterRegistry registry = new SimpleMeterRegistry();
+        @SuppressWarnings("unchecked")
+        ObjectProvider<io.micrometer.core.instrument.MeterRegistry> provider = mock(ObjectProvider.class);
+        when(provider.getIfAvailable()).thenReturn(registry);
+        KubeOnCallMetricsService metricsService = new KubeOnCallMetricsService(provider);
+
+        metricsService.recordSkillActivation(true, 1, "ALERT_NAME", true);
+
+        assertEquals(
+                1.0,
+                registry.counter(
+                                "kubeoncall.skill.activations",
+                                "active",
+                                "true",
+                                "match_source",
+                                "alert_name",
+                                "candidate_conflict",
+                                "true")
+                        .count());
+        assertEquals(
+                1.0,
+                registry.get("kubeoncall.skill.activated_count")
+                        .tag("active", "true")
+                        .tag("match_source", "alert_name")
+                        .summary()
+                        .totalAmount());
+    }
+
+    @Test
     void shouldRecordSandboxMetricsWithoutHighCardinalityIdentifiers() {
         SimpleMeterRegistry registry = new SimpleMeterRegistry();
         @SuppressWarnings("unchecked")

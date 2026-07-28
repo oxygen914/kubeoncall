@@ -1,23 +1,51 @@
 ---
 id: disk-capacity-triage
 name: Disk Capacity Triage
-version: v1
-description: Diagnose disk and inode pressure without unsafe automatic deletion.
-triggers: [disk full, disk usage, inode, filesystem, readonly]
-resourceTypes: [node, pod]
+version: v2
+description: Diagnose node filesystem and inode pressure from usage, growth, mount, and workload evidence without deleting data.
+triggers: [disk full, disk usage, inode usage, filesystem pressure, read only filesystem]
+resourceTypes: [node]
+alertNames: [HostDiskUsageP1, HostDiskUsageP0, HostInodeUsageP1, HostInodeUsageP0, NodeDiskHigh, NodeInodeHigh]
+metricNames: [host.disk.usage_percent, host.inode.usage_percent, node.filesystem.usage_percent, node.filesystem.inode_usage_percent]
+runbookIds: [runbook-host-disk-usage, runbook-host-inode-usage]
+categories: [host, node-monitoring]
 applicableTasks: [QUERY_LOGS, QUERY_METRICS]
-tags: [kubernetes, disk, filesystem, inode]
-maxRisk: MEDIUM
+tags: [kubernetes, node, disk, filesystem, inode]
+maxRisk: LOW
 toolWhitelist:
   - kubernetes.describeResource
+  - kubernetes.getPods
   - kubernetes.queryLogs
   - kubernetes.queryMetricsContext
+  - prometheus.instantQuery
   - prometheus.rangeQuery
-  - alertmanager.sendAlertEvent
+  - alertmanager.listAlerts
 ---
 # Disk Capacity Triage
 
-1. Verify mount point, filesystem type, inode usage, growth rate, and read-only state.
-2. Identify top consumers and recent growth without deleting files.
-3. Check log rotation, image garbage collection, and persistent volume ownership.
-4. Any cleanup, eviction, or volume change requires explicit approval.
+## Diagnostic objective
+
+Distinguish byte capacity, inode exhaustion, read-only remount, persistent-volume, and growth-rate failures on the affected node.
+
+## Required live evidence
+
+Confirm mount point, filesystem type, byte and inode usage, available capacity, growth rate, read-only state, affected workloads, and recent image or log growth. Exclude pseudo filesystems and compare against another node.
+
+## Decision branches
+
+- Bytes high but inodes normal: identify the growing path or volume owner without deleting files.
+- Inodes high but bytes normal: inspect small-file creation and rotation behavior.
+- Filesystem read-only: collect storage and kernel evidence and treat cleanup as unsafe.
+- Pressure is isolated to a persistent volume: hand off to the storage owner with volume identity and workload impact.
+
+## Safe next step
+
+Use the metric-specific runbook and document the mount, owner, growth rate, and remaining time before proposing capacity or cleanup work.
+
+## Prohibited actions
+
+Do not delete files, prune images, evict Pods, remount filesystems, or resize volumes from this Skill.
+
+## Recovery and escalation
+
+Require usage and inode trends below policy thresholds, writable state, and stable workloads across two windows. Escalate for read-only remount, critical-volume exhaustion, or rapidly shrinking headroom.

@@ -133,10 +133,12 @@ public class AskContextLifecycle {
             SkillActivation activation = skillActivationService.activate(question, state.getContext());
             if (!activation.active()) {
                 state.getContext().put("activatedSkills", List.of());
+                state.getContext().put("activatedSkillMatchSources", List.of());
                 return;
             }
             state.getContext().put("activatedSkills", activation.skillSummaries());
             state.getContext().put("activatedSkillIds", activation.skillIds());
+            state.getContext().put("activatedSkillMatchSources", activation.matchSources());
             state.getContext().put("skillPrompt", activation.prompt());
             state.getContext().put("activatedSkillToolWhitelist", activation.toolWhitelist());
             if (activation.maxRisk() != null) {
@@ -160,6 +162,7 @@ public class AskContextLifecycle {
         }
         plannerKnowledge.put("activatedSkills", activation.skillSummaries());
         plannerKnowledge.put("activatedSkillIds", activation.skillIds());
+        plannerKnowledge.put("activatedSkillMatchSources", activation.matchSources());
         plannerKnowledge.put("activatedSkillToolWhitelist", activation.toolWhitelist());
         plannerKnowledge.put(
                 "activatedSkillMaxRisk",

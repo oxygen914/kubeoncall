@@ -19,6 +19,10 @@ public record Skill(
         List<String> triggers,
         List<String> services,
         List<String> resourceTypes,
+        List<String> alertNames,
+        List<String> metricNames,
+        List<String> runbookIds,
+        List<String> categories,
         List<TaskType> applicableTasks,
         List<String> tags,
         RiskLevel maxRisk,
@@ -30,6 +34,13 @@ public record Skill(
         triggers = safe(triggers);
         services = safe(services);
         resourceTypes = safe(resourceTypes);
+        alertNames = safe(alertNames);
+        metricNames = safe(metricNames);
+        runbookIds = safe(runbookIds);
+        categories = safe(categories).stream()
+                .map(value -> value.toLowerCase(Locale.ROOT))
+                .distinct()
+                .toList();
         applicableTasks = applicableTasks == null ? List.of() : List.copyOf(applicableTasks);
         tags = safe(tags).stream()
                 .map(value -> value.toLowerCase(Locale.ROOT))
@@ -37,6 +48,44 @@ public record Skill(
                 .toList();
         toolWhitelist = safe(toolWhitelist);
         metadata = metadata == null ? Map.of() : Collections.unmodifiableMap(new LinkedHashMap<>(metadata));
+    }
+
+    public Skill(
+            String id,
+            String name,
+            String version,
+            SkillSource source,
+            String skillPath,
+            String description,
+            List<String> triggers,
+            List<String> services,
+            List<String> resourceTypes,
+            List<TaskType> applicableTasks,
+            List<String> tags,
+            RiskLevel maxRisk,
+            List<String> toolWhitelist,
+            String body,
+            Map<String, Object> metadata) {
+        this(
+                id,
+                name,
+                version,
+                source,
+                skillPath,
+                description,
+                triggers,
+                services,
+                resourceTypes,
+                List.of(),
+                List.of(),
+                List.of(),
+                List.of(),
+                applicableTasks,
+                tags,
+                maxRisk,
+                toolWhitelist,
+                body,
+                metadata);
     }
 
     public Skill(
@@ -65,6 +114,10 @@ public record Skill(
                 resourceTypes,
                 List.of(),
                 List.of(),
+                List.of(),
+                List.of(),
+                List.of(),
+                List.of(),
                 maxRisk,
                 toolWhitelist,
                 body,
@@ -82,6 +135,10 @@ public record Skill(
         summary.put("triggers", triggers);
         summary.put("services", services);
         summary.put("resourceTypes", resourceTypes);
+        summary.put("alertNames", alertNames);
+        summary.put("metricNames", metricNames);
+        summary.put("runbookIds", runbookIds);
+        summary.put("categories", categories);
         summary.put("applicableTasks", applicableTasks.stream().map(Enum::name).toList());
         summary.put("tags", tags);
         summary.put("maxRisk", maxRisk == null ? null : maxRisk.name());

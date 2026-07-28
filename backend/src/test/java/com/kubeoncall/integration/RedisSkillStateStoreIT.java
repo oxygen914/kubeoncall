@@ -44,14 +44,14 @@ class RedisSkillStateStoreIT {
         SkillStateStore store = new SkillStateStore(
                 redisTemplate, new KubeOnCallProperties(), org.mockito.Mockito.mock(KubeOnCallMetricsService.class));
 
-        store.disable("payment-oom-triage");
+        store.disable("pod-oom-triage");
 
-        assertTrue(store.disabledIds().contains("payment-oom-triage"));
-        assertFalse(store.isEnabled("payment-oom-triage"));
+        assertTrue(store.disabledIds().contains("pod-oom-triage"));
+        assertFalse(store.isEnabled("pod-oom-triage"));
 
-        store.enable("payment-oom-triage");
+        store.enable("pod-oom-triage");
 
-        assertFalse(store.disabledIds().contains("payment-oom-triage"));
-        assertTrue(store.isEnabled("payment-oom-triage"));
+        assertFalse(store.disabledIds().contains("pod-oom-triage"));
+        assertTrue(store.isEnabled("pod-oom-triage"));
     }
 }

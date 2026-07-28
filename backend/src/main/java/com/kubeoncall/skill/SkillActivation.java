@@ -20,4 +20,16 @@ public record SkillActivation(
     public boolean active() {
         return skills != null && !skills.isEmpty();
     }
+
+    public List<String> matchSources() {
+        if (skillSummaries == null) {
+            return List.of();
+        }
+        return skillSummaries.stream()
+                .map(summary -> summary.get("matchSource"))
+                .filter(java.util.Objects::nonNull)
+                .map(String::valueOf)
+                .distinct()
+                .toList();
+    }
 }

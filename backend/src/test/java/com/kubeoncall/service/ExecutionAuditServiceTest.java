@@ -47,7 +47,8 @@ class ExecutionAuditServiceTest {
         state.getContext().put("sessionId", "session-1");
         state.getContext().put("plannerSource", "rules");
         state.getContext().put("plannerIntent", "diagnose");
-        state.getContext().put("activatedSkillIds", List.of("payment-oom-triage"));
+        state.getContext().put("activatedSkillIds", List.of("pod-oom-triage"));
+        state.getContext().put("activatedSkillMatchSources", List.of("ALERT_NAME"));
         state.getContext().put("activatedSkillMaxRisk", "LOW");
         state.getContext().put("injectedMemoryCount", 2);
         state.getContext()
@@ -75,7 +76,8 @@ class ExecutionAuditServiceTest {
         Map<String, Object> metadata = recordCaptor.getValue().metadata();
         assertEquals("session-1", metadata.get("sessionId"));
         assertEquals("rules", metadata.get("plannerSource"));
-        assertEquals(List.of("payment-oom-triage"), metadata.get("activatedSkillIds"));
+        assertEquals(List.of("pod-oom-triage"), metadata.get("activatedSkillIds"));
+        assertEquals(List.of("ALERT_NAME"), metadata.get("activatedSkillMatchSources"));
         assertEquals(2, metadata.get("injectedMemoryCount"));
         assertEquals("task-1", metadata.get("currentTaskId"));
         assertEquals("QUERY_METRICS", metadata.get("currentTaskType"));

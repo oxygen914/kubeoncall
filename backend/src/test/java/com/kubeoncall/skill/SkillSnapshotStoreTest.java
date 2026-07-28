@@ -34,23 +34,23 @@ class SkillSnapshotStoreTest {
 
         verify(values).set(eq("skill:snapshot:v1"), eq(objectMapper.writeValueAsString(List.of(skill))));
         assertEquals("full runbook body", restored.get(0).body());
-        assertEquals("payment-oom", restored.get(0).id());
+        assertEquals("pod-oom-triage", restored.get(0).id());
     }
 
     private Skill skill() {
         return new Skill(
-                "payment-oom",
-                "Payment OOM",
+                "pod-oom-triage",
+                "Pod OOMKilled Triage",
                 "v1",
                 SkillSource.PROJECT,
-                "file:skills/payment-oom/SKILL.md",
-                "triage payment OOM",
+                "file:skills/pod-oom-triage/SKILL.md",
+                "triage Pod OOM",
                 List.of("oom"),
-                List.of("payment-service"),
-                List.of("Deployment"),
-                RiskLevel.MEDIUM,
+                List.of(),
+                List.of("Pod"),
+                RiskLevel.LOW,
                 List.of("kubernetes.describeResource"),
                 "full runbook body",
-                Map.of("owner", "payments"));
+                Map.of("owner", "platform"));
     }
 }

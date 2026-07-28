@@ -91,7 +91,7 @@ class VerifierThinkNodeTest {
                 "order-service",
                 Map.of("namespace", "default"),
                 new SopReference("SOP-QUERY_LOGS", "logs", "v1", "rag:sop")));
-        state.getContext().put("activatedSkillIds", List.of("payment-oom-triage"));
+        state.getContext().put("activatedSkillIds", List.of("pod-oom-triage"));
         state.getContext().put("activatedSkillMaxRisk", "LOW");
         state.getContext()
                 .put(

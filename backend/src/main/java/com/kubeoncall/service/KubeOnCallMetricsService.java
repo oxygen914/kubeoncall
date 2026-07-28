@@ -147,12 +147,46 @@ public class KubeOnCallMetricsService {
     }
 
     public void recordSkillActivation(boolean active, long skillCount) {
-        increment("kubeoncall.skill.activations", "active", String.valueOf(active));
-        recordAmount("kubeoncall.skill.activated_count", Math.max(0, skillCount), "active", String.valueOf(active));
+        recordSkillActivation(active, skillCount, "NONE", false);
+    }
+
+    public void recordSkillActivation(boolean active, long skillCount, String matchSource, boolean candidateConflict) {
+        String source = skillMatchSource(matchSource);
+        increment(
+                "kubeoncall.skill.activations",
+                "active",
+                String.valueOf(active),
+                "match_source",
+                source,
+                "candidate_conflict",
+                String.valueOf(candidateConflict));
+        recordAmount(
+                "kubeoncall.skill.activated_count",
+                Math.max(0, skillCount),
+                "active",
+                String.valueOf(active),
+                "match_source",
+                source);
     }
 
     public void recordSkillGovernance(String operation, String outcome) {
         increment("kubeoncall.skill.governance", "operation", safe(operation), "outcome", safe(outcome));
+    }
+
+    private String skillMatchSource(String source) {
+        if (source == null) {
+            return "none";
+        }
+        return switch (source.trim().toUpperCase(Locale.ROOT)) {
+            case "ALERT_NAME" -> "alert_name";
+            case "RUNBOOK_ID" -> "runbook_id";
+            case "METRIC_NAME" -> "metric_name";
+            case "TRIGGER" -> "trigger";
+            case "SERVICE" -> "service";
+            case "NAME" -> "name";
+            case "REQUESTED" -> "requested";
+            default -> "none";
+        };
     }
 
     /** Records a legacy Console API response with a mapping-pattern endpoint tag, never raw IDs. */

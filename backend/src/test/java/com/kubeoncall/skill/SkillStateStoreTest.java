@@ -53,4 +53,21 @@ class SkillStateStoreTest {
         verify(setOperations, never()).add("skill:disabled", "skill-b");
         verify(metrics).recordLegacyWriteSkipped("skill-state");
     }
+
+    @Test
+    void shouldPreserveDisabledStateAcrossPaymentOomSkillRename() {
+        StringRedisTemplate redisTemplate = mock(StringRedisTemplate.class);
+        @SuppressWarnings("unchecked")
+        SetOperations<String, String> setOperations = mock(SetOperations.class);
+        when(redisTemplate.opsForSet()).thenReturn(setOperations);
+        when(setOperations.members("skill:disabled")).thenReturn(Set.of("payment-oom-triage"), Set.of());
+        SkillStateStore store =
+                new SkillStateStore(redisTemplate, new KubeOnCallProperties(), mock(KubeOnCallMetricsService.class));
+
+        assertFalse(store.isEnabled("pod-oom-triage"));
+        store.enable("pod-oom-triage");
+
+        verify(setOperations).remove("skill:disabled", "pod-oom-triage", "payment-oom-triage");
+        assertTrue(store.isEnabled("pod-oom-triage"));
+    }
 }

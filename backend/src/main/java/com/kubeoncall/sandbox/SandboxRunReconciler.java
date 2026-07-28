@@ -8,6 +8,7 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.UUID;
 
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
@@ -43,6 +44,7 @@ public class SandboxRunReconciler {
     private final KubeOnCallMetricsService metrics;
     private final String ownerToken = "sandbox-reconciler-" + UUID.randomUUID();
 
+    @Autowired
     public SandboxRunReconciler(
             SandboxRunRepository repository,
             SandboxControllerClient controller,

@@ -88,6 +88,7 @@ public class IntelligentDiagnosisNode implements AlertWorkflowNode {
         diagnosis.put("requiresLiveValidation", memoryConsumed);
         diagnosis.put("guardrails", memoryConsumed ? MEMORY_GUARDRAILS : List.of());
         diagnosis.put("activatedSkillIds", skillActivation.skillIds());
+        diagnosis.put("activatedSkillMatchSources", skillActivation.matchSources());
         diagnosis.put("activatedSkills", skillActivation.skillSummaries());
         diagnosis.put(
                 "skillPrompt",
@@ -101,6 +102,7 @@ public class IntelligentDiagnosisNode implements AlertWorkflowNode {
         context.putAttribute("repeatIncident", repeatedIncident);
         if (skillActivation.active()) {
             context.putAttribute("activatedSkillIds", skillActivation.skillIds());
+            context.putAttribute("activatedSkillMatchSources", skillActivation.matchSources());
             context.putAttribute("activatedSkills", skillActivation.skillSummaries());
             context.putAttribute("activatedSkillToolWhitelist", skillActivation.toolWhitelist());
             context.putAttribute(
@@ -125,32 +127,70 @@ public class IntelligentDiagnosisNode implements AlertWorkflowNode {
             return SkillActivation.empty();
         }
         var event = context.getNormalizedAlarm();
+        String category = policyCategory(context);
+        String runbookId = runbookId(context);
+        String reason = event.labels().get("reason");
+        String container = event.labels().get("container");
         String request = String.join(
                 " ",
                 safe(event.alertName()),
                 safe(event.summary()),
                 safe(event.service()),
                 safe(event.resourceName()),
-                event.resourceType() == null ? "" : event.resourceType().name());
+                event.resourceType() == null ? "" : event.resourceType().name(),
+                safe(event.metricName()),
+                safe(runbookId),
+                safe(category),
+                safe(reason),
+                safe(container));
         try {
-            return skillActivationService.activate(
-                    request,
-                    Map.of(
-                            "service", safe(event.service()),
-                            "resourceType",
-                                    event.resourceType() == null
-                                            ? ""
-                                            : event.resourceType().name(),
-                            "severity",
-                                    event.severity() == null
-                                            ? ""
-                                            : event.severity().name()));
+            Map<String, Object> skillContext = new LinkedHashMap<>();
+            putSignal(skillContext, "service", event.service());
+            putSignal(
+                    skillContext,
+                    "resourceType",
+                    event.resourceType() == null ? null : event.resourceType().name());
+            putSignal(
+                    skillContext,
+                    "severity",
+                    event.severity() == null ? null : event.severity().name());
+            putSignal(skillContext, "alertName", event.alertName());
+            putSignal(skillContext, "metricName", event.metricName());
+            putSignal(skillContext, "runbookId", runbookId);
+            putSignal(skillContext, "policyCategory", category);
+            putSignal(skillContext, "reason", reason);
+            putSignal(skillContext, "container", container);
+            putSignal(skillContext, "job", event.labels().get("job"));
+            return skillActivationService.activate(request, skillContext);
         } catch (RuntimeException ex) {
             log.warn(
                     "Alarm skill activation failed; continuing without skill context: errorType={}",
                     ex.getClass().getSimpleName());
             context.putAttribute("skillWarning", "alarm skill activation failed");
             return SkillActivation.empty();
+        }
+    }
+
+    private String policyCategory(AlertWorkflowContext context) {
+        if (context.getEvaluationResult() != null
+                && context.getEvaluationResult().matchedPolicy() != null) {
+            return context.getEvaluationResult().matchedPolicy().category();
+        }
+        return context.getNormalizedAlarm().labels().get("category");
+    }
+
+    private String runbookId(AlertWorkflowContext context) {
+        if (context.getEvaluationResult() != null
+                && context.getEvaluationResult().runbookId() != null
+                && !context.getEvaluationResult().runbookId().isBlank()) {
+            return context.getEvaluationResult().runbookId();
+        }
+        return context.getNormalizedAlarm().runbookId();
+    }
+
+    private void putSignal(Map<String, Object> target, String key, String value) {
+        if (value != null && !value.isBlank()) {
+            target.put(key, value);
         }
     }
 

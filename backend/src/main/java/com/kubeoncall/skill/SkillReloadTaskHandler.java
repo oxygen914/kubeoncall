@@ -92,6 +92,10 @@ public class SkillReloadTaskHandler implements AsyncTaskHandler {
         metadata.put("triggers", skill.triggers());
         metadata.put("services", skill.services());
         metadata.put("resourceTypes", skill.resourceTypes());
+        metadata.put("alertNames", skill.alertNames());
+        metadata.put("metricNames", skill.metricNames());
+        metadata.put("runbookIds", skill.runbookIds());
+        metadata.put("categories", skill.categories());
         metadata.put(
                 "applicableTasks",
                 skill.applicableTasks().stream().map(Enum::name).toList());

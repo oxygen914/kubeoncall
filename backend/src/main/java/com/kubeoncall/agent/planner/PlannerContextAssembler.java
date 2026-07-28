@@ -46,6 +46,7 @@ public class PlannerContextAssembler {
     public void applySkillActivation(GraphState state, SkillActivation activation) {
         state.getContext().put("activatedSkills", activation.skillSummaries());
         state.getContext().put("activatedSkillIds", activation.skillIds());
+        state.getContext().put("activatedSkillMatchSources", activation.matchSources());
         state.getContext().put("skillPrompt", activation.prompt());
         state.getContext().put("activatedSkillToolWhitelist", activation.toolWhitelist());
         if (activation.maxRisk() != null) {
@@ -54,6 +55,7 @@ public class PlannerContextAssembler {
         Map<String, Object> knowledge = new LinkedHashMap<>(plannerKnowledge(state));
         knowledge.put("activatedSkills", activation.skillSummaries());
         knowledge.put("activatedSkillIds", activation.skillIds());
+        knowledge.put("activatedSkillMatchSources", activation.matchSources());
         knowledge.put("activatedSkillToolWhitelist", activation.toolWhitelist());
         knowledge.put(
                 "activatedSkillMaxRisk",
@@ -117,6 +119,7 @@ public class PlannerContextAssembler {
     private void mergeSkillKnowledge(Map<String, Object> knowledge, GraphState state) {
         putIfPresent(knowledge, state, "activatedSkills");
         putIfPresent(knowledge, state, "activatedSkillIds");
+        putIfPresent(knowledge, state, "activatedSkillMatchSources");
         putIfPresent(knowledge, state, "activatedSkillToolWhitelist");
         putIfPresent(knowledge, state, "activatedSkillMaxRisk");
         putIfPresent(knowledge, state, "skillPrompt");

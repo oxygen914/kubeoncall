@@ -33,7 +33,8 @@ class PlannerContextAssemblerTest {
     void shouldMergeSkillKnowledgeAndCollectToolEvidence() {
         GraphState state = new GraphState();
         state.getContext().put("plannerKnowledge", Map.of("metrics", Map.of("tool", "prometheus")));
-        state.getContext().put("activatedSkillIds", List.of("payment-oom"));
+        state.getContext().put("activatedSkillIds", List.of("pod-oom-triage"));
+        state.getContext().put("activatedSkillMatchSources", List.of("TRIGGER"));
         state.getContext()
                 .put(
                         "plannerAvailableTools",
@@ -41,7 +42,8 @@ class PlannerContextAssemblerTest {
 
         Map<String, Object> knowledge = assembler.plannerKnowledge(state);
 
-        assertEquals(List.of("payment-oom"), knowledge.get("activatedSkillIds"));
+        assertEquals(List.of("pod-oom-triage"), knowledge.get("activatedSkillIds"));
+        assertEquals(List.of("TRIGGER"), knowledge.get("activatedSkillMatchSources"));
         assertEquals(Map.of("metrics", "prometheus"), assembler.evidenceSources(knowledge));
         assertEquals(List.of("prometheus.query", "kubernetes.logs"), assembler.consultedTools(state));
     }

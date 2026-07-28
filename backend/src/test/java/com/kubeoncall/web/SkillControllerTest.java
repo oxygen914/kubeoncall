@@ -29,7 +29,7 @@ class SkillControllerTest {
         SkillController controller = new SkillController(registry, metrics, audit);
 
         SkillRegistry.ReloadResult result = controller.reload();
-        SkillStateResponse disabled = controller.disable("payment-oom-triage");
+        SkillStateResponse disabled = controller.disable("pod-oom-triage");
 
         assertEquals(4, result.loaded());
         assertEquals(false, disabled.enabled());

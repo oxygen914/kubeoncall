@@ -1,5 +1,7 @@
 package com.kubeoncall.skill;
 
+import java.util.LinkedHashSet;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -17,6 +19,7 @@ public class SkillStateStore {
     private static final Logger log = LoggerFactory.getLogger(SkillStateStore.class);
     private static final String DISABLED_KEY = "skill:disabled";
     private static final String DOMAIN = "skill-state";
+    private static final Map<String, String> LEGACY_SKILL_IDS = Map.of("payment-oom-triage", "pod-oom-triage");
 
     private final StringRedisTemplate redisTemplate;
     private final KubeOnCallProperties properties;
@@ -44,7 +47,13 @@ public class SkillStateStore {
                     "Unable to refresh disabled skill state from Redis; using local cache: errorType={}",
                     ex.getClass().getSimpleName());
         }
-        return Set.copyOf(localDisabled);
+        Set<String> disabled = new LinkedHashSet<>(localDisabled);
+        LEGACY_SKILL_IDS.forEach((legacyId, currentId) -> {
+            if (localDisabled.contains(legacyId)) {
+                disabled.add(currentId);
+            }
+        });
+        return Set.copyOf(disabled);
     }
 
     public void disable(String skillId) {
@@ -63,8 +72,9 @@ public class SkillStateStore {
             metricsService.recordLegacyWriteSkipped(DOMAIN);
             return;
         }
-        localDisabled.remove(skillId);
-        redisTemplate.opsForSet().remove(DISABLED_KEY, skillId);
+        Set<String> equivalentIds = equivalentIds(skillId);
+        localDisabled.removeAll(equivalentIds);
+        redisTemplate.opsForSet().remove(DISABLED_KEY, equivalentIds.toArray());
     }
 
     public boolean isEnabled(String skillId) {
@@ -73,5 +83,16 @@ public class SkillStateStore {
 
     private boolean legacyWriteDisabled() {
         return properties.getDataMigration().getSkillState().legacyWriteDisabled();
+    }
+
+    private Set<String> equivalentIds(String skillId) {
+        Set<String> ids = new LinkedHashSet<>();
+        ids.add(skillId);
+        LEGACY_SKILL_IDS.forEach((legacyId, currentId) -> {
+            if (currentId.equals(skillId)) {
+                ids.add(legacyId);
+            }
+        });
+        return ids;
     }
 }
