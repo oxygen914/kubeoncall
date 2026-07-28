@@ -17,6 +17,7 @@ interface NavItem {
 
 const NAV_ITEMS: NavItem[] = [
   { to: '/overview', label: '概览', permission: PERMISSIONS.DASHBOARD_READ },
+  { to: '/monitoring', label: '集群态势', permission: PERMISSIONS.DASHBOARD_READ },
   { to: '/alarms', label: '告警', permission: PERMISSIONS.ALARM_READ },
   { to: '/approvals', label: '审批', permission: PERMISSIONS.APPROVAL_READ },
   { to: '/executions', label: '执行', permission: PERMISSIONS.EXECUTION_READ },

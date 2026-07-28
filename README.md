@@ -202,7 +202,16 @@ Compose 默认把所有端口绑定到 `127.0.0.1`，并使用命名卷保存数
 Node Exporter → Prometheus → Alertmanager → KubeOnCall
 ```
 
-默认规则覆盖节点不可达、CPU、内存、磁盘和 inode。需要 `NodeNotReady` 时再接入 kube-state-metrics。
+默认规则覆盖节点不可达、CPU、内存、磁盘和 inode；接入 kube-state-metrics 后还会启用
+`NodeNotReady` 和 `PodPendingTooLong`。集群态势页与生产指标接入步骤见
+[监控重构计划](监控重构/KubeOnCall监控能力重构实施计划.md)和
+[Kubernetes 指标接入指南](监控重构/Kubernetes指标接入指南.md)。
+
+本地单节点 kube-state-metrics 验收：
+
+```bash
+./scripts/setup-single-node-monitoring.sh
+```
 
 验证规则和链路：
 

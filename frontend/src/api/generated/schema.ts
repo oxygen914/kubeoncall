@@ -2180,6 +2180,86 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/monitoring/summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["summary"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/monitoring/pods": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["pods"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/monitoring/nodes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["nodes"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/monitoring/nodes/{node}/cpu": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["cpuTrend"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/monitoring/clusters": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["clusters"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -3905,6 +3985,113 @@ export interface components {
         AlarmMaintenanceWindowRevocationResponse: {
             id?: string;
             revoked?: boolean;
+        };
+        ApiResponseSummary: {
+            data?: components["schemas"]["Summary"];
+            meta?: components["schemas"]["ResponseMeta"];
+        };
+        DataSources: {
+            nodeMetricsAvailable?: boolean;
+            kubernetesStateAvailable?: boolean;
+        };
+        Summary: {
+            cluster?: string;
+            /** Format: int32 */
+            totalNodes?: number;
+            /** Format: int64 */
+            readyNodes?: number;
+            /** Format: int64 */
+            notReadyNodes?: number;
+            /** Format: int64 */
+            unknownNodes?: number;
+            /** Format: int64 */
+            totalPods?: number;
+            podPhaseCounts?: {
+                [key: string]: number;
+            };
+            /** Format: double */
+            averageCpuUsagePercent?: number;
+            dataSources?: components["schemas"]["DataSources"];
+            /** Format: date-time */
+            collectedAt?: string;
+        };
+        ApiResponsePodList: {
+            data?: components["schemas"]["PodList"];
+            meta?: components["schemas"]["ResponseMeta"];
+        };
+        Pod: {
+            namespace?: string;
+            name?: string;
+            node?: string;
+            phase?: string;
+            /** Format: int64 */
+            restartCount?: number;
+        };
+        PodList: {
+            cluster?: string;
+            kubernetesStateAvailable?: boolean;
+            pods?: components["schemas"]["Pod"][];
+            /** Format: int32 */
+            returned?: number;
+            /** Format: date-time */
+            collectedAt?: string;
+        };
+        ApiResponseNodeList: {
+            data?: components["schemas"]["NodeList"];
+            meta?: components["schemas"]["ResponseMeta"];
+        };
+        Node: {
+            name?: string;
+            ready?: string;
+            exporterUp?: boolean;
+            /** Format: double */
+            cpuUsagePercent?: number;
+            /** Format: double */
+            memoryUsagePercent?: number;
+            /** Format: int64 */
+            podCount?: number;
+        };
+        NodeList: {
+            cluster?: string;
+            dataSources?: components["schemas"]["DataSources"];
+            nodes?: components["schemas"]["Node"][];
+            /** Format: date-time */
+            collectedAt?: string;
+        };
+        ApiResponseCpuTrend: {
+            data?: components["schemas"]["CpuTrend"];
+            meta?: components["schemas"]["ResponseMeta"];
+        };
+        CpuPoint: {
+            /** Format: date-time */
+            timestamp?: string;
+            /** Format: double */
+            value?: number;
+        };
+        CpuTrend: {
+            cluster?: string;
+            node?: string;
+            window?: string;
+            nodeMetricsAvailable?: boolean;
+            points?: components["schemas"]["CpuPoint"][];
+            /** Format: date-time */
+            collectedAt?: string;
+        };
+        ApiResponseClusterList: {
+            data?: components["schemas"]["ClusterList"];
+            meta?: components["schemas"]["ResponseMeta"];
+        };
+        Cluster: {
+            name?: string;
+            nodeMetricsAvailable?: boolean;
+            kubernetesStateAvailable?: boolean;
+            /** Format: int32 */
+            nodeCount?: number;
+        };
+        ClusterList: {
+            clusters?: components["schemas"]["Cluster"][];
+            /** Format: date-time */
+            collectedAt?: string;
         };
     };
     responses: never;
@@ -7378,6 +7565,120 @@ export interface operations {
                 };
                 content: {
                     "*/*": components["schemas"]["AlarmMaintenanceWindowRevocationResponse"];
+                };
+            };
+        };
+    };
+    summary: {
+        parameters: {
+            query: {
+                cluster: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseSummary"];
+                };
+            };
+        };
+    };
+    pods: {
+        parameters: {
+            query: {
+                cluster: string;
+                namespace?: string;
+                phase?: string;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponsePodList"];
+                };
+            };
+        };
+    };
+    nodes: {
+        parameters: {
+            query: {
+                cluster: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseNodeList"];
+                };
+            };
+        };
+    };
+    cpuTrend: {
+        parameters: {
+            query: {
+                cluster: string;
+                window?: string;
+            };
+            header?: never;
+            path: {
+                node: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseCpuTrend"];
+                };
+            };
+        };
+    };
+    clusters: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseClusterList"];
                 };
             };
         };

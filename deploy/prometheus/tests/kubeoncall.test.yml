@@ -10,6 +10,10 @@ tests:
         values: '0 0 0 0'
       - series: 'kubeoncall_sandbox_cleanup{status="FAILED"}'
         values: '1x11'
+      - series: 'kube_node_status_condition{cluster="prod",condition="Ready",node="worker-2",status="true"}'
+        values: '0x11'
+      - series: 'kube_pod_status_phase{cluster="prod",namespace="payments",node="worker-2",phase="Pending",pod="payments-api-1"}'
+        values: '1x11'
     alert_rule_test:
       - eval_time: 2m
         alertname: NodeDown
@@ -30,3 +34,26 @@ tests:
               status: FAILED
             exp_annotations:
               summary: KubeOnCall Sandbox cleanup failed or remains pending over 10 minutes
+      - eval_time: 5m
+        alertname: NodeNotReady
+        exp_alerts:
+          - exp_labels:
+              cluster: prod
+              condition: Ready
+              node: worker-2
+              severity: P1
+              status: "true"
+            exp_annotations:
+              summary: Kubernetes node is not Ready
+      - eval_time: 10m
+        alertname: PodPendingTooLong
+        exp_alerts:
+          - exp_labels:
+              cluster: prod
+              namespace: payments
+              node: worker-2
+              phase: Pending
+              pod: payments-api-1
+              severity: P2
+            exp_annotations:
+              summary: Kubernetes pod remains Pending

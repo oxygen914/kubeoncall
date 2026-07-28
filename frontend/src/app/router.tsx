@@ -3,6 +3,7 @@ import { AuthBoundary } from '@/features/auth/AuthBoundary'
 import { LoginPage } from '@/features/auth/LoginPage'
 import { SystemStatusPage } from '@/features/system/SystemStatusPage'
 import { OverviewPage } from '@/features/overview/OverviewPage'
+import { MonitoringPage } from '@/features/monitoring/MonitoringPage'
 import { AskPage } from '@/features/ask/AskPage'
 import { UserManagementPage } from '@/features/users/UserManagementPage'
 import { MigrationPage } from '@/features/migration/MigrationPage'
@@ -116,6 +117,14 @@ export function AppRouter() {
           element={
             <Restricted permission={PERMISSIONS.DASHBOARD_READ}>
               <OverviewPage />
+            </Restricted>
+          }
+        />
+        <Route
+          path="/monitoring"
+          element={
+            <Restricted permission={PERMISSIONS.DASHBOARD_READ}>
+              <MonitoringPage />
             </Restricted>
           }
         />

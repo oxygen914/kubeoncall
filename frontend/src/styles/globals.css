@@ -702,3 +702,164 @@ code {
   border-radius: var(--koc-radius-sm);
   background: var(--koc-primary-500);
 }
+
+/* ---------- Cluster monitoring ---------- */
+.koc-monitoring {
+  display: flex;
+  flex-direction: column;
+  gap: var(--koc-space-4);
+}
+.koc-monitoring__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--koc-space-4);
+}
+.koc-monitoring__panel {
+  padding: var(--koc-space-4);
+  border: 1px solid var(--koc-border);
+  border-radius: var(--koc-radius-md);
+  background: var(--koc-surface);
+}
+.koc-monitoring__panel-title {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--koc-space-4);
+  margin-bottom: var(--koc-space-3);
+}
+.koc-monitoring__panel-title h2 {
+  margin: 0;
+  font-size: var(--koc-font-lg);
+}
+.koc-monitoring__panel-title p {
+  margin: var(--koc-space-1) 0 0;
+  color: var(--koc-text-muted);
+  font-size: var(--koc-font-sm);
+}
+.koc-monitoring__notices {
+  display: grid;
+  gap: var(--koc-space-2);
+}
+.koc-monitoring__scope {
+  display: grid;
+  min-width: 12rem;
+  gap: 0.2rem;
+  padding: var(--koc-space-2) var(--koc-space-3);
+  border: 1px solid var(--koc-border);
+  border-radius: var(--koc-radius-md);
+  background: var(--koc-surface);
+}
+.koc-monitoring__scope > span {
+  color: var(--koc-text-muted);
+  font-size: var(--koc-font-xs);
+}
+.koc-monitoring__scope > strong {
+  font-size: var(--koc-font-md);
+}
+.koc-monitoring__sources {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--koc-space-3);
+}
+.koc-monitoring__sources > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--koc-space-3);
+  padding: var(--koc-space-3) var(--koc-space-4);
+  border: 1px solid var(--koc-border);
+  border-radius: var(--koc-radius-md);
+  background: var(--koc-surface);
+}
+.koc-monitoring__sources span:first-child {
+  color: var(--koc-text-muted);
+  font-size: var(--koc-font-sm);
+}
+.koc-monitoring__sources strong {
+  font-size: var(--koc-font-sm);
+}
+.koc-monitoring__phase-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--koc-space-3);
+}
+.koc-monitoring__notice {
+  margin: 0;
+  padding: var(--koc-space-3) var(--koc-space-4);
+  border-radius: var(--koc-radius-md);
+  font-size: var(--koc-font-sm);
+}
+.koc-monitoring__notice[data-tone='warning'] {
+  color: var(--koc-warning);
+  background: var(--koc-warning-bg);
+}
+.koc-monitoring__notice[data-tone='danger'] {
+  color: var(--koc-danger);
+  background: var(--koc-danger-bg);
+}
+.koc-monitoring__table-wrap {
+  overflow-x: auto;
+}
+.koc-monitoring__table-wrap tr[data-selected='true'] {
+  background: var(--koc-surface-muted);
+}
+.koc-monitoring__node-button {
+  appearance: none;
+  padding: 0;
+  border: 0;
+  color: var(--koc-primary-600);
+  background: transparent;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+.koc-monitoring__node-button:hover {
+  text-decoration: underline;
+}
+.koc-monitoring__pod-name {
+  display: block;
+  margin-top: 0.2rem;
+  color: var(--koc-text-muted);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: var(--koc-font-xs);
+}
+.koc-monitoring__chart {
+  min-height: 220px;
+}
+.koc-monitoring__chart svg {
+  width: 100%;
+  height: 200px;
+}
+.koc-monitoring__chart line {
+  stroke: var(--koc-border);
+  stroke-width: 1;
+}
+.koc-monitoring__chart polyline {
+  fill: none;
+  stroke: var(--koc-primary-500);
+  stroke-width: 3;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.koc-monitoring__chart-legend,
+.koc-monitoring__chart-time {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--koc-space-3);
+  color: var(--koc-text-muted);
+  font-size: var(--koc-font-xs);
+}
+.koc-monitoring__chart-legend strong {
+  color: var(--koc-text);
+}
+@media (max-width: 720px) {
+  .koc-monitoring__header,
+  .koc-monitoring__panel-title {
+    flex-direction: column;
+  }
+  .koc-monitoring__sources,
+  .koc-monitoring__phase-grid {
+    grid-template-columns: 1fr;
+  }
+}

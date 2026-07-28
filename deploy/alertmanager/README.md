@@ -19,7 +19,9 @@ Alertmanager 只配置一个 KubeOnCall Webhook receiver，并使用 Bearer Toke
 ./scripts/verify-prometheus-rules.sh
 ```
 
-如需 `NodeNotReady`，需单独部署 kube-state-metrics 并添加 scrape target；默认 Node Exporter 配置只覆盖节点不可达、CPU、内存、磁盘和 inode 五条规则。
+`NodeNotReady` 和 `PodPendingTooLong` 规则已经随仓库提供，但只有部署
+kube-state-metrics 并添加 scrape target 后才会产生数据；默认 Docker Node Exporter
+仍只提供节点不可达、CPU、内存、磁盘和 inode 指标。
 
 ## 端到端演练
 
