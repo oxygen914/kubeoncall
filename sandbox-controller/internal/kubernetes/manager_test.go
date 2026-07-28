@@ -24,7 +24,11 @@ func newTestManager(t *testing.T) (*Manager, *fake.Clientset) {
 	builder := jobs.Builder{
 		Namespace: "kubeoncall-sandbox",
 		Tools: map[string]jobs.Tool{
-			"pod-inspect:v1": {ID: "pod-inspect", Version: "v1", Image: testImage, Entrypoint: []string{"/tool"}},
+			"pod-inspect:v1": {
+				ID: "pod-inspect", Version: "v1", Image: testImage, Entrypoint: []string{"/tool"},
+				Runtime: jobs.RuntimeFixedDiagnostic, NetworkEgressPolicy: jobs.NetworkEgressDenyAll,
+				Limits: jobs.Limits{CPUMilli: 250, MemoryMiB: 256, EphemeralMiB: 256, TimeoutSeconds: 120, TTLSeconds: 3600},
+			},
 		},
 		Ceiling: jobs.Limits{CPUMilli: 500, MemoryMiB: 512, EphemeralMiB: 512, TimeoutSeconds: 300, TTLSeconds: 3600},
 	}
@@ -63,6 +67,13 @@ func TestEnsureJobCreatesAndIsIdempotentOnReplay(t *testing.T) {
 	}
 	if len(jobs.Items) != 1 {
 		t.Fatalf("expected exactly 1 job, got %d", len(jobs.Items))
+	}
+	resources := jobs.Items[0].Spec.Template.Spec.Containers[0].Resources
+	if resources.Limits.Cpu().MilliValue() != 250 ||
+		resources.Requests.Cpu().MilliValue() != 250 ||
+		jobs.Items[0].Spec.ActiveDeadlineSeconds == nil ||
+		*jobs.Items[0].Spec.ActiveDeadlineSeconds != 120 {
+		t.Fatalf("job did not use tool-specific resources: %#v", jobs.Items[0].Spec)
 	}
 }
 
@@ -216,8 +227,8 @@ func TestEnsureJobEmitsHardenedSecurityContext(t *testing.T) {
 	if job.Spec.TTLSecondsAfterFinished == nil || *job.Spec.TTLSecondsAfterFinished != 3600 {
 		t.Fatal("TTL must be set")
 	}
-	if job.Spec.ActiveDeadlineSeconds == nil || *job.Spec.ActiveDeadlineSeconds != 300 {
-		t.Fatal("active deadline (timeout) must be set")
+	if job.Spec.ActiveDeadlineSeconds == nil || *job.Spec.ActiveDeadlineSeconds != 120 {
+		t.Fatal("tool-specific active deadline must be set")
 	}
 	if pod.Spec.AutomountServiceAccountToken == nil || *pod.Spec.AutomountServiceAccountToken {
 		t.Fatal("sandbox jobs must not mount a ServiceAccount token")
@@ -230,7 +241,9 @@ func TestEnsureJobEmitsHardenedSecurityContext(t *testing.T) {
 			t.Fatalf("sandbox job received credential-like env %s", env.Name)
 		}
 	}
-	if job.Labels[RunIDLabel] != "sbx_a3b4" || job.Labels[ToolVersionLabel] != "v1" {
+	if job.Labels[RunIDLabel] != "sbx_a3b4" ||
+		job.Labels[ToolVersionLabel] != "v1" ||
+		job.Labels["sandbox.kubeoncall.io/network-egress"] != "DENY_ALL" {
 		t.Fatalf("job labels = %v", job.Labels)
 	}
 	// Expiry lives in an annotation because RFC3339 colons are illegal in label values; assert it is

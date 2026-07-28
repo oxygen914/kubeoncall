@@ -7,7 +7,9 @@ spring:
     uris: http://elasticsearch:9200
 
 kubeoncall:
-  mysql-enabled: true
+  # Compose keeps the historical MySQL-on default; Helm explicitly supplies false when the
+  # external database profile is disabled.
+  mysql-enabled: ${KUBEONCALL_MYSQL_ENABLED:true}
   auth:
     session-cookie-secure: ${KUBEONCALL_AUTH_SESSION_COOKIE_SECURE:false}
     session-idle-timeout-seconds: ${KUBEONCALL_AUTH_SESSION_IDLE_TIMEOUT_SECONDS:1800}

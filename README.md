@@ -14,7 +14,9 @@ KubeOnCall 是一个面向 Kubernetes 和云基础设施运维的多智能体服
 项目采用前后端分离的单仓库结构：Spring Boot 后端承载核心能力，独立 Web Console 用于数据调试，根目录负责 Docker Compose、部署和文档。
 
 > [!IMPORTANT]
-> 当前版本为 `0.0.1-SNAPSHOT`，仓库没有正式发布镜像和独立 `LICENSE`。Compose 默认是单机部署，不代表高可用生产架构；对外发布或生产使用前需要补充许可证、TLS、Secret 管理、备份和容量评估。
+> 当前源码版本为 `0.0.1-SNAPSHOT`，仓库已具备按 `vX.Y.Z` Tag 发布多架构镜像和 Helm OCI
+> Chart 的流水线，但在首个 Release 实际成功前仍不能视为已有正式镜像。仓库尚无独立
+> `LICENSE`；Compose 和 Helm Quickstart 都不代表高可用生产架构。
 
 ## 为什么使用 KubeOnCall
 
@@ -158,11 +160,12 @@ curl --fail \
 | --- | --- | --- |
 | Docker Compose | 本地开发、单机 Linux、功能演练 | 仓库内编排应用和基础依赖 |
 | Standalone YAML | Minikube 或测试集群 | 包含应用、Redis、ES、MinIO、PVC 和初始化 Job |
-| Helm | 已有 Kubernetes 平台 | 只部署 KubeOnCall；外部依赖由平台提供 |
+| Helm Quickstart | Kind、Minikube、临时测试集群 | 单命令部署应用与临时 MySQL/Redis/ES/MinIO |
+| Helm Production | 已有 Kubernetes 平台 | 多镜像部署；数据库、存储、监控和工具 Adapter 由平台提供 |
 
 - Compose：[安装指南](docs/installation.md#2-docker-compose-快速安装)
 - Standalone YAML：[后端运行手册](docs/后端运行手册.md#单文件-kubernetes-部署)
-- Helm：[Chart 部署说明](deploy/helm/kubeoncall/README.md)
+- Helm Quickstart、Production 和 Sandbox Release：[Chart 部署说明](deploy/helm/kubeoncall/README.md)
 
 Compose 默认把所有端口绑定到 `127.0.0.1`，并使用命名卷保存数据。需要远程访问时优先使用 SSH 隧道或 TLS 反向代理，不要把 Redis、Elasticsearch 或 MinIO 直接暴露到公网。
 

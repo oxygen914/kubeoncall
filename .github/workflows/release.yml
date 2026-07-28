@@ -1,0 +1,372 @@
+name: release
+
+on:
+  push:
+    tags: ["v*.*.*"]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: SemVer release version, for example 0.1.0
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  packages: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  REGISTRY: ghcr.io
+  REGISTRY_PREFIX: ghcr.io/${{ github.repository_owner }}
+
+# Third-party Actions are pinned to immutable commit SHAs. Release images are first published under
+# candidate tags, scanned by architecture, and promoted only after every matrix entry succeeds.
+jobs:
+  backend-jar:
+    name: Build tested Backend JAR
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/setup-java@c1e323688fd81a25caa38c78aa6df2d33d3e20d9
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: maven
+          cache-dependency-path: backend/pom.xml
+      - name: Build release JAR
+        shell: bash
+        working-directory: backend
+        run: |
+          ./mvnw --batch-mode --no-transfer-progress verify -Pintegration-test
+          jar_path="$(find target -maxdepth 1 -name 'kubeoncall-*.jar' ! -name '*.original' -print -quit)"
+          test -n "${jar_path}"
+          cp "${jar_path}" target/kubeoncall.jar
+      - name: Verify source-controlled OpenAPI contract
+        working-directory: backend
+        run: |
+          ./mvnw --batch-mode --no-transfer-progress verify -Popenapi-contract
+          git diff --exit-code -- api/openapi.json
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: kubeoncall-backend-jar
+          path: backend/target/kubeoncall.jar
+          if-no-files-found: error
+
+  console-test:
+    name: Verify Console
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Test release Console
+        working-directory: frontend
+        run: |
+          npm ci
+          npm run api:check
+          npm run typecheck
+          npm run lint
+          npm run test
+          npm run build
+          npx playwright install --with-deps chromium
+          npm run e2e
+
+  controller-test:
+    name: Verify Sandbox Controller
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff
+        with:
+          go-version-file: sandbox-controller/go.mod
+          cache-dependency-path: sandbox-controller/go.sum
+      - name: Test release Controller
+        working-directory: sandbox-controller
+        run: |
+          go test ./...
+          go vet ./...
+          go test -run=^$ -fuzz=FuzzAuthenticatorRejectsMalformedInput -fuzztime=10s ./internal/httpapi
+
+  packaging-test:
+    name: Verify Helm and release packaging
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4
+      - name: Verify release packaging
+        run: ./scripts/verify-release-packaging.sh
+
+  images:
+    name: Build and scan ${{ matrix.image }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    needs: [backend-jar, console-test, controller-test, packaging-test]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - image: kubeoncall-backend
+            context: .
+            dockerfile: ./deploy/local/Dockerfile.prebuilt
+          - image: kubeoncall-console
+            context: ./frontend
+            dockerfile: ./frontend/Dockerfile
+          - image: kubeoncall-sandbox-controller
+            context: ./sandbox-controller
+            dockerfile: ./sandbox-controller/Dockerfile
+          - image: kubeoncall-sandbox-generated-python
+            context: ./sandbox-runtimes/generated-code
+            dockerfile: ./sandbox-runtimes/generated-code/python/Dockerfile
+          - image: kubeoncall-sandbox-generated-posix-shell
+            context: ./sandbox-runtimes/generated-code
+            dockerfile: ./sandbox-runtimes/generated-code/posix-shell/Dockerfile
+          - image: kubeoncall-sandbox-manifest-validation
+            context: ./sandbox-runtimes/manifest-validation
+            dockerfile: ./sandbox-runtimes/manifest-validation/Dockerfile
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: kubeoncall-backend-jar
+          path: backend/target
+      - id: version
+        name: Resolve release version
+        shell: bash
+        run: |
+          if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" ]]; then
+            version="${{ inputs.version }}"
+          else
+            version="${GITHUB_REF_NAME#v}"
+          fi
+          if [[ ! "${version}" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+            echo "invalid Docker-tag-safe SemVer release: ${version}" >&2
+            exit 1
+          fi
+          echo "version=${version}" >>"${GITHUB_OUTPUT}"
+      - uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: build
+        name: Build and publish attested release candidate
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.dockerfile }}
+          platforms: linux/amd64,linux/arm64
+          push: true
+          provenance: mode=max
+          sbom: true
+          tags: |
+            ${{ env.REGISTRY_PREFIX }}/${{ matrix.image }}:candidate-${{ github.sha }}
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.version=${{ steps.version.outputs.version }}
+      - name: Pull exact candidate for both architectures
+        shell: bash
+        env:
+          IMAGE_REF: ${{ env.REGISTRY_PREFIX }}/${{ matrix.image }}@${{ steps.build.outputs.digest }}
+        run: |
+          docker pull --platform linux/amd64 "${IMAGE_REF}"
+          amd64_id="$(docker image inspect --format='{{.Id}}' "${IMAGE_REF}")"
+          docker tag "${amd64_id}" "${{ matrix.image }}:release-scan-amd64"
+          docker pull --platform linux/arm64 "${IMAGE_REF}"
+          arm64_id="$(docker image inspect --format='{{.Id}}' "${IMAGE_REF}")"
+          docker tag "${arm64_id}" "${{ matrix.image }}:release-scan-arm64"
+          test "${amd64_id}" != "${arm64_id}"
+      - name: Reject HIGH or CRITICAL amd64 vulnerabilities
+        uses: aquasecurity/trivy-action@6e7b7d1fd3e4fef0c5fa8cce1229c54b2c9bd0d8
+        with:
+          image-ref: ${{ matrix.image }}:release-scan-amd64
+          severity: HIGH,CRITICAL
+          exit-code: "1"
+          ignore-unfixed: true
+      - name: Reject HIGH or CRITICAL arm64 vulnerabilities
+        uses: aquasecurity/trivy-action@6e7b7d1fd3e4fef0c5fa8cce1229c54b2c9bd0d8
+        with:
+          image-ref: ${{ matrix.image }}:release-scan-arm64
+          severity: HIGH,CRITICAL
+          exit-code: "1"
+          ignore-unfixed: true
+      - name: Record multi-platform digest
+        shell: bash
+        run: |
+          mkdir -p image-digests
+          printf '%s\n' '${{ steps.build.outputs.digest }}' >"image-digests/${{ matrix.image }}.digest"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: image-digest-${{ matrix.image }}
+          path: image-digests/*.digest
+          if-no-files-found: error
+
+  runtime-smoke:
+    name: Smoke scanned candidate images
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read
+    needs: images
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Pull scanned release candidates
+        shell: bash
+        run: |
+          for image in \
+            kubeoncall-backend \
+            kubeoncall-console \
+            kubeoncall-sandbox-controller \
+            kubeoncall-sandbox-generated-python \
+            kubeoncall-sandbox-generated-posix-shell \
+            kubeoncall-sandbox-manifest-validation; do
+            docker pull "${REGISTRY_PREFIX}/${image}:candidate-${GITHUB_SHA}"
+          done
+      - name: Smoke exact candidate images
+        env:
+          KUBEONCALL_BACKEND_IMAGE: ${{ env.REGISTRY_PREFIX }}/kubeoncall-backend:candidate-${{ github.sha }}
+          KUBEONCALL_CONSOLE_IMAGE: ${{ env.REGISTRY_PREFIX }}/kubeoncall-console:candidate-${{ github.sha }}
+          KUBEONCALL_SANDBOX_CONTROLLER_IMAGE: ${{ env.REGISTRY_PREFIX }}/kubeoncall-sandbox-controller:candidate-${{ github.sha }}
+          KUBEONCALL_SANDBOX_PYTHON_IMAGE: ${{ env.REGISTRY_PREFIX }}/kubeoncall-sandbox-generated-python:candidate-${{ github.sha }}
+          KUBEONCALL_SANDBOX_SHELL_IMAGE: ${{ env.REGISTRY_PREFIX }}/kubeoncall-sandbox-generated-posix-shell:candidate-${{ github.sha }}
+          KUBEONCALL_SANDBOX_MANIFEST_IMAGE: ${{ env.REGISTRY_PREFIX }}/kubeoncall-sandbox-manifest-validation:candidate-${{ github.sha }}
+        run: ./scripts/verify-release-image-runtime.sh
+
+  promote-images:
+    name: Promote scanned image manifests
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    needs: [images, runtime-smoke]
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - id: version
+        name: Resolve release version
+        shell: bash
+        run: |
+          if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" ]]; then
+            version="${{ inputs.version }}"
+          else
+            version="${GITHUB_REF_NAME#v}"
+          fi
+          if [[ ! "${version}" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+            echo "invalid Docker-tag-safe SemVer release: ${version}" >&2
+            exit 1
+          fi
+          echo "version=${version}" >>"${GITHUB_OUTPUT}"
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          pattern: image-digest-*
+          path: image-digests
+          merge-multiple: true
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Promote only fully scanned manifests
+        shell: bash
+        run: |
+          for image in \
+            kubeoncall-backend \
+            kubeoncall-console \
+            kubeoncall-sandbox-controller \
+            kubeoncall-sandbox-generated-python \
+            kubeoncall-sandbox-generated-posix-shell \
+            kubeoncall-sandbox-manifest-validation; do
+            digest="$(tr -d '[:space:]' <"image-digests/${image}.digest")"
+            [[ "${digest}" =~ ^sha256:[0-9a-f]{64}$ ]]
+            docker buildx imagetools create \
+              --tag "${REGISTRY_PREFIX}/${image}:${{ steps.version.outputs.version }}" \
+              "${REGISTRY_PREFIX}/${image}@${digest}"
+            docker buildx imagetools inspect \
+              "${REGISTRY_PREFIX}/${image}:${{ steps.version.outputs.version }}" >/dev/null
+          done
+
+  helm:
+    name: Publish Helm OCI chart
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      packages: write
+    needs: promote-images
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - id: version
+        name: Resolve release version
+        shell: bash
+        run: |
+          if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" ]]; then
+            version="${{ inputs.version }}"
+          else
+            version="${GITHUB_REF_NAME#v}"
+          fi
+          echo "version=${version}" >>"${GITHUB_OUTPUT}"
+          echo "tag=v${version}" >>"${GITHUB_OUTPUT}"
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          pattern: image-digest-*
+          path: image-digests
+          merge-multiple: true
+      - uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4
+      - name: Render release-pinned Sandbox values
+        run: |
+          ./scripts/render-release-values.sh \
+            "${REGISTRY_PREFIX}" \
+            "${{ steps.version.outputs.version }}" \
+            image-digests \
+            kubeoncall-release-values.yaml
+      - name: Validate and package chart
+        run: |
+          helm lint --strict deploy/helm/kubeoncall
+          helm template kubeoncall deploy/helm/kubeoncall \
+            --namespace kubeoncall \
+            --values deploy/helm/kubeoncall/values-quickstart.yaml \
+            --values kubeoncall-release-values.yaml >/dev/null
+          mkdir -p dist
+          helm package deploy/helm/kubeoncall \
+            --destination dist \
+            --version "${{ steps.version.outputs.version }}" \
+            --app-version "${{ steps.version.outputs.version }}"
+      - name: Login and publish chart
+        run: |
+          printf '%s' "${{ secrets.GITHUB_TOKEN }}" |
+            helm registry login "${REGISTRY}" --username "${{ github.actor }}" --password-stdin
+          helm push "dist/kubeoncall-${{ steps.version.outputs.version }}.tgz" \
+            "oci://${REGISTRY_PREFIX}/charts"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: kubeoncall-release-${{ steps.version.outputs.version }}
+          path: |
+            dist/kubeoncall-${{ steps.version.outputs.version }}.tgz
+            kubeoncall-release-values.yaml
+      - name: Attach install assets to GitHub release
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release view "${{ steps.version.outputs.tag }}" >/dev/null 2>&1 ||
+            gh release create "${{ steps.version.outputs.tag }}" \
+              --title "KubeOnCall ${{ steps.version.outputs.version }}" \
+              --generate-notes
+          gh release upload "${{ steps.version.outputs.tag }}" \
+            "dist/kubeoncall-${{ steps.version.outputs.version }}.tgz" \
+            kubeoncall-release-values.yaml \
+            --clobber

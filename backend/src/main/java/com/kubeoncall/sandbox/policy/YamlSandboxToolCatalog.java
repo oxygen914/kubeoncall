@@ -8,25 +8,42 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.function.Predicate;
 
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.ClassPathResource;
+import org.springframework.core.io.FileSystemResource;
+import org.springframework.core.io.Resource;
 import org.springframework.stereotype.Component;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
 import com.kubeoncall.sandbox.domain.SandboxRunMode;
 
-/** Loads the immutable, versioned server-owned sandbox tool catalog bundled with the backend. */
+/**
+ * Loads the immutable, versioned server-owned sandbox tool catalog.
+ *
+ * <p>The classpath catalog is the safe default for local development. A release may mount a
+ * generated catalog containing registry-published image digests and select it through
+ * {@code KUBEONCALL_SANDBOX_TOOL_CATALOG_PATH}; callers still cannot provide an image or command.
+ */
 @Component
 public class YamlSandboxToolCatalog implements SandboxToolCatalog {
 
     private final Map<String, SandboxToolSpec> tools;
 
-    public YamlSandboxToolCatalog() {
-        try (InputStream input = new ClassPathResource("sandbox-tools/tools.yaml").getInputStream()) {
+    @Autowired
+    public YamlSandboxToolCatalog(@Value("${kubeoncall.sandbox.tool-catalog-path:}") String catalogPath) {
+        Resource resource = catalogResource(catalogPath);
+        try (InputStream input = resource.getInputStream()) {
             this.tools = load(input, YamlSandboxToolCatalog::schemaExists);
         } catch (Exception ex) {
-            throw new IllegalStateException("cannot load sandbox tool catalog", ex);
+            throw new IllegalStateException("cannot load sandbox tool catalog from " + resource.getDescription(), ex);
         }
+    }
+
+    /** Package-visible default keeps the bundled catalogue directly testable. */
+    YamlSandboxToolCatalog() {
+        this("");
     }
 
     /** Package-visible constructor keeps malformed catalog contracts directly testable. */
@@ -95,6 +112,12 @@ public class YamlSandboxToolCatalog implements SandboxToolCatalog {
 
     private static String key(String id, String version) {
         return id.trim() + ":" + version.trim();
+    }
+
+    private static Resource catalogResource(String catalogPath) {
+        return catalogPath == null || catalogPath.isBlank()
+                ? new ClassPathResource("sandbox-tools/tools.yaml")
+                : new FileSystemResource(catalogPath.trim());
     }
 
     private static boolean sha256Digest(String image) {

@@ -1,0 +1,92 @@
+{{- if and .Values.config.sandboxEnabled (not .Values.sandboxController.enabled) -}}
+{{- fail "config.sandboxEnabled requires sandboxController.enabled" -}}
+{{- end -}}
+{{- if and .Values.sandboxController.enabled (not .Values.sandboxTools.catalog.enabled) -}}
+{{- fail "sandboxController.enabled requires sandboxTools.catalog.enabled with release-pinned images" -}}
+{{- end -}}
+{{- if .Values.sandboxTools.catalog.enabled }}
+{{- $enabledTools := 0 }}
+{{- range .Values.sandboxTools.tools }}
+{{- if .enabled }}
+{{- $enabledTools = add1 $enabledTools }}
+{{- if not .image.repository }}
+{{- fail (printf "sandbox tool %s:%s requires image.repository" .id .version) }}
+{{- end }}
+{{- if not (regexMatch "^sha256:[0-9a-f]{64}$" .image.digest) }}
+{{- fail (printf "sandbox tool %s:%s requires a sha256-pinned image.digest" .id .version) }}
+{{- end }}
+{{- end }}
+{{- end }}
+{{- if lt $enabledTools 3 }}
+{{- fail "sandboxTools.catalog.enabled requires at least three enabled, release-pinned tools" }}
+{{- end }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "kubeoncall.sandboxCatalogName" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "kubeoncall.labels" . | nindent 4 }}
+    app.kubernetes.io/component: sandbox-tool-catalog
+data:
+  tools.yaml: |
+    tools:
+{{ range .Values.sandboxTools.tools }}
+{{- if .enabled }}
+      - id: {{ .id | quote }}
+        version: {{ .version | quote }}
+        mode: {{ .mode | quote }}
+        imageDigest: {{ printf "%s@%s" .image.repository .image.digest | quote }}
+        entrypoint: {{ .entrypoint | quote }}
+        networkEgressPolicy: {{ .networkEgressPolicy | quote }}
+        inputSchemaRef: {{ .inputSchemaRef | quote }}
+        outputSchemaRef: {{ .outputSchemaRef | quote }}
+        resources:
+          cpu: {{ .resources.cpu | quote }}
+          memory: {{ .resources.memory | quote }}
+          ephemeralStorage: {{ .resources.ephemeralStorage | quote }}
+          inputMaxBytes: {{ .resources.inputMaxBytes | int64 }}
+          outputMaxBytes: {{ .resources.outputMaxBytes | int64 }}
+          logMaxBytes: {{ .resources.logMaxBytes | int64 }}
+          scriptMaxBytes: {{ .resources.scriptMaxBytes | int64 }}
+          timeoutSeconds: {{ .resources.timeoutSeconds | int64 }}
+          maxTimeoutSeconds: {{ .resources.maxTimeoutSeconds | int64 }}
+{{- end }}
+{{- end }}
+{{- if and .Values.sandboxController.enabled (ne .Release.Namespace .Values.sandboxController.namespace) }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "kubeoncall.sandboxCatalogName" . }}
+  namespace: {{ .Values.sandboxController.namespace }}
+  labels:
+    {{- include "kubeoncall.labels" . | nindent 4 }}
+    app.kubernetes.io/component: sandbox-tool-catalog
+data:
+  tools.yaml: |
+    tools:
+{{ range .Values.sandboxTools.tools }}
+{{- if .enabled }}
+      - id: {{ .id | quote }}
+        version: {{ .version | quote }}
+        mode: {{ .mode | quote }}
+        imageDigest: {{ printf "%s@%s" .image.repository .image.digest | quote }}
+        entrypoint: {{ .entrypoint | quote }}
+        networkEgressPolicy: {{ .networkEgressPolicy | quote }}
+        inputSchemaRef: {{ .inputSchemaRef | quote }}
+        outputSchemaRef: {{ .outputSchemaRef | quote }}
+        resources:
+          cpu: {{ .resources.cpu | quote }}
+          memory: {{ .resources.memory | quote }}
+          ephemeralStorage: {{ .resources.ephemeralStorage | quote }}
+          inputMaxBytes: {{ .resources.inputMaxBytes | int64 }}
+          outputMaxBytes: {{ .resources.outputMaxBytes | int64 }}
+          logMaxBytes: {{ .resources.logMaxBytes | int64 }}
+          scriptMaxBytes: {{ .resources.scriptMaxBytes | int64 }}
+          timeoutSeconds: {{ .resources.timeoutSeconds | int64 }}
+          maxTimeoutSeconds: {{ .resources.maxTimeoutSeconds | int64 }}
+{{- end }}
+{{- end }}
+{{- end }}
+{{- end }}

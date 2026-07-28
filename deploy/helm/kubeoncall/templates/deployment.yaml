@@ -4,28 +4,111 @@ metadata:
   name: {{ include "kubeoncall.fullname" . }}
   labels:
     {{- include "kubeoncall.labels" . | nindent 4 }}
+    app.kubernetes.io/component: backend
 spec:
+  {{- if .Values.quickstart.enabled }}
+  replicas: 1
+  {{- else if not .Values.autoscaling.enabled }}
   replicas: {{ .Values.replicaCount }}
+  {{- end }}
+  revisionHistoryLimit: {{ .Values.deployment.revisionHistoryLimit }}
+  progressDeadlineSeconds: {{ .Values.deployment.progressDeadlineSeconds }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: {{ .Values.deployment.strategy.maxUnavailable }}
+      maxSurge: {{ .Values.deployment.strategy.maxSurge }}
   selector:
     matchLabels:
       {{- include "kubeoncall.labels" . | nindent 6 }}
+      app.kubernetes.io/component: backend
   template:
     metadata:
       labels:
         {{- include "kubeoncall.labels" . | nindent 8 }}
+        app.kubernetes.io/component: backend
     spec:
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      {{- if and (not .Values.quickstart.enabled) .Values.podAntiAffinity.enabled }}
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                topologyKey: {{ .Values.podAntiAffinity.topologyKey | quote }}
+                labelSelector:
+                  matchLabels:
+                    app.kubernetes.io/name: {{ include "kubeoncall.name" . }}
+                    app.kubernetes.io/instance: {{ .Release.Name }}
+                    app.kubernetes.io/component: backend
+      {{- end }}
+      {{- if and (not .Values.quickstart.enabled) .Values.topologySpread.enabled }}
+      topologySpreadConstraints:
+        {{- range .Values.topologySpread.topologyKeys }}
+        - maxSkew: {{ $.Values.topologySpread.maxSkew }}
+          topologyKey: {{ . | quote }}
+          whenUnsatisfiable: {{ $.Values.topologySpread.whenUnsatisfiable }}
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: {{ include "kubeoncall.name" $ }}
+              app.kubernetes.io/instance: {{ $.Release.Name }}
+              app.kubernetes.io/component: backend
+        {{- end }}
+      {{- end }}
+      {{- with .Values.global.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- if .Values.quickstart.enabled }}
+      # The application owns Quickstart Flyway execution. Wait for both MySQL and its init scripts
+      # to create the migration identity, otherwise the first Pod would crash-loop during image
+      # pulls even though the release is healthy once dependencies settle.
+      initContainers:
+        - name: wait-for-mysql
+          image: {{ .Values.quickstart.mysql.image | quote }}
+          imagePullPolicy: IfNotPresent
+          command: ["/bin/sh", "-ec"]
+          args:
+            - >-
+              until mysql --connect-timeout=2
+              --host={{ .Values.mysql.inClusterHost | quote }}
+              --user="${MYSQL_MIGRATION_USER}"
+              --password="${MYSQL_MIGRATION_PASSWORD}"
+              --execute='SELECT 1'; do sleep 2; done
+          env:
+            - name: MYSQL_MIGRATION_USER
+              value: {{ .Values.mysql.migrationUsername | quote }}
+            - name: MYSQL_MIGRATION_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secrets.existingSecret }}
+                  key: {{ .Values.secrets.mysqlMigrationPasswordKey }}
+          resources:
+            requests: {cpu: 10m, memory: 32Mi}
+            limits: {cpu: 100m, memory: 128Mi}
+          securityContext:
+            {{- toYaml .Values.containerSecurityContext | nindent 12 }}
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      {{- end }}
       containers:
         - name: kubeoncall
-          image: "{{ .Values.image.repository }}{{ if .Values.image.digest }}@{{ .Values.image.digest }}{{ else }}:{{ .Values.image.tag }}{{ end }}"
+          image: {{ include "kubeoncall.imageRef" (dict "root" . "image" .Values.image) | quote }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            {{- toYaml .Values.containerSecurityContext | nindent 12 }}
           ports:
             - name: http
               containerPort: 8080
           env:
             - name: SPRING_PROFILES_ACTIVE
-              value: {{ if .Values.mysql.enabled }}docker,{{ .Values.mysql.profile }}{{ else }}docker{{ end }}
+              value: {{ if or .Values.mysql.enabled .Values.quickstart.enabled }}docker,{{ .Values.mysql.profile }}{{ else }}docker{{ end }}
             - name: KUBEONCALL_API_AUTH_ENABLED
-              value: {{ .Values.config.apiAuthEnabled | quote }}
+              value: {{ and .Values.config.apiAuthEnabled .Values.legacyApi.enabled | quote }}
+            - name: KUBEONCALL_MYSQL_ENABLED
+              value: {{ or .Values.mysql.enabled .Values.quickstart.enabled | quote }}
             - name: KUBEONCALL_API_VIEWER_TOKEN
               valueFrom:
                 secretKeyRef:
@@ -43,7 +126,7 @@ spec:
                 secretKeyRef:
                   name: {{ .Values.secrets.existingSecret }}
                   key: {{ .Values.secrets.apiAdminTokenKey }}
-                  optional: {{ not .Values.config.apiAuthEnabled }}
+                  optional: {{ not (and .Values.config.apiAuthEnabled .Values.legacyApi.enabled) }}
             - name: APPROVAL_RESUME_LEASE_SECONDS
               value: {{ .Values.config.approvalResumeLeaseSeconds | quote }}
             - name: KUBEONCALL_REALTIME_CLUSTER_TRANSPORT
@@ -58,9 +141,21 @@ spec:
               value: {{ .Values.config.sandboxEnabled | quote }}
             - name: KUBEONCALL_SANDBOX_FIXED_DIAGNOSTIC
               value: {{ .Values.config.sandboxFixedDiagnostic | quote }}
+            - name: KUBEONCALL_SANDBOX_GENERATED_CODE
+              value: {{ .Values.config.sandboxGeneratedCode | quote }}
+            - name: KUBEONCALL_SANDBOX_MANIFEST_VALIDATION
+              value: {{ .Values.config.sandboxManifestValidation | quote }}
+            - name: KUBEONCALL_SANDBOX_REMEDIATION_SIMULATION
+              value: {{ .Values.config.sandboxRemediationSimulation | quote }}
+            - name: KUBEONCALL_SANDBOX_AGENT_AUTO_ROUTE_ENABLED
+              value: {{ .Values.config.sandboxAgentAutoRouteEnabled | quote }}
+            {{- if .Values.sandboxTools.catalog.enabled }}
+            - name: KUBEONCALL_SANDBOX_TOOL_CATALOG_PATH
+              value: {{ .Values.sandboxTools.catalog.mountPath | quote }}
+            {{- end }}
             {{- if .Values.sandboxController.enabled }}
             - name: KUBEONCALL_SANDBOX_CONTROLLER_ENDPOINT
-              value: {{ .Values.sandboxController.backendEndpoint | quote }}
+              value: {{ default (printf "http://sandbox-controller.%s.svc.cluster.local:%v" .Values.sandboxController.namespace .Values.sandboxController.service.port) .Values.sandboxController.backendEndpoint | quote }}
             - name: KUBEONCALL_SANDBOX_CONTROLLER_KEY_ID
               value: {{ .Values.sandboxController.backendKeyId | quote }}
             - name: KUBEONCALL_SANDBOX_CONTROLLER_HMAC_SECRET
@@ -74,7 +169,11 @@ spec:
             - name: SPRING_ELASTICSEARCH_URIS
               value: {{ .Values.config.elasticsearchUri | quote }}
             - name: KUBEONCALL_STORAGE_MINIO_ENDPOINT
-              value: {{ .Values.config.minioEndpoint | quote }}
+              value: {{ if .Values.quickstart.enabled }}{{ printf "http://minio.%s.svc.cluster.local:9000" .Release.Namespace | quote }}{{ else }}{{ .Values.config.minioEndpoint | quote }}{{ end }}
+            {{- if not .Values.config.springAiEnabled }}
+            - name: SPRING_AUTOCONFIGURE_EXCLUDE
+              value: org.springframework.ai.autoconfigure.openai.OpenAiAutoConfiguration
+            {{- end }}
             - name: SPRING_AI_OPENAI_BASE_URL
               value: {{ .Values.config.springAiBaseUrl | quote }}
             - name: SPRING_AI_OPENAI_CHAT_OPTIONS_MODEL
@@ -112,11 +211,11 @@ spec:
             - name: RAG_AUTO_BIND_DATASET_VERSION
               value: {{ .Values.config.autoBindDatasetVersion | quote }}
             - name: RAG_JSONL_MAX_PAYLOAD_BYTES
-              value: {{ .Values.config.ragJsonlMaxPayloadBytes | quote }}
+              value: {{ .Values.config.ragJsonlMaxPayloadBytes | int64 | quote }}
             - name: RAG_JSONL_MAX_LINES
               value: {{ .Values.config.ragJsonlMaxLines | quote }}
             - name: RAG_DOCUMENT_MAX_CONTENT_BYTES
-              value: {{ .Values.config.ragDocumentMaxContentBytes | quote }}
+              value: {{ .Values.config.ragDocumentMaxContentBytes | int64 | quote }}
             - name: MEMORY_LLM_EXTRACTION_ENABLED
               value: {{ .Values.config.memoryLlmExtractionEnabled | quote }}
             - name: MEMORY_LLM_EXTRACTION_ENDPOINT
@@ -184,7 +283,7 @@ spec:
             - name: CHANGE_EVENT_WEBHOOK_AUTH_MODE
               value: {{ .Values.config.changeEventWebhookAuthMode | quote }}
             - name: CHANGE_EVENT_WEBHOOK_MAX_PAYLOAD_BYTES
-              value: {{ .Values.config.changeEventWebhookMaxPayloadBytes | quote }}
+              value: {{ .Values.config.changeEventWebhookMaxPayloadBytes | int64 | quote }}
             - name: KUBERNETES_TOOL_ENDPOINT
               value: {{ .Values.config.kubernetesToolEndpoint | quote }}
             - name: PROMETHEUS_TOOL_ENDPOINT
@@ -211,18 +310,20 @@ spec:
                 secretKeyRef:
                   name: {{ .Values.secrets.existingSecret }}
                   key: {{ .Values.secrets.minioSecretKeyKey }}
+            - name: MINIO_BUCKET
+              value: {{ if .Values.quickstart.enabled }}{{ .Values.quickstart.minio.bucket | quote }}{{ else }}{{ .Values.config.minioBucket | quote }}{{ end }}
             - name: ALIYUN_API_KEY
               valueFrom:
                 secretKeyRef:
                   name: {{ .Values.secrets.existingSecret }}
                   key: {{ .Values.secrets.aliyunApiKeyKey }}
-                  optional: {{ not (or .Values.config.augmentationEnabled .Values.config.memoryLlmExtractionEnabled .Values.config.memoryTokenizerEnabled) }}
+                  optional: {{ not (or .Values.config.springAiEnabled .Values.config.augmentationEnabled .Values.config.memoryLlmExtractionEnabled .Values.config.memoryTokenizerEnabled) }}
             - name: SPRING_AI_OPENAI_API_KEY
               valueFrom:
                 secretKeyRef:
                   name: {{ .Values.secrets.existingSecret }}
                   key: {{ .Values.secrets.aliyunApiKeyKey }}
-                  optional: {{ not (or .Values.config.augmentationEnabled .Values.config.memoryLlmExtractionEnabled .Values.config.memoryTokenizerEnabled) }}
+                  optional: {{ not (or .Values.config.springAiEnabled .Values.config.augmentationEnabled .Values.config.memoryLlmExtractionEnabled .Values.config.memoryTokenizerEnabled) }}
             - name: MCP_API_KEY
               valueFrom:
                 secretKeyRef:
@@ -271,7 +372,7 @@ spec:
                   name: {{ .Values.secrets.existingSecret }}
                   key: {{ .Values.secrets.changeEventArgocdWebhookTokenKey }}
                   optional: true
-            {{- if .Values.mysql.enabled }}
+            {{- if or .Values.mysql.enabled .Values.quickstart.enabled }}
             - name: SPRING_DATASOURCE_URL
               value: {{ if .Values.mysql.url }}{{ .Values.mysql.url | quote }}{{ else }}{{ printf "jdbc:mysql://%s:3306/%s?useUnicode=true&characterEncoding=utf8&serverTimezone=UTC&allowPublicKeyRetrieval=true&useSSL=false" .Values.mysql.inClusterHost .Values.mysql.database | quote }}{{ end }}
             - name: SPRING_DATASOURCE_USERNAME
@@ -281,11 +382,22 @@ spec:
                 secretKeyRef:
                   name: {{ .Values.secrets.existingSecret }}
                   key: {{ .Values.secrets.mysqlPasswordKey }}
-            # Schema changes run in the Helm migration Job with a separate DDL identity.
+            # Production schema changes run in the Helm migration Job. Quickstart lets the
+            # application run Flyway with the separate DDL identity so bundled MySQL can start in
+            # the same release without a pre-install hook dependency cycle.
             - name: SPRING_FLYWAY_ENABLED
-              value: "false"
+              value: {{ or .Values.mysql.flywayInApplication .Values.quickstart.enabled | quote }}
+            {{- if or .Values.mysql.flywayInApplication .Values.quickstart.enabled }}
+            - name: SPRING_FLYWAY_USER
+              value: {{ .Values.mysql.migrationUsername | quote }}
+            - name: SPRING_FLYWAY_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secrets.existingSecret }}
+                  key: {{ .Values.secrets.mysqlMigrationPasswordKey }}
+            {{- end }}
             - name: KUBEONCALL_AUTH_SESSION_COOKIE_SECURE
-              value: {{ .Values.mysql.sessionCookieSecure | quote }}
+              value: {{ ternary false .Values.mysql.sessionCookieSecure .Values.quickstart.enabled | quote }}
             - name: KUBEONCALL_AUTH_SESSION_IDLE_TIMEOUT_SECONDS
               value: {{ .Values.mysql.sessionIdleTimeoutSeconds | quote }}
             - name: KUBEONCALL_AUTH_SESSION_MAX_TIMEOUT_SECONDS
@@ -295,11 +407,11 @@ spec:
             - name: KUBEONCALL_AUTH_LOGIN_LOCK_DURATION_SECONDS
               value: {{ .Values.mysql.loginLockDurationSeconds | quote }}
             - name: KUBEONCALL_AUTH_LEGACY_TOKEN_COMPAT
-              value: {{ .Values.mysql.legacyTokenCompat | quote }}
+              value: {{ ternary false .Values.mysql.legacyTokenCompat .Values.quickstart.enabled | quote }}
             - name: KUBEONCALL_BOOTSTRAP_ADMIN_ENABLED
-              value: {{ .Values.mysql.bootstrapAdminEnabled | quote }}
+              value: {{ or .Values.mysql.bootstrapAdminEnabled .Values.quickstart.enabled | quote }}
             - name: KUBEONCALL_BOOTSTRAP_ADMIN_USERNAME
-              value: {{ .Values.mysql.bootstrapAdminUsername | quote }}
+              value: {{ ternary (default "admin" .Values.mysql.bootstrapAdminUsername) .Values.mysql.bootstrapAdminUsername .Values.quickstart.enabled | quote }}
             - name: KUBEONCALL_BOOTSTRAP_ADMIN_PASSWORD
               valueFrom:
                 secretKeyRef:
@@ -322,9 +434,9 @@ spec:
             - name: KUBEONCALL_DATA_MIGRATION_LEGACY_ACTOR_USERNAME_MAPPINGS
               value: {{ .Values.dataMigration.legacyActorUsernameMappings | quote }}
             - name: KUBEONCALL_LEGACY_API_ENABLED
-              value: {{ .Values.legacyApi.enabled | quote }}
+              value: {{ ternary false .Values.legacyApi.enabled .Values.quickstart.enabled | quote }}
             - name: SPRING_APPLICATION_JSON
-              value: {{ dict "kubeoncall" (dict "legacy-api" (dict "successors" .Values.legacyApi.successors "retired-endpoints" .Values.legacyApi.retiredEndpoints)) | toJson | quote }}
+              value: {{ include "kubeoncall.legacyApiSpringJson" . | quote }}
           readinessProbe:
             httpGet: {path: /actuator/health/readiness, port: http}
             initialDelaySeconds: 20
@@ -334,4 +446,29 @@ spec:
             initialDelaySeconds: 30
             periodSeconds: 20
           resources:
+            {{- if .Values.quickstart.enabled }}
+            {{- toYaml .Values.quickstart.backendResources | nindent 12 }}
+            {{- else }}
             {{- toYaml .Values.resources | nindent 12 }}
+            {{- end }}
+          {{- if .Values.sandboxTools.catalog.enabled }}
+          volumeMounts:
+            - name: sandbox-tool-catalog
+              mountPath: {{ .Values.sandboxTools.catalog.mountPath | quote }}
+              subPath: tools.yaml
+              readOnly: true
+            - name: tmp
+              mountPath: /tmp
+          {{- else }}
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+          {{- end }}
+      volumes:
+        - name: tmp
+          emptyDir: {}
+      {{- if .Values.sandboxTools.catalog.enabled }}
+        - name: sandbox-tool-catalog
+          configMap:
+            name: {{ include "kubeoncall.sandboxCatalogName" . }}
+      {{- end }}

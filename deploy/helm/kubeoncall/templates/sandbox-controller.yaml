@@ -1,11 +1,16 @@
 {{- if .Values.sandboxController.enabled }}
+{{- if or .Values.sandboxController.createNamespace .Values.quickstart.enabled }}
 apiVersion: v1
 kind: Namespace
 metadata:
   name: {{ .Values.sandboxController.namespace }}
   labels:
     app.kubernetes.io/part-of: kubeoncall-sandbox
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/warn: restricted
 ---
+{{- end }}
 apiVersion: v1
 kind: ServiceAccount
 metadata:
@@ -78,9 +83,18 @@ spec:
       labels: {app.kubernetes.io/name: sandbox-controller}
     spec:
       serviceAccountName: sandbox-controller
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        seccompProfile: {type: RuntimeDefault}
+      {{- with .Values.global.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       containers:
         - name: controller
-          image: "{{ .Values.sandboxController.image.repository }}{{ if .Values.sandboxController.image.digest }}@{{ .Values.sandboxController.image.digest }}{{ else }}:{{ .Values.sandboxController.image.tag }}{{ end }}"
+          image: {{ include "kubeoncall.imageRef" (dict "root" . "image" .Values.sandboxController.image) | quote }}
           imagePullPolicy: {{ .Values.sandboxController.image.pullPolicy }}
           ports: [{name: http, containerPort: 8088}]
           env:
@@ -89,16 +103,41 @@ spec:
             - name: SANDBOX_CONTROLLER_BACKEND_HMAC_SECRET
               valueFrom:
                 secretKeyRef:
-                  name: {{ .Values.secrets.existingSecret }}
+                  name: {{ .Values.sandboxController.existingSecret }}
                   key: {{ .Values.sandboxController.backendHmacSecretKey }}
-            - name: SANDBOX_CONTROLLER_SANDBOX_NAMESPACE
+            - name: SANDBOX_CONTROLLER_NAMESPACE
               value: {{ .Values.sandboxController.namespace | quote }}
+            {{- if .Values.sandboxTools.catalog.enabled }}
+            - name: SANDBOX_CONTROLLER_TOOL_CATALOG_PATH
+              value: {{ .Values.sandboxTools.catalog.mountPath | quote }}
+            {{- end }}
+          readinessProbe:
+            httpGet: {path: /healthz, port: http}
+            initialDelaySeconds: 3
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: {path: /healthz, port: http}
+            initialDelaySeconds: 10
+            periodSeconds: 20
           securityContext:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true
             runAsNonRoot: true
             capabilities: {drop: ["ALL"]}
           resources: {{- toYaml .Values.sandboxController.resources | nindent 12 }}
+          {{- if .Values.sandboxTools.catalog.enabled }}
+          volumeMounts:
+            - name: sandbox-tool-catalog
+              mountPath: {{ .Values.sandboxTools.catalog.mountPath | quote }}
+              subPath: tools.yaml
+              readOnly: true
+          {{- end }}
+      {{- if .Values.sandboxTools.catalog.enabled }}
+      volumes:
+        - name: sandbox-tool-catalog
+          configMap:
+            name: {{ include "kubeoncall.sandboxCatalogName" . }}
+      {{- end }}
 ---
 apiVersion: v1
 kind: Service
@@ -122,12 +161,28 @@ spec:
     - from:
         - namespaceSelector:
             matchLabels: {kubernetes.io/metadata.name: {{ .Release.Namespace | quote }}}
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: {{ include "kubeoncall.name" . }}
+              app.kubernetes.io/instance: {{ .Release.Name }}
+              app.kubernetes.io/component: backend
       ports: [{protocol: TCP, port: 8088}]
   egress:
     - to:
         - namespaceSelector:
             matchLabels: {kubernetes.io/metadata.name: kube-system}
       ports: [{protocol: UDP, port: 53}, {protocol: TCP, port: 53}, {protocol: TCP, port: 443}]
+    {{- if .Values.quickstart.enabled }}
+    # Quickstart targets disposable Kind/Minikube clusters whose API Service CIDR is not known at
+    # chart-render time. Limit this evaluation-only exception to HTTPS; production supplies the
+    # exact API CIDR through controllerExtraEgress.
+    - to:
+        - ipBlock: {cidr: 0.0.0.0/0}
+      ports: [{protocol: TCP, port: 443}]
+    {{- end }}
+    {{- with .Values.sandboxController.networkPolicy.controllerExtraEgress }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
 ---
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
@@ -152,4 +207,7 @@ spec:
           podSelector:
             matchLabels: {app.kubernetes.io/name: minio}
       ports: [{protocol: TCP, port: 9000}]
+    {{- with .Values.sandboxController.networkPolicy.jobExtraEgress }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
 {{- end }}

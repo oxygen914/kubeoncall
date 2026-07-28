@@ -1,0 +1,68 @@
+{{- if .Values.networkPolicy.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "kubeoncall.fullname" . }}-backend
+  labels:
+    {{- include "kubeoncall.labels" . | nindent 4 }}
+    app.kubernetes.io/component: backend
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: {{ include "kubeoncall.name" . }}
+      app.kubernetes.io/instance: {{ .Release.Name }}
+      app.kubernetes.io/component: backend
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Release.Namespace | quote }}
+        {{- if .Values.networkPolicy.ingressControllerNamespace }}
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Values.networkPolicy.ingressControllerNamespace | quote }}
+        {{- end }}
+        {{- if .Values.networkPolicy.monitoringNamespace }}
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Values.networkPolicy.monitoringNamespace | quote }}
+        {{- end }}
+      ports:
+        - {protocol: TCP, port: 8080}
+    {{- with .Values.networkPolicy.extraBackendIngress }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+{{- if .Values.console.enabled }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "kubeoncall.fullname" . }}-console
+  labels:
+    {{- include "kubeoncall.labels" . | nindent 4 }}
+    app.kubernetes.io/component: console
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: {{ include "kubeoncall.name" . }}
+      app.kubernetes.io/instance: {{ .Release.Name }}
+      app.kubernetes.io/component: console
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Release.Namespace | quote }}
+        {{- if .Values.networkPolicy.ingressControllerNamespace }}
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Values.networkPolicy.ingressControllerNamespace | quote }}
+        {{- end }}
+      ports:
+        - {protocol: TCP, port: 8080}
+    {{- with .Values.networkPolicy.extraConsoleIngress }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+{{- end }}
+{{- end }}

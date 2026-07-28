@@ -43,6 +43,7 @@ class CapabilitiesServiceTest {
         sandbox.setRemediationSimulation(false);
         sandbox.setAgentAutoRouteEnabled(true);
         sandbox.setControllerEndpoint("http://controller.svc:8090/internal/v1");
+        sandbox.setControllerHmacSecret("test-hmac-secret-never-returned");
 
         CapabilitiesService service = newService(properties);
 
@@ -68,6 +69,7 @@ class CapabilitiesServiceTest {
         KubeOnCallProperties properties = new KubeOnCallProperties();
         properties.getSandbox().setEnabled(true);
         properties.getSandbox().setControllerEndpoint("http://controller.svc:8090/internal/v1");
+        properties.getSandbox().setControllerHmacSecret("test-hmac-secret-never-returned");
 
         CapabilitiesService service = newService(properties);
         String featuresJson = service.features().toString();
@@ -77,6 +79,8 @@ class CapabilitiesServiceTest {
                 featuresJson.contains("controller.svc"),
                 "controller endpoint must not appear in features: " + featuresJson);
         assertFalse(limitsJson.contains("controller"), "controller endpoint must not appear in limits: " + limitsJson);
+        assertFalse(featuresJson.contains("test-hmac-secret-never-returned"));
+        assertFalse(limitsJson.contains("test-hmac-secret-never-returned"));
         assertNull(service.auth().get("controllerEndpoint"));
     }
 

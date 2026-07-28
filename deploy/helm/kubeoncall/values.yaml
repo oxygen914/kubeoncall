@@ -1,8 +1,63 @@
+global:
+  # Optional pull secrets applied to Backend, Console, migration and Sandbox Controller Pods.
+  imagePullSecrets: []
+
 replicaCount: 2
 
+deployment:
+  revisionHistoryLimit: 3
+  progressDeadlineSeconds: 600
+  strategy:
+    maxUnavailable: 0
+    maxSurge: 1
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 10001
+  runAsGroup: 10001
+  fsGroup: 10001
+  seccompProfile: {type: RuntimeDefault}
+
+containerSecurityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  runAsNonRoot: true
+  runAsUser: 10001
+  runAsGroup: 10001
+  capabilities: {drop: [ALL]}
+
+topologySpread:
+  enabled: true
+  maxSkew: 1
+  whenUnsatisfiable: ScheduleAnyway
+  topologyKeys: [kubernetes.io/hostname, topology.kubernetes.io/zone]
+
+podAntiAffinity:
+  enabled: true
+  topologyKey: kubernetes.io/hostname
+
+podDisruptionBudget:
+  enabled: true
+  maxUnavailable: 1
+
+autoscaling:
+  enabled: false
+  minReplicas: 2
+  maxReplicas: 6
+  targetCPUUtilizationPercentage: 70
+  targetMemoryUtilizationPercentage: 80
+
+networkPolicy:
+  enabled: false
+  ingressControllerNamespace: ingress-nginx
+  monitoringNamespace: monitoring
+  extraBackendIngress: []
+  extraConsoleIngress: []
+
 image:
-  repository: kubeoncall
-  tag: latest
+  repository: ghcr.io/oxygen914/kubeoncall-backend
+  # Empty means Chart.appVersion. Release packaging sets appVersion to the Git tag version.
+  tag: ""
   # Prefer an immutable registry manifest digest in production. When set, this overrides tag.
   # Example: sha256:0123... (the repository remains a separate field).
   digest: ""
@@ -26,9 +81,17 @@ config:
   dependencyCircuitBreakerResetTimeoutSeconds: 30
   sandboxEnabled: false
   sandboxFixedDiagnostic: false
+  sandboxGeneratedCode: false
+  sandboxManifestValidation: false
+  sandboxRemediationSimulation: false
+  sandboxAgentAutoRouteEnabled: false
   redisHost: redis
   elasticsearchUri: http://elasticsearch:9200
   minioEndpoint: http://minio:9000
+  minioBucket: kubeoncall-docs
+  # Keep Spring AI auto-configuration off for Quickstart and keyless installs. Production enables
+  # it explicitly after provisioning aliyun-api-key; rule-based planning remains available.
+  springAiEnabled: false
   springAiBaseUrl: https://dashscope.aliyuncs.com/compatible-mode
   springAiChatModel: qwen-plus
   embeddingEndpoint: https://dashscope.aliyuncs.com/compatible-mode/v1/embeddings
@@ -116,6 +179,9 @@ mysql:
   legacyTokenCompat: true
   bootstrapAdminEnabled: false
   bootstrapAdminUsername: ""
+  # Quickstart only: let the application run Flyway with the dedicated migration identity while
+  # retaining the DML-only datasource identity. Production must keep this false and use the Job.
+  flywayInApplication: false
   migrationJob:
     enabled: true
     backoffLimit: 6
@@ -148,6 +214,9 @@ legacyApi:
   retiredEndpoints: []
 
 secrets:
+  # Quickstart creates and retains a generated Secret. Production should keep this false and
+  # provide an ExternalSecret/SealedSecret or another platform-managed Secret.
+  create: false
   existingSecret: kubeoncall-secrets
   apiViewerTokenKey: api-viewer-token
   apiOperatorTokenKey: api-operator-token
@@ -176,13 +245,43 @@ console:
   enabled: true
   replicaCount: 2
   image:
-    repository: kubeoncall-console
-    tag: latest
+    repository: ghcr.io/oxygen914/kubeoncall-console
+    tag: ""
     digest: ""
     pullPolicy: IfNotPresent
   resources:
     requests: {cpu: 100m, memory: 128Mi}
     limits: {cpu: "1", memory: 512Mi}
+  podSecurityContext:
+    runAsNonRoot: true
+    runAsUser: 101
+    runAsGroup: 101
+    fsGroup: 101
+    seccompProfile: {type: RuntimeDefault}
+  containerSecurityContext:
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: true
+    runAsNonRoot: true
+    runAsUser: 101
+    runAsGroup: 101
+    capabilities: {drop: [ALL]}
+  topologySpread:
+    enabled: true
+    maxSkew: 1
+    whenUnsatisfiable: ScheduleAnyway
+    topologyKeys: [kubernetes.io/hostname, topology.kubernetes.io/zone]
+  podAntiAffinity:
+    enabled: true
+    topologyKey: kubernetes.io/hostname
+  podDisruptionBudget:
+    enabled: true
+    maxUnavailable: 1
+  autoscaling:
+    enabled: false
+    minReplicas: 2
+    maxReplicas: 6
+    targetCPUUtilizationPercentage: 70
+    targetMemoryUtilizationPercentage: 80
   service:
     type: ClusterIP
     port: 80
@@ -209,9 +308,15 @@ grafanaDashboard:
 sandboxController:
   enabled: false
   namespace: kubeoncall-sandbox
+  # Quickstart may create this disposable namespace. Production keeps it platform-owned so
+  # uninstalling the KubeOnCall release cannot delete unrelated or still-running Sandbox Jobs.
+  createNamespace: false
+  # Secrets are namespaced. When this namespace differs from the release namespace, provision the
+  # HMAC key under this name as well (Quickstart does this automatically).
+  existingSecret: kubeoncall-sandbox-controller
   image:
-    repository: kubeoncall-sandbox-controller
-    tag: latest
+    repository: ghcr.io/oxygen914/kubeoncall-sandbox-controller
+    tag: ""
     digest: ""
     pullPolicy: IfNotPresent
   service:
@@ -220,12 +325,100 @@ sandboxController:
     requests: {cpu: 100m, memory: 128Mi}
     limits: {cpu: "1", memory: 1Gi}
   quota:
-    pods: "8"
+    # One Controller Pod plus at most eight runtime Pods.
+    pods: "9"
     requestsCpu: "2"
     requestsMemory: 2Gi
     limitsCpu: "4"
     limitsMemory: 4Gi
   backendKeyId: backend
   backendHmacSecretKey: sandbox-controller-hmac
-  # Internal ClusterIP endpoint used only when sandboxEnabled is explicitly enabled.
-  backendEndpoint: http://sandbox-controller.kubeoncall-sandbox.svc.cluster.local:8088
+  # Optional override for an external Controller. Empty derives the in-cluster Service FQDN from
+  # namespace and service.port, so namespace overrides cannot leave Backend on a stale endpoint.
+  backendEndpoint: ""
+  networkPolicy:
+    # Raw Kubernetes NetworkPolicy egress entries for platform-specific API server, artifact
+    # gateway or validation-cluster routes. Defaults retain DNS + in-release MinIO only.
+    controllerExtraEgress: []
+    jobExtraEgress: []
+
+# A release-generated catalogue is mounted into Backend and Controller. Enabling it requires every
+# selected image to be pinned by sha256 digest; mutable tags are deliberately rejected by Helm and
+# both applications. Only runtimes with build contexts in this repository are enabled here.
+sandboxTools:
+  catalog:
+    enabled: false
+    name: ""
+    mountPath: /etc/kubeoncall/sandbox-tools/tools.yaml
+  tools:
+    - id: generated-python
+      version: v1
+      mode: GENERATED_CODE
+      enabled: true
+      image:
+        repository: ghcr.io/oxygen914/kubeoncall-sandbox-generated-python
+        digest: ""
+      entrypoint: /usr/local/bin/koc-run-python
+      networkEgressPolicy: DENY_ALL
+      inputSchemaRef: sandbox-tools/schemas/generated-code-input-v1.json
+      outputSchemaRef: sandbox-tools/schemas/generated-code-result-v1.json
+      resources: {cpu: 500m, memory: 512Mi, ephemeralStorage: 512Mi, inputMaxBytes: 52428800, outputMaxBytes: 1048576, logMaxBytes: 2097152, scriptMaxBytes: 262144, timeoutSeconds: 120, maxTimeoutSeconds: 300}
+    - id: generated-posix-shell
+      version: v1
+      mode: GENERATED_CODE
+      enabled: true
+      image:
+        repository: ghcr.io/oxygen914/kubeoncall-sandbox-generated-posix-shell
+        digest: ""
+      entrypoint: /usr/local/bin/koc-run-posix-shell
+      networkEgressPolicy: DENY_ALL
+      inputSchemaRef: sandbox-tools/schemas/generated-code-input-v1.json
+      outputSchemaRef: sandbox-tools/schemas/generated-code-result-v1.json
+      resources: {cpu: 500m, memory: 512Mi, ephemeralStorage: 512Mi, inputMaxBytes: 52428800, outputMaxBytes: 1048576, logMaxBytes: 2097152, scriptMaxBytes: 262144, timeoutSeconds: 120, maxTimeoutSeconds: 300}
+    - id: manifest-validation
+      version: v1
+      mode: MANIFEST_VALIDATION
+      enabled: true
+      image:
+        repository: ghcr.io/oxygen914/kubeoncall-sandbox-manifest-validation
+        digest: ""
+      entrypoint: /usr/local/bin/koc-validate-manifest
+      networkEgressPolicy: DENY_ALL
+      inputSchemaRef: sandbox-tools/schemas/manifest-validation-input-v1.json
+      outputSchemaRef: sandbox-tools/schemas/manifest-validation-result-v1.json
+      resources: {cpu: 500m, memory: 512Mi, ephemeralStorage: 1Gi, inputMaxBytes: 52428800, outputMaxBytes: 1048576, logMaxBytes: 2097152, scriptMaxBytes: 262144, timeoutSeconds: 180, maxTimeoutSeconds: 300}
+
+# Self-contained, ephemeral infrastructure for Kind/Minikube evaluation. This mode is intentionally
+# single-node and non-production; disabling it leaves all dependencies externally managed.
+quickstart:
+  enabled: false
+  backendResources:
+    requests: {cpu: 100m, memory: 256Mi}
+    limits: {cpu: "1", memory: 1Gi}
+  consoleResources:
+    requests: {cpu: 25m, memory: 64Mi}
+    limits: {cpu: 250m, memory: 256Mi}
+  mysql:
+    image: mysql:8.0@sha256:7dcddc01f13bab2f15cde676d44d01f61fc9f99fe7785e86196dfc07d358ae2b
+    resources:
+      requests: {cpu: 100m, memory: 256Mi}
+      limits: {cpu: "1", memory: 768Mi}
+  redis:
+    image: redis:7@sha256:595cc6f2bb3af6e03347b90deb6123c6aa2c81dea05ce08128de8a174b6ac67b
+    resources:
+      requests: {cpu: 25m, memory: 32Mi}
+      limits: {cpu: 500m, memory: 256Mi}
+  elasticsearch:
+    enabled: true
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.14.3@sha256:96ae58e574cb40b2caf8bdebc6dda7b789e1fae7d56346cc83c288374e18b1c2
+    javaOpts: -Xms256m -Xmx256m
+    resources:
+      requests: {cpu: 150m, memory: 512Mi}
+      limits: {cpu: "1", memory: 768Mi}
+  minio:
+    image: minio/minio:RELEASE.2024-08-03T04-33-23Z@sha256:c933bb53ac226d1f4bdfeac66a3854d02903771e91d7ee2cbc330841a1d77d7e
+    clientImage: minio/mc:RELEASE.2024-07-31T15-58-33Z@sha256:5282b2b3c5d858eb8aa9a2c6c4ca4880554d9b1ed66ffe2e2663003bd581273d
+    bucket: kubeoncall-docs
+    resources:
+      requests: {cpu: 25m, memory: 64Mi}
+      limits: {cpu: 500m, memory: 256Mi}

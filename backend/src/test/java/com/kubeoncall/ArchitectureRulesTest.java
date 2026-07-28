@@ -21,15 +21,15 @@ class ArchitectureRulesTest {
     static final ArchRule coreBusinessDomainsDoNotDependOnWeb = noClasses()
             .that()
             .resideInAnyPackage(
-                    "..agent..",
-                    "..alarm..",
-                    "..approval..",
-                    "..memory..",
-                    "..rag..",
-                    "..skill..",
-                    "..tool..",
-                    "..workflow..",
-                    "..sandbox..")
+                    "com.kubeoncall.agent..",
+                    "com.kubeoncall.alarm..",
+                    "com.kubeoncall.approval..",
+                    "com.kubeoncall.memory..",
+                    "com.kubeoncall.rag..",
+                    "com.kubeoncall.skill..",
+                    "com.kubeoncall.tool..",
+                    "com.kubeoncall.workflow..",
+                    "com.kubeoncall.sandbox..")
             .should()
             .dependOnClassesThat()
             .resideInAnyPackage("..web..");

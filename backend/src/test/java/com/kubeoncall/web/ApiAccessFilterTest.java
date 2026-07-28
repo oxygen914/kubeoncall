@@ -36,6 +36,14 @@ class ApiAccessFilterTest {
         assertEquals(200, fixture.invoke("POST", "/api/integrations/change-events/github", null));
     }
 
+    @Test
+    void shouldLeaveV1LoginAndAuthenticatedRoutesToV1SecurityChain() throws Exception {
+        Fixture fixture = new Fixture();
+
+        assertEquals(200, fixture.invoke("POST", "/api/v1/auth/login", null));
+        assertEquals(200, fixture.invoke("GET", "/api/v1/alarms", null));
+    }
+
     private static class Fixture {
         private final ApiAccessFilter filter;
 

@@ -323,13 +323,12 @@ func podSecurityContext(spec jobs.JobSpec) *corev1.PodSecurityContext {
 }
 
 func containerResources(spec jobs.JobSpec) corev1.ResourceRequirements {
-	return corev1.ResourceRequirements{
-		Limits: corev1.ResourceList{
-			corev1.ResourceCPU:              milliCPU(spec.Limits.CPUMilli),
-			corev1.ResourceMemory:           mebiBytes(spec.Limits.MemoryMiB),
-			corev1.ResourceEphemeralStorage: mebiBytes(spec.Limits.EphemeralMiB),
-		},
+	resources := corev1.ResourceList{
+		corev1.ResourceCPU:              milliCPU(spec.Limits.CPUMilli),
+		corev1.ResourceMemory:           mebiBytes(spec.Limits.MemoryMiB),
+		corev1.ResourceEphemeralStorage: mebiBytes(spec.Limits.EphemeralMiB),
 	}
+	return corev1.ResourceRequirements{Requests: resources.DeepCopy(), Limits: resources}
 }
 
 func dropCapabilities(spec jobs.JobSpec) []corev1.Capability {

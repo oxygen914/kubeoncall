@@ -1,5 +1,7 @@
 config:
-  apiAuthEnabled: true
+  # The legacy /api surface is disabled below, so static role tokens must not gate the v1 Console.
+  apiAuthEnabled: false
+  springAiEnabled: true
   augmentationEnabled: true
   autoBindDatasetVersion: true
   memoryLlmExtractionEnabled: true
@@ -30,6 +32,9 @@ mysql:
 legacyApi:
   enabled: false
 
+sandboxController:
+  createNamespace: false
+
 console:
   enabled: true
   replicaCount: 3
@@ -46,4 +51,7 @@ serviceMonitor:
   enabled: true
 
 grafanaDashboard:
+  enabled: true
+
+networkPolicy:
   enabled: true

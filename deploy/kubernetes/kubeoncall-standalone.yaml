@@ -600,7 +600,7 @@ spec:
           imagePullPolicy: IfNotPresent
           ports:
             - name: http
-              containerPort: 80
+              containerPort: 8080
           readinessProbe:
             httpGet: {path: /healthz, port: http}
             initialDelaySeconds: 5
@@ -630,7 +630,7 @@ spec:
       port: 80
       targetPort: http
 ---
-# WBS-12: single Ingress routing /api + /actuator to backend and / to console. SSE proxying disables
+# WBS-12: single Ingress routing /api to backend and / to console. Actuator remains cluster-internal.
 # buffering and extends timeouts so /api/v1/events/stream stays open.
 apiVersion: networking.k8s.io/v1
 kind: Ingress
@@ -646,13 +646,6 @@ spec:
     - http:
         paths:
           - path: /api
-            pathType: Prefix
-            backend:
-              service:
-                name: kubeoncall
-                port:
-                  name: http
-          - path: /actuator
             pathType: Prefix
             backend:
               service:

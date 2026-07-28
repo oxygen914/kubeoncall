@@ -19,8 +19,8 @@ import org.springframework.web.filter.OncePerRequestFilter;
 import com.kubeoncall.common.config.KubeOnCallProperties;
 
 /**
- * Protects the application API with a small role hierarchy while leaving signed integration
- * webhooks on their existing provider-specific authentication path.
+ * Protects only the legacy application API with a small role hierarchy while leaving the v1
+ * session/API-token surface and signed integration webhooks on their own authentication paths.
  */
 @Component
 public class ApiAccessFilter extends OncePerRequestFilter {
@@ -50,6 +50,7 @@ public class ApiAccessFilter extends OncePerRequestFilter {
         return HttpMethod.OPTIONS.matches(request.getMethod())
                 || path == null
                 || !path.startsWith("/api/")
+                || path.startsWith("/api/v1/")
                 || path.equals("/api/integrations/alertmanager/webhook")
                 || path.startsWith("/api/integrations/change-events/");
     }

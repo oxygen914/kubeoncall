@@ -18,7 +18,7 @@ README 只保留项目定位和最短成功路径；安装、配置、部署和�
 | --- | --- |
 | [Alertmanager 接入](../deploy/alertmanager/README.md) | 配置 Bearer Token receiver 和节点告警闭环 |
 | [ChangeEvent 接入](../deploy/change-events/README.md) | 接入 GitHub、GitLab、Jenkins 和 Argo CD 变更事件 |
-| [Helm 部署](../deploy/helm/kubeoncall/README.md) | 将已有镜像部署到 Kubernetes，并连接外部依赖 |
+| [Helm 部署](../deploy/helm/kubeoncall/README.md) | Quickstart 一键安装、多镜像 Release、生产外部依赖与 Sandbox digest 配置 |
 | [项目架构](../项目架构.md) | 理解模块边界、数据流和核心设计 |
 
 ## 开发与贡献

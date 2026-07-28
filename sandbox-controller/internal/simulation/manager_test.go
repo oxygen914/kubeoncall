@@ -24,7 +24,11 @@ func newTestManager(t *testing.T) (*Manager, *fake.Clientset) {
 	t.Helper()
 	client := fake.NewSimpleClientset()
 	manager, err := NewManager(client, "validation-kind", "koc-sim-", jobs.Builder{
-		Tools:   map[string]jobs.Tool{"remediation-simulation:v1": {ID: "remediation-simulation", Version: "v1", Image: simulationImage, Entrypoint: []string{"/simulate"}}},
+		Tools: map[string]jobs.Tool{"remediation-simulation:v1": {
+			ID: "remediation-simulation", Version: "v1", Image: simulationImage, Entrypoint: []string{"/simulate"},
+			Runtime: jobs.RuntimeFixedDiagnostic, NetworkEgressPolicy: jobs.NetworkEgressDenyAll,
+			Limits: jobs.Limits{CPUMilli: 250, MemoryMiB: 256, EphemeralMiB: 256, TimeoutSeconds: 30, TTLSeconds: 3600},
+		}},
 		Ceiling: jobs.Limits{CPUMilli: 500, MemoryMiB: 512, EphemeralMiB: 512, TimeoutSeconds: 60, TTLSeconds: 3600},
 	})
 	if err != nil {

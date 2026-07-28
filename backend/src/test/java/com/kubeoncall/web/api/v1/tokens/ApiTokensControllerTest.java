@@ -115,7 +115,9 @@ class ApiTokensControllerTest {
                         200, "{\"id\":\"tok_1\",\"name\":\"ci-token\",\"prefix\":\"koc_abcd1234\"}"));
 
         var data = controller
-                .create(IDEMPOTENCY_KEY, new ApiTokensController.CreateTokenRequest("ci-token", List.of(), FUTURE))
+                .create(
+                        IDEMPOTENCY_KEY,
+                        new ApiTokensController.CreateTokenRequest("ci-token", List.of("alarm:read"), FUTURE))
                 .data();
 
         assertThat(data).doesNotContainKey("token");
@@ -196,7 +198,8 @@ class ApiTokensControllerTest {
     }
 
     private static V1Principal operator() {
-        return principal(Set.of(PermissionCode.TOKEN_READ_OWN, PermissionCode.TOKEN_MANAGE_OWN));
+        return principal(
+                Set.of(PermissionCode.TOKEN_READ_OWN, PermissionCode.TOKEN_MANAGE_OWN, PermissionCode.ALARM_READ));
     }
 
     private static V1Principal admin() {

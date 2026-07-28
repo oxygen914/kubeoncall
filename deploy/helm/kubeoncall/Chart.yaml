@@ -1,6 +1,6 @@
 apiVersion: v2
 name: kubeoncall
-description: KubeOnCall backend deployment
+description: KubeOnCall backend, console and isolated Sandbox deployment
 type: application
 version: 0.1.0
 appVersion: "0.0.1"

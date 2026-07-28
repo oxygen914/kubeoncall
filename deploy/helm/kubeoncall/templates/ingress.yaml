@@ -36,13 +36,6 @@ spec:
                 name: {{ include "kubeoncall.fullname" . }}
                 port:
                   name: http
-          - path: /actuator
-            pathType: Prefix
-            backend:
-              service:
-                name: {{ include "kubeoncall.fullname" . }}
-                port:
-                  name: http
           # Everything else (Console SPA + runtime config) → console.
           - path: /
             pathType: Prefix

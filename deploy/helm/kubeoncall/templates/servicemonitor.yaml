@@ -9,6 +9,7 @@ spec:
   selector:
     matchLabels:
       {{- include "kubeoncall.labels" . | nindent 6 }}
+      app.kubernetes.io/component: backend
   endpoints:
     - port: http
       path: /actuator/prometheus

@@ -5,9 +5,12 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.io.ByteArrayInputStream;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.List;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 import org.springframework.core.io.ClassPathResource;
 
 import com.fasterxml.jackson.databind.JsonNode;
@@ -17,6 +20,9 @@ import com.kubeoncall.sandbox.domain.SandboxRunMode;
 class YamlSandboxToolCatalogTest {
 
     private final ObjectMapper objectMapper = new ObjectMapper();
+
+    @TempDir
+    Path tempDir;
 
     @Test
     void loadsThreeDigestPinnedFixedDiagnosticTools() {
@@ -103,6 +109,19 @@ class YamlSandboxToolCatalogTest {
             assertThat(runtime.inputSchemaRef()).isEqualTo("sandbox-tools/schemas/generated-code-input-v1.json");
             assertThat(runtime.outputSchemaRef()).isEqualTo("sandbox-tools/schemas/generated-code-result-v1.json");
         }
+    }
+
+    @Test
+    void loadsAReleaseMountedCatalogFromTheFilesystem() throws Exception {
+        Path catalogPath = tempDir.resolve("tools.yaml");
+        try (var source = new ClassPathResource("sandbox-tools/tools.yaml").getInputStream()) {
+            Files.copy(source, catalogPath);
+        }
+
+        YamlSandboxToolCatalog catalog = new YamlSandboxToolCatalog(catalogPath.toString());
+
+        assertThat(catalog.find("generated-python", "v1", SandboxRunMode.GENERATED_CODE))
+                .isPresent();
     }
 
     private JsonNode readJson(String path) throws Exception {
