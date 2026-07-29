@@ -1,7 +1,18 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { render, screen, within } from '@testing-library/react'
+import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { MonitoringPage } from '../MonitoringPage'
+import { MonitoringScopeProvider } from '../MonitoringScopeProvider'
+
+vi.mock('@/features/auth/useSession', () => ({
+  useSession: () => ({
+    session: {
+      authenticated: true,
+      user: { permissions: ['dashboard:read', 'alarm:read', 'change:read'] },
+    },
+  }),
+}))
 
 function jsonResponse(data: unknown): Response {
   return {
@@ -25,7 +36,11 @@ function renderPage() {
   })
   return render(
     <QueryClientProvider client={queryClient}>
-      <MonitoringPage />
+      <MemoryRouter>
+        <MonitoringScopeProvider>
+          <MonitoringPage />
+        </MonitoringScopeProvider>
+      </MemoryRouter>
     </QueryClientProvider>,
   )
 }
@@ -39,17 +54,17 @@ describe('MonitoringPage', () => {
     fetchMock.mockReset()
     fetchMock.mockImplementation((input: RequestInfo | URL) => {
       const path = String(input)
-      if (path === '/api/v1/monitoring/clusters') {
+      if (path.startsWith('/api/v1/monitoring/scopes')) {
         return Promise.resolve(
           jsonResponse({
-            clusters: [
-              {
-                name: 'prod',
-                nodeMetricsAvailable: true,
-                kubernetesStateAvailable,
-                nodeCount: 1,
-              },
-            ],
+            clusters: [{ value: 'prod', label: 'prod', resourceCount: 1 }],
+            environments: [],
+            namespaces: [{ value: 'default', label: 'default', resourceCount: 1 }],
+            capabilities: {
+              clusterFilterAvailable: true,
+              environmentFilterAvailable: false,
+              namespaceFilterAvailable: true,
+            },
             collectedAt: '2026-07-28T10:00:00Z',
           }),
         )
@@ -128,6 +143,73 @@ describe('MonitoringPage', () => {
           }),
         )
       }
+      if (path.startsWith('/api/v1/monitoring/health/trend')) {
+        return Promise.resolve(
+          jsonResponse({
+            scope: { cluster: 'prod' },
+            window: '6h',
+            stepSeconds: 300,
+            current: [
+              {
+                timestamp: '2026-07-28T10:00:00Z',
+                readyPercent: 100,
+                abnormalPods: 0,
+                healthScore: 100,
+              },
+            ],
+            previous: [
+              {
+                timestamp: '2026-07-28T04:00:00Z',
+                readyPercent: 90,
+                abnormalPods: 0,
+                healthScore: 90,
+              },
+            ],
+            comparison: {
+              currentAverage: 100,
+              previousAverage: 90,
+              delta: 10,
+              direction: 'IMPROVING',
+              baselineAvailable: true,
+            },
+            collectedAt: '2026-07-28T10:00:00Z',
+          }),
+        )
+      }
+      if (path.startsWith('/api/v1/monitoring/correlations')) {
+        return Promise.resolve(
+          jsonResponse({
+            scope: { cluster: 'prod' },
+            alarmDataAvailable: true,
+            changeDataAvailable: true,
+            correlations: [],
+            collectedAt: '2026-07-28T10:00:00Z',
+          }),
+        )
+      }
+      if (path.startsWith('/api/v1/monitoring/advice')) {
+        return Promise.resolve(
+          jsonResponse({
+            scope: { cluster: 'prod' },
+            generatedBy: 'RULE_ENGINE_FALLBACK',
+            modelAvailable: false,
+            safetyMode: 'READ_ONLY',
+            advice: [
+              {
+                id: 'stable',
+                title: '当前范围未发现明显异常',
+                risk: 'INFO',
+                summary: '健康',
+                evidence: 'Ready 1/1',
+                recommendation: '保持观察',
+                source: 'RULE_ENGINE_FALLBACK',
+                analysisPath: '/monitoring',
+              },
+            ],
+            collectedAt: '2026-07-28T10:00:00Z',
+          }),
+        )
+      }
       return Promise.reject(new Error(`Unexpected request: ${path}`))
     })
     vi.stubGlobal('fetch', fetchMock)
@@ -146,7 +228,8 @@ describe('MonitoringPage', () => {
     expect(screen.getByText(/Pod 状态不可用/)).toBeInTheDocument()
     expect(screen.queryByText('Ready', { selector: '.koc-badge' })).not.toBeInTheDocument()
     expect(screen.getByLabelText('当前监控范围')).toHaveTextContent('prod')
-    expect(screen.queryByRole('combobox', { name: '集群' })).not.toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: '集群健康趋势' })).toBeInTheDocument()
+    expect(screen.getByText('规则降级')).toBeInTheDocument()
     expect(screen.getByText('0/1')).toHaveAttribute('data-tone', 'warning')
     expect(screen.getByText('0', { selector: '.koc-overview__value' })).toHaveAttribute(
       'data-tone',

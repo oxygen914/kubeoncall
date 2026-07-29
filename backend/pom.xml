@@ -32,6 +32,7 @@
         <springdoc.version>2.6.0</springdoc.version>
         <springdoc.maven.plugin.version>1.5</springdoc.maven.plugin.version>
         <openapi.contract.jmx-port>19001</openapi.contract.jmx-port>
+        <openapi.contract.http-port>18081</openapi.contract.http-port>
     </properties>
 
     <repositories>
@@ -306,7 +307,7 @@
                                 <configuration>
                                     <arguments>
                                         <argument>--spring.profiles.active=local</argument>
-                                        <argument>--server.port=18080</argument>
+                                        <argument>--server.port=${openapi.contract.http-port}</argument>
                                     </arguments>
                                 </configuration>
                             </execution>
@@ -331,7 +332,7 @@
                                     <goal>generate</goal>
                                 </goals>
                                 <configuration>
-                                    <apiDocsUrl>http://127.0.0.1:18080/v3/api-docs</apiDocsUrl>
+                                    <apiDocsUrl>http://127.0.0.1:${openapi.contract.http-port}/v3/api-docs</apiDocsUrl>
                                     <outputFileName>openapi.json</outputFileName>
                                     <outputDir>${project.basedir}/../api</outputDir>
                                 </configuration>

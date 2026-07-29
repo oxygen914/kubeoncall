@@ -3,8 +3,8 @@ import { useNavigate } from 'react-router-dom'
 import type { SessionData } from '@/api/auth'
 import { Button } from '@/components/ui/Button'
 import { Icon } from '@/components/ui/Icon'
-import { useMonitoringScope } from '@/features/monitoring/MonitoringScopeProvider'
-import { useTheme } from '@/features/theme/ThemeProvider'
+import { useMonitoringScope } from '@/features/monitoring/monitoringScopeContext'
+import { useTheme } from '@/features/theme/themeContext'
 
 interface TopBarProps {
   session: SessionData | null

@@ -4,10 +4,11 @@ import * as echarts from 'echarts/core'
 import { BarChart } from 'echarts/charts'
 import { GridComponent, LegendComponent, TooltipComponent } from 'echarts/components'
 import { SVGRenderer } from 'echarts/renderers'
+import { useTheme } from '@/features/theme/themeContext'
 
 echarts.use([BarChart, GridComponent, LegendComponent, TooltipComponent, SVGRenderer])
 
-const CHART_COLORS = {
+const LIGHT_CHART_COLORS = {
   primary: '#2563eb',
   success: '#15803d',
   danger: '#dc2626',
@@ -19,10 +20,12 @@ const CHART_COLORS = {
 
 export function ExecutionTrendChart({ values }: { values: Record<string, number> }) {
   const entries = Object.entries(values)
+  const { theme } = useTheme()
+  const colors = chartColors(theme)
   const option = useMemo(
     () => ({
       animationDuration: 180,
-      color: [CHART_COLORS.primary],
+      color: [colors.primary],
       tooltip: {
         trigger: 'axis',
         valueFormatter: (value: number) => `${value} 次`,
@@ -31,23 +34,23 @@ export function ExecutionTrendChart({ values }: { values: Record<string, number>
         top: 0,
         right: 0,
         data: ['全部执行'],
-        textStyle: { color: CHART_COLORS.text, fontSize: 12 },
+        textStyle: { color: colors.text, fontSize: 12 },
       },
       grid: { left: 42, right: 16, top: 38, bottom: 36 },
       xAxis: {
         type: 'category',
         data: entries.map(([bucket]) => compactBucket(bucket)),
         axisTick: { alignWithLabel: true },
-        axisLabel: { color: CHART_COLORS.text, fontSize: 11, hideOverlap: true },
-        axisLine: { lineStyle: { color: CHART_COLORS.grid } },
+        axisLabel: { color: colors.text, fontSize: 11, hideOverlap: true },
+        axisLine: { lineStyle: { color: colors.grid } },
       },
       yAxis: {
         type: 'value',
         minInterval: 1,
         name: '次数',
-        nameTextStyle: { color: CHART_COLORS.text, fontSize: 11 },
-        axisLabel: { color: CHART_COLORS.text, fontSize: 11 },
-        splitLine: { lineStyle: { color: CHART_COLORS.grid, type: 'dashed' } },
+        nameTextStyle: { color: colors.text, fontSize: 11 },
+        axisLabel: { color: colors.text, fontSize: 11 },
+        splitLine: { lineStyle: { color: colors.grid, type: 'dashed' } },
       },
       series: [
         {
@@ -55,12 +58,12 @@ export function ExecutionTrendChart({ values }: { values: Record<string, number>
           type: 'bar',
           barMaxWidth: 28,
           data: entries.map(([, count]) => count),
-          itemStyle: { color: CHART_COLORS.primary, borderRadius: [3, 3, 0, 0] },
-          emphasis: { itemStyle: { color: '#1d4ed8' } },
+          itemStyle: { color: colors.primary, borderRadius: [3, 3, 0, 0] },
+          emphasis: { itemStyle: { color: colors.primaryStrong } },
         },
       ],
     }),
-    [entries],
+    [colors, entries],
   )
 
   if (entries.length === 0) {
@@ -94,6 +97,8 @@ export function ExecutionTrendChart({ values }: { values: Record<string, number>
 
 export function FailureReasonChart({ values }: { values: Record<string, number> }) {
   const entries = Object.entries(values).sort((a, b) => b[1] - a[1])
+  const { theme } = useTheme()
+  const colors = chartColors(theme)
   const option = useMemo(
     () => ({
       animationDuration: 180,
@@ -106,15 +111,15 @@ export function FailureReasonChart({ values }: { values: Record<string, number> 
       xAxis: {
         type: 'value',
         minInterval: 1,
-        axisLabel: { color: CHART_COLORS.text, fontSize: 11 },
-        splitLine: { lineStyle: { color: CHART_COLORS.grid, type: 'dashed' } },
+        axisLabel: { color: colors.text, fontSize: 11 },
+        splitLine: { lineStyle: { color: colors.grid, type: 'dashed' } },
       },
       yAxis: {
         type: 'category',
         inverse: true,
         data: entries.map(([reason]) => reason),
         axisLabel: {
-          color: CHART_COLORS.text,
+          color: colors.text,
           fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
           fontSize: 11,
           width: 104,
@@ -129,12 +134,12 @@ export function FailureReasonChart({ values }: { values: Record<string, number> 
           type: 'bar',
           barMaxWidth: 18,
           data: entries.map(([, count]) => count),
-          label: { show: true, position: 'right', color: CHART_COLORS.text, fontSize: 11 },
-          itemStyle: { color: CHART_COLORS.danger, borderRadius: [0, 3, 3, 0] },
+          label: { show: true, position: 'right', color: colors.text, fontSize: 11 },
+          itemStyle: { color: colors.danger, borderRadius: [0, 3, 3, 0] },
         },
       ],
     }),
-    [entries],
+    [colors, entries],
   )
 
   if (entries.length === 0) {
@@ -206,4 +211,18 @@ export function ExecutionStatusDistribution({ values }: { values: Record<string,
 function compactBucket(bucket: string): string {
   const match = bucket.match(/(\d{2}:\d{2})$/)
   return match?.[1] ?? bucket
+}
+
+function chartColors(theme: 'light' | 'dark') {
+  if (theme === 'dark') {
+    return {
+      ...LIGHT_CHART_COLORS,
+      primary: '#60a5fa',
+      primaryStrong: '#93c5fd',
+      danger: '#f87171',
+      grid: '#334155',
+      text: '#cbd5e1',
+    }
+  }
+  return { ...LIGHT_CHART_COLORS, primaryStrong: '#1d4ed8' }
 }

@@ -1,9 +1,9 @@
 # KubeOnCall 监控能力重构实施计划
 
-> 版本：v1.0
-> 日期：2026-07-28
+> 版本：v1.1
+> 日期：2026-07-29
 > 当前状态：M0～M3 已完成，M4 真实 Kubernetes 生产验收待执行
-> 范围：CPU 使用率、Pod 阶段、Node Ready、同集群节点态势
+> 范围：CPU 使用率、Pod 阶段、Node Ready、同集群节点态势、统一范围、健康基线、运营研判
 > 非本期范围：GPU 指标、多集群控制面、Grafana 全量替代
 
 ## 1. 背景
@@ -137,6 +137,34 @@ KubeOnCall metrics ───────┘       │ 固定 PromQL 模板
 
 允许窗口：`15m | 1h | 6h`。返回时间点和 CPU 百分比，不接受任意 PromQL。
 
+### 5.6 全局监控范围
+
+`GET /api/v1/monitoring/scopes?cluster=local&environment=production`
+
+从 Prometheus 实际 `cluster/environment/namespace` 标签生成可选范围及资源数量。环境标签不存在
+时返回 `environmentFilterAvailable=false`，前端禁用对应选择器，不生成虚假环境。
+
+### 5.7 集群健康历史与基线
+
+`GET /api/v1/monitoring/health/trend?cluster=local&namespace=default&window=6h`
+
+允许窗口：`1h | 6h | 24h | 7d`。同时返回当前窗口、紧邻上一周期、周期均值、差值和
+`IMPROVING | DEGRADING | STABLE | UNAVAILABLE` 趋势。
+
+### 5.8 告警与变更关联
+
+`GET /api/v1/monitoring/correlations?cluster=local&window=6h&limit=10`
+
+复用现有告警读模型和变更关联评分，返回关联原因、评分、变更时间及建议。接口额外要求
+`alarm:read` 和 `change:read`，数据不可用时明确返回能力状态，不伪造关联。
+
+### 5.9 AI 运营建议
+
+`GET /api/v1/monitoring/advice?cluster=local&window=6h`
+
+独立只读建议接口。优先使用已配置模型，并始终补充确定性运营规则；模型不可用时返回
+`RULE_ENGINE_FALLBACK`。响应包含证据、建议、来源和分析入口，不能创建或执行处置。
+
 ## 6. Prometheus 指标契约
 
 ### Node Exporter
@@ -168,12 +196,16 @@ Prometheus 使用其他标签，需要在 scrape/relabel 阶段完成归一化�
 
 新增“集群态势”导航和页面：
 
-1. 集群选择器和刷新频率。
+1. 全局集群、环境、Namespace 选择器和刷新频率。
 2. Ready/NotReady、Pod、异常 Pod、平均 CPU 摘要卡片。
 3. 节点表格：Ready、CPU、内存、Pod 数、Exporter。
 4. Pod phase 分布和异常 Pod 表格。
 5. 选中节点后的 CPU 短期趋势。
 6. 数据源缺失提示和 Grafana 跳转。
+7. 当前周期与上一周期健康趋势。
+8. 告警与变更关联证据。
+9. 明确标注模型/规则来源的只读 AI 运营建议。
+10. 可持久化的显式浅色/深色主题切换。
 
 页面每 15 秒刷新摘要、节点和 Pod，趋势数据按节点和窗口缓存。数据源缺失时显示配置指引，
 不显示误导性的绿色健康状态。
@@ -231,6 +263,14 @@ KubeOnCall Helm Chart 不直接捆绑完整监控栈。生产接入采用外部 
 - [x] 本地单节点 CPU 联调。
 - [x] Minikube 单节点 kube-state-metrics、Node Ready、Pod phase 和重启次数验收。
 
+### M3.5：运营视图收口
+
+- [x] Prometheus 标签驱动的全局统一范围接口。
+- [x] 集群健康历史与上一周期对比基线。
+- [x] 告警与变更事件关联读模型。
+- [x] 独立、只读、可降级的 AI 运营建议接口。
+- [x] Console 全局范围联动和显式深色主题。
+
 ### M4：生产验收
 
 - [ ] 真实 Kubernetes 集群多节点验收。
@@ -270,6 +310,8 @@ KubeOnCall Helm Chart 不直接捆绑完整监控栈。生产接入采用外部 
 - 前端不包含任意 PromQL 输入。
 - 浏览器不直接访问 Prometheus。
 - 所有接口受 `dashboard:read` 保护。
+- 告警变更关联接口额外受 `alarm:read`、`change:read` 保护。
+- AI 建议明确标注模型或规则来源，且保持 `READ_ONLY`。
 - 自动化检查通过。
 
 生产完成还必须满足 M4 的真实 Kubernetes 验收；本地 Docker 单节点通过不等于生产完成。

@@ -5,6 +5,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { OverviewPage } from '../OverviewPage'
 import { SessionContext, type SessionState } from '@/features/auth/sessionContext'
 import { PERMISSIONS } from '@/features/auth/permissions'
+import { MonitoringScopeProvider } from '@/features/monitoring/MonitoringScopeProvider'
+import { ThemeProvider } from '@/features/theme/ThemeProvider'
 
 vi.mock('echarts-for-react/lib/core', () => ({
   default: ({ option }: { option: unknown }) => (
@@ -69,9 +71,13 @@ function renderPage() {
   return render(
     <QueryClientProvider client={queryClient}>
       <SessionContext.Provider value={sessionState}>
-        <MemoryRouter>
-          <OverviewPage />
-        </MemoryRouter>
+        <ThemeProvider>
+          <MemoryRouter>
+            <MonitoringScopeProvider>
+              <OverviewPage />
+            </MonitoringScopeProvider>
+          </MemoryRouter>
+        </ThemeProvider>
       </SessionContext.Provider>
     </QueryClientProvider>,
   )
@@ -100,17 +106,17 @@ describe('OverviewPage', () => {
           }),
         )
       }
-      if (url === '/api/v1/monitoring/clusters') {
+      if (url.startsWith('/api/v1/monitoring/scopes')) {
         return Promise.resolve(
           dataEnvelope({
-            clusters: [
-              {
-                name: 'prod',
-                nodeMetricsAvailable: true,
-                kubernetesStateAvailable: true,
-                nodeCount: 3,
-              },
-            ],
+            clusters: [{ value: 'prod', label: 'prod', resourceCount: 3 }],
+            environments: [],
+            namespaces: [{ value: 'payments', label: 'payments', resourceCount: 8 }],
+            capabilities: {
+              clusterFilterAvailable: true,
+              environmentFilterAvailable: false,
+              namespaceFilterAvailable: true,
+            },
             collectedAt: '2026-07-29T02:00:00Z',
           }),
         )
@@ -146,6 +152,62 @@ describe('OverviewPage', () => {
               },
             ],
             returned: 1,
+            collectedAt: '2026-07-29T02:00:00Z',
+          }),
+        )
+      }
+      if (url.startsWith('/api/v1/monitoring/health/trend?')) {
+        return Promise.resolve(
+          dataEnvelope({
+            scope: { cluster: 'prod' },
+            window: '24h',
+            stepSeconds: 900,
+            current: [
+              {
+                timestamp: '2026-07-29T02:00:00Z',
+                readyPercent: 66.67,
+                abnormalPods: 1,
+                healthScore: 61.67,
+              },
+            ],
+            previous: [
+              {
+                timestamp: '2026-07-28T02:00:00Z',
+                readyPercent: 100,
+                abnormalPods: 0,
+                healthScore: 100,
+              },
+            ],
+            comparison: {
+              currentAverage: 61.67,
+              previousAverage: 100,
+              delta: -38.33,
+              direction: 'DEGRADING',
+              baselineAvailable: true,
+            },
+            collectedAt: '2026-07-29T02:00:00Z',
+          }),
+        )
+      }
+      if (url.startsWith('/api/v1/monitoring/advice?')) {
+        return Promise.resolve(
+          dataEnvelope({
+            scope: { cluster: 'prod' },
+            generatedBy: 'RULE_ENGINE_FALLBACK',
+            modelAvailable: false,
+            safetyMode: 'READ_ONLY',
+            advice: [
+              {
+                id: 'node-health',
+                title: '优先核查节点健康',
+                risk: 'P1',
+                summary: '当前范围存在 NotReady 节点。',
+                evidence: '1 NotReady',
+                recommendation: '先检查 kubelet 与网络状态。',
+                source: 'RULE_ENGINE_FALLBACK',
+                analysisPath: '/monitoring',
+              },
+            ],
             collectedAt: '2026-07-29T02:00:00Z',
           }),
         )
@@ -230,7 +292,7 @@ describe('OverviewPage', () => {
     expect(screen.getByRole('heading', { name: '执行趋势' })).toBeInTheDocument()
     expect(await screen.findByText('TOOL_TIMEOUT')).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: '今日需要关注' })).toBeInTheDocument()
-    expect(screen.getByText('高优先级告警仍在持续')).toBeInTheDocument()
+    expect(screen.getByText('优先核查节点健康')).toBeInTheDocument()
     expect(screen.getAllByTestId('echart')).toHaveLength(2)
   })
 })

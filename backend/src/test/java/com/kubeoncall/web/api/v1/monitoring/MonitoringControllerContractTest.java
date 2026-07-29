@@ -17,6 +17,7 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 import com.kubeoncall.identity.PermissionCode;
 import com.kubeoncall.monitoring.MonitoringDataSourceException;
+import com.kubeoncall.monitoring.MonitoringOperationsService;
 import com.kubeoncall.monitoring.MonitoringQueryService;
 import com.kubeoncall.monitoring.MonitoringViews.Cluster;
 import com.kubeoncall.monitoring.MonitoringViews.ClusterList;
@@ -28,13 +29,15 @@ class MonitoringControllerContractTest {
 
     private MockMvc mockMvc;
     private MonitoringQueryService service;
+    private MonitoringOperationsService operationsService;
     private V1Security security;
 
     @BeforeEach
     void setUp() {
         service = mock(MonitoringQueryService.class);
+        operationsService = mock(MonitoringOperationsService.class);
         security = mock(V1Security.class);
-        mockMvc = MockMvcBuilders.standaloneSetup(new MonitoringController(service, security))
+        mockMvc = MockMvcBuilders.standaloneSetup(new MonitoringController(service, operationsService, security))
                 .addFilters(new RequestIdFilter())
                 .setControllerAdvice(new V1ApiExceptionHandler())
                 .build();

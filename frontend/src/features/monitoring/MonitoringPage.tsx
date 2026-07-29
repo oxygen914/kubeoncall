@@ -1,57 +1,76 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { Link } from 'react-router-dom'
 import { AsyncState } from '@/components/feedback/AsyncState'
 import { Button } from '@/components/ui/Button'
 import { StatusBadge, type StatusTone } from '@/components/ui/StatusBadge'
+import { hasPermission, PERMISSIONS } from '@/features/auth/permissions'
+import { useSession } from '@/features/auth/useSession'
 import {
-  getMonitoringClusters,
+  getHealthTrend,
+  getMonitoringCorrelations,
   getMonitoringNodes,
+  getOperationsAdvice,
   getMonitoringPods,
   getMonitoringSummary,
   getNodeCpuTrend,
+  type AlarmChangeCorrelation,
   type CpuPoint,
+  type HealthPoint,
   type MonitoringNode,
+  type OperationsAdvice,
   type MonitoringPod,
 } from './api'
+import { useMonitoringScope } from './monitoringScopeContext'
 
 const REFRESH_INTERVAL = 15_000
 
 export function MonitoringPage() {
   const queryClient = useQueryClient()
-  const [cluster, setCluster] = useState('')
+  const { session } = useSession()
+  const { scope, catalog, isLoading: scopeLoading, error: scopeError } = useMonitoringScope()
+  const cluster = scope.cluster
   const [selectedNode, setSelectedNode] = useState('')
   const [cpuWindow, setCpuWindow] = useState<'15m' | '1h' | '6h'>('15m')
+  const [healthWindow, setHealthWindow] = useState<'1h' | '6h' | '24h' | '7d'>('6h')
   const [podPhase, setPodPhase] = useState('')
-
-  const clustersQuery = useQuery({
-    queryKey: ['monitoring', 'clusters'],
-    queryFn: getMonitoringClusters,
-    refetchInterval: REFRESH_INTERVAL,
-  })
-  const clusters = useMemo(() => clustersQuery.data?.clusters ?? [], [clustersQuery.data])
-
-  useEffect(() => {
-    if (!cluster && clusters[0]) setCluster(clusters[0].name)
-    if (cluster && clusters.length > 0 && !clusters.some((item) => item.name === cluster)) {
-      setCluster(clusters[0]!.name)
-    }
-  }, [cluster, clusters])
+  const canReadCorrelations =
+    hasPermission(session, PERMISSIONS.ALARM_READ) &&
+    hasPermission(session, PERMISSIONS.CHANGE_READ)
 
   const summaryQuery = useQuery({
-    queryKey: ['monitoring', 'summary', cluster],
-    queryFn: () => getMonitoringSummary(cluster),
+    queryKey: ['monitoring', 'summary', scope],
+    queryFn: () => getMonitoringSummary(scope),
     enabled: Boolean(cluster),
     refetchInterval: REFRESH_INTERVAL,
   })
   const nodesQuery = useQuery({
-    queryKey: ['monitoring', 'nodes', cluster],
-    queryFn: () => getMonitoringNodes(cluster),
+    queryKey: ['monitoring', 'nodes', scope.cluster, scope.environment],
+    queryFn: () => getMonitoringNodes(scope),
     enabled: Boolean(cluster),
     refetchInterval: REFRESH_INTERVAL,
   })
   const podsQuery = useQuery({
-    queryKey: ['monitoring', 'pods', cluster, podPhase],
-    queryFn: () => getMonitoringPods(cluster, podPhase),
+    queryKey: ['monitoring', 'pods', scope, podPhase],
+    queryFn: () => getMonitoringPods(scope, podPhase),
+    enabled: Boolean(cluster),
+    refetchInterval: REFRESH_INTERVAL,
+  })
+  const healthQuery = useQuery({
+    queryKey: ['monitoring', 'health', scope, healthWindow],
+    queryFn: () => getHealthTrend(scope, healthWindow),
+    enabled: Boolean(cluster),
+    refetchInterval: REFRESH_INTERVAL,
+  })
+  const correlationsQuery = useQuery({
+    queryKey: ['monitoring', 'correlations', scope, healthWindow],
+    queryFn: () => getMonitoringCorrelations(scope, healthWindow),
+    enabled: Boolean(cluster && canReadCorrelations),
+    refetchInterval: REFRESH_INTERVAL,
+  })
+  const adviceQuery = useQuery({
+    queryKey: ['monitoring', 'advice', scope, healthWindow],
+    queryFn: () => getOperationsAdvice(scope, healthWindow),
     enabled: Boolean(cluster),
     refetchInterval: REFRESH_INTERVAL,
   })
@@ -65,17 +84,16 @@ export function MonitoringPage() {
   }, [nodes, selectedNode])
 
   const cpuQuery = useQuery({
-    queryKey: ['monitoring', 'cpu', cluster, selectedNode, cpuWindow],
-    queryFn: () => getNodeCpuTrend(cluster, selectedNode, cpuWindow),
+    queryKey: ['monitoring', 'cpu', scope.cluster, scope.environment, selectedNode, cpuWindow],
+    queryFn: () => getNodeCpuTrend(scope, selectedNode, cpuWindow),
     enabled: Boolean(cluster && selectedNode),
     refetchInterval: REFRESH_INTERVAL,
   })
 
   const loading =
-    clustersQuery.isLoading ||
+    scopeLoading ||
     (Boolean(cluster) && (summaryQuery.isLoading || nodesQuery.isLoading || podsQuery.isLoading))
-  const error =
-    clustersQuery.error ?? summaryQuery.error ?? nodesQuery.error ?? podsQuery.error ?? null
+  const error = scopeError ?? summaryQuery.error ?? nodesQuery.error ?? podsQuery.error ?? null
 
   const refresh = () => queryClient.invalidateQueries({ queryKey: ['monitoring'] })
 
@@ -100,7 +118,9 @@ export function MonitoringPage() {
         <div className="koc-monitoring__scope" aria-label="当前监控范围">
           <span>集群</span>
           <strong>{cluster || '发现中'}</strong>
-          <span>{clusters[0] ? `${clusters[0].nodeCount} 个节点` : '等待 Prometheus'}</span>
+          <span>
+            {scope.environment || '全部环境'} / {scope.namespace || '全部 Namespace'}
+          </span>
         </div>
         <label className="koc-filter">
           <span>Pod 阶段</span>
@@ -118,7 +138,7 @@ export function MonitoringPage() {
       <AsyncState
         isLoading={loading}
         error={error}
-        isEmpty={!loading && !error && clusters.length === 0}
+        isEmpty={!loading && !error && (catalog?.clusters.length ?? 0) === 0}
         emptyMessage="Prometheus 中尚未发现带 cluster/node 标签的节点，请先接入 Node Exporter。"
       >
         {cluster && summaryQuery.data && nodesQuery.data && podsQuery.data ? (
@@ -137,6 +157,42 @@ export function MonitoringPage() {
               counts={summaryQuery.data.podPhaseCounts}
               available={summaryQuery.data.dataSources.kubernetesStateAvailable}
             />
+            <section className="koc-monitoring__panel">
+              <div className="koc-monitoring__panel-title">
+                <div>
+                  <h2>集群健康趋势</h2>
+                  <p>当前窗口与紧邻上一周期使用相同口径，可直接查看环比基线。</p>
+                </div>
+                <label className="koc-filter">
+                  <span>窗口</span>
+                  <select
+                    value={healthWindow}
+                    onChange={(event) =>
+                      setHealthWindow(event.target.value as '1h' | '6h' | '24h' | '7d')
+                    }
+                  >
+                    <option value="1h">1 小时</option>
+                    <option value="6h">6 小时</option>
+                    <option value="24h">24 小时</option>
+                    <option value="7d">7 天</option>
+                  </select>
+                </label>
+              </div>
+              <AsyncState
+                isLoading={healthQuery.isLoading}
+                error={healthQuery.error}
+                isEmpty={!healthQuery.data?.current.length}
+                emptyMessage="当前范围尚无可用的集群健康历史指标。"
+              >
+                {healthQuery.data ? (
+                  <HealthTrendPanel
+                    current={healthQuery.data.current}
+                    previous={healthQuery.data.previous}
+                    comparison={healthQuery.data.comparison}
+                  />
+                ) : null}
+              </AsyncState>
+            </section>
             <section className="koc-monitoring__panel">
               <div className="koc-monitoring__panel-title">
                 <div>
@@ -195,6 +251,53 @@ export function MonitoringPage() {
                 </p>
               )}
             </section>
+
+            <div className="koc-monitoring__operations-grid">
+              <section className="koc-monitoring__panel">
+                <div className="koc-monitoring__panel-title">
+                  <div>
+                    <h2>告警与变更关联</h2>
+                    <p>按时间、资源与 Namespace 评分，仅展示有证据的关联。</p>
+                  </div>
+                </div>
+                {!canReadCorrelations ? (
+                  <p className="koc-monitoring__notice">
+                    需要告警读取和变更读取权限才能查看关联证据。
+                  </p>
+                ) : (
+                  <AsyncState
+                    isLoading={correlationsQuery.isLoading}
+                    error={correlationsQuery.error}
+                    isEmpty={!correlationsQuery.data?.correlations.length}
+                    emptyMessage="当前窗口未发现可解释的告警与变更关联。"
+                  >
+                    <CorrelationList correlations={correlationsQuery.data?.correlations ?? []} />
+                  </AsyncState>
+                )}
+              </section>
+
+              <section className="koc-monitoring__panel">
+                <div className="koc-monitoring__panel-title">
+                  <div>
+                    <h2>AI 运营建议</h2>
+                    <p>独立只读接口输出研判与建议，不会直接触发处置。</p>
+                  </div>
+                  {adviceQuery.data ? (
+                    <StatusBadge tone={adviceQuery.data.modelAvailable ? 'info' : 'neutral'}>
+                      {adviceQuery.data.modelAvailable ? '模型增强' : '规则降级'}
+                    </StatusBadge>
+                  ) : null}
+                </div>
+                <AsyncState
+                  isLoading={adviceQuery.isLoading}
+                  error={adviceQuery.error}
+                  isEmpty={!adviceQuery.data?.advice.length}
+                  emptyMessage="当前没有运营建议。"
+                >
+                  <AdviceList advice={adviceQuery.data?.advice ?? []} />
+                </AsyncState>
+              </section>
+            </div>
           </div>
         ) : null}
       </AsyncState>
@@ -473,6 +576,136 @@ function CpuChart({ points }: { points: CpuPoint[] }) {
   )
 }
 
+function HealthTrendPanel({
+  current,
+  previous,
+  comparison,
+}: {
+  current: HealthPoint[]
+  previous: HealthPoint[]
+  comparison: {
+    currentAverage: number | null
+    previousAverage: number | null
+    delta: number | null
+    direction: 'IMPROVING' | 'DEGRADING' | 'STABLE' | 'UNAVAILABLE'
+    baselineAvailable: boolean
+  }
+}) {
+  const currentLine = healthPolyline(current)
+  const previousLine = healthPolyline(previous)
+  const latest = current.at(-1)
+  const comparisonLabel = comparison.baselineAvailable
+    ? `${comparison.delta !== null && comparison.delta > 0 ? '+' : ''}${comparison.delta?.toFixed(2)} 分`
+    : '基线不足'
+
+  return (
+    <div className="koc-monitoring__health">
+      <div className="koc-monitoring__health-summary">
+        <div>
+          <span>当前健康分</span>
+          <strong>{latest ? latest.healthScore.toFixed(2) : '—'}</strong>
+        </div>
+        <div>
+          <span>当前周期均值</span>
+          <strong>{comparison.currentAverage?.toFixed(2) ?? '—'}</strong>
+        </div>
+        <div>
+          <span>上一周期均值</span>
+          <strong>{comparison.previousAverage?.toFixed(2) ?? '—'}</strong>
+        </div>
+        <div>
+          <span>周期环比</span>
+          <StatusBadge tone={comparisonTone(comparison.direction)}>{comparisonLabel}</StatusBadge>
+        </div>
+      </div>
+      <div className="koc-monitoring__chart">
+        <div className="koc-monitoring__chart-legend" aria-hidden="true">
+          <span className="koc-monitoring__legend-current">当前周期</span>
+          <span className="koc-monitoring__legend-previous">上一周期</span>
+        </div>
+        <svg viewBox="0 0 600 180" role="img" aria-label="集群健康分当前周期与上一周期趋势">
+          <line x1="10" y1="20" x2="590" y2="20" />
+          <line x1="10" y1="92.5" x2="590" y2="92.5" />
+          <line x1="10" y1="165" x2="590" y2="165" />
+          {previousLine ? (
+            <polyline className="koc-health-line--previous" points={previousLine} />
+          ) : null}
+          <polyline className="koc-health-line--current" points={currentLine} />
+        </svg>
+        <p className="koc-monitoring__chart-fallback">
+          当前周期均值 {comparison.currentAverage?.toFixed(2) ?? '不可用'}；上一周期均值{' '}
+          {comparison.previousAverage?.toFixed(2) ?? '不可用'}；趋势{' '}
+          {comparisonDirectionLabel(comparison.direction)}。
+        </p>
+      </div>
+    </div>
+  )
+}
+
+function CorrelationList({ correlations }: { correlations: AlarmChangeCorrelation[] }) {
+  return (
+    <ul className="koc-monitoring__correlations">
+      {correlations.map((correlation) => (
+        <li key={correlation.alarmId}>
+          <div>
+            <StatusBadge tone={severityTone(correlation.severity)}>
+              {correlation.severity}
+            </StatusBadge>
+            <Link to={`/alarms/${correlation.alarmId}`}>{correlation.alertName}</Link>
+            <span className="koc-mono">{correlation.resourceName}</span>
+          </div>
+          {correlation.changes.map((change) => (
+            <div className="koc-monitoring__change-evidence" key={change.changeId}>
+              <strong>{change.changeType}</strong>
+              <span>{change.reason}</span>
+              <span>相关度 {Math.round(change.score * 100)}%</span>
+              <time>{formatDateTime(change.changedAt)}</time>
+            </div>
+          ))}
+        </li>
+      ))}
+    </ul>
+  )
+}
+
+function AdviceList({ advice }: { advice: OperationsAdvice[] }) {
+  return (
+    <ul className="koc-monitoring__advice">
+      {advice.map((item) => (
+        <li key={item.id}>
+          <div>
+            <StatusBadge tone={severityTone(item.risk)}>{item.risk}</StatusBadge>
+            <strong>{item.title}</strong>
+            <span>{item.source === 'MODEL' ? 'AI 生成' : '规则建议'}</span>
+          </div>
+          <p>{item.summary}</p>
+          <dl>
+            <div>
+              <dt>证据</dt>
+              <dd>{item.evidence}</dd>
+            </div>
+            <div>
+              <dt>建议</dt>
+              <dd>{item.recommendation}</dd>
+            </div>
+          </dl>
+          <Link to={item.analysisPath}>查看分析入口</Link>
+        </li>
+      ))}
+    </ul>
+  )
+}
+
+function healthPolyline(points: HealthPoint[]): string {
+  return points
+    .map((point, index) => {
+      const x = points.length === 1 ? 300 : (index / (points.length - 1)) * 580 + 10
+      const y = 165 - Math.max(0, Math.min(100, point.healthScore)) * 1.45
+      return `${x},${y}`
+    })
+    .join(' ')
+}
+
 function GrafanaLink() {
   const href =
     typeof window !== 'undefined' && ['127.0.0.1', 'localhost'].includes(window.location.hostname)
@@ -531,5 +764,31 @@ function phaseTone(phase: string): StatusTone {
   if (phase === 'Running' || phase === 'Succeeded') return 'success'
   if (phase === 'Pending') return 'warning'
   if (phase === 'Failed' || phase === 'Unknown') return 'danger'
+  return 'neutral'
+}
+
+function comparisonTone(
+  direction: 'IMPROVING' | 'DEGRADING' | 'STABLE' | 'UNAVAILABLE',
+): StatusTone {
+  if (direction === 'IMPROVING') return 'success'
+  if (direction === 'DEGRADING') return 'danger'
+  if (direction === 'STABLE') return 'info'
+  return 'neutral'
+}
+
+function comparisonDirectionLabel(
+  direction: 'IMPROVING' | 'DEGRADING' | 'STABLE' | 'UNAVAILABLE',
+): string {
+  if (direction === 'IMPROVING') return '改善'
+  if (direction === 'DEGRADING') return '下降'
+  if (direction === 'STABLE') return '稳定'
+  return '不可用'
+}
+
+function severityTone(severity: string): StatusTone {
+  const normalized = severity.toUpperCase()
+  if (normalized === 'P1' || normalized === 'CRITICAL') return 'danger'
+  if (normalized === 'P2' || normalized === 'HIGH') return 'warning'
+  if (normalized === 'P3' || normalized === 'MEDIUM') return 'info'
   return 'neutral'
 }

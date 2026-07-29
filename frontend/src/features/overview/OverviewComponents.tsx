@@ -183,6 +183,7 @@ export interface AiInsight {
   action: string
   analysisPath: string
   handlingPath?: string
+  source?: 'MODEL' | 'RULE_ENGINE_FALLBACK'
 }
 
 export function AiInsightPanel({ insights }: { insights: AiInsight[] }) {
@@ -192,7 +193,7 @@ export function AiInsightPanel({ insights }: { insights: AiInsight[] }) {
         <article className="koc-ai-insight" key={insight.id}>
           <header>
             <span className="koc-ai-insight__mark" aria-hidden="true">
-              AI
+              {insight.source === 'RULE_ENGINE_FALLBACK' ? '规则' : 'AI'}
             </span>
             <div>
               <h3>{insight.title}</h3>

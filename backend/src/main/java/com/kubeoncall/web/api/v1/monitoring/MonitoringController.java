@@ -1,5 +1,6 @@
 package com.kubeoncall.web.api.v1.monitoring;
 
+import java.time.Duration;
 import java.util.function.Supplier;
 import java.util.regex.Pattern;
 
@@ -12,18 +13,27 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.kubeoncall.identity.PermissionCode;
 import com.kubeoncall.monitoring.MonitoringDataSourceException;
+import com.kubeoncall.monitoring.MonitoringOperationsService;
 import com.kubeoncall.monitoring.MonitoringQueryService;
 import com.kubeoncall.monitoring.MonitoringQueryService.CpuWindow;
+import com.kubeoncall.monitoring.MonitoringQueryService.HealthWindow;
+import com.kubeoncall.monitoring.MonitoringViews.AdviceFeed;
 import com.kubeoncall.monitoring.MonitoringViews.ClusterList;
+import com.kubeoncall.monitoring.MonitoringViews.CorrelationFeed;
 import com.kubeoncall.monitoring.MonitoringViews.CpuTrend;
+import com.kubeoncall.monitoring.MonitoringViews.HealthTrend;
 import com.kubeoncall.monitoring.MonitoringViews.NodeList;
 import com.kubeoncall.monitoring.MonitoringViews.PodList;
+import com.kubeoncall.monitoring.MonitoringViews.Scope;
+import com.kubeoncall.monitoring.MonitoringViews.ScopeCatalog;
 import com.kubeoncall.monitoring.MonitoringViews.Summary;
 import com.kubeoncall.web.api.v1.ApiResponse;
 import com.kubeoncall.web.api.v1.RequestIdFilter;
 import com.kubeoncall.web.api.v1.V1ApiErrorCode;
 import com.kubeoncall.web.api.v1.V1ApiException;
 import com.kubeoncall.web.api.v1.V1Security;
+
+import io.swagger.v3.oas.annotations.Operation;
 
 @RestController
 @RequestMapping("/api/v1/monitoring")
@@ -33,10 +43,13 @@ public class MonitoringController {
     private static final Pattern NAMESPACE = Pattern.compile("[a-z0-9](?:[-a-z0-9.]{0,251}[a-z0-9])?");
 
     private final MonitoringQueryService queryService;
+    private final MonitoringOperationsService operationsService;
     private final V1Security security;
 
-    public MonitoringController(MonitoringQueryService queryService, V1Security security) {
+    public MonitoringController(
+            MonitoringQueryService queryService, MonitoringOperationsService operationsService, V1Security security) {
         this.queryService = queryService;
+        this.operationsService = operationsService;
         this.security = security;
     }
 
@@ -45,34 +58,58 @@ public class MonitoringController {
         return read(queryService::clusters);
     }
 
-    @GetMapping("/summary")
-    public ApiResponse<Summary> summary(@RequestParam String cluster) {
-        return read(() -> queryService.summary(resourceName(cluster, "cluster")));
+    @GetMapping("/scopes")
+    public ApiResponse<ScopeCatalog> scopes(
+            @RequestParam(required = false) String cluster, @RequestParam(required = false) String environment) {
+        String checkedCluster = optionalResourceName(cluster, "cluster");
+        String checkedEnvironment = optionalResourceName(environment, "environment");
+        return read(() -> queryService.scopes(checkedCluster, checkedEnvironment));
     }
 
+    @GetMapping("/summary")
+    public ApiResponse<Summary> summary(
+            @RequestParam String cluster,
+            @RequestParam(required = false) String environment,
+            @RequestParam(required = false) String namespace) {
+        return read(() -> queryService.summary(
+                resourceName(cluster, "cluster"),
+                optionalResourceName(environment, "environment"),
+                optionalNamespace(namespace)));
+    }
+
+    @Operation(operationId = "monitoringNodes")
     @GetMapping("/nodes")
-    public ApiResponse<NodeList> nodes(@RequestParam String cluster) {
-        return read(() -> queryService.nodes(resourceName(cluster, "cluster")));
+    public ApiResponse<NodeList> nodes(
+            @RequestParam String cluster, @RequestParam(required = false) String environment) {
+        return read(() ->
+                queryService.nodes(resourceName(cluster, "cluster"), optionalResourceName(environment, "environment")));
     }
 
     @GetMapping("/pods")
     public ApiResponse<PodList> pods(
             @RequestParam String cluster,
+            @RequestParam(required = false) String environment,
             @RequestParam(required = false) String namespace,
             @RequestParam(required = false) String phase,
             @RequestParam(defaultValue = "100") int limit) {
-        String checkedNamespace = namespace == null || namespace.isBlank() ? null : namespace(namespace);
+        String checkedNamespace = optionalNamespace(namespace);
         String checkedPhase = phase == null || phase.isBlank() ? null : phase(phase);
         if (limit < 1 || limit > 500) {
             throw invalid("limit must be between 1 and 500");
         }
-        return read(() -> queryService.pods(resourceName(cluster, "cluster"), checkedNamespace, checkedPhase, limit));
+        return read(() -> queryService.pods(
+                resourceName(cluster, "cluster"),
+                optionalResourceName(environment, "environment"),
+                checkedNamespace,
+                checkedPhase,
+                limit));
     }
 
     @GetMapping("/nodes/{node}/cpu")
     public ApiResponse<CpuTrend> cpuTrend(
             @PathVariable String node,
             @RequestParam String cluster,
+            @RequestParam(required = false) String environment,
             @RequestParam(defaultValue = "15m") String window) {
         CpuWindow selected;
         try {
@@ -80,12 +117,70 @@ public class MonitoringController {
         } catch (IllegalArgumentException ex) {
             throw invalid(ex.getMessage());
         }
-        return read(
-                () -> queryService.cpuTrend(resourceName(cluster, "cluster"), resourceName(node, "node"), selected));
+        return read(() -> queryService.cpuTrend(
+                resourceName(cluster, "cluster"),
+                optionalResourceName(environment, "environment"),
+                resourceName(node, "node"),
+                selected));
+    }
+
+    @GetMapping("/health/trend")
+    public ApiResponse<HealthTrend> healthTrend(
+            @RequestParam String cluster,
+            @RequestParam(required = false) String environment,
+            @RequestParam(required = false) String namespace,
+            @RequestParam(defaultValue = "6h") String window) {
+        HealthWindow selected;
+        try {
+            selected = HealthWindow.parse(window);
+        } catch (IllegalArgumentException ex) {
+            throw invalid(ex.getMessage());
+        }
+        return read(() -> queryService.healthTrend(
+                resourceName(cluster, "cluster"),
+                optionalResourceName(environment, "environment"),
+                optionalNamespace(namespace),
+                selected));
+    }
+
+    @Operation(operationId = "monitoringCorrelations")
+    @GetMapping("/correlations")
+    public ApiResponse<CorrelationFeed> correlations(
+            @RequestParam String cluster,
+            @RequestParam(required = false) String environment,
+            @RequestParam(required = false) String namespace,
+            @RequestParam(defaultValue = "6h") String window,
+            @RequestParam(defaultValue = "10") int limit) {
+        security.requirePermission(PermissionCode.DASHBOARD_READ);
+        security.requirePermission(PermissionCode.ALARM_READ);
+        security.requirePermission(PermissionCode.CHANGE_READ);
+        if (limit < 1 || limit > 20) {
+            throw invalid("limit must be between 1 and 20");
+        }
+        Duration correlationWindow = historyDuration(window);
+        Scope scope = scope(cluster, environment, namespace);
+        return readAuthorized(() -> operationsService.correlations(scope, correlationWindow, limit));
+    }
+
+    @GetMapping("/advice")
+    public ApiResponse<AdviceFeed> advice(
+            @RequestParam String cluster,
+            @RequestParam(required = false) String environment,
+            @RequestParam(required = false) String namespace,
+            @RequestParam(defaultValue = "6h") String window) {
+        security.requirePermission(PermissionCode.DASHBOARD_READ);
+        Scope scope = scope(cluster, environment, namespace);
+        boolean includeCorrelations =
+                security.hasPermission(PermissionCode.ALARM_READ) && security.hasPermission(PermissionCode.CHANGE_READ);
+        return readAuthorized(() -> operationsService.advice(scope, historyDuration(window), includeCorrelations));
     }
 
     private <T> ApiResponse<T> read(Supplier<T> query) {
         security.requirePermission(PermissionCode.DASHBOARD_READ);
+        return readAuthorized(query);
+    }
+
+    private <T> ApiResponse<T> readAuthorized(Supplier<T> query) {
         try {
             return ApiResponse.ok(query.get(), RequestIdFilter.currentRequestId());
         } catch (MonitoringDataSourceException ex) {
@@ -102,6 +197,29 @@ public class MonitoringController {
             throw invalid(field + " has an invalid format");
         }
         return normalized;
+    }
+
+    private static String optionalResourceName(String value, String field) {
+        return value == null || value.isBlank() ? null : resourceName(value, field);
+    }
+
+    private static String optionalNamespace(String value) {
+        return value == null || value.isBlank() ? null : namespace(value);
+    }
+
+    private static Scope scope(String cluster, String environment, String namespace) {
+        return new Scope(
+                resourceName(cluster, "cluster"),
+                optionalResourceName(environment, "environment"),
+                optionalNamespace(namespace));
+    }
+
+    private static Duration historyDuration(String value) {
+        try {
+            return HealthWindow.parse(value).duration();
+        } catch (IllegalArgumentException ex) {
+            throw invalid(ex.getMessage());
+        }
     }
 
     private static String namespace(String value) {

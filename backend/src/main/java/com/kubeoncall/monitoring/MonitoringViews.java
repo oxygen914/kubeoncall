@@ -14,6 +14,20 @@ public final class MonitoringViews {
 
     public record ClusterList(List<Cluster> clusters, Instant collectedAt) {}
 
+    public record Scope(String cluster, String environment, String namespace) {}
+
+    public record ScopeValue(String value, String label, String cluster, String environment, long resourceCount) {}
+
+    public record ScopeCapabilities(
+            boolean clusterFilterAvailable, boolean environmentFilterAvailable, boolean namespaceFilterAvailable) {}
+
+    public record ScopeCatalog(
+            List<ScopeValue> clusters,
+            List<ScopeValue> environments,
+            List<ScopeValue> namespaces,
+            ScopeCapabilities capabilities,
+            Instant collectedAt) {}
+
     public record Summary(
             String cluster,
             int totalNodes,
@@ -49,5 +63,63 @@ public final class MonitoringViews {
             String window,
             boolean nodeMetricsAvailable,
             List<CpuPoint> points,
+            Instant collectedAt) {}
+
+    public record HealthPoint(Instant timestamp, double readyPercent, long abnormalPods, double healthScore) {}
+
+    public record HealthComparison(
+            Double currentAverage, Double previousAverage, Double delta, String direction, boolean baselineAvailable) {}
+
+    public record HealthTrend(
+            Scope scope,
+            String window,
+            long stepSeconds,
+            List<HealthPoint> current,
+            List<HealthPoint> previous,
+            HealthComparison comparison,
+            Instant collectedAt) {}
+
+    public record RelatedChange(
+            String changeId,
+            String changeType,
+            String resourceName,
+            String namespace,
+            Instant changedAt,
+            double score,
+            String reason,
+            List<String> suggestions) {}
+
+    public record AlarmChangeCorrelation(
+            String alarmId,
+            String alertName,
+            String severity,
+            String status,
+            String resourceName,
+            Instant firstSeen,
+            List<RelatedChange> changes) {}
+
+    public record CorrelationFeed(
+            Scope scope,
+            boolean alarmDataAvailable,
+            boolean changeDataAvailable,
+            List<AlarmChangeCorrelation> correlations,
+            Instant collectedAt) {}
+
+    public record AdviceItem(
+            String id,
+            String title,
+            String risk,
+            String summary,
+            String evidence,
+            String recommendation,
+            String source,
+            String analysisPath) {}
+
+    public record AdviceFeed(
+            Scope scope,
+            String generatedBy,
+            boolean modelAvailable,
+            String safetyMode,
+            List<AdviceItem> advice,
             Instant collectedAt) {}
 }

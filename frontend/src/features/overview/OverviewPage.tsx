@@ -1,12 +1,14 @@
-import { lazy, Suspense, useEffect, useMemo, useState } from 'react'
+import { lazy, Suspense, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useNavigate } from 'react-router-dom'
 import { getOverview } from './api'
 import {
-  getMonitoringClusters,
+  getHealthTrend,
   getMonitoringPods,
   getMonitoringSummary,
+  getOperationsAdvice,
 } from '@/features/monitoring/api'
+import { useMonitoringScope } from '@/features/monitoring/monitoringScopeContext'
 import { listAlarms } from '@/features/alarms/api'
 import { listApprovals } from '@/features/approvals/api'
 import { listExecutions } from '@/features/executions/api'
@@ -48,10 +50,11 @@ export function OverviewPage() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const { session } = useSession()
+  const { scope, catalog, setCluster, setEnvironment, setNamespace } = useMonitoringScope()
   const [window, setWindow] = useState('24h')
-  const [cluster, setCluster] = useState('')
-  const [environment, setEnvironment] = useState('')
-  const [namespace, setNamespace] = useState('')
+  const cluster = scope.cluster
+  const environment = scope.environment ?? ''
+  const namespace = scope.namespace ?? ''
   const [refreshMode, setRefreshMode] = useState<RefreshMode>('30s')
   const refreshInterval = refreshMode === 'off' ? false : Number.parseInt(refreshMode) * 1_000
 
@@ -67,29 +70,29 @@ export function OverviewPage() {
     staleTime: 15_000,
     refetchInterval: refreshInterval,
   })
-  const clustersQuery = useQuery({
-    queryKey: ['overview', 'clusters'],
-    queryFn: getMonitoringClusters,
-    refetchInterval: refreshInterval,
-  })
-  const clusters = useMemo(() => clustersQuery.data?.clusters ?? [], [clustersQuery.data])
-
-  useEffect(() => {
-    if (!cluster && clusters[0]) setCluster(clusters[0].name)
-    if (cluster && clusters.length > 0 && !clusters.some((item) => item.name === cluster)) {
-      setCluster(clusters[0]!.name)
-    }
-  }, [cluster, clusters])
-
   const summaryQuery = useQuery({
-    queryKey: ['overview', 'monitoring-summary', cluster],
-    queryFn: () => getMonitoringSummary(cluster),
+    queryKey: ['overview', 'monitoring-summary', scope],
+    queryFn: () => getMonitoringSummary(scope),
     enabled: Boolean(cluster),
     refetchInterval: refreshInterval,
   })
   const podsQuery = useQuery({
-    queryKey: ['overview', 'monitoring-pods', cluster],
-    queryFn: () => getMonitoringPods(cluster),
+    queryKey: ['overview', 'monitoring-pods', scope],
+    queryFn: () => getMonitoringPods(scope),
+    enabled: Boolean(cluster),
+    refetchInterval: refreshInterval,
+  })
+  const normalizedWindow = (['1h', '6h', '24h', '7d'].includes(window) ? window : '7d') as
+    '1h' | '6h' | '24h' | '7d'
+  const healthQuery = useQuery({
+    queryKey: ['overview', 'health-trend', scope, normalizedWindow],
+    queryFn: () => getHealthTrend(scope, normalizedWindow),
+    enabled: Boolean(cluster),
+    refetchInterval: refreshInterval,
+  })
+  const adviceQuery = useQuery({
+    queryKey: ['overview', 'operations-advice', scope, normalizedWindow],
+    queryFn: () => getOperationsAdvice(scope, normalizedWindow),
     enabled: Boolean(cluster),
     refetchInterval: refreshInterval,
   })
@@ -128,9 +131,10 @@ export function OverviewPage() {
 
   const queryStates = [
     overviewQuery,
-    clustersQuery,
     summaryQuery,
     podsQuery,
+    healthQuery,
+    adviceQuery,
     alarmsQuery,
     approvalsQuery,
     executionsQuery,
@@ -165,15 +169,17 @@ export function OverviewPage() {
       (summaryQuery.data.podPhaseCounts.Unknown ?? 0)
     : null
   const executionTrend = Object.values(data.executionTrend)
-  const insights = buildInsights({
-    p1,
-    p2,
-    failedExecutions: data.failedExecutions,
-    abnormalWorkloads,
-    notReadyNodes: summaryQuery.data?.notReadyNodes ?? null,
-    alarm: alarmsQuery.data?.data[0],
-    canAsk,
-  })
+  const insights = adviceQuery.data
+    ? adviceQuery.data.advice.map(toAiInsight)
+    : buildInsights({
+        p1,
+        p2,
+        failedExecutions: data.failedExecutions,
+        abnormalWorkloads,
+        notReadyNodes: summaryQuery.data?.notReadyNodes ?? null,
+        alarm: alarmsQuery.data?.data[0],
+        canAsk,
+      })
 
   return (
     <section className="koc-overview-page">
@@ -199,35 +205,40 @@ export function OverviewPage() {
         <label className="koc-overview-control">
           <span>集群</span>
           <select value={cluster} onChange={(event) => setCluster(event.target.value)}>
-            {clusters.length === 0 ? <option value="">暂无集群</option> : null}
-            {clusters.map((item) => (
-              <option value={item.name} key={item.name}>
-                {item.name}
+            {(catalog?.clusters.length ?? 0) === 0 ? <option value="">暂无集群</option> : null}
+            {catalog?.clusters.map((item) => (
+              <option value={item.value} key={item.value}>
+                {item.label}
               </option>
             ))}
           </select>
         </label>
-        <label
-          className="koc-overview-control"
-          title="环境维度尚无共享后端范围接口，当前仅保留交互位置"
-        >
+        <label className="koc-overview-control">
           <span>环境</span>
-          <select value={environment} onChange={(event) => setEnvironment(event.target.value)}>
+          <select
+            value={environment}
+            onChange={(event) => setEnvironment(event.target.value)}
+            disabled={!catalog?.capabilities.environmentFilterAvailable}
+          >
             <option value="">全部环境</option>
-            <option value="production">生产</option>
-            <option value="staging">预发</option>
+            {catalog?.environments.map((item) => (
+              <option value={item.value} key={item.value}>
+                {item.label}
+              </option>
+            ))}
           </select>
         </label>
-        <label
-          className="koc-overview-control"
-          title="Namespace 仅用于已有告警列表筛选，不改变概览聚合口径"
-        >
+        <label className="koc-overview-control">
           <span>Namespace</span>
-          <select value={namespace} onChange={(event) => setNamespace(event.target.value)}>
+          <select
+            value={namespace}
+            onChange={(event) => setNamespace(event.target.value)}
+            disabled={!catalog?.capabilities.namespaceFilterAvailable}
+          >
             <option value="">全部 Namespace</option>
-            {uniqueNamespaces(alarmsQuery.data?.data ?? []).map((item) => (
-              <option value={item} key={item}>
-                {item}
+            {catalog?.namespaces.map((item) => (
+              <option value={item.value} key={item.value}>
+                {item.label}
               </option>
             ))}
           </select>
@@ -276,7 +287,7 @@ export function OverviewPage() {
           <MetricCard
             label="集群健康"
             value={clusterHealthValue(summaryQuery.data)}
-            meta={clusterHealthMeta(summaryQuery.data)}
+            meta={clusterHealthMeta(summaryQuery.data, healthQuery.data?.comparison)}
             tone={clusterHealthTone(summaryQuery.data)}
             icon="cluster"
             onClick={() => navigate('/monitoring')}
@@ -343,7 +354,7 @@ export function OverviewPage() {
         <div className="koc-overview-grid">
           <SectionPanel
             title="集群健康与工作负载"
-            description="现有接口提供当前快照；历史健康趋势未提供时不生成伪趋势。"
+            description="实时快照与同口径上一周期健康基线。"
             className="koc-span-7"
             action={<PanelLink label="查看集群态势" onClick={() => navigate('/monitoring')} />}
           >
@@ -357,9 +368,11 @@ export function OverviewPage() {
                   ['Pending', 'Failed', 'Unknown'].includes(pod.phase),
                 ) ?? []
               }
+              comparison={healthQuery.data?.comparison}
               onRetry={() => {
                 void summaryQuery.refetch()
                 void podsQuery.refetch()
+                void healthQuery.refetch()
               }}
             />
           </SectionPanel>
@@ -489,6 +502,7 @@ function ClusterHealthPanel({
   cluster,
   summary,
   abnormalPods,
+  comparison,
   onRetry,
 }: {
   isLoading: boolean
@@ -496,6 +510,7 @@ function ClusterHealthPanel({
   cluster: string
   summary: Awaited<ReturnType<typeof getMonitoringSummary>> | undefined
   abnormalPods: Awaited<ReturnType<typeof getMonitoringPods>>['pods']
+  comparison: Awaited<ReturnType<typeof getHealthTrend>>['comparison'] | undefined
   onRetry: () => void
 }) {
   if (isLoading) return <LoadingState lines={5} />
@@ -560,7 +575,9 @@ function ClusterHealthPanel({
       <div className="koc-cluster-health__footer">
         <span>
           <Icon name="activity" size={15} />
-          历史健康趋势接口尚未提供，当前展示实时快照
+          {comparison?.baselineAvailable
+            ? `较上一周期 ${formatSigned(comparison.delta)} 分`
+            : '上一周期健康基线不足'}
         </span>
         <span>采集于 {formatDateTime(summary.collectedAt)}</span>
       </div>
@@ -689,6 +706,25 @@ function buildInsights({
   return insights.slice(0, 3)
 }
 
+function toAiInsight(
+  item: Awaited<ReturnType<typeof getOperationsAdvice>>['advice'][number],
+): AiInsight {
+  return {
+    id: item.id,
+    title: item.title,
+    risk: ['P1', 'P2', 'P3'].includes(item.risk) ? (item.risk as 'P1' | 'P2' | 'P3') : 'INFO',
+    summary: item.summary,
+    cause:
+      item.source === 'MODEL' ? '由已配置模型基于当前监控证据生成。' : '由后端确定性运营规则生成。',
+    relatedAlarm: '详见告警与变更关联面板',
+    relatedChange: '仅在具备对应权限时纳入研判',
+    evidence: item.evidence,
+    action: item.recommendation,
+    analysisPath: item.analysisPath,
+    source: item.source,
+  }
+}
+
 function clusterHealthValue(
   summary: Awaited<ReturnType<typeof getMonitoringSummary>> | undefined,
 ): string {
@@ -698,8 +734,10 @@ function clusterHealthValue(
 
 function clusterHealthMeta(
   summary: Awaited<ReturnType<typeof getMonitoringSummary>> | undefined,
+  comparison?: Awaited<ReturnType<typeof getHealthTrend>>['comparison'],
 ): string {
   if (!summary) return '监控快照不可用'
+  if (comparison?.baselineAvailable) return `较上一周期 ${formatSigned(comparison.delta)} 分`
   if (summary.notReadyNodes > 0) return `${summary.notReadyNodes} 个 NotReady`
   if (summary.unknownNodes > 0) return `${summary.unknownNodes} 个状态未知`
   return '节点全部 Ready'
@@ -719,10 +757,6 @@ function executionTone(status: string): StatusTone {
   if (status === 'FAILED' || status === 'REJECTED' || status === 'CANCELLED') return 'danger'
   if (status === 'RUNNING') return 'info'
   return 'warning'
-}
-
-function uniqueNamespaces(alarms: Awaited<ReturnType<typeof listAlarms>>['data']): string[] {
-  return [...new Set(alarms.map((alarm) => alarm.resource.namespace).filter(Boolean))] as string[]
 }
 
 function formatUpdatedAt(timestamp: number): string {
@@ -747,4 +781,9 @@ function formatDuration(milliseconds: number | null): string {
   if (milliseconds < 1_000) return `${milliseconds}ms`
   if (milliseconds < 60_000) return `${(milliseconds / 1_000).toFixed(1)}s`
   return `${Math.round(milliseconds / 60_000)}m`
+}
+
+function formatSigned(value: number | null): string {
+  if (value === null) return '—'
+  return `${value > 0 ? '+' : ''}${value.toFixed(2)}`
 }

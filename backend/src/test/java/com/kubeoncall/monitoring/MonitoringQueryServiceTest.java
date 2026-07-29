@@ -13,6 +13,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import com.kubeoncall.monitoring.MonitoringQueryService.CpuWindow;
+import com.kubeoncall.monitoring.MonitoringQueryService.HealthWindow;
 import com.kubeoncall.monitoring.PrometheusReadClient.InstantSample;
 import com.kubeoncall.monitoring.PrometheusReadClient.Point;
 import com.kubeoncall.monitoring.PrometheusReadClient.RangeSeries;
@@ -159,6 +160,66 @@ class MonitoringQueryServiceTest {
                 .singleElement()
                 .extracting(MonitoringViews.CpuPoint::value)
                 .isEqualTo(10.12);
+    }
+
+    @Test
+    void derivesScopeCatalogOnlyFromRealMetricLabels() {
+        when(prometheus.instant(anyString())).thenAnswer(invocation -> {
+            String query = invocation.getArgument(0);
+            if (query.contains("kube_node_info")) {
+                return List.of(sample(Map.of("cluster", "prod", "environment", "production"), 2));
+            }
+            return List.of(
+                    sample(Map.of("cluster", "prod", "environment", "production", "namespace", "payments"), 7),
+                    sample(Map.of("cluster", "prod", "namespace", "default"), 3));
+        });
+
+        var result = service.scopes("prod", "production");
+
+        assertThat(result.clusters())
+                .singleElement()
+                .extracting(MonitoringViews.ScopeValue::value)
+                .isEqualTo("prod");
+        assertThat(result.environments())
+                .singleElement()
+                .extracting(MonitoringViews.ScopeValue::value)
+                .isEqualTo("production");
+        assertThat(result.namespaces())
+                .singleElement()
+                .extracting(MonitoringViews.ScopeValue::value)
+                .isEqualTo("payments");
+        assertThat(result.capabilities().environmentFilterAvailable()).isTrue();
+    }
+
+    @Test
+    void returnsCurrentAndPreviousHealthBaseline() {
+        when(prometheus.range(
+                        anyString(),
+                        org.mockito.ArgumentMatchers.any(),
+                        org.mockito.ArgumentMatchers.any(),
+                        org.mockito.ArgumentMatchers.any()))
+                .thenAnswer(invocation -> {
+                    String query = invocation.getArgument(0);
+                    Instant start = invocation.getArgument(1);
+                    if (query.contains("kube_pod_status_phase")) {
+                        return List.of(new RangeSeries(Map.of(), List.of(new Point(start, 1))));
+                    }
+                    double readyPercent = start.isBefore(Instant.now().minus(java.time.Duration.ofHours(7))) ? 80 : 100;
+                    return List.of(new RangeSeries(Map.of(), List.of(new Point(start, readyPercent))));
+                });
+
+        var result = service.healthTrend("prod", null, "payments", HealthWindow.SIX_HOURS);
+
+        assertThat(result.current())
+                .singleElement()
+                .extracting(MonitoringViews.HealthPoint::healthScore)
+                .isEqualTo(95.0);
+        assertThat(result.previous())
+                .singleElement()
+                .extracting(MonitoringViews.HealthPoint::healthScore)
+                .isEqualTo(75.0);
+        assertThat(result.comparison().baselineAvailable()).isTrue();
+        assertThat(result.comparison().direction()).isEqualTo("IMPROVING");
     }
 
     private static InstantSample sample(Map<String, String> labels, double value) {

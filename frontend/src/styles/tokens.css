@@ -1,8 +1,4 @@
-/**
- * Design tokens. CSS custom properties so a dark theme can be applied by
- * overriding these variables on a `[data-theme="dark"]` (or prefers-color-scheme)
- * selector without touching component CSS.
- */
+/** Design tokens shared by the explicit light and dark themes. */
 :root {
   /* Neutral scale (slate-ish) */
   --koc-neutral-0: #ffffff;
@@ -44,6 +40,7 @@
   --koc-surface: var(--koc-neutral-0);
   --koc-surface-muted: #f1f5f9;
   --koc-surface-subtle: #f8fafc;
+  --koc-topbar-bg: rgba(255, 255, 255, 0.97);
   --koc-border: #dbe3ee;
   --koc-border-strong: #c6d1df;
   --koc-text: var(--koc-neutral-900);
@@ -88,15 +85,33 @@
   --koc-page-gap: 16px;
 }
 
-/* Reserved for a later explicit theme switch. This delivery stays light-first. */
 [data-theme='dark'] {
+  color-scheme: dark;
   --koc-bg: var(--koc-neutral-950);
   --koc-surface: var(--koc-neutral-900);
   --koc-surface-muted: var(--koc-neutral-800);
-  --koc-surface-subtle: var(--koc-neutral-900);
+  --koc-surface-subtle: #172033;
+  --koc-topbar-bg: rgba(15, 23, 42, 0.97);
   --koc-border: var(--koc-neutral-700);
   --koc-border-strong: var(--koc-neutral-600);
   --koc-text: var(--koc-neutral-100);
   --koc-text-muted: var(--koc-neutral-400);
+  --koc-text-subtle: var(--koc-neutral-400);
   --koc-text-inverse: var(--koc-neutral-900);
+  --koc-primary-50: #172554;
+  --koc-primary-100: #1e3a8a;
+  --koc-primary-500: #60a5fa;
+  --koc-primary-600: #93c5fd;
+  --koc-primary-700: #bfdbfe;
+  --koc-success: #4ade80;
+  --koc-success-bg: #123524;
+  --koc-warning: #fbbf24;
+  --koc-warning-bg: #3b2a0c;
+  --koc-danger: #f87171;
+  --koc-danger-bg: #401a1d;
+  --koc-info: #60a5fa;
+  --koc-info-bg: #172554;
+  --koc-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --koc-shadow-md: 0 4px 12px rgba(0, 0, 0, 0.35);
+  --koc-shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.45);
 }

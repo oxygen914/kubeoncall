@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { AppRouter } from '@/app/router'
 import { SessionContext, type SessionState } from '../sessionContext'
 import { PERMISSIONS, type Permission } from '../permissions'
+import { ThemeProvider } from '@/features/theme/ThemeProvider'
 
 function renderRoute(route: string, permissions: Permission[]) {
   const sessionState: SessionState = {
@@ -32,9 +33,11 @@ function renderRoute(route: string, permissions: Permission[]) {
   return render(
     <QueryClientProvider client={queryClient}>
       <SessionContext.Provider value={sessionState}>
-        <MemoryRouter initialEntries={[route]}>
-          <AppRouter />
-        </MemoryRouter>
+        <ThemeProvider>
+          <MemoryRouter initialEntries={[route]}>
+            <AppRouter />
+          </MemoryRouter>
+        </ThemeProvider>
       </SessionContext.Provider>
     </QueryClientProvider>,
   )
