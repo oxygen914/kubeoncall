@@ -4,6 +4,7 @@ class IntegrationsProperties {
 
     private final KubeOnCallProperties.Endpoint kubernetes = new KubeOnCallProperties.Endpoint();
     private final KubeOnCallProperties.Endpoint prometheus = new KubeOnCallProperties.Endpoint();
+    private final KubeOnCallProperties.Endpoint loki = new KubeOnCallProperties.Endpoint();
     private final KubeOnCallProperties.Endpoint alertmanager = new KubeOnCallProperties.Endpoint();
     private final KubeOnCallProperties.Endpoint notification = new KubeOnCallProperties.Endpoint();
     private final KubeOnCallProperties.Endpoint incident = new KubeOnCallProperties.Endpoint();
@@ -16,6 +17,10 @@ class IntegrationsProperties {
 
     public KubeOnCallProperties.Endpoint getPrometheus() {
         return prometheus;
+    }
+
+    public KubeOnCallProperties.Endpoint getLoki() {
+        return loki;
     }
 
     public KubeOnCallProperties.Endpoint getAlertmanager() {

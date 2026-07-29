@@ -2,6 +2,7 @@ package com.kubeoncall.agent.planner;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.List;
@@ -10,6 +11,7 @@ import java.util.Map;
 import org.junit.jupiter.api.Test;
 
 import com.kubeoncall.domain.task.RiskLevel;
+import com.kubeoncall.domain.task.SopReference;
 import com.kubeoncall.domain.task.TaskType;
 
 class PlannerRuleEngineTest {
@@ -47,5 +49,41 @@ class PlannerRuleEngineTest {
         assertEquals(
                 List.of("restart payment-service", "查询 payment-service 日志"),
                 ruleEngine.splitTaskRequests("restart payment-service 然后 查询 payment-service 日志"));
+        assertTrue(ruleEngine.isMutation(TaskType.RESTART_SERVICE));
+        assertFalse(ruleEngine.isMutation(TaskType.QUERY_LOGS));
+    }
+
+    @Test
+    void shouldResolveOnlyARealVersionedSopHit() {
+        assertNull(ruleEngine.resolveSopReference(
+                Map.of("sop", Map.of("collectionStatus", "UNAVAILABLE", "tool", "knowledge.searchSop"))));
+        assertNull(ruleEngine.resolveSopReference(Map.of(
+                "sop",
+                Map.of(
+                        "collectionStatus", "SUCCEEDED",
+                        "tool", "knowledge.searchSop",
+                        "title", "Pending triage"))));
+
+        SopReference reference = ruleEngine.resolveSopReference(Map.of(
+                "sop",
+                Map.of(
+                        "collectionStatus",
+                        "SUCCEEDED",
+                        "tool",
+                        "knowledge.searchSop",
+                        "results",
+                        List.of(Map.of(
+                                "sopId",
+                                "pod-pending-triage",
+                                "title",
+                                "Pending triage",
+                                "version",
+                                "1.3.0",
+                                "source",
+                                "runbook")))));
+
+        assertEquals("pod-pending-triage", reference.sopId());
+        assertEquals("1.3.0", reference.version());
+        assertEquals("runbook", reference.source());
     }
 }

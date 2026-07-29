@@ -136,6 +136,31 @@ kubeoncall:
     post-execution-verification-poll-millis: ${KUBEONCALL_POST_EXECUTION_VERIFICATION_POLL_MILLIS:5000}
     automatic-rollback-enabled: ${KUBEONCALL_AUTOMATIC_ROLLBACK_ENABLED:true}
     post-execution-escalation-enabled: ${KUBEONCALL_POST_EXECUTION_ESCALATION_ENABLED:true}
+  ai-operations:
+    planner-mode: ${KUBEONCALL_PLANNER_MODE:RULE_FALLBACK}
+    planner-provider: ${KUBEONCALL_PLANNER_PROVIDER:openai-compatible}
+    planner-model: ${KUBEONCALL_PLANNER_MODEL:${SPRING_AI_OPENAI_CHAT_OPTIONS_MODEL:qwen-plus}}
+    planner-schema-version: ${KUBEONCALL_PLANNER_SCHEMA_VERSION:v1}
+    planner-max-response-chars: ${KUBEONCALL_PLANNER_MAX_RESPONSE_CHARS:32768}
+    planner-connect-timeout-millis: ${KUBEONCALL_PLANNER_CONNECT_TIMEOUT_MILLIS:3000}
+    planner-read-timeout-millis: ${KUBEONCALL_PLANNER_READ_TIMEOUT_MILLIS:30000}
+    planner-canary-enabled: ${KUBEONCALL_PLANNER_CANARY_ENABLED:false}
+    planner-canary-fail-fast: ${KUBEONCALL_PLANNER_CANARY_FAIL_FAST:true}
+    evidence-prometheus-enabled: ${KUBEONCALL_EVIDENCE_PROMETHEUS_ENABLED:false}
+    evidence-loki-enabled: ${KUBEONCALL_EVIDENCE_LOKI_ENABLED:false}
+    evidence-k8s-events-enabled: ${KUBEONCALL_EVIDENCE_K8S_EVENTS_ENABLED:false}
+    evidence-pod-logs-enabled: ${KUBEONCALL_EVIDENCE_POD_LOGS_ENABLED:false}
+    ask-durable-workflow-enabled: ${KUBEONCALL_ASK_DURABLE_WORKFLOW_ENABLED:false}
+    operation-closure-enabled: ${KUBEONCALL_OPERATION_CLOSURE_ENABLED:true}
+    conclusion-evidence-ui-enabled: ${KUBEONCALL_CONCLUSION_EVIDENCE_UI_ENABLED:false}
+    evidence-lookback-minutes: ${KUBEONCALL_EVIDENCE_LOOKBACK_MINUTES:30}
+    evidence-collection-timeout-millis: ${KUBEONCALL_EVIDENCE_COLLECTION_TIMEOUT_MILLIS:5000}
+    evidence-max-snippet-chars: ${KUBEONCALL_EVIDENCE_MAX_SNIPPET_CHARS:8192}
+    loki-max-window-minutes: ${KUBEONCALL_LOKI_MAX_WINDOW_MINUTES:360}
+    loki-max-lines: ${KUBEONCALL_LOKI_MAX_LINES:500}
+    loki-max-response-bytes: ${KUBEONCALL_LOKI_MAX_RESPONSE_BYTES:1048576}
+    allowed-clusters: ${KUBEONCALL_EVIDENCE_ALLOWED_CLUSTERS:}
+    allowed-namespaces: ${KUBEONCALL_EVIDENCE_ALLOWED_NAMESPACES:}
   approval:
     enabled: true
     callback-timeout-seconds: 1800
@@ -270,6 +295,9 @@ kubeoncall:
     prometheus:
       endpoint: http://localhost:18082/api/tools/prometheus
       timeout-millis: 3000
+    loki:
+      endpoint: ${LOKI_ENDPOINT:http://localhost:3100}
+      timeout-millis: ${LOKI_TIMEOUT_MILLIS:5000}
     alertmanager:
       endpoint: http://localhost:18083/api/tools/alertmanager
       timeout-millis: 3000

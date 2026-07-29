@@ -61,7 +61,7 @@ public class ExecutionAuditService {
                 Instant.now(),
                 graphAuditMetadataFactory.retryCount(state),
                 state.getStatus() == GraphStatus.REPLAN_REQUIRED,
-                state.getStatus() == GraphStatus.FAILED || state.getStatus() == GraphStatus.REPLAN_REQUIRED,
+                isDegraded(state),
                 readApprovalLatencyMs(state),
                 toolOutcome.successCount(),
                 toolOutcome.failureCount(),
@@ -155,6 +155,12 @@ public class ExecutionAuditService {
 
     private boolean isAutoHandled(GraphState state) {
         return state.getStatus() == GraphStatus.SUCCESS && state.getFinalApprovalDecision() == null;
+    }
+
+    private boolean isDegraded(GraphState state) {
+        return state.getStatus() == GraphStatus.FAILED
+                || state.getStatus() == GraphStatus.REPLAN_REQUIRED
+                || Boolean.TRUE.equals(state.getContext().get("plannerDegraded"));
     }
 
     private String buildSummary(GraphState state) {

@@ -6,11 +6,11 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 
 import org.springframework.stereotype.Service;
 
 import com.kubeoncall.agent.planner.PlannerLlmDecision;
+import com.kubeoncall.agent.planner.PlannerLlmResult;
 import com.kubeoncall.agent.planner.PlannerLlmService;
 import com.kubeoncall.alarm.correlation.ChangeCorrelation;
 import com.kubeoncall.alarm.correlation.ChangeCorrelationService;
@@ -99,13 +99,16 @@ public class MonitoringOperationsService {
                 ? correlations(scope, correlationWindow, 5)
                 : new CorrelationFeed(scope, false, false, List.of(), Instant.now());
         Map<String, Object> evidence = evidence(summary, correlationFeed);
-        Optional<PlannerLlmDecision> decision = plannerLlm.plan(
+        PlannerLlmResult plannerResult = plannerLlm.planWithStatus(
                 "Generate a read-only Kubernetes operations recommendation from the supplied monitoring evidence. "
                         + "Do not execute, mutate, or bypass approval.",
                 evidence);
+        PlannerLlmDecision decision = plannerResult.decision();
 
         List<AdviceItem> items = new ArrayList<>();
-        decision.ifPresent(value -> items.add(modelAdvice(value, summary)));
+        if (decision != null) {
+            items.add(modelAdvice(decision, summary));
+        }
         addRuleAdvice(items, summary, correlationFeed);
         if (items.isEmpty()) {
             items.add(new AdviceItem(
@@ -120,8 +123,8 @@ public class MonitoringOperationsService {
         }
         return new AdviceFeed(
                 scope,
-                decision.isPresent() ? "CONFIGURED_LLM" : "RULE_ENGINE_FALLBACK",
-                decision.isPresent(),
+                plannerResult.mode().name(),
+                decision != null,
                 "READ_ONLY",
                 items.stream().limit(3).toList(),
                 Instant.now());

@@ -8,6 +8,7 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -17,6 +18,7 @@ import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.kubeoncall.common.config.KubeOnCallProperties;
 import com.kubeoncall.idempotency.IdempotencyService;
 import com.kubeoncall.identity.PermissionCode;
 import com.kubeoncall.web.api.v1.ApiResponse;
@@ -39,10 +41,20 @@ public class ExecutionCommandsController {
 
     private final ObjectProvider<WorkflowSubmissionService> serviceProvider;
     private final V1Security security;
+    private final KubeOnCallProperties properties;
 
     public ExecutionCommandsController(ObjectProvider<WorkflowSubmissionService> serviceProvider, V1Security security) {
+        this(serviceProvider, security, null);
+    }
+
+    @Autowired
+    public ExecutionCommandsController(
+            ObjectProvider<WorkflowSubmissionService> serviceProvider,
+            V1Security security,
+            KubeOnCallProperties properties) {
         this.serviceProvider = serviceProvider;
         this.security = security;
+        this.properties = properties;
     }
 
     @PostMapping
@@ -67,7 +79,13 @@ public class ExecutionCommandsController {
                 requestId,
                 request.getHeader("X-Trace-Id"),
                 clientIp(request),
-                request.getHeader(HttpHeaders.USER_AGENT));
+                request.getHeader(HttpHeaders.USER_AGENT),
+                body.cluster(),
+                body.environment(),
+                body.namespace(),
+                body.resourceKind(),
+                body.resourceName(),
+                body.resourceUid());
         IdempotencyService.IdempotencyScope scope =
                 new IdempotencyService.IdempotencyScope("USER", principal.user().publicId(), ROUTE);
         AsyncCommandResult result = service.submitAsk(command, scope, key, canonical(body));
@@ -86,6 +104,12 @@ public class ExecutionCommandsController {
     }
 
     private WorkflowSubmissionService requiredService() {
+        if (properties != null && !properties.getAiOperations().isAskDurableWorkflowEnabled()) {
+            throw new V1ApiException(
+                    HttpStatus.SERVICE_UNAVAILABLE.value(),
+                    V1ApiErrorCode.SERVICE_UNAVAILABLE,
+                    "Durable Ask workflow is disabled");
+        }
         WorkflowSubmissionService service = serviceProvider.getIfAvailable();
         if (service == null || !service.isAvailable()) {
             throw new V1ApiException(
@@ -115,7 +139,10 @@ public class ExecutionCommandsController {
     }
 
     private static String canonical(CreateExecutionRequest body) {
-        return "ask|" + body.question().trim() + "|" + safe(body.sessionId()) + "|" + safe(body.alarmId());
+        return "ask|" + body.question().trim() + "|" + safe(body.sessionId()) + "|"
+                + safe(body.alarmId()) + "|" + safe(body.cluster()) + "|" + safe(body.environment())
+                + "|" + safe(body.namespace()) + "|" + safe(body.resourceKind()) + "|"
+                + safe(body.resourceName()) + "|" + safe(body.resourceUid());
     }
 
     private static String requireIdempotencyKey(String idempotencyKey) {
@@ -147,5 +174,16 @@ public class ExecutionCommandsController {
     public record CreateExecutionRequest(
             @NotBlank @Size(max = 8000) String question,
             @Size(max = 128) String sessionId,
-            @Size(max = 40) String alarmId) {}
+            @Size(max = 40) String alarmId,
+            @Size(max = 128) String cluster,
+            @Size(max = 64) String environment,
+            @Size(max = 253) String namespace,
+            @Size(max = 128) String resourceKind,
+            @Size(max = 253) String resourceName,
+            @Size(max = 128) String resourceUid) {
+
+        public CreateExecutionRequest(String question, String sessionId, String alarmId) {
+            this(question, sessionId, alarmId, null, null, null, null, null, null);
+        }
+    }
 }

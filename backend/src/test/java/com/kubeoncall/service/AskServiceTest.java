@@ -1,6 +1,7 @@
 package com.kubeoncall.service;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -76,6 +77,7 @@ class AskServiceTest {
                     state.setTaskPlan(
                             new TaskPlan("exec-handle", "restart payment-service", List.of(task), Instant.now(), true));
                     state.setCurrentTask(task);
+                    state.getContext().put("plannerKnowledge", Map.of("apiToken", "must-not-be-returned"));
                     state.setStatus(GraphStatus.SUCCESS);
                     return null;
                 })
@@ -115,6 +117,7 @@ class AskServiceTest {
         assertTrue(result.details().containsKey("executor"));
         assertTrue(result.details().containsKey("approval"));
         assertTrue(result.details().containsKey("nodeResults"));
+        assertFalse(((Map<?, ?>) result.details().get("planner")).containsKey("plannerKnowledge"));
         verify(executorAgent).plan(any());
         verify(verifierAgent).run(any());
         verify(executorAgent).executePrepared(any());

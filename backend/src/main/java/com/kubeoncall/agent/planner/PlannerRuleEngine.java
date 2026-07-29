@@ -11,6 +11,7 @@ import java.util.regex.Pattern;
 import org.springframework.stereotype.Component;
 
 import com.kubeoncall.domain.task.RiskLevel;
+import com.kubeoncall.domain.task.SopReference;
 import com.kubeoncall.domain.task.Task;
 import com.kubeoncall.domain.task.TaskType;
 
@@ -43,7 +44,41 @@ public class PlannerRuleEngine {
 
     public Task buildTask(
             String intent, TaskType taskType, String target, Map<String, Object> parameters, RiskLevel riskLevel) {
-        return taskFactory.create(intent, taskType, target, parameters, riskLevel);
+        return buildTask(intent, taskType, target, parameters, riskLevel, null);
+    }
+
+    public Task buildTask(
+            String intent,
+            TaskType taskType,
+            String target,
+            Map<String, Object> parameters,
+            RiskLevel riskLevel,
+            SopReference sopReference) {
+        return taskFactory.create(intent, taskType, target, parameters, riskLevel, sopReference);
+    }
+
+    /**
+     * Resolves only a versioned SOP returned by a successful knowledge lookup.
+     *
+     * <p>Missing identifiers are left missing rather than replaced with a generated placeholder.
+     */
+    public SopReference resolveSopReference(Map<String, Object> plannerKnowledge) {
+        Map<String, Object> envelope = readMap(plannerKnowledge == null ? null : plannerKnowledge.get("sop"));
+        if (!evidenceAvailable(envelope) || Boolean.TRUE.equals(envelope.get("simulation"))) {
+            return null;
+        }
+        Map<String, Object> candidate = firstResult(envelope);
+        String sopId = firstText(candidate, "sopId", "runbookId", "documentId", "id");
+        String version = firstText(candidate, "version", "runbookVersion", "datasetVersion", "dataset_version");
+        String source = firstText(candidate, "source");
+        if (source.isBlank()) {
+            source = firstText(envelope, "source", "tool");
+        }
+        if (sopId.isBlank() || version.isBlank() || source.isBlank()) {
+            return null;
+        }
+        String title = firstText(candidate, "title", "name");
+        return new SopReference(sopId, title, version, source);
     }
 
     public String defaultString(String value, String fallback) {
@@ -117,7 +152,7 @@ public class PlannerRuleEngine {
         if (lower.contains("清理") || lower.contains("删除") || lower.contains("clean") || lower.contains("delete")) {
             return "CLEAN_DATA";
         }
-        return "QUERY_LOGS";
+        return "GENERAL_DIAGNOSTICS";
     }
 
     public String inferConfidence(String normalized, String intent) {
@@ -135,6 +170,9 @@ public class PlannerRuleEngine {
         if (intent.equals("PATCH_CONFIG")
                 && (lower.contains("配置") || lower.contains("config") || lower.contains("超时"))) {
             matchCount++;
+        }
+        if ("GENERAL_DIAGNOSTICS".equals(intent)) {
+            return "LOW";
         }
         return matchCount > 0 ? "HIGH" : "MEDIUM";
     }
@@ -157,17 +195,17 @@ public class PlannerRuleEngine {
         if (lower.contains("user")) {
             return "user-service";
         }
-        return "unknown-service";
+        return "current-scope";
     }
 
     public String inferTargetSource(String normalized, String target) {
         if (SERVICE_PATTERN.matcher(normalized).find()) {
             return "extracted_from_request";
         }
-        if (!target.equals("unknown-service")) {
+        if (!target.equals("current-scope")) {
             return "inferred_from_keywords";
         }
-        return "default_fallback";
+        return "scope_fallback";
     }
 
     public TaskType mapIntentToTaskType(String intent) {
@@ -179,7 +217,8 @@ public class PlannerRuleEngine {
             case "PATCH_CONFIG" -> TaskType.PATCH_CONFIG;
             case "EXECUTE_SCRIPT" -> TaskType.EXECUTE_SCRIPT;
             case "CLEAN_DATA" -> TaskType.CLEAN_DATA;
-            default -> TaskType.QUERY_LOGS;
+            case "GENERAL_DIAGNOSTICS" -> TaskType.QUERY_METRICS;
+            default -> TaskType.QUERY_METRICS;
         };
     }
 
@@ -229,6 +268,15 @@ public class PlannerRuleEngine {
             TaskType taskType,
             Map<String, Object> parameters,
             Map<String, Object> plannerKnowledge) {
+        return identifyMissingSignals(normalized, taskType, null, parameters, plannerKnowledge);
+    }
+
+    public List<String> identifyMissingSignals(
+            String normalized,
+            TaskType taskType,
+            String target,
+            Map<String, Object> parameters,
+            Map<String, Object> plannerKnowledge) {
         List<String> missing = new ArrayList<>();
         if (taskType == TaskType.PATCH_CONFIG && "config_key".equals(parameters.get("configKey"))) {
             missing.add("specific_config_key_not_identified");
@@ -238,10 +286,13 @@ public class PlannerRuleEngine {
                 && !readSupplementalSignals(plannerKnowledge).containsKey("recommendedReplicas")) {
             missing.add("target_replica_count_not_specified");
         }
-        if (!plannerKnowledge.containsKey("sop")) {
+        if (isMutation(taskType) && isScopeTarget(target)) {
+            missing.add("specific_target_not_identified");
+        }
+        if (!evidenceAvailable(plannerKnowledge.get("sop"))) {
             missing.add("sop_context_unavailable");
         }
-        if (!plannerKnowledge.containsKey("serviceMetadata")) {
+        if (!evidenceAvailable(plannerKnowledge.get("serviceMetadata"))) {
             missing.add("service_metadata_unavailable");
         }
         return missing;
@@ -252,6 +303,17 @@ public class PlannerRuleEngine {
             return false;
         }
         return (taskType == TaskType.SCALE_WORKLOAD && missingSignals.contains("target_replica_count_not_specified"))
+                || (taskType == TaskType.PATCH_CONFIG && missingSignals.contains("specific_config_key_not_identified"))
+                || (isMutation(taskType) && missingSignals.contains("specific_target_not_identified"));
+    }
+
+    public boolean requiresClarification(TaskType taskType, List<String> missingSignals, int currentLoop) {
+        if (currentLoop <= 0 || !isMutation(taskType)) {
+            return false;
+        }
+        return missingSignals.contains("specific_target_not_identified")
+                || (taskType == TaskType.SCALE_WORKLOAD
+                        && missingSignals.contains("target_replica_count_not_specified"))
                 || (taskType == TaskType.PATCH_CONFIG && missingSignals.contains("specific_config_key_not_identified"));
     }
 
@@ -270,6 +332,16 @@ public class PlannerRuleEngine {
         return readMap(plannerKnowledge.get("supplementalSignals"));
     }
 
+    private Map<String, Object> firstResult(Map<String, Object> envelope) {
+        for (String key : List.of("items", "results", "documents", "hits")) {
+            Object value = envelope.get(key);
+            if (value instanceof List<?> list && !list.isEmpty() && list.get(0) instanceof Map<?, ?> map) {
+                return readMap(map);
+            }
+        }
+        return envelope;
+    }
+
     private Map<String, Object> readMap(Object value) {
         if (!(value instanceof Map<?, ?> raw)) {
             return Map.of();
@@ -277,5 +349,35 @@ public class PlannerRuleEngine {
         Map<String, Object> result = new LinkedHashMap<>();
         raw.forEach((key, entryValue) -> result.put(String.valueOf(key), entryValue));
         return result;
+    }
+
+    private boolean evidenceAvailable(Object value) {
+        if (!(value instanceof Map<?, ?> map)) {
+            return false;
+        }
+        Object status = map.get("collectionStatus");
+        return status == null || "SUCCEEDED".equalsIgnoreCase(String.valueOf(status));
+    }
+
+    private String firstText(Map<String, Object> values, String... keys) {
+        for (String key : keys) {
+            Object value = values.get(key);
+            if (value != null && !String.valueOf(value).isBlank()) {
+                return String.valueOf(value);
+            }
+        }
+        return "";
+    }
+
+    public boolean isMutation(TaskType taskType) {
+        return taskType != null && !taskType.name().startsWith("QUERY");
+    }
+
+    private boolean isScopeTarget(Object target) {
+        if (target == null) {
+            return true;
+        }
+        String value = String.valueOf(target);
+        return value.isBlank() || "current-scope".equals(value) || "unknown-service".equals(value);
     }
 }

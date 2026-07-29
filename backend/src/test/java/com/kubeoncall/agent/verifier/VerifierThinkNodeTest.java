@@ -59,6 +59,7 @@ class VerifierThinkNodeTest {
                                 Map.of("namespace", "from_planner"),
                                 "summary",
                                 null));
+        state.getContext().put("plannerMode", "REAL_MODEL");
 
         NodeResult result = node.execute(state);
 
@@ -113,5 +114,66 @@ class VerifierThinkNodeTest {
         assertTrue(((List<?>) result.payload().get("riskReasons"))
                 .stream().anyMatch(reason -> String.valueOf(reason).contains("maxRisk LOW")));
         assertEquals("LOW", result.payload().get("activatedSkillMaxRisk"));
+    }
+
+    @Test
+    void shouldAllowReadOnlyDiagnosisWithoutInventingAnSopReference() {
+        AgentToolCatalog catalog = mock(AgentToolCatalog.class);
+        ToolDefinition tool = new ToolDefinition(
+                "kubernetes.queryLogs",
+                "kubernetes",
+                "query logs",
+                true,
+                false,
+                List.of(TaskType.QUERY_LOGS),
+                List.of("namespace"),
+                List.of("k8s"));
+        when(catalog.findExecutorTool("kubernetes", "queryLogs")).thenReturn(tool);
+        VerifierThinkNode node = new VerifierThinkNode(catalog);
+        GraphState state = new GraphState();
+        state.setCurrentTask(new Task(
+                "task-3",
+                "query logs",
+                TaskType.QUERY_LOGS,
+                RiskLevel.LOW,
+                "order-service",
+                Map.of("namespace", "default"),
+                null));
+        state.getContext()
+                .put(
+                        "executionPlan",
+                        new ExecutionPlan(
+                                "kubernetes",
+                                "queryLogs",
+                                Map.of("namespace", "default"),
+                                List.of("namespace"),
+                                List.of(),
+                                Map.of("namespace", "from_planner"),
+                                "summary",
+                                null));
+
+        NodeResult result = node.execute(state);
+
+        assertEquals(NodeStatus.SUCCESS, result.status());
+        assertEquals("ALLOW", state.getContext().get("verifierDecision"));
+    }
+
+    @Test
+    void shouldRejectMutationWithoutVersionedSop() {
+        VerifierThinkNode node = new VerifierThinkNode(mock(AgentToolCatalog.class));
+        GraphState state = new GraphState();
+        state.setCurrentTask(new Task(
+                "task-4",
+                "restart order-service",
+                TaskType.RESTART_SERVICE,
+                RiskLevel.HIGH,
+                "order-service",
+                Map.of("namespace", "default"),
+                null));
+
+        NodeResult result = node.execute(state);
+
+        assertEquals(NodeStatus.FAILURE, result.status());
+        assertTrue(result.message().contains("versioned SOP"));
     }
 }

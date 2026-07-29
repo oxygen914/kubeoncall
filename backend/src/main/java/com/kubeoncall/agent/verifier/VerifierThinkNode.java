@@ -9,6 +9,7 @@ import java.util.Map;
 import org.springframework.stereotype.Component;
 
 import com.kubeoncall.agent.node.ThinkNode;
+import com.kubeoncall.agent.planner.PlannerMode;
 import com.kubeoncall.domain.graph.ExecutionPlan;
 import com.kubeoncall.domain.graph.GraphState;
 import com.kubeoncall.domain.graph.NodeResult;
@@ -39,9 +40,12 @@ public class VerifierThinkNode extends ThinkNode {
         if (task == null) {
             return new NodeResult(getName(), NodeStatus.FAILURE, "No task available for verification", Map.of());
         }
-        if (task.sopReference() == null) {
+        if (task.sopReference() == null && isMutation(task.taskType())) {
             return new NodeResult(
-                    getName(), NodeStatus.FAILURE, "Task missing SOP reference", Map.of("taskId", task.taskId()));
+                    getName(),
+                    NodeStatus.FAILURE,
+                    "Mutating task is missing a versioned SOP reference",
+                    Map.of("taskId", task.taskId()));
         }
 
         ExecutionPlan executionPlan =
@@ -93,6 +97,17 @@ public class VerifierThinkNode extends ThinkNode {
 
         if (!toolDefinition.supportedTaskTypes().contains(task.taskType())) {
             reasons.add("Tool " + toolDefinition.name() + " does not support task type " + task.taskType());
+        }
+        if (!toolDefinition.readOnly()
+                && context != null
+                && Boolean.TRUE.equals(context.get("compatibilityReadOnly"))) {
+            reasons.add("The synchronous Ask compatibility endpoint only permits read-only tools");
+            return new Evaluation("REJECT", reasons, detailMap(task, executionPlan, toolDefinition, reasons, context));
+        }
+        PlannerMode plannerMode = PlannerMode.runtime(context == null ? null : context.get("plannerMode"));
+        if (!toolDefinition.readOnly() && !plannerMode.mutationCandidateAllowed()) {
+            reasons.add("Planner mode " + plannerMode + " is not allowed to create a mutating operation");
+            return new Evaluation("REJECT", reasons, detailMap(task, executionPlan, toolDefinition, reasons, context));
         }
         if (task.taskType() == TaskType.CLEAN_DATA) {
             reasons.add("Data cleanup is treated as a destructive red-line action");
@@ -189,6 +204,9 @@ public class VerifierThinkNode extends ThinkNode {
             putIfPresent(details, context, "activatedSkillMaxRisk");
             putIfPresent(details, context, "activatedSkillToolWhitelist");
             putIfPresent(details, context, "skillToolWhitelistViolation");
+            putIfPresent(details, context, "plannerMode");
+            putIfPresent(details, context, "plannerDegraded");
+            putIfPresent(details, context, "plannerDegradedReason");
         }
         return details;
     }
@@ -217,6 +235,10 @@ public class VerifierThinkNode extends ThinkNode {
             return false;
         }
         return "CURRENT".equals(String.valueOf(recheck.get("status")));
+    }
+
+    private static boolean isMutation(TaskType taskType) {
+        return taskType != null && !taskType.name().startsWith("QUERY");
     }
 
     private void putIfPresent(Map<String, Object> details, Map<String, Object> context, String key) {

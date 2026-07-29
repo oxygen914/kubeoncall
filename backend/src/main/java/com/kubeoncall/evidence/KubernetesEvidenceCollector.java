@@ -1,0 +1,188 @@
+package com.kubeoncall.evidence;
+
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+
+import org.springframework.stereotype.Component;
+
+import com.kubeoncall.common.config.KubeOnCallProperties;
+import com.kubeoncall.service.KubeOnCallMetricsService;
+import com.kubeoncall.tool.ToolExecutor;
+
+/** Collects typed Kubernetes Events and current/previous Pod logs through the governed executor. */
+@Component
+public class KubernetesEvidenceCollector {
+
+    private final ToolExecutor kubernetes;
+    private final KubeOnCallProperties properties;
+    private final EvidenceScopePolicy scopePolicy;
+    private final EvidenceItemFactory factory;
+    private final KubeOnCallMetricsService metrics;
+
+    public KubernetesEvidenceCollector(
+            List<ToolExecutor> executors,
+            KubeOnCallProperties properties,
+            EvidenceScopePolicy scopePolicy,
+            EvidenceItemFactory factory,
+            KubeOnCallMetricsService metrics) {
+        this.kubernetes = executors.stream()
+                .filter(executor -> "kubernetes".equals(executor.getExecutorKind()))
+                .findFirst()
+                .orElse(null);
+        this.properties = properties;
+        this.scopePolicy = scopePolicy;
+        this.factory = factory;
+        this.metrics = metrics;
+    }
+
+    public List<EvidenceItem> collect(EvidenceCollectionScope scope) {
+        List<EvidenceItem> items = new ArrayList<>();
+        var rejection = scopePolicy.rejection(scope);
+        if (rejection.isPresent()) {
+            if (properties.getAiOperations().isEvidenceK8sEventsEnabled()) {
+                items.add(
+                        statusItem(scope, EvidenceType.K8S_EVENT, EvidenceCollectionStatus.FORBIDDEN, rejection.get()));
+            }
+            if (properties.getAiOperations().isEvidencePodLogsEnabled()) {
+                items.add(statusItem(scope, EvidenceType.POD_LOG, EvidenceCollectionStatus.FORBIDDEN, rejection.get()));
+            }
+            return List.copyOf(items);
+        }
+        if (kubernetes == null) {
+            if (properties.getAiOperations().isEvidenceK8sEventsEnabled()) {
+                items.add(factory.unavailable(scope, EvidenceType.K8S_EVENT, "kubernetes-api", "CLIENT_MISSING"));
+            }
+            if (properties.getAiOperations().isEvidencePodLogsEnabled()) {
+                items.add(factory.unavailable(scope, EvidenceType.POD_LOG, "kubernetes-api", "CLIENT_MISSING"));
+            }
+            return List.copyOf(items);
+        }
+        if (properties.getAiOperations().isEvidenceK8sEventsEnabled()) {
+            items.addAll(call(scope, EvidenceType.K8S_EVENT, "queryEvents", baseParameters(scope), false));
+        }
+        if (properties.getAiOperations().isEvidencePodLogsEnabled()) {
+            items.addAll(call(scope, EvidenceType.POD_LOG, "queryPodLogs", logParameters(scope, false), false));
+            items.addAll(call(scope, EvidenceType.POD_LOG, "queryPodLogs", logParameters(scope, true), true));
+        }
+        return List.copyOf(items);
+    }
+
+    private List<EvidenceItem> call(
+            EvidenceCollectionScope scope,
+            EvidenceType type,
+            String action,
+            Map<String, Object> parameters,
+            boolean previous) {
+        long startedAt = System.currentTimeMillis();
+        Map<String, Object> response = kubernetes.execute(action, parameters);
+        long latencyMs = Math.max(0, System.currentTimeMillis() - startedAt);
+        EvidenceCollectionStatus status = "success".equalsIgnoreCase(String.valueOf(response.get("status")))
+                ? EvidenceCollectionStatus.SUCCEEDED
+                : mapFailure(response);
+        metrics.recordEvidenceCollection("kubernetes-api:" + action, status.name(), latencyMs);
+        if (status != EvidenceCollectionStatus.SUCCEEDED) {
+            Map<String, Object> failed = new LinkedHashMap<>();
+            failed.put("source", "kubernetes-api");
+            failed.put("collectionStatus", status.name());
+            failed.put("errorType", response.getOrDefault("errorType", "KUBERNETES_UNAVAILABLE"));
+            failed.put("latencyMs", latencyMs);
+            failed.put("previous", previous);
+            return List.of(factory.fromMap(scope, type, failed, "kubernetes-api"));
+        }
+        List<Map<String, Object>> payloads = flatten(response.get("response"), type);
+        if (payloads.isEmpty()) {
+            return List.of(
+                    statusItem(scope, type, EvidenceCollectionStatus.EMPTY, previous ? "PREVIOUS_LOG_EMPTY" : ""));
+        }
+        return payloads.stream()
+                .map(payload -> {
+                    Map<String, Object> normalized = new LinkedHashMap<>(payload);
+                    normalized.put("source", "kubernetes-api");
+                    normalized.put("collectionStatus", "SUCCEEDED");
+                    normalized.put("latencyMs", latencyMs);
+                    normalized.put("previous", previous);
+                    return factory.fromMap(scope, type, normalized, "kubernetes-api");
+                })
+                .toList();
+    }
+
+    private EvidenceItem statusItem(
+            EvidenceCollectionScope scope, EvidenceType type, EvidenceCollectionStatus status, String errorType) {
+        Map<String, Object> value = new LinkedHashMap<>();
+        value.put("source", "kubernetes-api");
+        value.put("collectionStatus", status.name());
+        if (errorType != null && !errorType.isBlank()) {
+            value.put("errorType", errorType);
+        }
+        return factory.fromMap(scope, type, value, "kubernetes-api");
+    }
+
+    private Map<String, Object> baseParameters(EvidenceCollectionScope scope) {
+        Map<String, Object> values = new LinkedHashMap<>();
+        values.put("cluster", scope.cluster());
+        values.put("namespace", scope.namespace());
+        put(values, "resourceKind", scope.resource().kind());
+        put(values, "resourceName", scope.resource().name());
+        put(values, "resourceUid", scope.resource().uid());
+        values.put("startTime", scope.start().toString());
+        values.put("endTime", scope.end().toString());
+        return values;
+    }
+
+    private Map<String, Object> logParameters(EvidenceCollectionScope scope, boolean previous) {
+        Map<String, Object> values = new LinkedHashMap<>(baseParameters(scope));
+        values.put("previous", previous);
+        values.put("tailLines", Math.min(500, properties.getAiOperations().getLokiMaxLines()));
+        return values;
+    }
+
+    private static List<Map<String, Object>> flatten(Object response, EvidenceType type) {
+        if (response instanceof List<?> list) {
+            return list.stream()
+                    .filter(Map.class::isInstance)
+                    .map(Map.class::cast)
+                    .map(KubernetesEvidenceCollector::stringMap)
+                    .toList();
+        }
+        Map<String, Object> root = map(response);
+        for (String key : type == EvidenceType.K8S_EVENT
+                ? List.of("items", "events", "results")
+                : List.of("items", "logs", "results", "entries")) {
+            Object candidate = root.get(key);
+            if (candidate instanceof List<?> list) {
+                return list.stream()
+                        .filter(Map.class::isInstance)
+                        .map(Map.class::cast)
+                        .map(KubernetesEvidenceCollector::stringMap)
+                        .toList();
+            }
+        }
+        return root.isEmpty() ? List.of() : List.of(root);
+    }
+
+    private static EvidenceCollectionStatus mapFailure(Map<String, Object> response) {
+        String error = String.valueOf(response.getOrDefault("errorType", "")).toUpperCase();
+        if (error.contains("FORBIDDEN") || error.contains("RBAC") || error.contains("403")) {
+            return EvidenceCollectionStatus.FORBIDDEN;
+        }
+        return EvidenceCollectionStatus.UNAVAILABLE;
+    }
+
+    private static Map<String, Object> map(Object value) {
+        return value instanceof Map<?, ?> raw ? stringMap(raw) : Map.of();
+    }
+
+    private static Map<String, Object> stringMap(Map<?, ?> raw) {
+        Map<String, Object> result = new LinkedHashMap<>();
+        raw.forEach((key, value) -> result.put(String.valueOf(key), value));
+        return result;
+    }
+
+    private static void put(Map<String, Object> values, String key, String value) {
+        if (value != null && !value.isBlank()) {
+            values.put(key, value);
+        }
+    }
+}

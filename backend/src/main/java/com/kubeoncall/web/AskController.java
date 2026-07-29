@@ -24,7 +24,8 @@ public class AskController {
 
     @PostMapping
     public AskResponse ask(@Valid @RequestBody AskRequest request) {
-        AskService.AskExecutionResult result = askService.handle(request.question(), request.sessionId());
+        AskService.AskExecutionResult result =
+                askService.handleReadOnlyCompatibility(request.question(), request.sessionId());
         return new AskResponse(
                 result.executionId(), result.status(), result.message(), result.sessionId(), result.details());
     }

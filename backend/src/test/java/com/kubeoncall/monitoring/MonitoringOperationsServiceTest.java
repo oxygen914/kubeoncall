@@ -9,12 +9,14 @@ import static org.mockito.Mockito.when;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Map;
-import java.util.Optional;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import com.kubeoncall.agent.planner.PlannerDegradedReason;
+import com.kubeoncall.agent.planner.PlannerLlmResult;
 import com.kubeoncall.agent.planner.PlannerLlmService;
+import com.kubeoncall.agent.planner.PlannerMode;
 import com.kubeoncall.alarm.correlation.ChangeCorrelationService;
 import com.kubeoncall.alarm.readmodel.AlarmQueryService;
 import com.kubeoncall.monitoring.MonitoringViews.DataSources;
@@ -51,11 +53,17 @@ class MonitoringOperationsServiceTest {
                         82.5,
                         new DataSources(true, true),
                         Instant.parse("2026-07-29T10:00:00Z")));
-        when(plannerLlm.plan(anyString(), anyMap())).thenReturn(Optional.empty());
+        when(plannerLlm.planWithStatus(anyString(), anyMap()))
+                .thenReturn(PlannerLlmResult.degraded(
+                        PlannerMode.RULE_FALLBACK,
+                        PlannerDegradedReason.RULE_MODE_CONFIGURED,
+                        "openai-compatible",
+                        "qwen-plus",
+                        0));
 
         var result = service.advice(scope, Duration.ofHours(6), false);
 
-        assertThat(result.generatedBy()).isEqualTo("RULE_ENGINE_FALLBACK");
+        assertThat(result.generatedBy()).isEqualTo("RULE_FALLBACK");
         assertThat(result.modelAvailable()).isFalse();
         assertThat(result.safetyMode()).isEqualTo("READ_ONLY");
         assertThat(result.advice())

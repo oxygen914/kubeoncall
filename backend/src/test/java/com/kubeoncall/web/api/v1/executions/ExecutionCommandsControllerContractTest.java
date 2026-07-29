@@ -21,6 +21,7 @@ import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
+import com.kubeoncall.common.config.KubeOnCallProperties;
 import com.kubeoncall.identity.PermissionCode;
 import com.kubeoncall.identity.UserAccount;
 import com.kubeoncall.web.api.v1.RequestIdFilter;
@@ -85,6 +86,23 @@ class ExecutionCommandsControllerContractTest {
                         .content("{\"question\":\"inspect\"}"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.error.code").value("INVALID_REQUEST"));
+    }
+
+    @Test
+    void durableAskFeatureFlagFailsClosed() throws Exception {
+        KubeOnCallProperties properties = new KubeOnCallProperties();
+        MockMvc disabled = MockMvcBuilders.standaloneSetup(
+                        new ExecutionCommandsController(provider(service), security, properties))
+                .addFilters(new RequestIdFilter())
+                .setControllerAdvice(new V1ApiExceptionHandler())
+                .build();
+
+        disabled.perform(post("/api/v1/executions")
+                        .header("Idempotency-Key", "execution-key-0002")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"question\":\"inspect\"}"))
+                .andExpect(status().isServiceUnavailable())
+                .andExpect(jsonPath("$.error.code").value("SERVICE_UNAVAILABLE"));
     }
 
     private static V1Principal principal() {

@@ -26,6 +26,18 @@ discovery.relabel "docker_logs" {
     target_label = "job"
     replacement  = "docker"
   }
+
+  // Compose logs are explicitly scoped so the local AI evidence adapter can apply the same
+  // fail-closed cluster/namespace allowlist used for Kubernetes sources.
+  rule {
+    target_label = "cluster"
+    replacement  = "local"
+  }
+
+  rule {
+    target_label = "namespace"
+    replacement  = "kubeoncall-system"
+  }
 }
 
 loki.source.docker "local" {

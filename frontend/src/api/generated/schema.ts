@@ -2712,6 +2712,12 @@ export interface components {
             question: string;
             sessionId?: string;
             alarmId?: string;
+            cluster?: string;
+            environment?: string;
+            namespace?: string;
+            resourceKind?: string;
+            resourceName?: string;
+            resourceUid?: string;
         };
         ClientEventRequest: {
             release: string;
@@ -3830,9 +3836,72 @@ export interface components {
             page?: components["schemas"]["PageMeta"];
             meta?: components["schemas"]["ResponseMeta"];
         };
+        AiConclusion: {
+            conclusionId?: string;
+            executionId?: string;
+            claim?: string;
+            severity?: string;
+            status?: string;
+            evidenceRefs?: string[];
+            sopRefs?: components["schemas"]["SopEvidenceReference"][];
+            confidence?: components["schemas"]["ConfidenceAssessment"];
+            planner?: {
+                [key: string]: Record<string, never>;
+            };
+            recommendedAction?: components["schemas"]["RecommendedAction"];
+        };
         ApiResponseExecutionDetail: {
             data?: components["schemas"]["ExecutionDetail"];
             meta?: components["schemas"]["ResponseMeta"];
+        };
+        ConfidenceAssessment: {
+            /** Format: double */
+            score?: number;
+            label?: string;
+            basis?: {
+                [key: string]: number;
+            };
+        };
+        EvidenceItem: {
+            evidenceId?: string;
+            executionId?: string;
+            /** @enum {string} */
+            type?: "RESOURCE_STATE" | "K8S_EVENT" | "POD_LOG" | "METRIC" | "ALERT" | "CHANGE_EVENT" | "SOP" | "OPERATION_RESULT" | "VERIFICATION_RESULT" | "ROLLBACK_RESULT";
+            source?: string;
+            cluster?: string;
+            namespace?: string;
+            resource?: components["schemas"]["EvidenceResource"];
+            /** Format: date-time */
+            observedAt?: string;
+            window?: components["schemas"]["EvidenceWindow"];
+            summary?: string;
+            snippet?: string;
+            locator?: {
+                [key: string]: Record<string, never>;
+            };
+            /** Format: int64 */
+            freshnessSeconds?: number;
+            redacted?: boolean;
+            truncated?: boolean;
+            contentHash?: string;
+            /** @enum {string} */
+            collectionStatus?: "SUCCEEDED" | "EMPTY" | "UNAVAILABLE" | "FORBIDDEN" | "FAILED";
+            errorType?: string;
+            artifactReference?: string;
+            metadata?: {
+                [key: string]: Record<string, never>;
+            };
+        };
+        EvidenceResource: {
+            kind?: string;
+            name?: string;
+            uid?: string;
+        };
+        EvidenceWindow: {
+            /** Format: date-time */
+            start?: string;
+            /** Format: date-time */
+            end?: string;
         };
         ExecutionDetail: {
             id?: string;
@@ -3855,6 +3924,18 @@ export interface components {
             errorSummary?: string;
             requestId?: string;
             traceId?: string;
+            sessionId?: string;
+            taskId?: string;
+            taskStatus?: string;
+            taskStage?: string;
+            /** Format: int32 */
+            taskProgress?: number;
+            answer?: string;
+            details?: {
+                [key: string]: Record<string, never>;
+            };
+            evidence?: components["schemas"]["EvidenceItem"][];
+            conclusions?: components["schemas"]["AiConclusion"][];
             nodes?: components["schemas"]["ExecutionNodeView"][];
         };
         ExecutionNodeView: {
@@ -3875,6 +3956,19 @@ export interface components {
             errorSummary?: string;
             /** Format: int64 */
             version?: number;
+        };
+        RecommendedAction: {
+            type?: string;
+            requiresApproval?: boolean;
+            parameters?: {
+                [key: string]: Record<string, never>;
+            };
+        };
+        SopEvidenceReference: {
+            sopId?: string;
+            version?: string;
+            source?: string;
+            section?: string;
         };
         ApiResponseListExecutionNodeView: {
             data?: components["schemas"]["ExecutionNodeView"][];

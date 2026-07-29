@@ -19,6 +19,7 @@ class CapabilitiesServiceTest {
 
         Map<String, Object> features = service.features();
         Map<String, Object> sandbox = sandboxFeatureMap(features);
+        Map<String, Object> planner = plannerFeatureMap(features);
 
         assertEquals(false, sandbox.get("enabled"));
         assertEquals(false, sandbox.get("fixedDiagnostic"));
@@ -26,6 +27,9 @@ class CapabilitiesServiceTest {
         assertEquals(false, sandbox.get("manifestValidation"));
         assertEquals(false, sandbox.get("remediationSimulation"));
         assertEquals(false, sandbox.get("agentAutoRouteEnabled"));
+        assertEquals("UNAVAILABLE", planner.get("status"));
+        assertEquals("RULE_FALLBACK", planner.get("mode"));
+        assertFalse(planner.toString().toLowerCase().contains("api-key"));
 
         // When the master switch is off, sandbox limits are not advertised at all.
         assertFalse(service.limits().containsKey("sandbox"));
@@ -91,5 +95,10 @@ class CapabilitiesServiceTest {
     @SuppressWarnings("unchecked")
     private static Map<String, Object> sandboxFeatureMap(Map<String, Object> features) {
         return (Map<String, Object>) features.get("sandbox");
+    }
+
+    @SuppressWarnings("unchecked")
+    private static Map<String, Object> plannerFeatureMap(Map<String, Object> features) {
+        return (Map<String, Object>) ((Map<String, Object>) features.get("aiOperations")).get("planner");
     }
 }

@@ -8,11 +8,19 @@ import java.util.Map;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
+import com.kubeoncall.observability.SensitiveDataRedactor;
 import com.kubeoncall.tool.mcp.McpClient;
 
-/** Collects the planner's read-only MCP evidence and preserves deterministic fallback evidence. */
+/**
+ * Collects planner read-only MCP evidence.
+ *
+ * <p>Dependency failures are represented as unavailable evidence. The collector deliberately never
+ * substitutes fabricated SOPs, topology, health, alerts or metric values.
+ */
 @Component
 public class PlannerToolEvidenceCollector {
+
+    private static final SensitiveDataRedactor REDACTOR = SensitiveDataRedactor.STANDARD;
 
     private final McpClient mcpClient;
     private final DynamicMcpEvidenceCollector dynamicMcpEvidenceCollector;
@@ -31,97 +39,18 @@ public class PlannerToolEvidenceCollector {
         String target = inferTarget(request);
         String namespace = inferNamespace(request);
         Map<String, Object> evidence = new LinkedHashMap<>();
-        evidence.put(
-                "sop",
-                queryWithFallback(
-                        "knowledge.searchSop",
-                        Map.of("query", request),
-                        Map.of(
-                                "tool",
-                                "knowledge.searchSop",
-                                "documentId",
-                                "SOP-GENERAL-001",
-                                "title",
-                                "Standard investigation procedure for " + target,
-                                "matchedIntent",
-                                inferIntent(request))));
-        evidence.put(
-                "topology",
-                queryWithFallback(
-                        "topology.getServiceTopology",
-                        Map.of("serviceName", target),
-                        Map.of(
-                                "tool",
-                                "topology.getServiceTopology",
-                                "service",
-                                target,
-                                "upstreams",
-                                List.of("gateway-service"),
-                                "downstreams",
-                                List.of("mysql", "redis"))));
-        evidence.put(
-                "serviceMetadata",
-                queryWithFallback(
-                        "cmdb.getServiceMetadata",
-                        Map.of("serviceName", target),
-                        Map.of(
-                                "tool",
-                                "cmdb.getServiceMetadata",
-                                "service",
-                                target,
-                                "namespace",
-                                namespace,
-                                "environment",
-                                inferEnvironment(request),
-                                "criticality",
-                                inferCriticality(target),
-                                "owner",
-                                "lab-ops")));
+        evidence.put("sop", queryWithFallback("knowledge.searchSop", Map.of("query", request)));
+        evidence.put("topology", queryWithFallback("topology.getServiceTopology", Map.of("serviceName", target)));
+        evidence.put("serviceMetadata", queryWithFallback("cmdb.getServiceMetadata", Map.of("serviceName", target)));
         evidence.put(
                 "resourceSnapshot",
                 queryWithFallback(
-                        "kubernetes.describeResource",
-                        Map.of("resourceName", target, "namespace", namespace),
-                        Map.of(
-                                "tool",
-                                "kubernetes.describeResource",
-                                "resourceName",
-                                target,
-                                "namespace",
-                                namespace,
-                                "kind",
-                                "Deployment",
-                                "status",
-                                "Healthy")));
-        evidence.put(
-                "activeAlerts",
-                queryWithFallback(
-                        "alerts.getActiveAlerts",
-                        Map.of("serviceName", target),
-                        Map.of(
-                                "tool",
-                                "alerts.getActiveAlerts",
-                                "service",
-                                target,
-                                "count",
-                                request.contains("告警") || request.toLowerCase().contains("alert") ? 2 : 0,
-                                "labels",
-                                List.of("service=" + target, "severity=warning"))));
+                        "kubernetes.describeResource", Map.of("resourceName", target, "namespace", namespace)));
+        evidence.put("activeAlerts", queryWithFallback("alerts.getActiveAlerts", Map.of("serviceName", target)));
         String metricQuery = "rate(http_requests_total{service=\"" + target + "\"}[5m])";
         evidence.put(
                 "metricsContext",
-                queryWithFallback(
-                        "prometheus.queryRange",
-                        Map.of("query", metricQuery, "windowMinutes", 10),
-                        Map.of(
-                                "tool",
-                                "prometheus.queryRange",
-                                "query",
-                                metricQuery,
-                                "windowMinutes",
-                                10,
-                                "trend",
-                                "stable")));
+                queryWithFallback("prometheus.queryRange", Map.of("query", metricQuery, "windowMinutes", 10)));
         addDynamicMcpEvidence(evidence, request, target, namespace, missingSignals);
         addSupplementalSignals(evidence, request, target, missingSignals);
         return new Evidence(target, evidence);
@@ -141,8 +70,8 @@ public class PlannerToolEvidenceCollector {
         if (!result.attempted()) {
             return;
         }
-        evidence.put("dynamicMcpInvocations", result.invocations());
-        evidence.put("dynamicMcpSkipped", result.skipped());
+        evidence.put("dynamicMcpInvocations", REDACTOR.redact(result.invocations()));
+        evidence.put("dynamicMcpSkipped", REDACTOR.redact(result.skipped()));
         evidence.put(
                 "dynamicMcpTools",
                 result.invocations().stream()
@@ -158,23 +87,24 @@ public class PlannerToolEvidenceCollector {
         Map<String, Object> supplementalSignals = new LinkedHashMap<>();
         if (missingSignals.contains("target_replica_count_not_specified")) {
             Map<String, Object> scaleHint = queryWithFallback(
-                    "topology.getServiceTopology",
-                    Map.of("serviceName", target, "mode", "capacity_hint"),
-                    Map.of("tool", "topology.getServiceTopology", "recommendedReplicas", 3));
+                    "topology.getServiceTopology", Map.of("serviceName", target, "mode", "capacity_hint"));
             Object replicas = scaleHint.get("recommendedReplicas");
-            supplementalSignals.put("recommendedReplicas", replicas instanceof Number number ? number.intValue() : 3);
-            supplementalSignals.put(
-                    "scaleHintSource", String.valueOf(scaleHint.getOrDefault("tool", "topology.getServiceTopology")));
+            if (replicas instanceof Number number) {
+                supplementalSignals.put("recommendedReplicas", number.intValue());
+                supplementalSignals.put(
+                        "scaleHintSource",
+                        String.valueOf(scaleHint.getOrDefault("tool", "topology.getServiceTopology")));
+            }
         }
         if (missingSignals.contains("specific_config_key_not_identified")) {
-            Map<String, Object> configHint = queryWithFallback(
-                    "knowledge.searchSop",
-                    Map.of("query", request + " config key recommendation"),
-                    Map.of("tool", "knowledge.searchSop", "recommendedConfigKey", "timeout"));
-            supplementalSignals.put(
-                    "recommendedConfigKey", String.valueOf(configHint.getOrDefault("recommendedConfigKey", "timeout")));
-            supplementalSignals.put(
-                    "configHintSource", String.valueOf(configHint.getOrDefault("tool", "knowledge.searchSop")));
+            Map<String, Object> configHint =
+                    queryWithFallback("knowledge.searchSop", Map.of("query", request + " config key recommendation"));
+            Object configKey = configHint.get("recommendedConfigKey");
+            if (configKey != null && !String.valueOf(configKey).isBlank()) {
+                supplementalSignals.put("recommendedConfigKey", String.valueOf(configKey));
+                supplementalSignals.put(
+                        "configHintSource", String.valueOf(configHint.getOrDefault("tool", "knowledge.searchSop")));
+            }
         }
         if (!supplementalSignals.isEmpty()) {
             evidence.put("supplementalSignals", supplementalSignals);
@@ -182,24 +112,44 @@ public class PlannerToolEvidenceCollector {
         }
     }
 
-    private Map<String, Object> queryWithFallback(
-            String toolName, Map<String, Object> requestPayload, Map<String, Object> fallback) {
-        Map<String, Object> response = mcpClient.call(toolName, requestPayload);
+    private Map<String, Object> queryWithFallback(String toolName, Map<String, Object> requestPayload) {
+        Map<String, Object> response;
+        try {
+            response = mcpClient.call(toolName, requestPayload);
+        } catch (RuntimeException ex) {
+            return unavailable(toolName, ex.getClass().getSimpleName());
+        }
+        if (response == null) {
+            return unavailable(toolName, "EMPTY_TOOL_RESPONSE");
+        }
         String status = String.valueOf(response.getOrDefault("status", "failed"));
         if (!"success".equalsIgnoreCase(status)) {
-            return fallback;
+            return unavailable(toolName, String.valueOf(response.getOrDefault("errorType", "DEPENDENCY_UNAVAILABLE")));
         }
         Object body = response.get("response");
         if (body instanceof Map<?, ?> map) {
             LinkedHashMap<String, Object> converted = new LinkedHashMap<>();
             map.forEach((key, value) -> converted.put(String.valueOf(key), value));
             converted.putIfAbsent("tool", toolName);
-            return converted;
+            converted.put("collectionStatus", "SUCCEEDED");
+            converted.put("simulation", false);
+            return REDACTOR.redactMap(converted);
         }
-        LinkedHashMap<String, Object> wrapped = new LinkedHashMap<>(fallback);
+        LinkedHashMap<String, Object> wrapped = new LinkedHashMap<>();
         wrapped.put("tool", toolName);
+        wrapped.put("collectionStatus", "SUCCEEDED");
+        wrapped.put("simulation", false);
         wrapped.put("rawResponse", body);
-        return wrapped;
+        return REDACTOR.redactMap(wrapped);
+    }
+
+    private Map<String, Object> unavailable(String toolName, String errorType) {
+        LinkedHashMap<String, Object> unavailable = new LinkedHashMap<>();
+        unavailable.put("tool", toolName);
+        unavailable.put("collectionStatus", "UNAVAILABLE");
+        unavailable.put("simulation", false);
+        unavailable.put("errorType", errorType == null || errorType.isBlank() ? "DEPENDENCY_UNAVAILABLE" : errorType);
+        return unavailable;
     }
 
     private String inferTarget(String request) {
@@ -213,24 +163,7 @@ public class PlannerToolEvidenceCollector {
         if (lower.contains("order")) {
             return "order-service";
         }
-        return "unknown-service";
-    }
-
-    private String inferIntent(String request) {
-        String lower = request.toLowerCase();
-        if (lower.contains("日志") || lower.contains("log")) {
-            return "QUERY_LOGS";
-        }
-        if (lower.contains("指标") || lower.contains("metric") || lower.contains("cpu")) {
-            return "QUERY_METRICS";
-        }
-        if (lower.contains("重启") || lower.contains("restart")) {
-            return "RESTART_SERVICE";
-        }
-        if (lower.contains("配置") || lower.contains("config") || lower.contains("timeout")) {
-            return "PATCH_CONFIG";
-        }
-        return "GENERAL_DIAGNOSTICS";
+        return "current-scope";
     }
 
     private String inferNamespace(String request) {
@@ -242,24 +175,6 @@ public class PlannerToolEvidenceCollector {
             return "staging";
         }
         return "default";
-    }
-
-    private String inferEnvironment(String request) {
-        String lower = request.toLowerCase();
-        if (lower.contains("prod") || lower.contains("生产")) {
-            return "production";
-        }
-        if (lower.contains("staging") || lower.contains("预发")) {
-            return "staging";
-        }
-        return "lab";
-    }
-
-    private String inferCriticality(String target) {
-        if (target.contains("payment") || target.contains("gateway") || target.contains("order")) {
-            return "high";
-        }
-        return "medium";
     }
 
     public record Evidence(String target, Map<String, Object> payload) {

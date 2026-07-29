@@ -3,9 +3,12 @@ package com.kubeoncall.web.api.v1.capabilities;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
+import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
+import com.kubeoncall.agent.planner.PlannerLlmService;
 import com.kubeoncall.common.config.KubeOnCallProperties;
 import com.kubeoncall.common.config.KubeOnCallProperties.Sandbox;
 
@@ -25,7 +28,9 @@ public class CapabilitiesService {
     private final int maxPageSize;
     private final long maxUploadBytes;
     private final int maxJsonlLines;
+    private final ObjectProvider<PlannerLlmService> plannerProvider;
 
+    @Autowired
     public CapabilitiesService(
             KubeOnCallProperties properties,
             @Value("${kubeoncall.release.version:0.1.0}") String version,
@@ -34,7 +39,8 @@ public class CapabilitiesService {
             @Value("${kubeoncall.api.default-page-size:20}") int defaultPageSize,
             @Value("${kubeoncall.api.max-page-size:100}") int maxPageSize,
             @Value("${kubeoncall.api.max-upload-bytes:52428800}") long maxUploadBytes,
-            @Value("${kubeoncall.api.max-jsonl-lines:100000}") int maxJsonlLines) {
+            @Value("${kubeoncall.api.max-jsonl-lines:100000}") int maxJsonlLines,
+            ObjectProvider<PlannerLlmService> plannerProvider) {
         this.properties = properties;
         this.version = version;
         this.commit = commit;
@@ -43,11 +49,34 @@ public class CapabilitiesService {
         this.maxPageSize = maxPageSize;
         this.maxUploadBytes = maxUploadBytes;
         this.maxJsonlLines = maxJsonlLines;
+        this.plannerProvider = plannerProvider;
         // Fail fast at startup when the sandbox is enabled with misconfigured ceilings, rather than
         // silently clamping or rejecting a production Run later. When disabled the defaults are inert.
         if (properties.getSandbox().isEnabled()) {
             properties.getSandbox().validate();
         }
+    }
+
+    /** Compatibility constructor for focused tests that do not create a Spring bean provider. */
+    public CapabilitiesService(
+            KubeOnCallProperties properties,
+            String version,
+            String commit,
+            String environment,
+            int defaultPageSize,
+            int maxPageSize,
+            long maxUploadBytes,
+            int maxJsonlLines) {
+        this(
+                properties,
+                version,
+                commit,
+                environment,
+                defaultPageSize,
+                maxPageSize,
+                maxUploadBytes,
+                maxJsonlLines,
+                null);
     }
 
     public Map<String, Object> release() {
@@ -82,6 +111,7 @@ public class CapabilitiesService {
                 "executionAuditFactSource",
                 properties.getDataMigration().getExecutionAudit().factSource());
         features.put("sandbox", sandboxFeatures());
+        features.put("aiOperations", aiOperationsFeatures());
         return features;
     }
 
@@ -123,6 +153,45 @@ public class CapabilitiesService {
         sandboxFeatures.put("remediationSimulation", sandbox.isRemediationSimulation());
         sandboxFeatures.put("agentAutoRouteEnabled", sandbox.isAgentAutoRouteEnabled());
         return sandboxFeatures;
+    }
+
+    private Map<String, Object> aiOperationsFeatures() {
+        KubeOnCallProperties.AiOperations ai = properties.getAiOperations();
+        Map<String, Object> features = new LinkedHashMap<>();
+        features.put("plannerMode", ai.getPlannerMode());
+        features.put("evidencePrometheus", ai.isEvidencePrometheusEnabled());
+        features.put("evidenceLoki", ai.isEvidenceLokiEnabled());
+        features.put("evidenceK8sEvents", ai.isEvidenceK8sEventsEnabled());
+        features.put("evidencePodLogs", ai.isEvidencePodLogsEnabled());
+        features.put("durableAskWorkflow", ai.isAskDurableWorkflowEnabled());
+        features.put("operationClosure", ai.isOperationClosureEnabled());
+        features.put("conclusionEvidenceUi", ai.isConclusionEvidenceUiEnabled());
+        features.put("planner", plannerCapability());
+        return features;
+    }
+
+    private Map<String, Object> plannerCapability() {
+        PlannerLlmService service = plannerProvider == null ? null : plannerProvider.getIfAvailable();
+        if (service == null) {
+            return Map.of(
+                    "status", "UNAVAILABLE",
+                    "mode", properties.getAiOperations().getPlannerMode(),
+                    "provider", properties.getAiOperations().getPlannerProvider(),
+                    "model", properties.getAiOperations().getPlannerModel());
+        }
+        PlannerLlmService.PlannerModelCapability capability = service.capability();
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("status", capability.status());
+        result.put("mode", capability.mode().name());
+        result.put("provider", capability.provider());
+        result.put("model", capability.model());
+        result.put("lastSuccessAt", capability.lastSuccessAt());
+        result.put(
+                "lastFailureReason",
+                capability.lastFailureReason() == null
+                        ? null
+                        : capability.lastFailureReason().name());
+        return result;
     }
 
     public Map<String, Object> links() {

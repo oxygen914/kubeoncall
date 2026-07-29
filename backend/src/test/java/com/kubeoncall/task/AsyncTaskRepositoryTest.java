@@ -47,19 +47,22 @@ class AsyncTaskRepositoryTest {
         assertThat(repository.complete("tsk_1", "owner-1", 7, Map.of("ok", true), NOW))
                 .isTrue();
         assertOwnershipPredicate(jdbcTemplate.sql);
+        assertThat(jdbcTemplate.sql).contains("stage = 'COMPLETED'");
 
         assertThat(repository.fail("tsk_1", "owner-1", 7, "FAILED", "terminal", NOW))
                 .isTrue();
         assertOwnershipPredicate(jdbcTemplate.sql);
+        assertThat(jdbcTemplate.sql).contains("stage = 'FAILED'");
 
         assertThat(repository.retry("tsk_1", "owner-1", 7, "TIMEOUT", "retry", NOW.plusSeconds(10), NOW))
                 .isTrue();
         assertOwnershipPredicate(jdbcTemplate.sql);
-        assertThat(jdbcTemplate.sql).contains("attempt < max_attempts");
+        assertThat(jdbcTemplate.sql).contains("stage = 'RETRY_SCHEDULED'").contains("attempt < max_attempts");
 
         assertThat(repository.deadLetter("tsk_1", "owner-1", 7, "EXHAUSTED", "dead", NOW))
                 .isTrue();
         assertOwnershipPredicate(jdbcTemplate.sql);
+        assertThat(jdbcTemplate.sql).contains("stage = 'DEAD_LETTER'");
     }
 
     @Test

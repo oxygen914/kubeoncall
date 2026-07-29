@@ -25,7 +25,7 @@ import com.kubeoncall.tool.mcp.McpToolRegistry;
 class PlannerQueryToolNodeTest {
 
     @Test
-    void shouldAssembleFallbackEvidenceAndSupplementalSignalsIntoGraphState() {
+    void shouldExposeUnavailableEvidenceWithoutFabricatingSupplementalSignals() {
         McpClient mcpClient = mock(McpClient.class);
         when(mcpClient.call(anyString(), anyMap())).thenReturn(Map.of("status", "failed"));
         PlannerQueryToolNode node = node(mcpClient);
@@ -42,9 +42,9 @@ class PlannerQueryToolNodeTest {
         assertEquals(NodeStatus.SUCCESS, result.status());
         assertEquals(true, result.payload().get("plannerReadOnlyValidated"));
         assertEquals(List.of("payment-runbook"), result.payload().get("activatedSkillIds"));
-        assertEquals("production", ((Map<?, ?>) result.payload().get("serviceMetadata")).get("environment"));
-        assertEquals(3, ((Map<?, ?>) result.payload().get("supplementalSignals")).get("recommendedReplicas"));
-        assertEquals("timeout", ((Map<?, ?>) result.payload().get("supplementalSignals")).get("recommendedConfigKey"));
+        assertEquals("UNAVAILABLE", ((Map<?, ?>) result.payload().get("serviceMetadata")).get("collectionStatus"));
+        assertEquals(false, ((Map<?, ?>) result.payload().get("serviceMetadata")).get("simulation"));
+        assertEquals(false, result.payload().containsKey("supplementalSignals"));
         assertEquals(result.payload(), state.getContext().get("plannerKnowledge"));
         assertEquals(6, ((List<?>) state.getContext().get("plannerAvailableTools")).size());
         assertTrue(state.getObservations().get(0).contains("target=payment-service"));
@@ -57,7 +57,11 @@ class PlannerQueryToolNodeTest {
         McpClient mcpClient = mock(McpClient.class);
         when(mcpClient.call(anyString(), anyMap())).thenReturn(Map.of("status", "failed"));
         when(mcpClient.call(eq("topology.getServiceTopology"), anyMap()))
-                .thenReturn(Map.of("status", "success", "response", Map.of("upstreams", List.of("edge"))));
+                .thenReturn(Map.of(
+                        "status",
+                        "success",
+                        "response",
+                        Map.of("upstreams", List.of("edge"), "apiToken", "internal-secret-token")));
         PlannerQueryToolNode node = node(mcpClient);
         GraphState state = new GraphState();
         state.setUserRequest("inspect gateway-service topology");
@@ -67,7 +71,25 @@ class PlannerQueryToolNodeTest {
         Map<?, ?> topology = (Map<?, ?>) result.payload().get("topology");
         assertEquals(List.of("edge"), topology.get("upstreams"));
         assertEquals("topology.getServiceTopology", topology.get("tool"));
-        assertEquals("gateway-service", ((Map<?, ?>) result.payload().get("serviceMetadata")).get("service"));
+        assertEquals("[REDACTED]", topology.get("apiToken"));
+        assertEquals("gateway-service", result.payload().get("evidenceTarget"));
+    }
+
+    @Test
+    void shouldConvertToolTransportExceptionsIntoUnavailableEvidence() {
+        McpClient mcpClient = mock(McpClient.class);
+        when(mcpClient.call(anyString(), anyMap())).thenThrow(new IllegalStateException("secret upstream failure"));
+        PlannerQueryToolNode node = node(mcpClient);
+        GraphState state = new GraphState();
+        state.setUserRequest("inspect order-service");
+
+        NodeResult result = node.execute(state);
+
+        assertEquals(NodeStatus.SUCCESS, result.status());
+        Map<?, ?> sop = (Map<?, ?>) result.payload().get("sop");
+        assertEquals("UNAVAILABLE", sop.get("collectionStatus"));
+        assertEquals("IllegalStateException", sop.get("errorType"));
+        assertEquals(false, sop.containsValue("secret upstream failure"));
     }
 
     private static PlannerQueryToolNode node(McpClient mcpClient) {

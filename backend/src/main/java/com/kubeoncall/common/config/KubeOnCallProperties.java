@@ -26,6 +26,7 @@ public class KubeOnCallProperties {
     private final Knowledge knowledge = new Knowledge();
     private final DependencyCircuitBreaker dependencyCircuitBreaker = new DependencyCircuitBreaker();
     private final Sandbox sandbox = new Sandbox();
+    private final AiOperations aiOperations = new AiOperations();
 
     public Agent getAgent() {
         return agent;
@@ -111,6 +112,10 @@ public class KubeOnCallProperties {
         return sandbox;
     }
 
+    public AiOperations getAiOperations() {
+        return aiOperations;
+    }
+
     public static class Agent extends AgentProperties {}
 
     public static class Approval extends ApprovalProperties {}
@@ -157,4 +162,6 @@ public class KubeOnCallProperties {
     public static class Endpoint extends EndpointProperties {}
 
     public static class Sandbox extends SandboxProperties {}
+
+    public static class AiOperations extends AiOperationsProperties {}
 }

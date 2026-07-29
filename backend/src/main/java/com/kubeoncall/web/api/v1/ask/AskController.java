@@ -38,13 +38,17 @@ public class AskController {
     @PostMapping
     public ApiResponse<Map<String, Object>> ask(@Valid @RequestBody AskRequest request) {
         security.requirePermission(PermissionCode.ASK_EXECUTE);
-        AskService.AskExecutionResult result = askService.handle(request.question(), request.sessionId());
+        AskService.AskExecutionResult result =
+                askService.handleReadOnlyCompatibility(request.question(), request.sessionId());
         Map<String, Object> data = new LinkedHashMap<>();
         data.put("executionId", result.executionId());
         data.put("status", result.status());
         data.put("message", result.message());
         data.put("sessionId", result.sessionId());
         data.put("details", result.details());
+        data.put("deprecated", true);
+        data.put("replacement", "/api/v1/executions");
+        data.put("executionMode", "READ_ONLY_COMPATIBILITY");
         return ApiResponse.ok(data, RequestIdFilter.currentRequestId());
     }
 

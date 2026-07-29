@@ -1782,6 +1782,301 @@ button.koc-metric-card:hover {
   font-size: 10px;
 }
 
+.koc-ask-message__meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  color: var(--koc-text-subtle);
+  font-size: 10px;
+}
+
+.koc-ask-message__meta a,
+.koc-ask-context__actions a {
+  color: var(--koc-primary-700);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.koc-ask-message__meta a:hover,
+.koc-ask-message__meta a:focus-visible,
+.koc-ask-context__actions a:hover,
+.koc-ask-context__actions a:focus-visible {
+  text-decoration: underline;
+}
+
+.koc-planner-mode,
+.koc-confidence {
+  display: inline-flex;
+  min-height: 20px;
+  align-items: center;
+  padding: 2px 7px;
+  border: 1px solid var(--koc-border);
+  border-radius: 4px;
+  background: var(--koc-surface-subtle);
+  color: var(--koc-text-muted);
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+.koc-planner-mode--real_model,
+.koc-planner-mode--rule_assisted,
+.koc-confidence--high {
+  border-color: var(--koc-success);
+  background: var(--koc-success-bg);
+  color: var(--koc-success);
+}
+
+.koc-planner-mode--rule_fallback,
+.koc-planner-mode--simulation,
+.koc-confidence--medium {
+  border-color: var(--koc-warning-border);
+  background: var(--koc-warning-bg);
+  color: var(--koc-warning);
+}
+
+.koc-planner-mode--unavailable,
+.koc-confidence--low {
+  border-color: var(--koc-danger);
+  background: var(--koc-danger-bg);
+  color: var(--koc-danger);
+}
+
+.koc-conclusion-panel {
+  display: grid;
+  width: 100%;
+  gap: 0;
+  overflow: hidden;
+  border: 1px solid var(--koc-border);
+  border-radius: 7px;
+  background: var(--koc-surface);
+}
+
+.koc-conclusion-panel__summary {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 11px 12px;
+  border-bottom: 1px solid var(--koc-border);
+}
+
+.koc-conclusion-panel__summary > div {
+  display: grid;
+  gap: 3px;
+}
+
+.koc-conclusion-panel__summary > div > span {
+  color: var(--koc-danger);
+  font-size: 9px;
+  font-weight: 750;
+}
+
+.koc-conclusion-panel__summary strong {
+  color: var(--koc-text);
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 1.5;
+}
+
+.koc-conclusion-panel > details {
+  border-bottom: 1px solid var(--koc-border);
+}
+
+.koc-conclusion-panel > details:last-of-type {
+  border-bottom: 0;
+}
+
+.koc-conclusion-panel > details > summary {
+  padding: 9px 12px;
+  color: var(--koc-text-muted);
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.koc-conclusion-panel > details[open] > summary {
+  border-bottom: 1px solid var(--koc-border);
+  background: var(--koc-surface-subtle);
+}
+
+.koc-confidence-breakdown {
+  display: grid;
+  margin: 0;
+  padding: 8px 12px 10px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 7px;
+}
+
+.koc-confidence-breakdown > div {
+  display: grid;
+  gap: 2px;
+  padding: 6px 7px;
+  border: 1px solid var(--koc-border);
+  border-radius: 4px;
+  background: var(--koc-surface-subtle);
+}
+
+.koc-confidence-breakdown dt {
+  color: var(--koc-text-subtle);
+  font-size: 9px;
+}
+
+.koc-confidence-breakdown dd {
+  margin: 0;
+  color: var(--koc-text);
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.koc-evidence-list {
+  display: grid;
+  gap: 8px;
+  padding: 10px 12px 12px;
+}
+
+.koc-evidence-snippet {
+  overflow: hidden;
+  border: 1px solid var(--koc-border);
+  border-left: 3px solid var(--koc-primary-500);
+  border-radius: 5px;
+  background: var(--koc-surface);
+}
+
+.koc-evidence-snippet--unavailable,
+.koc-evidence-snippet--forbidden,
+.koc-evidence-snippet--failed {
+  border-left-color: var(--koc-warning);
+}
+
+.koc-evidence-snippet header,
+.koc-evidence-snippet footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px 10px;
+  padding: 7px 9px;
+  color: var(--koc-text-subtle);
+  font-size: 9px;
+}
+
+.koc-evidence-snippet header {
+  border-bottom: 1px solid var(--koc-border);
+  background: var(--koc-surface-subtle);
+}
+
+.koc-evidence-snippet header > div,
+.koc-evidence-snippet footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.koc-evidence-snippet header strong {
+  color: var(--koc-text);
+  font-size: 10px;
+}
+
+.koc-evidence-snippet > p {
+  margin: 0;
+  padding: 8px 9px;
+  color: var(--koc-text-muted);
+  font-size: 10px;
+  line-height: 1.5;
+}
+
+.koc-evidence-snippet pre {
+  max-height: 180px;
+  overflow: auto;
+  margin: 0 9px 9px;
+  padding: 8px;
+  border: 1px solid var(--koc-border);
+  border-radius: 4px;
+  background: var(--koc-surface-muted);
+  color: var(--koc-text);
+  font-size: 10px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.koc-evidence-snippet footer {
+  border-top: 1px solid var(--koc-border);
+}
+
+.koc-evidence-empty {
+  margin: 0;
+  color: var(--koc-warning);
+  font-size: 10px;
+}
+
+.koc-sop-list {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 9px 12px 12px;
+  list-style: none;
+}
+
+.koc-sop-list li {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 2px 8px;
+  padding: 7px 8px;
+  border: 1px solid var(--koc-border);
+  border-radius: 4px;
+}
+
+.koc-sop-list strong,
+.koc-sop-list span {
+  color: var(--koc-text);
+  font-size: 10px;
+}
+
+.koc-sop-list small {
+  grid-column: 1 / -1;
+  color: var(--koc-text-subtle);
+  font-size: 9px;
+}
+
+.koc-recommended-action {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  background: var(--koc-surface-subtle);
+}
+
+.koc-recommended-action > div {
+  display: grid;
+  gap: 2px;
+}
+
+.koc-recommended-action span {
+  color: var(--koc-text-subtle);
+  font-size: 9px;
+}
+
+.koc-recommended-action strong {
+  color: var(--koc-text);
+  font-size: 11px;
+}
+
+.koc-ask-context__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--koc-border);
+  font-size: 11px;
+}
+
 .koc-ask-thinking {
   display: flex;
   align-items: center;

@@ -100,6 +100,21 @@ public class AsyncTaskRepository {
         }
     }
 
+    public Optional<AsyncTaskRecord> findLatestByResource(String resourceType, String resourcePublicId) {
+        try {
+            return Optional.ofNullable(jdbcTemplate.queryForObject(
+                    "SELECT " + COLUMNS
+                            + " FROM koc_async_task t"
+                            + " WHERE t.resource_type = ? AND t.resource_public_id = ?"
+                            + " ORDER BY t.created_at DESC, t.id DESC LIMIT 1",
+                    new TaskRowMapper(objectMapper),
+                    resourceType,
+                    resourcePublicId));
+        } catch (EmptyResultDataAccessException ex) {
+            return Optional.empty();
+        }
+    }
+
     /**
      * Claims either a due task or an expired RUNNING task.
      *
@@ -195,6 +210,7 @@ public class AsyncTaskRepository {
         return jdbcTemplate.update("""
                         UPDATE koc_async_task
                            SET status = 'CANCELLED',
+                               stage = 'CANCELLED',
                                error_code = 'CANCELLED',
                                error_summary = 'Cancelled by operator',
                                finished_at = ?,
@@ -245,6 +261,7 @@ public class AsyncTaskRepository {
         return ownedUpdate("""
                 UPDATE koc_async_task
                    SET status = 'SUCCEEDED',
+                       stage = 'COMPLETED',
                        progress = 100,
                        result_json = ?,
                        error_code = NULL,
@@ -267,6 +284,7 @@ public class AsyncTaskRepository {
         return ownedUpdate("""
                 UPDATE koc_async_task
                    SET status = 'FAILED',
+                       stage = 'FAILED',
                        error_code = ?,
                        error_summary = ?,
                        finished_at = ?,
@@ -296,6 +314,7 @@ public class AsyncTaskRepository {
         return ownedUpdate("""
                 UPDATE koc_async_task
                    SET status = 'RETRY',
+                       stage = 'RETRY_SCHEDULED',
                        error_code = ?,
                        error_summary = ?,
                        next_attempt_at = ?,
@@ -318,6 +337,7 @@ public class AsyncTaskRepository {
         return ownedUpdate("""
                 UPDATE koc_async_task
                    SET status = 'DEAD_LETTER',
+                       stage = 'DEAD_LETTER',
                        error_code = ?,
                        error_summary = ?,
                        finished_at = ?,

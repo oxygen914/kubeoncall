@@ -16,6 +16,12 @@ public class GraphAuditMetadataFactory {
         Map<String, Object> context = state.getContext();
         putIfPresent(metadata, "sessionId", context.get("sessionId"));
         putIfPresent(metadata, "plannerSource", context.get("plannerSource"));
+        putIfPresent(metadata, "plannerMode", context.get("plannerMode"));
+        putIfPresent(metadata, "plannerDegraded", context.get("plannerDegraded"));
+        putIfPresent(metadata, "plannerDegradedReason", context.get("plannerDegradedReason"));
+        putIfPresent(metadata, "plannerProvider", context.get("plannerProvider"));
+        putIfPresent(metadata, "plannerModel", context.get("plannerModel"));
+        putIfPresent(metadata, "plannerTokenUsage", context.get("plannerTokenUsage"));
         putIfPresent(metadata, "plannerIntent", context.get("plannerIntent"));
         putIfPresent(metadata, "plannerConfidence", context.get("plannerConfidence"));
         putIfPresent(metadata, "verifierDecision", context.get("verifierDecision"));
@@ -31,6 +37,7 @@ public class GraphAuditMetadataFactory {
         putIfPresent(metadata, "memoryExtractionWarning", context.get("memoryExtractionWarning"));
         putIfPresent(metadata, "retryTraceSize", retryCount(state));
         putIfPresent(metadata, "nodeResultCount", state.getNodeResults().size());
+        putIfPresent(metadata, "simulation", context.get("simulation"));
         putTaskMetadata(metadata, state);
         putExecutorMetadata(metadata, context);
         return metadata;

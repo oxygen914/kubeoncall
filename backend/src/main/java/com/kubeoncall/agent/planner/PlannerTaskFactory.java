@@ -14,7 +14,12 @@ import com.kubeoncall.domain.task.TaskType;
 public class PlannerTaskFactory {
 
     public Task create(
-            String intent, TaskType taskType, String target, Map<String, Object> parameters, RiskLevel riskLevel) {
+            String intent,
+            TaskType taskType,
+            String target,
+            Map<String, Object> parameters,
+            RiskLevel riskLevel,
+            SopReference sopReference) {
         return new Task(
                 UUID.randomUUID().toString(),
                 description(intent, taskType, target, parameters),
@@ -22,7 +27,7 @@ public class PlannerTaskFactory {
                 riskLevel,
                 target,
                 parameters,
-                new SopReference("SOP-" + taskType.name(), taskType.name() + " Standard Procedure", "v1", "rag:sop"));
+                sopReference);
     }
 
     private String description(String intent, TaskType taskType, String target, Map<String, Object> parameters) {

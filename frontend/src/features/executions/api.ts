@@ -23,6 +23,76 @@ export interface ExecutionDetail extends ExecutionListItem {
   errorSummary?: string | null
   requestId?: string
   traceId?: string | null
+  sessionId?: string | null
+  taskId?: string | null
+  taskStatus?: string | null
+  taskStage?: string | null
+  taskProgress?: number | null
+  answer?: string | null
+  details?: Record<string, unknown>
+  evidence?: EvidenceItem[]
+  conclusions?: AiConclusion[]
+  nodes?: ExecutionNode[]
+}
+
+export interface EvidenceItem {
+  evidenceId: string
+  type: string
+  source: string
+  cluster: string
+  namespace: string
+  resource: {
+    kind: string
+    name: string
+    uid: string
+  }
+  observedAt: string
+  window?: {
+    start?: string | null
+    end?: string | null
+  }
+  summary: string
+  snippet: string
+  freshnessSeconds: number
+  redacted: boolean
+  truncated: boolean
+  collectionStatus: string
+  errorType?: string | null
+}
+
+export interface ConfidenceAssessment {
+  score: number
+  label: 'HIGH' | 'MEDIUM' | 'LOW' | string
+  basis: Record<string, number>
+}
+
+export interface SopEvidenceReference {
+  sopId: string
+  version: string
+  source: string
+  section: string
+}
+
+export interface AiConclusion {
+  conclusionId: string
+  claim: string
+  severity: string
+  status: string
+  evidenceRefs: string[]
+  sopRefs: SopEvidenceReference[]
+  confidence: ConfidenceAssessment
+  planner: {
+    mode?: string
+    model?: string
+    provider?: string
+    degraded?: boolean
+    degradedReason?: string
+  }
+  recommendedAction?: {
+    type: string
+    requiresApproval: boolean
+    parameters: Record<string, unknown>
+  }
 }
 
 export interface ExecutionNode {

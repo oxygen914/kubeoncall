@@ -10,6 +10,23 @@ kubeoncall:
   # Compose keeps the historical MySQL-on default; Helm explicitly supplies false when the
   # external database profile is disabled.
   mysql-enabled: ${KUBEONCALL_MYSQL_ENABLED:true}
+  ai-operations:
+    planner-mode: ${KUBEONCALL_PLANNER_MODE:RULE_FALLBACK}
+    planner-provider: ${KUBEONCALL_PLANNER_PROVIDER:openai-compatible}
+    planner-model: ${KUBEONCALL_PLANNER_MODEL:${SPRING_AI_OPENAI_CHAT_OPTIONS_MODEL:qwen-plus}}
+    planner-connect-timeout-millis: ${KUBEONCALL_PLANNER_CONNECT_TIMEOUT_MILLIS:3000}
+    planner-read-timeout-millis: ${KUBEONCALL_PLANNER_READ_TIMEOUT_MILLIS:30000}
+    planner-canary-enabled: ${KUBEONCALL_PLANNER_CANARY_ENABLED:false}
+    planner-canary-fail-fast: ${KUBEONCALL_PLANNER_CANARY_FAIL_FAST:true}
+    evidence-prometheus-enabled: ${KUBEONCALL_EVIDENCE_PROMETHEUS_ENABLED:false}
+    evidence-loki-enabled: ${KUBEONCALL_EVIDENCE_LOKI_ENABLED:false}
+    evidence-k8s-events-enabled: ${KUBEONCALL_EVIDENCE_K8S_EVENTS_ENABLED:false}
+    evidence-pod-logs-enabled: ${KUBEONCALL_EVIDENCE_POD_LOGS_ENABLED:false}
+    ask-durable-workflow-enabled: ${KUBEONCALL_ASK_DURABLE_WORKFLOW_ENABLED:true}
+    operation-closure-enabled: ${KUBEONCALL_OPERATION_CLOSURE_ENABLED:true}
+    conclusion-evidence-ui-enabled: ${KUBEONCALL_CONCLUSION_EVIDENCE_UI_ENABLED:true}
+    allowed-clusters: ${KUBEONCALL_EVIDENCE_ALLOWED_CLUSTERS:}
+    allowed-namespaces: ${KUBEONCALL_EVIDENCE_ALLOWED_NAMESPACES:}
   auth:
     session-cookie-secure: ${KUBEONCALL_AUTH_SESSION_COOKIE_SECURE:false}
     session-idle-timeout-seconds: ${KUBEONCALL_AUTH_SESSION_IDLE_TIMEOUT_SECONDS:1800}
@@ -93,6 +110,9 @@ kubeoncall:
       endpoint: ${KUBERNETES_TOOL_ENDPOINT:http://host.docker.internal:18081/api/tools/kubernetes}
     prometheus:
       endpoint: ${PROMETHEUS_TOOL_ENDPOINT:http://prometheus:9090}
+    loki:
+      endpoint: ${LOKI_ENDPOINT:http://loki:3100}
+      timeout-millis: ${LOKI_TIMEOUT_MILLIS:5000}
     alertmanager:
       endpoint: ${ALERTMANAGER_TOOL_ENDPOINT:http://host.docker.internal:18083/api/tools/alertmanager}
     notification:

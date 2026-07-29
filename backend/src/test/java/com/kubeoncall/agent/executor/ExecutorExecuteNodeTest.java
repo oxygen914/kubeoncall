@@ -1,7 +1,9 @@
 package com.kubeoncall.agent.executor;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 
@@ -11,6 +13,11 @@ import com.kubeoncall.domain.graph.ExecutionPlan;
 import com.kubeoncall.domain.graph.GraphState;
 import com.kubeoncall.domain.graph.NodeResult;
 import com.kubeoncall.domain.graph.NodeStatus;
+import com.kubeoncall.evidence.EvidenceCollectionStatus;
+import com.kubeoncall.evidence.EvidenceItem;
+import com.kubeoncall.evidence.EvidenceResource;
+import com.kubeoncall.evidence.EvidenceType;
+import com.kubeoncall.evidence.EvidenceWindow;
 import com.kubeoncall.tool.ToolDefinition;
 import com.kubeoncall.tool.ToolExecutor;
 
@@ -33,6 +40,7 @@ class ExecutorExecuteNodeTest {
                                 "execute",
                                 null));
         state.getContext().put("executorPayload", Map.of("toolName", "kubernetes.queryLogs", "complete", true));
+        state.getContext().put("executorToolDefinition", readOnlyQueryLogs());
         state.setCurrentLoop(1);
 
         NodeResult result = node.execute(state);
@@ -57,6 +65,7 @@ class ExecutorExecuteNodeTest {
                                 "execute",
                                 null));
         state.getContext().put("executorPayload", Map.of("toolName", "kubernetes.queryLogs", "complete", true));
+        state.getContext().put("executorToolDefinition", readOnlyQueryLogs());
         state.setCurrentLoop(0);
 
         NodeResult result = node.execute(state);
@@ -92,6 +101,33 @@ class ExecutorExecuteNodeTest {
     }
 
     @Test
+    void shouldSatisfyReadOnlyLogQueryFromSuccessfulUnifiedEvidence() {
+        ExecutorExecuteNode node = new ExecutorExecuteNode(List.of(new FailingExecutor()));
+        GraphState state = new GraphState();
+        state.getContext()
+                .put(
+                        "executionPlan",
+                        new ExecutionPlan(
+                                "kubernetes",
+                                "queryLogs",
+                                Map.of("namespace", "kubeoncall-system"),
+                                List.of(),
+                                List.of(),
+                                Map.of(),
+                                "inspect logs",
+                                null));
+        state.getContext().put("executorPayload", Map.of("toolName", "kubernetes.queryLogs", "complete", true));
+        state.getContext().put("executorToolDefinition", readOnlyQueryLogs());
+        state.getContext().put("evidenceItems", List.of(successfulLogEvidence()));
+
+        NodeResult result = node.execute(state);
+
+        assertEquals(NodeStatus.SUCCESS, result.status());
+        assertTrue((Boolean) result.payload().get("evidenceBacked"));
+        assertEquals("unified-evidence", ((Map<?, ?>) result.payload().get("result")).get("source"));
+    }
+
+    @Test
     void shouldAttachStableOperationIdToMutatingToolCall() {
         CapturingExecutor executor = new CapturingExecutor();
         OperationClosureService closureService = org.mockito.Mockito.mock(OperationClosureService.class);
@@ -120,6 +156,7 @@ class ExecutorExecuteNodeTest {
         state.getContext().put("executionPlan", plan);
         state.getContext().put("executorToolDefinition", definition);
         state.getContext().put("executorPayload", Map.of("toolName", "kubernetes.scaleWorkload", "complete", true));
+        state.getContext().put("plannerMode", "REAL_MODEL");
         org.mockito.Mockito.when(closureService.prepare(state, plan, definition))
                 .thenReturn(OperationClosureService.Preparation.ready(Map.of()));
 
@@ -127,6 +164,36 @@ class ExecutorExecuteNodeTest {
 
         assertEquals(NodeStatus.SUCCESS, result.status());
         assertEquals("exec-1:task-1:kubernetes.scaleWorkload", executor.parameters.get("operationId"));
+    }
+
+    private static ToolDefinition readOnlyQueryLogs() {
+        return new ToolDefinition(
+                "kubernetes.queryLogs", "kubernetes", "query logs", true, false, List.of(), List.of(), List.of());
+    }
+
+    private static EvidenceItem successfulLogEvidence() {
+        Instant now = Instant.now();
+        return new EvidenceItem(
+                "evd_1",
+                "exec_1",
+                EvidenceType.POD_LOG,
+                "loki",
+                "local",
+                "kubeoncall-system",
+                new EvidenceResource("", "", ""),
+                now,
+                new EvidenceWindow(now.minusSeconds(60), now),
+                "1 relevant log line",
+                "redacted log line",
+                Map.of(),
+                0,
+                true,
+                false,
+                "hash",
+                EvidenceCollectionStatus.SUCCEEDED,
+                "",
+                "",
+                Map.of());
     }
 
     private static class FailingExecutor implements ToolExecutor {

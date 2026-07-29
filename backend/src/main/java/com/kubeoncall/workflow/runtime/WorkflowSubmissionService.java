@@ -107,6 +107,16 @@ public class WorkflowSubmissionService {
         taskRequest.put("actorUserId", command.actorUserId());
         taskRequest.put("actorPublicId", command.actorPublicId());
         taskRequest.put("actorDisplayName", command.actorDisplayName());
+        Map<String, Object> requestScope = new LinkedHashMap<>();
+        putIfPresent(requestScope, "cluster", command.cluster());
+        putIfPresent(requestScope, "environment", command.environment());
+        putIfPresent(requestScope, "namespace", command.namespace());
+        putIfPresent(requestScope, "resourceKind", command.resourceKind());
+        putIfPresent(requestScope, "resourceName", command.resourceName());
+        putIfPresent(requestScope, "resourceUid", command.resourceUid());
+        if (!requestScope.isEmpty()) {
+            taskRequest.put("requestScope", requestScope);
+        }
         AsyncTaskRecord task = tasks.create(new AsyncTaskRepository.CreateTask(
                 null,
                 "ASK_EXECUTION",
@@ -275,5 +285,42 @@ public class WorkflowSubmissionService {
             String requestId,
             String traceId,
             String sourceIp,
-            String userAgent) {}
+            String userAgent,
+            String cluster,
+            String environment,
+            String namespace,
+            String resourceKind,
+            String resourceName,
+            String resourceUid) {
+
+        public SubmitAskCommand(
+                String question,
+                String sessionId,
+                String alarmId,
+                long actorUserId,
+                String actorPublicId,
+                String actorDisplayName,
+                String requestId,
+                String traceId,
+                String sourceIp,
+                String userAgent) {
+            this(
+                    question,
+                    sessionId,
+                    alarmId,
+                    actorUserId,
+                    actorPublicId,
+                    actorDisplayName,
+                    requestId,
+                    traceId,
+                    sourceIp,
+                    userAgent,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null);
+        }
+    }
 }

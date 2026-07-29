@@ -4,8 +4,10 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -13,7 +15,14 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.kubeoncall.common.config.KubeOnCallProperties;
+import com.kubeoncall.evidence.AiConclusion;
+import com.kubeoncall.evidence.ConclusionRepository;
+import com.kubeoncall.evidence.EvidenceItem;
+import com.kubeoncall.evidence.EvidenceRepository;
 import com.kubeoncall.identity.PermissionCode;
+import com.kubeoncall.task.AsyncTaskRecord;
+import com.kubeoncall.task.AsyncTaskRepository;
 import com.kubeoncall.web.api.v1.ApiResponse;
 import com.kubeoncall.web.api.v1.PageMeta;
 import com.kubeoncall.web.api.v1.RequestIdFilter;
@@ -37,11 +46,30 @@ public class ExecutionsController {
     private static final int MAX_PAGE_SIZE = 200;
 
     private final ObjectProvider<WorkflowExecutionRepository> repositoryProvider;
+    private final ObjectProvider<AsyncTaskRepository> taskRepositoryProvider;
+    private final ObjectProvider<EvidenceRepository> evidenceRepositoryProvider;
+    private final ObjectProvider<ConclusionRepository> conclusionRepositoryProvider;
     private final V1Security security;
+    private final KubeOnCallProperties properties;
+
+    @Autowired
+    public ExecutionsController(
+            ObjectProvider<WorkflowExecutionRepository> repositoryProvider,
+            ObjectProvider<AsyncTaskRepository> taskRepositoryProvider,
+            ObjectProvider<EvidenceRepository> evidenceRepositoryProvider,
+            ObjectProvider<ConclusionRepository> conclusionRepositoryProvider,
+            V1Security security,
+            KubeOnCallProperties properties) {
+        this.repositoryProvider = repositoryProvider;
+        this.taskRepositoryProvider = taskRepositoryProvider;
+        this.evidenceRepositoryProvider = evidenceRepositoryProvider;
+        this.conclusionRepositoryProvider = conclusionRepositoryProvider;
+        this.security = security;
+        this.properties = properties;
+    }
 
     public ExecutionsController(ObjectProvider<WorkflowExecutionRepository> repositoryProvider, V1Security security) {
-        this.repositoryProvider = repositoryProvider;
-        this.security = security;
+        this(repositoryProvider, null, null, null, security, null);
     }
 
     @GetMapping
@@ -77,7 +105,12 @@ public class ExecutionsController {
                 .toList();
         String currentNode =
                 nodes.isEmpty() ? null : nodes.get(nodes.size() - 1).nodeName();
-        return ApiResponse.ok(ExecutionDetail.from(execution, currentNode, nodes), RequestIdFilter.currentRequestId());
+        AsyncTaskRecord task = latestTask(executionId);
+        List<EvidenceItem> evidence = evidence(executionId);
+        List<AiConclusion> conclusions = conclusions(executionId);
+        return ApiResponse.ok(
+                ExecutionDetail.from(execution, currentNode, nodes, task, evidence, conclusions),
+                RequestIdFilter.currentRequestId());
     }
 
     /**
@@ -106,6 +139,32 @@ public class ExecutionsController {
                     "Workflow execution read model is not available");
         }
         return repository;
+    }
+
+    private AsyncTaskRecord latestTask(String executionId) {
+        AsyncTaskRepository repository =
+                taskRepositoryProvider == null ? null : taskRepositoryProvider.getIfAvailable();
+        return repository == null
+                ? null
+                : repository.findLatestByResource("execution", executionId).orElse(null);
+    }
+
+    private List<EvidenceItem> evidence(String executionId) {
+        if (properties != null && !properties.getAiOperations().isConclusionEvidenceUiEnabled()) {
+            return List.of();
+        }
+        EvidenceRepository repository =
+                evidenceRepositoryProvider == null ? null : evidenceRepositoryProvider.getIfAvailable();
+        return repository == null ? List.of() : repository.list(executionId);
+    }
+
+    private List<AiConclusion> conclusions(String executionId) {
+        if (properties != null && !properties.getAiOperations().isConclusionEvidenceUiEnabled()) {
+            return List.of();
+        }
+        ConclusionRepository repository =
+                conclusionRepositoryProvider == null ? null : conclusionRepositoryProvider.getIfAvailable();
+        return repository == null ? List.of() : repository.list(executionId);
     }
 
     private static V1ApiException notFound(String executionId) {
@@ -184,10 +243,27 @@ public class ExecutionsController {
             String errorSummary,
             String requestId,
             String traceId,
+            String sessionId,
+            String taskId,
+            String taskStatus,
+            String taskStage,
+            Integer taskProgress,
+            String answer,
+            Map<String, Object> details,
+            List<EvidenceItem> evidence,
+            List<AiConclusion> conclusions,
             List<ExecutionNodeView> nodes) {
 
         private static ExecutionDetail from(
-                WorkflowExecutionRecord record, String currentNode, List<ExecutionNodeView> nodes) {
+                WorkflowExecutionRecord record,
+                String currentNode,
+                List<ExecutionNodeView> nodes,
+                AsyncTaskRecord task,
+                List<EvidenceItem> evidence,
+                List<AiConclusion> conclusions) {
+            Map<String, Object> result = task == null || task.result() == null ? Map.of() : task.result();
+            Map<String, Object> details = result.get("details") instanceof Map<?, ?> map ? stringMap(map) : Map.of();
+            String answer = text(result.get("summary"), record.resultSummary());
             return new ExecutionDetail(
                     record.publicId(),
                     record.type(),
@@ -205,7 +281,26 @@ public class ExecutionsController {
                     record.errorSummary(),
                     record.requestId(),
                     record.traceId(),
+                    text(result.get("sessionId"), record.sessionId()),
+                    task == null ? null : task.publicId(),
+                    task == null ? null : task.status(),
+                    task == null ? null : task.stage(),
+                    task == null ? null : task.progress(),
+                    answer,
+                    details,
+                    evidence,
+                    conclusions,
                     nodes);
+        }
+
+        private static Map<String, Object> stringMap(Map<?, ?> raw) {
+            Map<String, Object> result = new java.util.LinkedHashMap<>();
+            raw.forEach((key, value) -> result.put(String.valueOf(key), value));
+            return result;
+        }
+
+        private static String text(Object primary, String fallback) {
+            return primary == null || String.valueOf(primary).isBlank() ? fallback : String.valueOf(primary);
         }
     }
 

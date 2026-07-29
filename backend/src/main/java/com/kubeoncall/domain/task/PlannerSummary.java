@@ -13,4 +13,10 @@ public record PlannerSummary(
         List<String> missingSignals,
         String summary,
         List<String> consultedTools,
-        Map<String, String> evidenceSources) {}
+        Map<String, String> evidenceSources,
+        String plannerMode,
+        boolean degraded,
+        String degradedReason,
+        String provider,
+        String model,
+        Map<String, Long> tokenUsage) {}

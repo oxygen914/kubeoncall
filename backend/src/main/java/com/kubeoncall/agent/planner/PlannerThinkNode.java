@@ -14,9 +14,12 @@ import com.kubeoncall.domain.graph.NodeResult;
 import com.kubeoncall.domain.graph.NodeStatus;
 import com.kubeoncall.domain.task.PlannerSummary;
 import com.kubeoncall.domain.task.RiskLevel;
+import com.kubeoncall.domain.task.SopReference;
 import com.kubeoncall.domain.task.Task;
 import com.kubeoncall.domain.task.TaskPlan;
 import com.kubeoncall.domain.task.TaskType;
+import com.kubeoncall.evidence.AiConclusion;
+import com.kubeoncall.evidence.ConclusionFactory;
 import com.kubeoncall.skill.SkillActivation;
 
 @Component
@@ -25,14 +28,17 @@ public class PlannerThinkNode extends ThinkNode {
     private final PlannerLlmService plannerLlmService;
     private final PlannerContextAssembler contextAssembler;
     private final PlannerRuleEngine ruleEngine;
+    private final ConclusionFactory conclusionFactory;
 
     public PlannerThinkNode(
             PlannerLlmService plannerLlmService,
             PlannerContextAssembler contextAssembler,
-            PlannerRuleEngine ruleEngine) {
+            PlannerRuleEngine ruleEngine,
+            ConclusionFactory conclusionFactory) {
         this.plannerLlmService = plannerLlmService;
         this.contextAssembler = contextAssembler;
         this.ruleEngine = ruleEngine;
+        this.conclusionFactory = conclusionFactory;
     }
 
     @Override
@@ -58,13 +64,13 @@ public class PlannerThinkNode extends ThinkNode {
                 ruleEngine.buildParameterSources(parameters, normalized, plannerKnowledge);
         RiskLevel riskLevel = ruleEngine.inferRiskLevel(intent, taskType, target, parameters, plannerKnowledge);
         List<String> missingSignals =
-                ruleEngine.identifyMissingSignals(normalized, taskType, parameters, plannerKnowledge);
+                ruleEngine.identifyMissingSignals(normalized, taskType, target, parameters, plannerKnowledge);
         List<String> consultedTools = contextAssembler.consultedTools(state);
         Map<String, String> evidenceSources = contextAssembler.evidenceSources(plannerKnowledge);
         String plannerSource = "rules";
 
-        PlannerLlmDecision llmDecision =
-                plannerLlmService.plan(normalized, plannerKnowledge).orElse(null);
+        PlannerLlmResult llmResult = plannerLlmService.planWithStatus(normalized, plannerKnowledge);
+        PlannerLlmDecision llmDecision = llmResult.decision();
         if (llmDecision != null) {
             SkillActivation requestedActivation = plannerLlmService.activateRequestedSkills(
                     normalized, state.getContext(), llmDecision.requestedSkills());
@@ -105,6 +111,14 @@ public class PlannerThinkNode extends ThinkNode {
                     "QUERY_ADDITIONAL_CONTEXT",
                     Map.of("missingSignals", missingSignals, "taskType", taskType.name(), "target", target));
         }
+        if (ruleEngine.requiresClarification(taskType, missingSignals, state.getCurrentLoop())) {
+            state.getContext().put("plannerMissingSignals", missingSignals);
+            return new NodeResult(
+                    getName(),
+                    NodeStatus.FAILURE,
+                    "Planner requires a specific target or change parameter before creating an operation",
+                    Map.of("missingSignals", missingSignals, "taskType", taskType.name(), "target", target));
+        }
 
         state.getContext().remove("plannerMissingSignals");
         PlannerSummary summary = new PlannerSummary(
@@ -117,26 +131,61 @@ public class PlannerThinkNode extends ThinkNode {
                 missingSignals,
                 planSummary,
                 consultedTools,
-                evidenceSources);
+                evidenceSources,
+                llmResult.mode().name(),
+                llmResult.degraded(),
+                llmResult.degradedReason() == null
+                        ? null
+                        : llmResult.degradedReason().name(),
+                llmResult.provider(),
+                llmResult.model(),
+                llmResult.tokenUsage());
         state.getContext().put("plannerSummary", summary);
         state.getContext().put("plannerIntent", intent);
         state.getContext().put("plannerConfidence", confidence);
         state.getContext().put("plannerSource", plannerSource);
+        state.getContext().put("plannerMode", llmResult.mode().name());
+        state.getContext().put("plannerDegraded", llmResult.degraded());
+        if (llmResult.degradedReason() != null) {
+            state.getContext()
+                    .put("plannerDegradedReason", llmResult.degradedReason().name());
+        } else {
+            state.getContext().remove("plannerDegradedReason");
+        }
+        state.getContext().put("plannerProvider", llmResult.provider());
+        state.getContext().put("plannerModel", llmResult.model());
+        state.getContext().put("plannerTokenUsage", llmResult.tokenUsage());
+        state.getContext().put("simulation", llmResult.mode() == PlannerMode.SIMULATION);
 
+        SopReference sopReference = ruleEngine.resolveSopReference(plannerKnowledge);
         List<Task> tasks = new ArrayList<>();
-        tasks.add(ruleEngine.buildTask(intent, taskType, target, parameters, riskLevel));
+        tasks.add(ruleEngine.buildTask(intent, taskType, target, parameters, riskLevel, sopReference));
         List<String> taskRequests = ruleEngine.splitTaskRequests(normalized);
         for (int index = 1; index < taskRequests.size(); index++) {
             String taskRequest = taskRequests.get(index);
             String taskIntent = ruleEngine.inferIntent(taskRequest);
             TaskType inferredTaskType = ruleEngine.mapIntentToTaskType(taskIntent);
+            if (ruleEngine.isMutation(inferredTaskType)) {
+                state.getContext().put("plannerRejectedCompoundMutation", taskRequest);
+                return new NodeResult(
+                        getName(),
+                        NodeStatus.FAILURE,
+                        "Each mutating instruction must be submitted as a separate execution for model validation",
+                        Map.of(
+                                "rejectedRequest",
+                                taskRequest,
+                                "taskType",
+                                inferredTaskType.name(),
+                                "reason",
+                                "COMPOUND_MUTATION_REQUIRES_SEPARATE_EXECUTION"));
+            }
             String inferredTarget = ruleEngine.inferTarget(taskRequest);
             Map<String, Object> inferredParameters =
                     ruleEngine.inferParameters(taskRequest, inferredTaskType, inferredTarget, plannerKnowledge);
             RiskLevel inferredRiskLevel = ruleEngine.inferRiskLevel(
                     taskIntent, inferredTaskType, inferredTarget, inferredParameters, plannerKnowledge);
             tasks.add(ruleEngine.buildTask(
-                    taskIntent, inferredTaskType, inferredTarget, inferredParameters, inferredRiskLevel));
+                    taskIntent, inferredTaskType, inferredTarget, inferredParameters, inferredRiskLevel, sopReference));
         }
         Task task = tasks.get(0);
         TaskPlan taskPlan = new TaskPlan(
@@ -148,18 +197,28 @@ public class PlannerThinkNode extends ThinkNode {
 
         state.setTaskPlan(taskPlan);
         state.setCurrentTask(task);
+        AiConclusion conclusion = conclusionFactory.create(state, task, planSummary);
+        state.getContext().put("conclusions", List.of(conclusion));
         state.addObservation("Planner: intent=" + intent + ", confidence=" + confidence + ", target=" + target
-                + ", risk=" + riskLevel + ", source=" + plannerSource + ", consultedTools=" + consultedTools);
-        return new NodeResult(
-                getName(),
-                NodeStatus.SUCCESS,
-                "Planner produced task plan",
-                Map.of(
-                        "taskCount", taskPlan.tasks().size(),
-                        "intent", intent,
-                        "confidence", confidence,
-                        "plannerSource", plannerSource,
-                        "consultedTools", consultedTools,
-                        "evidenceSources", evidenceSources));
+                + ", risk=" + riskLevel + ", mode=" + llmResult.mode() + ", consultedTools=" + consultedTools);
+        Map<String, Object> payload = new java.util.LinkedHashMap<>();
+        payload.put("taskCount", taskPlan.tasks().size());
+        payload.put("intent", intent);
+        payload.put("confidence", confidence);
+        payload.put("plannerSource", plannerSource);
+        payload.put("plannerMode", llmResult.mode().name());
+        payload.put("degraded", llmResult.degraded());
+        payload.put(
+                "degradedReason",
+                llmResult.degradedReason() == null
+                        ? null
+                        : llmResult.degradedReason().name());
+        payload.put("provider", llmResult.provider());
+        payload.put("model", llmResult.model());
+        payload.put("evidenceConfidence", conclusion.confidence());
+        payload.put("conclusionId", conclusion.conclusionId());
+        payload.put("consultedTools", consultedTools);
+        payload.put("evidenceSources", evidenceSources);
+        return new NodeResult(getName(), NodeStatus.SUCCESS, "Planner produced task plan", payload);
     }
 }

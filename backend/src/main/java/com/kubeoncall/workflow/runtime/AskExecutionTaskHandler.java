@@ -77,7 +77,7 @@ public class AskExecutionTaskHandler implements AsyncTaskHandler {
             actor.put("userId", requiredLong(request, "actorUserId"));
             actor.put("publicId", requiredText(request, "actorPublicId"));
             actor.put("displayName", optionalText(request, "actorDisplayName"));
-            return askService.handleDurably(question, sessionId, executionId, actor);
+            return askService.handleDurably(question, sessionId, executionId, actor, map(request.get("requestScope")));
         }
     }
 
@@ -129,5 +129,14 @@ public class AskExecutionTaskHandler implements AsyncTaskHandler {
             // Converted below to the stable workflow validation error.
         }
         throw new WorkflowCommandException(WorkflowCommandException.Code.INVALID, "Task request is missing " + key);
+    }
+
+    private static Map<String, Object> map(Object value) {
+        if (!(value instanceof Map<?, ?> raw)) {
+            return Map.of();
+        }
+        Map<String, Object> result = new LinkedHashMap<>();
+        raw.forEach((key, item) -> result.put(String.valueOf(key), item));
+        return result;
     }
 }

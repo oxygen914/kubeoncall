@@ -58,6 +58,9 @@ public class OperationClosureService {
         if (definition == null || definition.readOnly()) {
             return Preparation.notRequired();
         }
+        if (!properties.getAiOperations().isOperationClosureEnabled()) {
+            return Preparation.blocked("Operation closure is disabled for a mutating operation");
+        }
         if (!properties.getAgent().isPostExecutionVerificationEnabled()) {
             return Preparation.blocked("Post-execution verification is disabled for a mutating operation");
         }

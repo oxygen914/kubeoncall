@@ -187,7 +187,9 @@ public class WorkflowTaskResultCoordinator {
                 durable.status(),
                 durable.resultSummary(),
                 approval == null ? null : approval.publicId(),
-                terminal);
+                terminal,
+                result.sessionId(),
+                result.details());
     }
 
     public boolean isDurablyFinished(WorkflowExecutionRecord record) {
@@ -334,7 +336,9 @@ public class WorkflowTaskResultCoordinator {
                 execution.status(),
                 execution.resultSummary(),
                 null,
-                execution.finishedAt() != null && isTerminalStatus(execution.status()));
+                execution.finishedAt() != null && isTerminalStatus(execution.status()),
+                execution.sessionId(),
+                Map.of());
     }
 
     private static Map<String, Object> eventPayload(WorkflowExecutionRecord execution, ApprovalRequestRecord approval) {
@@ -490,7 +494,22 @@ public class WorkflowTaskResultCoordinator {
     }
 
     public record FinalizationResult(
-            String executionId, String status, String resultSummary, String approvalId, boolean terminal) {
+            String executionId,
+            String status,
+            String resultSummary,
+            String approvalId,
+            boolean terminal,
+            String sessionId,
+            Map<String, Object> details) {
+
+        public FinalizationResult(
+                String executionId, String status, String resultSummary, String approvalId, boolean terminal) {
+            this(executionId, status, resultSummary, approvalId, terminal, null, Map.of());
+        }
+
+        public FinalizationResult {
+            details = details == null ? Map.of() : Map.copyOf(details);
+        }
 
         public Map<String, Object> taskResult() {
             Map<String, Object> result = new LinkedHashMap<>();
@@ -501,6 +520,12 @@ public class WorkflowTaskResultCoordinator {
             }
             if (resultSummary != null) {
                 result.put("summary", resultSummary);
+            }
+            if (sessionId != null && !sessionId.isBlank()) {
+                result.put("sessionId", sessionId);
+            }
+            if (!details.isEmpty()) {
+                result.put("details", details);
             }
             return result;
         }

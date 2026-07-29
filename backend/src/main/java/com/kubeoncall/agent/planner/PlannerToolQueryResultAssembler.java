@@ -26,6 +26,7 @@ public class PlannerToolQueryResultAssembler {
             PlannerToolCandidates.Selection toolCandidates) {
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("query", request);
+        payload.put("evidenceTarget", evidence.target());
         payload.put("plannerReadOnlyValidated", toolCandidates.readOnlyValidated());
         payload.putAll(evidence.payload());
         contextAssembler.attachSkillKnowledge(payload, state);

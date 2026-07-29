@@ -7,6 +7,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import com.kubeoncall.agent.composer.ResponseComposer;
@@ -21,6 +22,7 @@ import com.kubeoncall.domain.audit.ExecutionRequestType;
 import com.kubeoncall.domain.graph.GraphState;
 import com.kubeoncall.domain.graph.GraphStatus;
 import com.kubeoncall.domain.task.Task;
+import com.kubeoncall.evidence.EvidencePersistenceService;
 
 @Service
 public class AskService {
@@ -35,6 +37,27 @@ public class AskService {
     private final ResponseComposer responseComposer;
     private final ExecutionAuditService executionAuditService;
     private final AskContextLifecycle contextLifecycle;
+    private final EvidencePersistenceService evidencePersistenceService;
+
+    @Autowired
+    public AskService(
+            PlannerAgent plannerAgent,
+            VerifierAgent verifierAgent,
+            ExecutorAgent executorAgent,
+            ApprovalService approvalService,
+            ResponseComposer responseComposer,
+            ExecutionAuditService executionAuditService,
+            AskContextLifecycle contextLifecycle,
+            EvidencePersistenceService evidencePersistenceService) {
+        this.plannerAgent = plannerAgent;
+        this.verifierAgent = verifierAgent;
+        this.executorAgent = executorAgent;
+        this.approvalService = approvalService;
+        this.responseComposer = responseComposer;
+        this.executionAuditService = executionAuditService;
+        this.contextLifecycle = contextLifecycle;
+        this.evidencePersistenceService = evidencePersistenceService;
+    }
 
     public AskService(
             PlannerAgent plannerAgent,
@@ -44,13 +67,15 @@ public class AskService {
             ResponseComposer responseComposer,
             ExecutionAuditService executionAuditService,
             AskContextLifecycle contextLifecycle) {
-        this.plannerAgent = plannerAgent;
-        this.verifierAgent = verifierAgent;
-        this.executorAgent = executorAgent;
-        this.approvalService = approvalService;
-        this.responseComposer = responseComposer;
-        this.executionAuditService = executionAuditService;
-        this.contextLifecycle = contextLifecycle;
+        this(
+                plannerAgent,
+                verifierAgent,
+                executorAgent,
+                approvalService,
+                responseComposer,
+                executionAuditService,
+                contextLifecycle,
+                null);
     }
 
     public AskExecutionResult handle(String question) {
@@ -72,6 +97,11 @@ public class AskService {
         return handle(question, requestedSessionId, executionId, false);
     }
 
+    /** Legacy synchronous surface. It is permanently restricted to read-only diagnosis. */
+    public AskExecutionResult handleReadOnlyCompatibility(String question, String requestedSessionId) {
+        return handle(question, requestedSessionId, null, false, Map.of(), Map.of(), true);
+    }
+
     /**
      * Executes an ask workflow and retains its final/paused GraphState until the MySQL task result
      * is committed. This makes a worker retry after a process crash a checkpoint replay instead of
@@ -88,10 +118,19 @@ public class AskService {
      */
     public AskExecutionResult handleDurably(
             String question, String requestedSessionId, String executionId, Map<String, Object> actor) {
+        return handleDurably(question, requestedSessionId, executionId, actor, Map.of());
+    }
+
+    public AskExecutionResult handleDurably(
+            String question,
+            String requestedSessionId,
+            String executionId,
+            Map<String, Object> actor,
+            Map<String, Object> requestScope) {
         if (executionId == null || executionId.isBlank()) {
             throw new IllegalArgumentException("A durable execution id is required");
         }
-        return handle(question, requestedSessionId, executionId, true, actor);
+        return handle(question, requestedSessionId, executionId, true, actor, requestScope, false);
     }
 
     private AskExecutionResult handle(
@@ -105,6 +144,27 @@ public class AskService {
             String executionId,
             boolean retainCheckpoint,
             Map<String, Object> actor) {
+        return handle(question, requestedSessionId, executionId, retainCheckpoint, actor, Map.of());
+    }
+
+    private AskExecutionResult handle(
+            String question,
+            String requestedSessionId,
+            String executionId,
+            boolean retainCheckpoint,
+            Map<String, Object> actor,
+            Map<String, Object> requestScope) {
+        return handle(question, requestedSessionId, executionId, retainCheckpoint, actor, requestScope, false);
+    }
+
+    private AskExecutionResult handle(
+            String question,
+            String requestedSessionId,
+            String executionId,
+            boolean retainCheckpoint,
+            Map<String, Object> actor,
+            Map<String, Object> requestScope,
+            boolean compatibilityReadOnly) {
         Instant startedAt = Instant.now();
         GraphState state = new GraphState();
         if (executionId != null && !executionId.isBlank()) {
@@ -113,6 +173,12 @@ public class AskService {
         state.setUserRequest(question);
         if (actor != null && !actor.isEmpty()) {
             state.getContext().put("workflowActor", Map.copyOf(actor));
+        }
+        if (requestScope != null && !requestScope.isEmpty()) {
+            state.getContext().put("requestScope", Map.copyOf(requestScope));
+        }
+        if (compatibilityReadOnly) {
+            state.getContext().put("compatibilityReadOnly", true);
         }
         String sessionId = contextLifecycle.prepare(state, question, requestedSessionId);
 
@@ -140,6 +206,7 @@ public class AskService {
 
     public AskExecutionResult inspectCheckpoint(String executionId) {
         GraphState state = approvalService.loadState(executionId);
+        persistEvidence(state);
         String message = String.valueOf(
                 state.getContext().getOrDefault(CHECKPOINT_MESSAGE_KEY, responseComposer.compose(state)));
         return new AskExecutionResult(
@@ -179,6 +246,7 @@ public class AskService {
                 contextLifecycle.complete(sessionId, state, message);
                 executionAuditService.recordGraphExecution(ExecutionRequestType.APPROVAL_RESUME, state, startedAt);
                 markResumeFinalized(state, message);
+                persistEvidence(state);
                 persistOrClear(executionId, state, clearTerminalState);
                 return result;
             }
@@ -209,6 +277,7 @@ public class AskService {
             executionAuditService.recordGraphExecution(ExecutionRequestType.APPROVAL_RESUME, state, startedAt);
             if (isTerminal(state.getStatus())) {
                 markResumeFinalized(state, message);
+                persistEvidence(state);
                 persistOrClear(executionId, state, clearTerminalState);
             } else if (!clearTerminalState) {
                 approvalService.saveState(state);
@@ -346,8 +415,15 @@ public class AskService {
         if (retainCheckpoint) {
             state.getContext().put(CHECKPOINT_MESSAGE_KEY, result.message() == null ? "" : result.message());
             approvalService.saveState(state);
+            persistEvidence(state);
         }
         return result;
+    }
+
+    private void persistEvidence(GraphState state) {
+        if (evidencePersistenceService != null) {
+            evidencePersistenceService.persist(state);
+        }
     }
 
     private Map<String, Object> structuredDetails(GraphState state) {
@@ -360,10 +436,19 @@ public class AskService {
                         state,
                         List.of(
                                 "plannerSource",
+                                "plannerMode",
+                                "plannerDegraded",
+                                "plannerDegradedReason",
+                                "plannerProvider",
+                                "plannerModel",
+                                "plannerTokenUsage",
                                 "plannerIntent",
                                 "plannerConfidence",
-                                "plannerKnowledge",
-                                "activatedSkillIds")));
+                                "activatedSkillIds",
+                                "evidenceItems",
+                                "conclusions",
+                                "evidenceConflicts",
+                                "simulation")));
         details.put(
                 "verifier", selectedContext(state, List.of("verifierDecision", "verifierRiskReasons", "verifierTool")));
         details.put(

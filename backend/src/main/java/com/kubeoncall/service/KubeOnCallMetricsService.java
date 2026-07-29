@@ -173,6 +173,32 @@ public class KubeOnCallMetricsService {
         increment("kubeoncall.skill.governance", "operation", safe(operation), "outcome", safe(outcome));
     }
 
+    /** Records bounded-cardinality planner provider/model outcomes and observed latency/token use. */
+    public void recordPlannerCall(String provider, String model, String outcome, long latencyMs, long totalTokens) {
+        String[] tags = new String[] {"provider", safe(provider), "model", safe(model), "status", safe(outcome)};
+        increment("kubeoncall.model.calls", tags);
+        recordAmount("kubeoncall.model.latency_ms", Math.max(0, latencyMs), tags);
+        if (totalTokens > 0) {
+            recordAmount("kubeoncall.model.tokens", totalTokens, tags);
+        }
+    }
+
+    /** Records the actual planner mode and a stable degradation reason, never provider error text. */
+    public void recordPlannerMode(String mode, String reason) {
+        increment("kubeoncall.planner.mode", "mode", safe(mode), "reason", safe(reason));
+    }
+
+    public void recordEvidenceCollection(String source, String status, long latencyMs) {
+        increment("kubeoncall.evidence.collection", "source", safe(source), "status", safe(status));
+        recordAmount(
+                "kubeoncall.evidence.collection_duration_ms",
+                Math.max(0, latencyMs),
+                "source",
+                safe(source),
+                "status",
+                safe(status));
+    }
+
     private String skillMatchSource(String source) {
         if (source == null) {
             return "none";

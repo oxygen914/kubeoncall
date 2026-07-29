@@ -34,6 +34,17 @@ import com.kubeoncall.domain.graph.PauseMetadata;
 import com.kubeoncall.domain.task.RiskLevel;
 import com.kubeoncall.domain.task.Task;
 import com.kubeoncall.domain.task.TaskType;
+import com.kubeoncall.evidence.AiConclusion;
+import com.kubeoncall.evidence.ConclusionRepository;
+import com.kubeoncall.evidence.ConfidenceAssessment;
+import com.kubeoncall.evidence.EvidenceCollectionStatus;
+import com.kubeoncall.evidence.EvidenceItem;
+import com.kubeoncall.evidence.EvidenceRepository;
+import com.kubeoncall.evidence.EvidenceResource;
+import com.kubeoncall.evidence.EvidenceType;
+import com.kubeoncall.evidence.EvidenceWindow;
+import com.kubeoncall.evidence.RecommendedAction;
+import com.kubeoncall.evidence.SopEvidenceReference;
 import com.kubeoncall.idempotency.IdempotencyService;
 import com.kubeoncall.service.AskService;
 import com.kubeoncall.task.AsyncTaskRecord;
@@ -65,6 +76,8 @@ class WorkflowRuntimeIT {
     private static WorkflowExecutionRepository executions;
     private static MySqlApprovalRepository approvals;
     private static AsyncTaskRepository tasks;
+    private static EvidenceRepository evidenceRepository;
+    private static ConclusionRepository conclusionRepository;
     private static WorkflowSubmissionService submissionService;
     private static ApprovalDecisionCommandService decisionService;
     private static WorkflowTaskResultCoordinator coordinator;
@@ -96,6 +109,8 @@ class WorkflowRuntimeIT {
         objectMapper.findAndRegisterModules();
         executions = new WorkflowExecutionRepository(jdbcTemplate, true);
         approvals = new MySqlApprovalRepository(jdbcTemplate, objectMapper, true);
+        evidenceRepository = new EvidenceRepository(jdbcTemplate, objectMapper);
+        conclusionRepository = new ConclusionRepository(jdbcTemplate, objectMapper);
         AsyncTaskRepository taskTarget = new AsyncTaskRepository(jdbcTemplate, objectMapper, true);
         PlatformTransactionManager transactionManager =
                 new org.springframework.jdbc.datasource.DataSourceTransactionManager(dataSource);
@@ -317,6 +332,76 @@ class WorkflowRuntimeIT {
         assertThat(tasks.findByPublicId(created.publicId()).orElseThrow())
                 .extracting(AsyncTaskRecord::status)
                 .isEqualTo("SUCCEEDED");
+    }
+
+    @Test
+    void evidenceAndConclusionsSurviveIdempotentMySqlProjection() {
+        String executionId = "exe_evidence_it";
+        executions.create(new WorkflowExecutionRepository.CreateExecution(
+                executionId,
+                "ASK",
+                "ASK",
+                null,
+                "evidence-it",
+                "RUNNING",
+                "LOW",
+                "diagnose pending pod",
+                "USER",
+                1L,
+                "session-evidence-it",
+                "req-evidence-it",
+                "trace-evidence-it",
+                "graph:evidence-it",
+                Instant.parse("2026-07-29T10:00:00Z")));
+        Instant observedAt = Instant.parse("2026-07-29T10:00:10Z");
+        EvidenceItem evidence = new EvidenceItem(
+                "evd_evidence_it",
+                executionId,
+                EvidenceType.K8S_EVENT,
+                "kubernetes-api",
+                "test-01",
+                "payments",
+                new EvidenceResource("Pod", "payment-api-1", "pod-uid-1"),
+                observedAt,
+                new EvidenceWindow(observedAt.minusSeconds(60), observedAt),
+                "Pod scheduling failed",
+                "0/3 nodes are available: Insufficient memory",
+                Map.of("sequence", "3912"),
+                8,
+                true,
+                false,
+                "sha256:evidence-it",
+                EvidenceCollectionStatus.SUCCEEDED,
+                "",
+                "",
+                Map.of("reason", "FailedScheduling"));
+        AiConclusion conclusion = new AiConclusion(
+                "con_evidence_it",
+                executionId,
+                "Pod Pending is caused by insufficient schedulable memory",
+                "P2",
+                "SUPPORTED",
+                List.of(evidence.evidenceId()),
+                List.of(new SopEvidenceReference("pod-pending-triage", "1.3.0", "runbook", "Scheduling")),
+                new ConfidenceAssessment(0.91, "HIGH", Map.of("directEvidence", 1.0)),
+                Map.of("mode", "REAL_MODEL", "model", "qwen-plus"),
+                new RecommendedAction("PATCH_CONFIG", true, Map.of("resource", "payment-api-1")));
+
+        evidenceRepository.upsert(executionId, evidence);
+        evidenceRepository.upsert(executionId, evidence);
+        conclusionRepository.upsert(executionId, conclusion);
+        conclusionRepository.upsert(executionId, conclusion);
+
+        assertThat(evidenceRepository.list(executionId)).singleElement().satisfies(stored -> {
+            assertThat(stored.evidenceId()).isEqualTo(evidence.evidenceId());
+            assertThat(stored.resource().uid()).isEqualTo("pod-uid-1");
+            assertThat(stored.collectionStatus()).isEqualTo(EvidenceCollectionStatus.SUCCEEDED);
+        });
+        assertThat(conclusionRepository.list(executionId)).singleElement().satisfies(stored -> {
+            assertThat(stored.conclusionId()).isEqualTo(conclusion.conclusionId());
+            assertThat(stored.evidenceRefs()).containsExactly(evidence.evidenceId());
+            assertThat(stored.confidence().label()).isEqualTo("HIGH");
+        });
     }
 
     private static AsyncTaskWorker worker(String owner, Set<String> types, AsyncTaskHandler handler) {

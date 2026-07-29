@@ -22,6 +22,12 @@ export function useExecution(executionId: string | undefined) {
     queryFn: () => getExecution(executionId as string),
     enabled: Boolean(executionId),
     staleTime: 5_000,
+    refetchInterval: (query) => {
+      const status = query.state.data?.status
+      return status && ['SUCCEEDED', 'FAILED', 'REJECTED', 'CANCELLED'].includes(status)
+        ? false
+        : 2_000
+    },
   })
 }
 

@@ -56,6 +56,7 @@ public class IntegrationsController {
                 "kubernetes", "Kubernetes API", properties.getIntegrations().getKubernetes(), circuits));
         integrations.add(
                 view("prometheus", "Prometheus", properties.getIntegrations().getPrometheus(), circuits));
+        integrations.add(view("loki", "Loki", properties.getIntegrations().getLoki(), circuits));
         integrations.add(view(
                 "alertmanager", "Alertmanager", properties.getIntegrations().getAlertmanager(), circuits));
         integrations.add(view(

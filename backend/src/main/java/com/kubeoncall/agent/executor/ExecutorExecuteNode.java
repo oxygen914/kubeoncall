@@ -10,10 +10,13 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import com.kubeoncall.agent.node.ExecuteNode;
+import com.kubeoncall.agent.planner.PlannerMode;
 import com.kubeoncall.domain.graph.ExecutionPlan;
 import com.kubeoncall.domain.graph.GraphState;
 import com.kubeoncall.domain.graph.NodeResult;
 import com.kubeoncall.domain.graph.NodeStatus;
+import com.kubeoncall.evidence.EvidenceItem;
+import com.kubeoncall.evidence.EvidenceType;
 import com.kubeoncall.tool.ToolDefinition;
 import com.kubeoncall.tool.ToolExecutor;
 
@@ -106,11 +109,66 @@ public class ExecutorExecuteNode extends ExecuteNode {
                     Map.of("executorKind", executorKind, "action", action, "errorCode", 404));
         }
 
+        ToolDefinition toolDefinition =
+                state.getContext().get("executorToolDefinition") instanceof ToolDefinition definition
+                        ? definition
+                        : null;
+        if (toolDefinition == null) {
+            return new NodeResult(
+                    getName(),
+                    NodeStatus.FAILURE,
+                    "Executor tool definition is missing",
+                    Map.of("executorKind", executorKind, "action", action, "errorCode", 409));
+        }
+        if (!toolDefinition.readOnly() && Boolean.TRUE.equals(state.getContext().get("compatibilityReadOnly"))) {
+            return new NodeResult(
+                    getName(),
+                    NodeStatus.FAILURE,
+                    "The synchronous Ask compatibility endpoint cannot execute mutating tools",
+                    Map.of("executorKind", executorKind, "action", action, "errorCode", 403));
+        }
+        PlannerMode plannerMode = PlannerMode.runtime(state.getContext().get("plannerMode"));
+        if (!toolDefinition.readOnly() && !plannerMode.mutationCandidateAllowed()) {
+            return new NodeResult(
+                    getName(),
+                    NodeStatus.FAILURE,
+                    "Planner mode " + plannerMode + " cannot execute mutating tools",
+                    Map.of(
+                            "executorKind",
+                            executorKind,
+                            "action",
+                            action,
+                            "plannerMode",
+                            plannerMode.name(),
+                            "errorCode",
+                            403));
+        }
+
+        Map<String, Object> evidenceResult = evidenceBackedReadResult(state, toolDefinition, action);
+        if (!evidenceResult.isEmpty()) {
+            state.getContext().put("executorResult", evidenceResult);
+            state.addObservation("Executor execute: satisfied " + executorKind + "." + action
+                    + " from the unified evidence snapshot");
+            return new NodeResult(
+                    getName(),
+                    NodeStatus.SUCCESS,
+                    defaultMessage(executionSummary, "Read-only query satisfied from unified evidence"),
+                    Map.of(
+                            "httpStatus",
+                            200,
+                            "executorKind",
+                            executorKind,
+                            "action",
+                            action,
+                            "toolName",
+                            payload.get("toolName"),
+                            "evidenceBacked",
+                            true,
+                            "result",
+                            evidenceResult));
+        }
+
         if (closureService != null) {
-            ToolDefinition toolDefinition =
-                    state.getContext().get("executorToolDefinition") instanceof ToolDefinition definition
-                            ? definition
-                            : null;
             OperationClosureService.Preparation preparation =
                     closureService.prepare(state, executionPlan, toolDefinition);
             if (!preparation.ready()) {
@@ -189,6 +247,45 @@ public class ExecutorExecuteNode extends ExecuteNode {
                         payload.get("toolName"),
                         "result",
                         toolResult));
+    }
+
+    private Map<String, Object> evidenceBackedReadResult(GraphState state, ToolDefinition definition, String action) {
+        if (!definition.readOnly()) {
+            return Map.of();
+        }
+        List<EvidenceType> acceptedTypes =
+                switch (action) {
+                    case "queryLogs" -> List.of(EvidenceType.POD_LOG, EvidenceType.K8S_EVENT);
+                    case "queryMetricsContext" -> List.of(EvidenceType.METRIC, EvidenceType.RESOURCE_STATE);
+                    default -> List.of();
+                };
+        if (acceptedTypes.isEmpty() || !(state.getContext().get("evidenceItems") instanceof List<?> candidates)) {
+            return Map.of();
+        }
+        List<EvidenceItem> evidence = candidates.stream()
+                .filter(EvidenceItem.class::isInstance)
+                .map(EvidenceItem.class::cast)
+                .filter(EvidenceItem::succeeded)
+                .filter(item -> acceptedTypes.contains(item.type()))
+                .limit(20)
+                .toList();
+        if (evidence.isEmpty()) {
+            return Map.of();
+        }
+        Map<String, Object> response = new LinkedHashMap<>();
+        response.put(
+                "evidenceIds", evidence.stream().map(EvidenceItem::evidenceId).toList());
+        response.put(
+                "sources",
+                evidence.stream().map(EvidenceItem::source).distinct().toList());
+        response.put(
+                "summaries",
+                evidence.stream()
+                        .map(EvidenceItem::summary)
+                        .filter(summary -> summary != null && !summary.isBlank())
+                        .toList());
+        response.put("observedCount", evidence.size());
+        return Map.of("status", "success", "httpStatus", 200, "source", "unified-evidence", "response", response);
     }
 
     private boolean shouldRetryToolFailure(int httpStatus, String resultStatus, int currentLoop) {
