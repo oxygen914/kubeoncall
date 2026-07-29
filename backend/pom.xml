@@ -31,6 +31,7 @@
         <logstash.logback.encoder.version>8.0</logstash.logback.encoder.version>
         <springdoc.version>2.6.0</springdoc.version>
         <springdoc.maven.plugin.version>1.5</springdoc.maven.plugin.version>
+        <tika.version>2.9.2</tika.version>
         <openapi.contract.jmx-port>19001</openapi.contract.jmx-port>
         <openapi.contract.http-port>18081</openapi.contract.http-port>
     </properties>
@@ -143,6 +144,16 @@
         <dependency>
             <groupId>com.fasterxml.jackson.dataformat</groupId>
             <artifactId>jackson-dataformat-yaml</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.tika</groupId>
+            <artifactId>tika-core</artifactId>
+            <version>${tika.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.tika</groupId>
+            <artifactId>tika-parsers-standard-package</artifactId>
+            <version>${tika.version}</version>
         </dependency>
         <dependency>
             <groupId>net.logstash.logback</groupId>

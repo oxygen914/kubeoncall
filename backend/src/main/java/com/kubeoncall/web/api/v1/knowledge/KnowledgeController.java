@@ -27,6 +27,7 @@ import com.fasterxml.jackson.annotation.JsonInclude;
 import com.kubeoncall.identity.PermissionCode;
 import com.kubeoncall.knowledge.KnowledgeDocumentCommandService;
 import com.kubeoncall.knowledge.KnowledgeDocumentCommandService.MutationOutcome;
+import com.kubeoncall.knowledge.KnowledgeImportContentNormalizer;
 import com.kubeoncall.knowledge.KnowledgeImportSubmissionService;
 import com.kubeoncall.knowledge.mysql.KnowledgeDocumentRecord;
 import com.kubeoncall.knowledge.mysql.KnowledgeDocumentRepository;
@@ -41,6 +42,9 @@ import com.kubeoncall.web.api.v1.V1ApiException;
 import com.kubeoncall.web.api.v1.V1Principal;
 import com.kubeoncall.web.api.v1.V1Security;
 
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.media.Schema;
+
 /** Versioned Knowledge API backed by the WBS-9 MySQL facts and durable import worker. */
 @RestController("v1KnowledgeController")
 @RequestMapping("/api/v1/knowledge")
@@ -50,6 +54,7 @@ public class KnowledgeController {
     private final ObjectProvider<KnowledgeImportRepository> importRepositoryProvider;
     private final ObjectProvider<KnowledgeDocumentCommandService> commandServiceProvider;
     private final ObjectProvider<KnowledgeImportSubmissionService> submissionServiceProvider;
+    private final KnowledgeImportContentNormalizer contentNormalizer;
     private final V1Security security;
 
     public KnowledgeController(
@@ -57,11 +62,13 @@ public class KnowledgeController {
             ObjectProvider<KnowledgeImportRepository> importRepositoryProvider,
             ObjectProvider<KnowledgeDocumentCommandService> commandServiceProvider,
             ObjectProvider<KnowledgeImportSubmissionService> submissionServiceProvider,
+            KnowledgeImportContentNormalizer contentNormalizer,
             V1Security security) {
         this.documentRepositoryProvider = documentRepositoryProvider;
         this.importRepositoryProvider = importRepositoryProvider;
         this.commandServiceProvider = commandServiceProvider;
         this.submissionServiceProvider = submissionServiceProvider;
+        this.contentNormalizer = contentNormalizer;
         this.security = security;
     }
 
@@ -152,26 +159,37 @@ public class KnowledgeController {
     @PostMapping(value = "/imports", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<ApiResponse<ImportAccepted>> createImport(
             @RequestPart("file") MultipartFile file,
-            @RequestParam(name = "importType", defaultValue = "JSONL") String importType,
+            @Parameter(schema = @Schema(allowableValues = {"DOCUMENT", "JSONL", "RUNBOOK"}))
+                    @RequestParam(name = "importType", defaultValue = "JSONL")
+                    String importType,
             @RequestParam(name = "duplicatePolicy", defaultValue = "SKIP") String duplicatePolicy,
             @RequestParam(name = "dryRun", defaultValue = "false") boolean dryRun,
             @RequestParam(name = "datasetVersion", required = false) String datasetVersion,
             @RequestParam(name = "metadata", required = false) String metadata,
             HttpServletRequest request) {
         V1Principal principal = requireUser(PermissionCode.KNOWLEDGE_WRITE);
-        if (!"JSONL".equalsIgnoreCase(importType)) {
-            throw new IllegalArgumentException("Only JSONL knowledge imports are currently supported");
-        }
         byte[] content;
         try {
             content = file.getBytes();
         } catch (IOException ex) {
-            throw new IllegalArgumentException("Uploaded JSONL file cannot be read", ex);
+            throw invalidRequest("Uploaded knowledge file cannot be read", ex);
+        }
+        KnowledgeImportContentNormalizer.NormalizedImport normalized;
+        try {
+            normalized =
+                    contentNormalizer.normalize(importType, file.getOriginalFilename(), file.getContentType(), content);
+        } catch (IllegalArgumentException ex) {
+            throw invalidRequest(ex.getMessage(), ex);
         }
         KnowledgeImportSubmissionService.Submission submission = submissions()
                 .submit(
                         new KnowledgeImportSubmissionService.Upload(
-                                file.getOriginalFilename(), content, duplicatePolicy, dryRun, datasetVersion),
+                                normalized.importType(),
+                                normalized.originalFilename(),
+                                normalized.jsonlContent(),
+                                duplicatePolicy,
+                                dryRun,
+                                datasetVersion),
                         new KnowledgeImportSubmissionService.Actor(
                                 principal.user().id(),
                                 principal.user().displayName(),
@@ -304,6 +322,13 @@ public class KnowledgeController {
 
     private static V1ApiException unavailable(String message) {
         return new V1ApiException(HttpStatus.SERVICE_UNAVAILABLE.value(), V1ApiErrorCode.SERVICE_UNAVAILABLE, message);
+    }
+
+    private static V1ApiException invalidRequest(String message, Exception cause) {
+        return new V1ApiException(
+                HttpStatus.BAD_REQUEST.value(),
+                V1ApiErrorCode.INVALID_REQUEST,
+                message == null ? "Invalid import request" : message);
     }
 
     @JsonInclude(JsonInclude.Include.NON_NULL)

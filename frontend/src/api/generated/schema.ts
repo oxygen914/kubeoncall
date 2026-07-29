@@ -1476,6 +1476,150 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/monitoring/summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["summary"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/monitoring/scopes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["scopes"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/monitoring/pods": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["pods"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/monitoring/nodes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["monitoringNodes"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/monitoring/nodes/{node}/cpu": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["cpuTrend"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/monitoring/health/trend": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["healthTrend"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/monitoring/correlations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["monitoringCorrelations"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/monitoring/clusters": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["clusters"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/monitoring/advice": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["advice"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/migration/status": {
         parameters: {
             query?: never;
@@ -2175,150 +2319,6 @@ export interface paths {
         put?: never;
         post?: never;
         delete: operations["revoke_1"];
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/monitoring/summary": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: operations["summary"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/monitoring/pods": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: operations["pods"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/monitoring/nodes": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: operations["monitoringNodes"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/monitoring/nodes/{node}/cpu": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: operations["cpuTrend"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/monitoring/clusters": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: operations["clusters"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/monitoring/scopes": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: operations["scopes"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/monitoring/health/trend": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: operations["healthTrend"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/monitoring/correlations": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: operations["monitoringCorrelations"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/monitoring/advice": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: operations["advice"];
-        put?: never;
-        post?: never;
-        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -3315,6 +3315,235 @@ export interface components {
             data?: components["schemas"]["AlarmMaintenanceWindow"][];
             meta?: components["schemas"]["ResponseMeta"];
         };
+        ApiResponseSummary: {
+            data?: components["schemas"]["Summary"];
+            meta?: components["schemas"]["ResponseMeta"];
+        };
+        DataSources: {
+            nodeMetricsAvailable?: boolean;
+            kubernetesStateAvailable?: boolean;
+        };
+        Summary: {
+            cluster?: string;
+            /** Format: int32 */
+            totalNodes?: number;
+            /** Format: int64 */
+            readyNodes?: number;
+            /** Format: int64 */
+            notReadyNodes?: number;
+            /** Format: int64 */
+            unknownNodes?: number;
+            /** Format: int64 */
+            totalPods?: number;
+            podPhaseCounts?: {
+                [key: string]: number;
+            };
+            /** Format: double */
+            averageCpuUsagePercent?: number;
+            dataSources?: components["schemas"]["DataSources"];
+            /** Format: date-time */
+            collectedAt?: string;
+        };
+        ApiResponseScopeCatalog: {
+            data?: components["schemas"]["ScopeCatalog"];
+            meta?: components["schemas"]["ResponseMeta"];
+        };
+        ScopeCapabilities: {
+            clusterFilterAvailable?: boolean;
+            environmentFilterAvailable?: boolean;
+            namespaceFilterAvailable?: boolean;
+        };
+        ScopeCatalog: {
+            clusters?: components["schemas"]["ScopeValue"][];
+            environments?: components["schemas"]["ScopeValue"][];
+            namespaces?: components["schemas"]["ScopeValue"][];
+            capabilities?: components["schemas"]["ScopeCapabilities"];
+            /** Format: date-time */
+            collectedAt?: string;
+        };
+        ScopeValue: {
+            value?: string;
+            label?: string;
+            cluster?: string;
+            environment?: string;
+            /** Format: int64 */
+            resourceCount?: number;
+        };
+        ApiResponsePodList: {
+            data?: components["schemas"]["PodList"];
+            meta?: components["schemas"]["ResponseMeta"];
+        };
+        Pod: {
+            namespace?: string;
+            name?: string;
+            node?: string;
+            phase?: string;
+            /** Format: int64 */
+            restartCount?: number;
+        };
+        PodList: {
+            cluster?: string;
+            kubernetesStateAvailable?: boolean;
+            pods?: components["schemas"]["Pod"][];
+            /** Format: int32 */
+            returned?: number;
+            /** Format: date-time */
+            collectedAt?: string;
+        };
+        ApiResponseNodeList: {
+            data?: components["schemas"]["NodeList"];
+            meta?: components["schemas"]["ResponseMeta"];
+        };
+        Node: {
+            name?: string;
+            ready?: string;
+            exporterUp?: boolean;
+            /** Format: double */
+            cpuUsagePercent?: number;
+            /** Format: double */
+            memoryUsagePercent?: number;
+            /** Format: int64 */
+            podCount?: number;
+        };
+        NodeList: {
+            cluster?: string;
+            dataSources?: components["schemas"]["DataSources"];
+            nodes?: components["schemas"]["Node"][];
+            /** Format: date-time */
+            collectedAt?: string;
+        };
+        ApiResponseCpuTrend: {
+            data?: components["schemas"]["CpuTrend"];
+            meta?: components["schemas"]["ResponseMeta"];
+        };
+        CpuPoint: {
+            /** Format: date-time */
+            timestamp?: string;
+            /** Format: double */
+            value?: number;
+        };
+        CpuTrend: {
+            cluster?: string;
+            node?: string;
+            window?: string;
+            nodeMetricsAvailable?: boolean;
+            points?: components["schemas"]["CpuPoint"][];
+            /** Format: date-time */
+            collectedAt?: string;
+        };
+        ApiResponseHealthTrend: {
+            data?: components["schemas"]["HealthTrend"];
+            meta?: components["schemas"]["ResponseMeta"];
+        };
+        HealthComparison: {
+            /** Format: double */
+            currentAverage?: number;
+            /** Format: double */
+            previousAverage?: number;
+            /** Format: double */
+            delta?: number;
+            direction?: string;
+            baselineAvailable?: boolean;
+        };
+        HealthPoint: {
+            /** Format: date-time */
+            timestamp?: string;
+            /** Format: double */
+            readyPercent?: number;
+            /** Format: int64 */
+            abnormalPods?: number;
+            /** Format: double */
+            healthScore?: number;
+        };
+        HealthTrend: {
+            scope?: components["schemas"]["Scope"];
+            window?: string;
+            /** Format: int64 */
+            stepSeconds?: number;
+            current?: components["schemas"]["HealthPoint"][];
+            previous?: components["schemas"]["HealthPoint"][];
+            comparison?: components["schemas"]["HealthComparison"];
+            /** Format: date-time */
+            collectedAt?: string;
+        };
+        Scope: {
+            cluster?: string;
+            environment?: string;
+            namespace?: string;
+        };
+        AlarmChangeCorrelation: {
+            alarmId?: string;
+            alertName?: string;
+            severity?: string;
+            status?: string;
+            resourceName?: string;
+            /** Format: date-time */
+            firstSeen?: string;
+            changes?: components["schemas"]["RelatedChange"][];
+        };
+        ApiResponseCorrelationFeed: {
+            data?: components["schemas"]["CorrelationFeed"];
+            meta?: components["schemas"]["ResponseMeta"];
+        };
+        CorrelationFeed: {
+            scope?: components["schemas"]["Scope"];
+            alarmDataAvailable?: boolean;
+            changeDataAvailable?: boolean;
+            correlations?: components["schemas"]["AlarmChangeCorrelation"][];
+            /** Format: date-time */
+            collectedAt?: string;
+        };
+        RelatedChange: {
+            changeId?: string;
+            changeType?: string;
+            resourceName?: string;
+            namespace?: string;
+            /** Format: date-time */
+            changedAt?: string;
+            /** Format: double */
+            score?: number;
+            reason?: string;
+            suggestions?: string[];
+        };
+        ApiResponseClusterList: {
+            data?: components["schemas"]["ClusterList"];
+            meta?: components["schemas"]["ResponseMeta"];
+        };
+        Cluster: {
+            name?: string;
+            nodeMetricsAvailable?: boolean;
+            kubernetesStateAvailable?: boolean;
+            /** Format: int32 */
+            nodeCount?: number;
+        };
+        ClusterList: {
+            clusters?: components["schemas"]["Cluster"][];
+            /** Format: date-time */
+            collectedAt?: string;
+        };
+        AdviceFeed: {
+            scope?: components["schemas"]["Scope"];
+            generatedBy?: string;
+            modelAvailable?: boolean;
+            safetyMode?: string;
+            advice?: components["schemas"]["AdviceItem"][];
+            /** Format: date-time */
+            collectedAt?: string;
+        };
+        AdviceItem: {
+            id?: string;
+            title?: string;
+            risk?: string;
+            summary?: string;
+            evidence?: string;
+            recommendation?: string;
+            source?: string;
+            analysisPath?: string;
+        };
+        ApiResponseAdviceFeed: {
+            data?: components["schemas"]["AdviceFeed"];
+            meta?: components["schemas"]["ResponseMeta"];
+        };
         ApiResponsePreflightReport: {
             data?: components["schemas"]["PreflightReport"];
             meta?: components["schemas"]["ResponseMeta"];
@@ -3976,6 +4205,11 @@ export interface components {
             description?: string;
             triggers?: string[];
             services?: string[];
+            resourceTypes?: string[];
+            alertNames?: string[];
+            metricNames?: string[];
+            runbookIds?: string[];
+            categories?: string[];
             applicableTasks?: string[];
             tags?: string[];
             maxRisk?: string;
@@ -4049,235 +4283,6 @@ export interface components {
         AlarmMaintenanceWindowRevocationResponse: {
             id?: string;
             revoked?: boolean;
-        };
-        ApiResponseSummary: {
-            data?: components["schemas"]["Summary"];
-            meta?: components["schemas"]["ResponseMeta"];
-        };
-        DataSources: {
-            nodeMetricsAvailable?: boolean;
-            kubernetesStateAvailable?: boolean;
-        };
-        Summary: {
-            cluster?: string;
-            /** Format: int32 */
-            totalNodes?: number;
-            /** Format: int64 */
-            readyNodes?: number;
-            /** Format: int64 */
-            notReadyNodes?: number;
-            /** Format: int64 */
-            unknownNodes?: number;
-            /** Format: int64 */
-            totalPods?: number;
-            podPhaseCounts?: {
-                [key: string]: number;
-            };
-            /** Format: double */
-            averageCpuUsagePercent?: number;
-            dataSources?: components["schemas"]["DataSources"];
-            /** Format: date-time */
-            collectedAt?: string;
-        };
-        ApiResponsePodList: {
-            data?: components["schemas"]["PodList"];
-            meta?: components["schemas"]["ResponseMeta"];
-        };
-        Pod: {
-            namespace?: string;
-            name?: string;
-            node?: string;
-            phase?: string;
-            /** Format: int64 */
-            restartCount?: number;
-        };
-        PodList: {
-            cluster?: string;
-            kubernetesStateAvailable?: boolean;
-            pods?: components["schemas"]["Pod"][];
-            /** Format: int32 */
-            returned?: number;
-            /** Format: date-time */
-            collectedAt?: string;
-        };
-        ApiResponseNodeList: {
-            data?: components["schemas"]["NodeList"];
-            meta?: components["schemas"]["ResponseMeta"];
-        };
-        Node: {
-            name?: string;
-            ready?: string;
-            exporterUp?: boolean;
-            /** Format: double */
-            cpuUsagePercent?: number;
-            /** Format: double */
-            memoryUsagePercent?: number;
-            /** Format: int64 */
-            podCount?: number;
-        };
-        NodeList: {
-            cluster?: string;
-            dataSources?: components["schemas"]["DataSources"];
-            nodes?: components["schemas"]["Node"][];
-            /** Format: date-time */
-            collectedAt?: string;
-        };
-        ApiResponseCpuTrend: {
-            data?: components["schemas"]["CpuTrend"];
-            meta?: components["schemas"]["ResponseMeta"];
-        };
-        CpuPoint: {
-            /** Format: date-time */
-            timestamp?: string;
-            /** Format: double */
-            value?: number;
-        };
-        CpuTrend: {
-            cluster?: string;
-            node?: string;
-            window?: string;
-            nodeMetricsAvailable?: boolean;
-            points?: components["schemas"]["CpuPoint"][];
-            /** Format: date-time */
-            collectedAt?: string;
-        };
-        ApiResponseClusterList: {
-            data?: components["schemas"]["ClusterList"];
-            meta?: components["schemas"]["ResponseMeta"];
-        };
-        Cluster: {
-            name?: string;
-            nodeMetricsAvailable?: boolean;
-            kubernetesStateAvailable?: boolean;
-            /** Format: int32 */
-            nodeCount?: number;
-        };
-        ClusterList: {
-            clusters?: components["schemas"]["Cluster"][];
-            /** Format: date-time */
-            collectedAt?: string;
-        };
-        ApiResponseScopeCatalog: {
-            data?: components["schemas"]["ScopeCatalog"];
-            meta?: components["schemas"]["ResponseMeta"];
-        };
-        ScopeCapabilities: {
-            clusterFilterAvailable?: boolean;
-            environmentFilterAvailable?: boolean;
-            namespaceFilterAvailable?: boolean;
-        };
-        ScopeCatalog: {
-            clusters?: components["schemas"]["ScopeValue"][];
-            environments?: components["schemas"]["ScopeValue"][];
-            namespaces?: components["schemas"]["ScopeValue"][];
-            capabilities?: components["schemas"]["ScopeCapabilities"];
-            /** Format: date-time */
-            collectedAt?: string;
-        };
-        ScopeValue: {
-            value?: string;
-            label?: string;
-            cluster?: string;
-            environment?: string;
-            /** Format: int64 */
-            resourceCount?: number;
-        };
-        ApiResponseHealthTrend: {
-            data?: components["schemas"]["HealthTrend"];
-            meta?: components["schemas"]["ResponseMeta"];
-        };
-        HealthComparison: {
-            /** Format: double */
-            currentAverage?: number;
-            /** Format: double */
-            previousAverage?: number;
-            /** Format: double */
-            delta?: number;
-            direction?: string;
-            baselineAvailable?: boolean;
-        };
-        HealthPoint: {
-            /** Format: date-time */
-            timestamp?: string;
-            /** Format: double */
-            readyPercent?: number;
-            /** Format: int64 */
-            abnormalPods?: number;
-            /** Format: double */
-            healthScore?: number;
-        };
-        HealthTrend: {
-            scope?: components["schemas"]["Scope"];
-            window?: string;
-            /** Format: int64 */
-            stepSeconds?: number;
-            current?: components["schemas"]["HealthPoint"][];
-            previous?: components["schemas"]["HealthPoint"][];
-            comparison?: components["schemas"]["HealthComparison"];
-            /** Format: date-time */
-            collectedAt?: string;
-        };
-        Scope: {
-            cluster?: string;
-            environment?: string;
-            namespace?: string;
-        };
-        AlarmChangeCorrelation: {
-            alarmId?: string;
-            alertName?: string;
-            severity?: string;
-            status?: string;
-            resourceName?: string;
-            /** Format: date-time */
-            firstSeen?: string;
-            changes?: components["schemas"]["RelatedChange"][];
-        };
-        ApiResponseCorrelationFeed: {
-            data?: components["schemas"]["CorrelationFeed"];
-            meta?: components["schemas"]["ResponseMeta"];
-        };
-        CorrelationFeed: {
-            scope?: components["schemas"]["Scope"];
-            alarmDataAvailable?: boolean;
-            changeDataAvailable?: boolean;
-            correlations?: components["schemas"]["AlarmChangeCorrelation"][];
-            /** Format: date-time */
-            collectedAt?: string;
-        };
-        RelatedChange: {
-            changeId?: string;
-            changeType?: string;
-            resourceName?: string;
-            namespace?: string;
-            /** Format: date-time */
-            changedAt?: string;
-            /** Format: double */
-            score?: number;
-            reason?: string;
-            suggestions?: string[];
-        };
-        AdviceFeed: {
-            scope?: components["schemas"]["Scope"];
-            generatedBy?: string;
-            modelAvailable?: boolean;
-            safetyMode?: string;
-            advice?: components["schemas"]["AdviceItem"][];
-            /** Format: date-time */
-            collectedAt?: string;
-        };
-        AdviceItem: {
-            id?: string;
-            title?: string;
-            risk?: string;
-            summary?: string;
-            evidence?: string;
-            recommendation?: string;
-            source?: string;
-            analysisPath?: string;
-        };
-        ApiResponseAdviceFeed: {
-            data?: components["schemas"]["AdviceFeed"];
-            meta?: components["schemas"]["ResponseMeta"];
         };
     };
     responses: never;
@@ -5104,7 +5109,7 @@ export interface operations {
     createImport: {
         parameters: {
             query?: {
-                importType?: string;
+                importType?: "DOCUMENT" | "JSONL" | "RUNBOOK";
                 duplicatePolicy?: string;
                 dryRun?: boolean;
                 datasetVersion?: string;
@@ -6696,6 +6701,224 @@ export interface operations {
             };
         };
     };
+    summary: {
+        parameters: {
+            query: {
+                cluster: string;
+                environment?: string;
+                namespace?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseSummary"];
+                };
+            };
+        };
+    };
+    scopes: {
+        parameters: {
+            query?: {
+                cluster?: string;
+                environment?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseScopeCatalog"];
+                };
+            };
+        };
+    };
+    pods: {
+        parameters: {
+            query: {
+                cluster: string;
+                environment?: string;
+                namespace?: string;
+                phase?: string;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponsePodList"];
+                };
+            };
+        };
+    };
+    monitoringNodes: {
+        parameters: {
+            query: {
+                cluster: string;
+                environment?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseNodeList"];
+                };
+            };
+        };
+    };
+    cpuTrend: {
+        parameters: {
+            query: {
+                cluster: string;
+                environment?: string;
+                window?: string;
+            };
+            header?: never;
+            path: {
+                node: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseCpuTrend"];
+                };
+            };
+        };
+    };
+    healthTrend: {
+        parameters: {
+            query: {
+                cluster: string;
+                environment?: string;
+                namespace?: string;
+                window?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseHealthTrend"];
+                };
+            };
+        };
+    };
+    monitoringCorrelations: {
+        parameters: {
+            query: {
+                cluster: string;
+                environment?: string;
+                namespace?: string;
+                window?: string;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseCorrelationFeed"];
+                };
+            };
+        };
+    };
+    clusters: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseClusterList"];
+                };
+            };
+        };
+    };
+    advice: {
+        parameters: {
+            query: {
+                cluster: string;
+                environment?: string;
+                namespace?: string;
+                window?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseAdviceFeed"];
+                };
+            };
+        };
+    };
     status_1: {
         parameters: {
             query?: never;
@@ -7751,224 +7974,6 @@ export interface operations {
                 };
                 content: {
                     "*/*": components["schemas"]["AlarmMaintenanceWindowRevocationResponse"];
-                };
-            };
-        };
-    };
-    summary: {
-        parameters: {
-            query: {
-                cluster: string;
-                environment?: string;
-                namespace?: string;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "*/*": components["schemas"]["ApiResponseSummary"];
-                };
-            };
-        };
-    };
-    pods: {
-        parameters: {
-            query: {
-                cluster: string;
-                environment?: string;
-                namespace?: string;
-                phase?: string;
-                limit?: number;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "*/*": components["schemas"]["ApiResponsePodList"];
-                };
-            };
-        };
-    };
-    monitoringNodes: {
-        parameters: {
-            query: {
-                cluster: string;
-                environment?: string;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "*/*": components["schemas"]["ApiResponseNodeList"];
-                };
-            };
-        };
-    };
-    cpuTrend: {
-        parameters: {
-            query: {
-                cluster: string;
-                environment?: string;
-                window?: string;
-            };
-            header?: never;
-            path: {
-                node: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "*/*": components["schemas"]["ApiResponseCpuTrend"];
-                };
-            };
-        };
-    };
-    clusters: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "*/*": components["schemas"]["ApiResponseClusterList"];
-                };
-            };
-        };
-    };
-    scopes: {
-        parameters: {
-            query?: {
-                cluster?: string;
-                environment?: string;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "*/*": components["schemas"]["ApiResponseScopeCatalog"];
-                };
-            };
-        };
-    };
-    healthTrend: {
-        parameters: {
-            query: {
-                cluster: string;
-                environment?: string;
-                namespace?: string;
-                window?: string;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "*/*": components["schemas"]["ApiResponseHealthTrend"];
-                };
-            };
-        };
-    };
-    monitoringCorrelations: {
-        parameters: {
-            query: {
-                cluster: string;
-                environment?: string;
-                namespace?: string;
-                window?: string;
-                limit?: number;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "*/*": components["schemas"]["ApiResponseCorrelationFeed"];
-                };
-            };
-        };
-    };
-    advice: {
-        parameters: {
-            query: {
-                cluster: string;
-                environment?: string;
-                namespace?: string;
-                window?: string;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "*/*": components["schemas"]["ApiResponseAdviceFeed"];
                 };
             };
         };

@@ -205,7 +205,7 @@ function KnowledgeImportCard() {
           <input
             type="file"
             required
-            accept=".md,.txt,.jsonl,application/json,text/plain,text/markdown"
+            accept=".md,.markdown,.txt,.log,.pdf,.doc,.docx,.odt,.rtf,.html,.htm,.csv,.json,.yaml,.yml,.jsonl,.ndjson,text/plain,text/markdown,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
             onChange={(event) => setFile(event.target.files?.[0] ?? null)}
           />
         </label>
@@ -219,6 +219,10 @@ function KnowledgeImportCard() {
             <option value="JSONL">JSONL</option>
             <option value="RUNBOOK">RUNBOOK</option>
           </select>
+          <small className="koc-muted">
+            DOCUMENT / RUNBOOK 支持 Markdown、TXT、PDF、Word、ODT、RTF、HTML、CSV、JSON 与
+            YAML；JSONL 保持批量导入。
+          </small>
         </label>
         <label className="koc-filter">
           <span>重复策略</span>

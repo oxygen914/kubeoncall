@@ -25,7 +25,7 @@ import com.kubeoncall.task.AsyncTaskRecord;
 import com.kubeoncall.task.AsyncTaskRepository;
 
 /**
- * Uploads a JSONL source first, then atomically creates its import/task/audit/outbox facts.
+ * Uploads a canonical JSONL source first, then atomically creates its import/task/audit/outbox facts.
  *
  * <p>A normal database rollback removes the just-uploaded object. Process-death orphan cleanup is
  * intentionally a separate maintenance concern.
@@ -75,6 +75,7 @@ public class KnowledgeImportSubmissionService {
                 request.put("sourceBucket", source.bucket());
                 request.put("sourceObjectKey", source.objectKey());
                 request.put("sourceChecksum", checksum);
+                request.put("importType", upload.importType());
                 request.put("duplicatePolicy", duplicatePolicy);
                 request.put("dryRun", upload.dryRun());
                 putIfPresent(request, "datasetVersion", upload.datasetVersion());
@@ -93,7 +94,7 @@ public class KnowledgeImportSubmissionService {
                 KnowledgeImportRecord importRecord = importRepository.create(new KnowledgeImportRepository.CreateImport(
                         importPublicId,
                         task.publicId(),
-                        "JSONL",
+                        upload.importType(),
                         duplicatePolicy,
                         upload.dryRun(),
                         source.bucket(),
@@ -144,15 +145,15 @@ public class KnowledgeImportSubmissionService {
 
     private void validate(Upload upload) {
         if (upload == null || upload.content() == null || upload.content().length == 0) {
-            throw new IllegalArgumentException("A non-empty JSONL file is required");
+            throw new IllegalArgumentException("A non-empty knowledge import source is required");
         }
         int limit = Math.max(1, properties.getRag().getJsonlMaxPayloadBytes());
         if (upload.content().length > limit) {
-            throw new IllegalArgumentException("JSONL file exceeds the configured byte limit");
+            throw new IllegalArgumentException("Knowledge import source exceeds the configured byte limit");
         }
         int maxLines = Math.max(1, properties.getRag().getJsonlMaxLines());
         if (nonBlankLineCount(upload.content()) > maxLines) {
-            throw new IllegalArgumentException("JSONL file exceeds the configured line limit");
+            throw new IllegalArgumentException("Knowledge import source exceeds the configured line limit");
         }
     }
 
@@ -190,9 +191,17 @@ public class KnowledgeImportSubmissionService {
     }
 
     public record Upload(
-            String originalFilename, byte[] content, String duplicatePolicy, boolean dryRun, String datasetVersion) {
+            String importType,
+            String originalFilename,
+            byte[] content,
+            String duplicatePolicy,
+            boolean dryRun,
+            String datasetVersion) {
 
         public Upload {
+            importType = importType == null || importType.isBlank()
+                    ? "JSONL"
+                    : importType.trim().toUpperCase();
             content = content == null ? null : content.clone();
         }
 

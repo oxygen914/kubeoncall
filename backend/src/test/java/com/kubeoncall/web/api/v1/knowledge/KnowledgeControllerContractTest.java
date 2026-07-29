@@ -31,6 +31,7 @@ import com.kubeoncall.identity.PermissionCode;
 import com.kubeoncall.identity.UserAccount;
 import com.kubeoncall.knowledge.KnowledgeDocumentCommandService;
 import com.kubeoncall.knowledge.KnowledgeDocumentCommandService.MutationOutcome;
+import com.kubeoncall.knowledge.KnowledgeImportContentNormalizer;
 import com.kubeoncall.knowledge.KnowledgeImportSubmissionService;
 import com.kubeoncall.knowledge.mysql.KnowledgeDocumentRecord;
 import com.kubeoncall.knowledge.mysql.KnowledgeDocumentRepository;
@@ -49,6 +50,7 @@ class KnowledgeControllerContractTest {
     private KnowledgeImportRepository imports;
     private KnowledgeDocumentCommandService commands;
     private KnowledgeImportSubmissionService submissions;
+    private KnowledgeImportContentNormalizer contentNormalizer;
     private V1Security security;
 
     @BeforeEach
@@ -57,15 +59,24 @@ class KnowledgeControllerContractTest {
         imports = mock(KnowledgeImportRepository.class);
         commands = mock(KnowledgeDocumentCommandService.class);
         submissions = mock(KnowledgeImportSubmissionService.class);
+        contentNormalizer = mock(KnowledgeImportContentNormalizer.class);
         security = mock(V1Security.class);
         when(documents.isAvailable()).thenReturn(true);
         when(imports.isAvailable()).thenReturn(true);
         when(commands.isAvailable()).thenReturn(true);
         when(submissions.isAvailable()).thenReturn(true);
+        when(contentNormalizer.normalize(any(), any(), any(), any()))
+                .thenAnswer(invocation -> new KnowledgeImportContentNormalizer.NormalizedImport(
+                        invocation.getArgument(0), invocation.getArgument(1), invocation.getArgument(3)));
         when(security.requirePermission(PermissionCode.KNOWLEDGE_WRITE)).thenReturn(principal());
         when(security.requirePermission(PermissionCode.KNOWLEDGE_DELETE)).thenReturn(principal());
         mockMvc = MockMvcBuilders.standaloneSetup(new KnowledgeController(
-                        provider(documents), provider(imports), provider(commands), provider(submissions), security))
+                        provider(documents),
+                        provider(imports),
+                        provider(commands),
+                        provider(submissions),
+                        contentNormalizer,
+                        security))
                 .addFilters(new RequestIdFilter())
                 .setControllerAdvice(new V1ApiExceptionHandler())
                 .build();
@@ -162,6 +173,22 @@ class KnowledgeControllerContractTest {
                 .andExpect(jsonPath("$.data.importId").value("imp_1"))
                 .andExpect(jsonPath("$.data.taskId").value("tsk_1"))
                 .andExpect(jsonPath("$.data.status").value("PENDING"));
+    }
+
+    @Test
+    void documentImportUsesNormalizedDocumentPayload() throws Exception {
+        KnowledgeImportRecord record = importRecord();
+        when(submissions.submit(any(), any()))
+                .thenReturn(new KnowledgeImportSubmissionService.Submission(record, "tsk_1"));
+        when(contentNormalizer.normalize(eq("DOCUMENT"), any(), any(), any()))
+                .thenReturn(new KnowledgeImportContentNormalizer.NormalizedImport(
+                        "DOCUMENT", "runbook.md", "{\"title\":\"runbook\",\"content\":\"guide\"}\n".getBytes()));
+
+        mockMvc.perform(multipart("/api/v1/knowledge/imports")
+                        .file(new MockMultipartFile("file", "runbook.md", "text/markdown", "# guide".getBytes()))
+                        .param("importType", "DOCUMENT"))
+                .andExpect(status().isAccepted())
+                .andExpect(jsonPath("$.data.importId").value("imp_1"));
     }
 
     @Test

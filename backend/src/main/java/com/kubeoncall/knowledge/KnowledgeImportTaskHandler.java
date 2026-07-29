@@ -28,7 +28,7 @@ import com.kubeoncall.task.worker.AsyncTaskContext;
 import com.kubeoncall.task.worker.AsyncTaskHandler;
 
 /**
- * Retry-safe JSONL import handler.
+ * Retry-safe canonical JSONL import handler for JSONL, document and runbook uploads.
  *
  * <p>Input errors become a partial-result report. A syntactically valid line that fails inside the
  * existing ES ingestion service is treated as an infrastructure failure and is rethrown so the
@@ -137,9 +137,9 @@ public class KnowledgeImportTaskHandler implements AsyncTaskHandler {
             SourceLine sourceLine, KnowledgeImportRecord importRecord, AsyncTaskContext context) {
         ParsedLine line = parse(sourceLine, importRecord.datasetVersion());
         String checksum = sha256(sourceLine.content().getBytes(StandardCharsets.UTF_8));
-        String documentPublicId = publicDocumentId(line.externalDocumentId());
+        String documentPublicId = publicDocumentId(importRecord.importType(), line.externalDocumentId());
         KnowledgeDocumentRecord existing = documentRepository
-                .findDocumentByExternalId("JSONL", line.externalDocumentId(), true)
+                .findDocumentByExternalId(importRecord.importType(), line.externalDocumentId(), true)
                 .orElse(null);
         KnowledgeDocumentVersionRecord sameVersion = existing == null
                 ? null
@@ -175,7 +175,7 @@ public class KnowledgeImportTaskHandler implements AsyncTaskHandler {
                     documentPublicId,
                     line.externalDocumentId(),
                     line.title(),
-                    "JSONL",
+                    importRecord.importType(),
                     "minio://" + importRecord.sourceBucket() + "/" + importRecord.sourceObjectKey() + "#line="
                             + sourceLine.number(),
                     importRecord.datasetVersion(),
@@ -319,9 +319,9 @@ public class KnowledgeImportTaskHandler implements AsyncTaskHandler {
         }
     }
 
-    private static String publicDocumentId(String externalId) {
+    private static String publicDocumentId(String importType, String externalId) {
         return "doc_"
-                + sha256(("JSONL:" + externalId).getBytes(StandardCharsets.UTF_8))
+                + sha256((importType + ":" + externalId).getBytes(StandardCharsets.UTF_8))
                         .substring(0, 32);
     }
 

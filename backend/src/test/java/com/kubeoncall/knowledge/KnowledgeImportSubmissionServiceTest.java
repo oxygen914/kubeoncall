@@ -32,10 +32,10 @@ class KnowledgeImportSubmissionServiceTest {
 
         assertThatThrownBy(() -> service.submit(
                         new KnowledgeImportSubmissionService.Upload(
-                                "oversized.jsonl", new byte[129], "SKIP", false, null),
+                                "JSONL", "oversized.jsonl", new byte[129], "SKIP", false, null),
                         new KnowledgeImportSubmissionService.Actor(1L, "tester", "req_large_import", null, null)))
                 .isInstanceOf(IllegalArgumentException.class)
-                .hasMessage("JSONL file exceeds the configured byte limit");
+                .hasMessage("Knowledge import source exceeds the configured byte limit");
         verifyNoInteractions(storage);
     }
 }
