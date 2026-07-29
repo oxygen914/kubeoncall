@@ -13,10 +13,12 @@ export type IconName =
   | 'chevron-right'
   | 'cluster'
   | 'execution'
+  | 'external-link'
   | 'grid'
   | 'integration'
   | 'key'
   | 'logout'
+  | 'logs'
   | 'memory'
   | 'menu'
   | 'moon'
@@ -58,6 +60,22 @@ function iconPath(name: IconName) {
       )
     case 'activity':
       return <path d="M3 12h4l2.2-6 4.1 12 2.2-6H21" />
+    case 'logs':
+      return (
+        <>
+          <path d="M8 6h12M8 12h12M8 18h12" />
+          <circle cx="4" cy="6" r="1" />
+          <circle cx="4" cy="12" r="1" />
+          <circle cx="4" cy="18" r="1" />
+        </>
+      )
+    case 'external-link':
+      return (
+        <>
+          <path d="M14 4h6v6M20 4l-9 9" />
+          <path d="M18 13v5a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h5" />
+        </>
+      )
     case 'cluster':
       return (
         <>

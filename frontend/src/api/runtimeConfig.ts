@@ -2,8 +2,8 @@
  * Runtime configuration loader.
  *
  * Build-once, run-anywhere: the same static bundle can be deployed to any
- * environment. Environment-specific values (API base URL, SSE path, release
- * SHA, support URL) are injected at deploy time via `/config/runtime.json`,
+ * environment. Environment-specific values (API base URL, SSE path, Grafana
+ * base URL, release SHA, support URL) are injected at deploy time via `/config/runtime.json`,
  * which Nginx (or a startup script) serves from the same origin.
  *
  * If the config file is missing or malformed we fall back to safe same-origin
@@ -21,6 +21,8 @@ export interface RuntimeConfig {
   release: string
   /** Optional support / docs URL shown in error UI. */
   supportUrl: string
+  /** Optional Grafana base URL used for deep-analysis links. */
+  grafanaBaseUrl: string
 }
 
 const SAFE_DEFAULTS: RuntimeConfig = {
@@ -29,6 +31,7 @@ const SAFE_DEFAULTS: RuntimeConfig = {
   environment: 'local',
   release: 'dev',
   supportUrl: '',
+  grafanaBaseUrl: '',
 }
 
 let cached: RuntimeConfig | undefined
@@ -43,6 +46,8 @@ function mergeWithDefaults(partial: unknown): RuntimeConfig {
     environment: typeof p.environment === 'string' ? p.environment : SAFE_DEFAULTS.environment,
     release: typeof p.release === 'string' ? p.release : SAFE_DEFAULTS.release,
     supportUrl: typeof p.supportUrl === 'string' ? p.supportUrl : SAFE_DEFAULTS.supportUrl,
+    grafanaBaseUrl:
+      typeof p.grafanaBaseUrl === 'string' ? p.grafanaBaseUrl : SAFE_DEFAULTS.grafanaBaseUrl,
   }
 }
 

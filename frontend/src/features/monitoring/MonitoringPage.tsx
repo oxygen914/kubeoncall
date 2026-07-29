@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/Button'
 import { StatusBadge, type StatusTone } from '@/components/ui/StatusBadge'
 import { hasPermission, PERMISSIONS } from '@/features/auth/permissions'
 import { useSession } from '@/features/auth/useSession'
+import { getGrafanaDashboardUrl } from '@/lib/grafana'
 import {
   getHealthTrend,
   getMonitoringCorrelations,
@@ -708,10 +709,7 @@ function healthPolyline(points: HealthPoint[]): string {
 }
 
 function GrafanaLink() {
-  const href =
-    typeof window !== 'undefined' && ['127.0.0.1', 'localhost'].includes(window.location.hostname)
-      ? `${window.location.protocol}//${window.location.hostname}:3000`
-      : null
+  const href = getGrafanaDashboardUrl('overview')
   return href ? (
     <a
       className="koc-btn koc-btn--secondary koc-btn--md"

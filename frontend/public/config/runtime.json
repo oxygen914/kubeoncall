@@ -3,5 +3,6 @@
   "ssePath": "/api/v1/events/stream",
   "environment": "local",
   "release": "dev",
-  "supportUrl": ""
+  "supportUrl": "",
+  "grafanaBaseUrl": "http://127.0.0.1:3000"
 }

@@ -3,14 +3,18 @@ import clsx from 'clsx'
 import { hasPermission, PERMISSIONS, type Permission } from '@/features/auth/permissions'
 import type { SessionData } from '@/api/auth'
 import { Icon, type IconName } from '@/components/ui/Icon'
+import { getGrafanaDashboardUrl, type GrafanaDashboard } from '@/lib/grafana'
 
-interface NavItem {
-  to: string
+interface NavItemBase {
   label: string
   icon: IconName
   permission?: Permission
   permissions?: Permission[]
 }
+
+type NavItem =
+  | (NavItemBase & { to: string; grafanaDashboard?: never })
+  | (NavItemBase & { to?: never; grafanaDashboard: GrafanaDashboard })
 
 interface NavSection {
   label: string
@@ -29,6 +33,12 @@ const NAV_SECTIONS: NavSection[] = [
         permission: PERMISSIONS.DASHBOARD_READ,
       },
       { to: '/alarms', label: '告警', icon: 'alarm', permission: PERMISSIONS.ALARM_READ },
+      {
+        grafanaDashboard: 'logs',
+        label: '日志分析',
+        icon: 'logs',
+        permission: PERMISSIONS.DASHBOARD_READ,
+      },
       {
         to: '/changes',
         label: '变更事件',
@@ -191,9 +201,10 @@ function SidebarSection({
 }) {
   const visibleItems = section.items.filter(
     (item) =>
-      (!item.permission && !item.permissions) ||
-      (item.permission ? hasPermission(session, item.permission) : false) ||
-      (item.permissions?.some((permission) => hasPermission(session, permission)) ?? false),
+      ((!item.permission && !item.permissions) ||
+        (item.permission ? hasPermission(session, item.permission) : false) ||
+        (item.permissions?.some((permission) => hasPermission(session, permission)) ?? false)) &&
+      (!item.grafanaDashboard || Boolean(getGrafanaDashboardUrl(item.grafanaDashboard))),
   )
 
   if (visibleItems.length === 0) return null
@@ -206,20 +217,53 @@ function SidebarSection({
         <h2>{section.label}</h2>
       )}
       <ul>
-        {visibleItems.map((item) => (
-          <li key={item.to}>
-            <NavLink
-              to={item.to}
-              className={({ isActive }) =>
-                clsx('koc-sidebar__link', isActive && 'koc-sidebar__link--active')
-              }
-              title={collapsed ? item.label : undefined}
-            >
-              <Icon name={item.icon} />
-              {collapsed ? <span className="koc-visually-hidden">{item.label}</span> : item.label}
-            </NavLink>
-          </li>
-        ))}
+        {visibleItems.map((item) => {
+          const key = item.to ?? `grafana:${item.grafanaDashboard}`
+          if (item.grafanaDashboard) {
+            const href = getGrafanaDashboardUrl(item.grafanaDashboard)
+            if (!href) return null
+            return (
+              <li key={key}>
+                <a
+                  className="koc-sidebar__link"
+                  href={href}
+                  target="_blank"
+                  rel="noreferrer"
+                  title={collapsed ? item.label : '在新标签页打开 Grafana Logs'}
+                >
+                  <Icon name={item.icon} />
+                  {collapsed ? (
+                    <span className="koc-visually-hidden">{item.label}</span>
+                  ) : (
+                    item.label
+                  )}
+                  <span className="koc-visually-hidden">（在新标签页打开）</span>
+                  {collapsed ? null : (
+                    <Icon
+                      className="koc-sidebar__external-indicator"
+                      name="external-link"
+                      size={14}
+                    />
+                  )}
+                </a>
+              </li>
+            )
+          }
+          return (
+            <li key={key}>
+              <NavLink
+                to={item.to}
+                className={({ isActive }) =>
+                  clsx('koc-sidebar__link', isActive && 'koc-sidebar__link--active')
+                }
+                title={collapsed ? item.label : undefined}
+              >
+                <Icon name={item.icon} />
+                {collapsed ? <span className="koc-visually-hidden">{item.label}</span> : item.label}
+              </NavLink>
+            </li>
+          )
+        })}
       </ul>
     </section>
   )
