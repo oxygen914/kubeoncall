@@ -51,6 +51,77 @@ test('authenticated operator can inspect the overview window and drill into exec
     })
   })
 
+  await page.route('**/api/v1/monitoring/clusters', async (route) => {
+    await route.fulfill({
+      contentType: 'application/json',
+      body: JSON.stringify(
+        envelope({
+          clusters: [
+            {
+              name: 'prod',
+              nodeMetricsAvailable: true,
+              kubernetesStateAvailable: true,
+              nodeCount: 2,
+            },
+          ],
+          collectedAt: '2026-07-23T10:00:00Z',
+        }),
+      ),
+    })
+  })
+  await page.route('**/api/v1/monitoring/summary?*', async (route) => {
+    await route.fulfill({
+      contentType: 'application/json',
+      body: JSON.stringify(
+        envelope({
+          cluster: 'prod',
+          totalNodes: 2,
+          readyNodes: 2,
+          notReadyNodes: 0,
+          unknownNodes: 0,
+          totalPods: 12,
+          podPhaseCounts: { Running: 12 },
+          averageCpuUsagePercent: 42,
+          dataSources: { nodeMetricsAvailable: true, kubernetesStateAvailable: true },
+          collectedAt: '2026-07-23T10:00:00Z',
+        }),
+      ),
+    })
+  })
+  await page.route('**/api/v1/monitoring/pods?*', async (route) => {
+    await route.fulfill({
+      contentType: 'application/json',
+      body: JSON.stringify(
+        envelope({
+          cluster: 'prod',
+          kubernetesStateAvailable: true,
+          pods: [],
+          returned: 0,
+          collectedAt: '2026-07-23T10:00:00Z',
+        }),
+      ),
+    })
+  })
+  await page.route('**/api/v1/alarms?*', async (route) => {
+    await route.fulfill({
+      contentType: 'application/json',
+      body: JSON.stringify({
+        data: [],
+        page: { number: 1, size: 5, totalElements: 0, totalPages: 0, hasNext: false },
+        meta,
+      }),
+    })
+  })
+  await page.route('**/api/v1/approvals?*', async (route) => {
+    await route.fulfill({
+      contentType: 'application/json',
+      body: JSON.stringify({
+        data: [],
+        page: { number: 1, size: 5, totalElements: 0, totalPages: 0, hasNext: false },
+        meta,
+      }),
+    })
+  })
   await page.route('**/api/v1/executions?*', async (route) => {
     await route.fulfill({
       contentType: 'application/json',
@@ -78,7 +149,7 @@ test('authenticated operator can inspect the overview window and drill into exec
 
   await expect(page.getByRole('heading', { name: '概览' })).toBeVisible()
   await expect(page.getByRole('button', { name: /失败执行/ })).toContainText('4')
-  await expect(page.getByRole('heading', { name: '失败原因 Top 5' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: '失败原因' })).toBeVisible()
   await expect(page.getByText('TOOL_TIMEOUT')).toBeVisible()
 
   await page.getByLabel('时间窗口').selectOption('6h')
