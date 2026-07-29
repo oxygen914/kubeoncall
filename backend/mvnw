@@ -97,6 +97,27 @@ if [ ! -e "$WRAPPER_JAR" ] ; then
   WRAPPER_DOWNLOADED=true
 fi
 
+# Verify the wrapper JAR before executing it.
+if [ -e "$WRAPPER_PROPERTIES" ] ; then
+  wrapperSha256Sum=$(grep -E '^wrapperSha256Sum=' "$WRAPPER_PROPERTIES" | sed -E 's/^wrapperSha256Sum=//')
+fi
+if [ -n "$wrapperSha256Sum" ] ; then
+  if command -v sha256sum >/dev/null 2>&1 ; then
+    actualWrapperSha256=$(sha256sum "$WRAPPER_JAR" | awk '{print $1}')
+  elif command -v shasum >/dev/null 2>&1 ; then
+    actualWrapperSha256=$(shasum -a 256 "$WRAPPER_JAR" | awk '{print $1}')
+  else
+    echo "ERROR: Cannot verify Maven Wrapper JAR (need sha256sum or shasum)." >&2
+    exit 1
+  fi
+  if [ "$actualWrapperSha256" != "$wrapperSha256Sum" ] ; then
+    echo "ERROR: Maven Wrapper JAR SHA-256 mismatch." >&2
+    echo "Expected: $wrapperSha256Sum" >&2
+    echo "Actual:   $actualWrapperSha256" >&2
+    exit 1
+  fi
+fi
+
 # Execute Maven
 MAVEN_CMDLINE_ARGS="$MAVEN_CONFIG $@"
 export MAVEN_CMDLINE_ARGS

@@ -41,4 +41,4 @@ docker compose up -d redis elasticsearch minio minio-init
 - 后端代码只放在 `backend/`，Web Console 代码只放在 `frontend/`，跨服务部署资产留在根目录。
 - 将格式化、包迁移和业务逻辑修改拆为独立提交。
 
-安装与配置入口见[文档索引](docs/README.md)，模块边界见[项目架构](项目架构.md)。
+安装与配置入口见[文档索引](docs/README.md)，模块边界见[项目架构](docs/architecture/项目架构.md)。

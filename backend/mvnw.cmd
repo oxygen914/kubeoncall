@@ -90,15 +90,23 @@ cd "%EXEC_DIR%"
 
 :endDetectBaseDir
 
-IF NOT EXIST "%MAVEN_PROJECTBASEDIR%\.mvn\wrapper\maven-wrapper.jar" (
-    if exist "%MAVEN_PROJECTBASEDIR%\.mvn\wrapper\maven-wrapper.properties" (
-        for /f "usebackq tokens=1* delims==" %%a in ("%MAVEN_PROJECTBASEDIR%\.mvn\wrapper\maven-wrapper.properties") do (
-            if "%%a"=="wrapperUrl" set wrapperUrl=%%b
-        )
+if exist "%MAVEN_PROJECTBASEDIR%\.mvn\wrapper\maven-wrapper.properties" (
+    for /f "usebackq tokens=1* delims==" %%a in ("%MAVEN_PROJECTBASEDIR%\.mvn\wrapper\maven-wrapper.properties") do (
+        if "%%a"=="wrapperUrl" set wrapperUrl=%%b
+        if "%%a"=="wrapperSha256Sum" set wrapperSha256Sum=%%b
     )
-    if "%wrapperUrl%"=="" set wrapperUrl="https://repo.maven.apache.org/maven2/org/apache/maven/wrapper/maven-wrapper/3.3.2/maven-wrapper-3.3.2.jar"
+)
+
+IF NOT EXIST "%MAVEN_PROJECTBASEDIR%\.mvn\wrapper\maven-wrapper.jar" (
+    if "%wrapperUrl%"=="" set wrapperUrl=https://repo.maven.apache.org/maven2/org/apache/maven/wrapper/maven-wrapper/3.3.2/maven-wrapper-3.3.2.jar
     echo Downloading Maven Wrapper from %wrapperUrl%
-    powershell -Command "&{ $ErrorActionPreference = 'SilentlyContinue'; Invoke-WebRequest -Uri %wrapperUrl% -OutFile '%MAVEN_PROJECTBASEDIR%\.mvn\wrapper\maven-wrapper.jar'}"
+    powershell -NoProfile -Command "&{ $ErrorActionPreference = 'Stop'; Invoke-WebRequest -Uri '%wrapperUrl%' -OutFile '%MAVEN_PROJECTBASEDIR%\.mvn\wrapper\maven-wrapper.jar'}"
+    if ERRORLEVEL 1 goto error
+)
+
+if not "%wrapperSha256Sum%"=="" (
+    powershell -NoProfile -Command "&{ $actual = (Get-FileHash -Algorithm SHA256 '%MAVEN_PROJECTBASEDIR%\.mvn\wrapper\maven-wrapper.jar').Hash.ToLowerInvariant(); if ($actual -ne '%wrapperSha256Sum%') { Write-Error ('Maven Wrapper JAR SHA-256 mismatch. Expected: %wrapperSha256Sum%; Actual: ' + $actual); exit 1 } }"
+    if ERRORLEVEL 1 goto error
 )
 
 set MAVEN_PROJECTBASEDIR=%MAVEN_PROJECTBASEDIR:"=%

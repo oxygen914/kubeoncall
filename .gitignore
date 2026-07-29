@@ -12,9 +12,9 @@ npm-debug.log*
 /backend/.mvn/wrapper/maven-wrapper.jar
 
 # Local environment and secrets
-/.env
-/.env.*
-!/.env.example
+**/.env
+**/.env.*
+!**/.env.example
 **/secrets/
 *.pem
 *.key
@@ -22,6 +22,21 @@ npm-debug.log*
 *.jks
 api-key*.md
 pre-api-token*.md
+
+# Go build and test outputs
+/sandbox-controller/sandbox-controller
+**/*.test
+**/coverage.out
+
+# Python environments, caches, and coverage outputs
+**/__pycache__/
+**/.pytest_cache/
+**/.mypy_cache/
+**/.ruff_cache/
+**/.venv/
+**/*.py[cod]
+**/.coverage
+**/htmlcov/
 
 # IDE, editor and OS metadata
 /.idea/
@@ -42,14 +57,11 @@ Thumbs.db
 /.codex/
 /.agents/
 
-# Local-only planning, interview and scratch documents
-/重构计划/
-/前后端重构-7.20/
+# Project refactor plans, progress records, and acceptance documents are tracked.
+# Keep only personal interview materials and scratch documents local.
 /面试问题/
 /新面试问题/
 /mianshiti/
-/代码风格重构.md
-/代码风格重构进度.md
 /notes/
 /drafts/
 *.local.md

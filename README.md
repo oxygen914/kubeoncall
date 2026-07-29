@@ -204,8 +204,8 @@ Node Exporter → Prometheus → Alertmanager → KubeOnCall
 
 默认规则覆盖节点不可达、CPU、内存、磁盘和 inode；接入 kube-state-metrics 后还会启用
 `NodeNotReady` 和 `PodPendingTooLong`。集群态势页与生产指标接入步骤见
-[监控重构计划](监控重构/KubeOnCall监控能力重构实施计划.md)和
-[Kubernetes 指标接入指南](监控重构/Kubernetes指标接入指南.md)。
+[监控重构计划](docs/plans/active/monitoring/KubeOnCall监控能力重构实施计划.md)和
+[Kubernetes 指标接入指南](docs/guides/Kubernetes指标接入指南.md)。
 
 本地单节点 kube-state-metrics 验收：
 
@@ -259,7 +259,7 @@ Compose 中的 Node Exporter 用于容器化演练；生产 Kubernetes 节点应
 - [阿里云模型联调](docs/阿里云模型联调.md)
 - [后端开发说明](backend/README.md)
 - [前端控制台说明](frontend/README.md)
-- [项目架构](项目架构.md)
+- [项目架构](docs/architecture/项目架构.md)
 - [贡献指南](CONTRIBUTING.md)
 
 ## 仓库结构
@@ -270,7 +270,7 @@ kubeoncall/
 ├── backend/                 # Spring Boot、Maven Wrapper、后端测试与镜像
 ├── frontend/                # 独立静态控制台、契约测试与 Nginx 镜像
 ├── deploy/                  # Compose 配套资源、Kubernetes、Helm、监控
-├── docs/                    # 安装、配置、运行和模型联调文档
+├── docs/                    # 架构、实施计划、接入指南和运行文档
 ├── scripts/                 # 告警、模型、MCP、Helm 验证脚本
 ├── .env.example             # 不含真实 Secret 的配置模板
 ├── docker-compose.yml       # 单机编排
