@@ -3,299 +3,415 @@
 <p align="center">
   <picture>
     <source media="(prefers-reduced-motion: reduce)" srcset="assets/readme/kubeoncall/wordmark.svg">
-    <img src="assets/readme/kubeoncall/wordmark.webp" alt="KUBEONCALL animated wordmark" width="720">
+    <img src="assets/readme/kubeoncall/wordmark.webp" alt="Animated KubeOnCall wordmark" width="720">
   </picture>
 </p>
 
-[![CI](https://github.com/oxygen914/kubeoncall/actions/workflows/ci.yml/badge.svg)](https://github.com/oxygen914/kubeoncall/actions/workflows/ci.yml)
+<p align="center">
+  <a href="https://github.com/oxygen914/kubeoncall/actions/workflows/ci.yml"><img src="https://github.com/oxygen914/kubeoncall/actions/workflows/ci.yml/badge.svg" alt="CI status"></a>
+</p>
 
-KubeOnCall 是一个面向 Kubernetes 和云基础设施运维的多智能体服务，把告警接入、诊断编排、RAG、长期记忆、Skill、MCP/HTTP 工具、审批与审计连接成可追踪的工作流。
+English | [简体中文](./README-CN.md)
 
-项目采用前后端分离的单仓库结构：Spring Boot 后端承载核心能力，独立 Web Console 用于数据调试，根目录负责 Docker Compose、部署和文档。
+KubeOnCall is an evidence-driven AI operations control plane for Kubernetes and infrastructure. It
+turns operator questions, alerts, telemetry, runbooks, historical memory, Skills, and external tools
+into durable and auditable Planner → Verifier → Executor workflows.
+
+The repository contains a Spring Boot backend, a React operations console, a Go sandbox controller,
+deployment assets, observability components, and validation scripts. KubeOnCall coordinates
+diagnosis and controlled operations; it does not replace Kubernetes, Prometheus, Loki, an incident
+platform, or a model provider.
 
 > [!IMPORTANT]
-> 当前源码版本为 `0.0.1-SNAPSHOT`，仓库已具备按 `vX.Y.Z` Tag 发布多架构镜像和 Helm OCI
-> Chart 的流水线，但在首个 Release 实际成功前仍不能视为已有正式镜像。仓库尚无独立
-> `LICENSE`；Compose 和 Helm Quickstart 都不代表高可用生产架构。
+> KubeOnCall is under active development. The current source version is `0.0.1-SNAPSHOT`.
+> Docker Compose and Helm Quickstart are intended for development and acceptance testing, not for
+> highly available production deployment. The repository currently has no `LICENSE` or
+> `SECURITY.md`; source availability does not grant an open-source license.
 
-## 为什么使用 KubeOnCall
+## What KubeOnCall provides
 
-- **告警闭环**：接收 Alertmanager Webhook，完成标准化、指纹去重、聚合、策略、确认、恢复、升级和审计。
-- **证据驱动诊断**：Planner → Executor → Verifier 工作流结合指标、工具输出、Runbook 和历史处置记录。
-- **RAG 知识库**：支持文档/JSONL/Runbook 导入、Elasticsearch 关键词与向量检索、RRF 融合和 Cross Encoder 重排。
-- **运维记忆**：支持会话压缩、长期记忆、结构化提取、证据归因、质量评分和统一 Token 预算。
-- **可插拔能力**：从 Markdown Skill 和 MCP/HTTP 工具扩展能力，并提供 allowlist、版本冲突、动态发现和审批边界。
-- **可观测与审计**：提供 Actuator、Prometheus 指标、Grafana Dashboard、执行审计和统一错误响应。
+- **Durable AI operations workflows** — `POST /api/v1/executions` creates an idempotent asynchronous
+  execution backed by MySQL task and node records rather than tying the workflow to one HTTP request.
+- **Evidence before conclusions** — scoped Prometheus and Loki collectors persist evidence,
+  conflicts, confidence, conclusions, and recommended actions separately from model output.
+- **Planner, Verifier, Executor, Closure** — planning, risk verification, tool execution, approval,
+  post-operation verification, rollback, and escalation are represented as explicit workflow stages.
+- **Alert lifecycle governance** — Alertmanager ingestion, normalization, fingerprinting, deduplication,
+  aggregation, suppression, acknowledgement, recovery, escalation, policy replay, and audit.
+- **Knowledge, memory, and Skills** — multi-format knowledge import, hybrid retrieval, reranking,
+  long-term operational memory, and Markdown Skills with allowlists and risk limits.
+- **Operator-facing console and API** — React pages for monitoring, executions, evidence, alarms,
+  approvals, knowledge, memory, Skills, tools, integrations, audit, users, and API tokens.
+- **Extensible execution plane** — built-in HTTP adapters, MCP integration, Kubernetes and Prometheus
+  tools, plus optional isolated sandbox runtimes.
 
-## 架构边界
+## Architecture
 
 ```mermaid
-flowchart LR
-    C["Web Console"] --> API["KubeOnCall Backend API"]
-    W["ChatOps / Alertmanager / CI-CD"] --> API
-    API --> Agent["Planner → Executor → Verifier"]
-    API --> Alarm["告警治理与工作流"]
-    API --> RAG["RAG 与 Runbook"]
-    API --> Memory["记忆与 Skill"]
-    Agent --> Tools["MCP / HTTP / Kubernetes / Prometheus"]
-    Alarm --> Redis[("Redis")]
-    Memory --> Redis
-    RAG --> ES[("Elasticsearch")]
-    RAG --> MinIO[("MinIO")]
+flowchart TB
+    Sources["Operators · Alertmanager · CI/CD · ChatOps"] --> Edge["React Console / REST API"]
+    Edge --> Identity["Session Auth · RBAC · API Tokens · Idempotency"]
+    Identity --> Runtime["Durable Workflow Runtime"]
+
+    Runtime --> Planner["Planner"]
+    Planner --> Context["RAG · Memory · Skill Activation"]
+    Planner --> Evidence["Evidence Orchestrator"]
+    Evidence --> Verifier["Verifier / Approval"]
+    Verifier --> Executor["Executor"]
+    Executor --> Closure["Verification · Rollback · Escalation · Conclusion"]
+
+    Runtime --> Alarm["Alarm Governance"]
+    Runtime --> Sandbox["Optional Sandbox Runs"]
+
+    Runtime --> MySQL[("MySQL\nbusiness facts and workflow records")]
+    Runtime --> Redis[("Redis\ncoordination and compatibility state")]
+    Context --> Elasticsearch[("Elasticsearch\nknowledge and memory")]
+    Context --> MinIO[("MinIO\nsource documents and artifacts")]
+
+    Evidence --> Observability["Prometheus · Loki"]
+    Executor --> Tools["Kubernetes Adapter · MCP · HTTP Tools"]
+    Alarm --> Webhooks["Alertmanager · Notification · Incident Systems"]
 ```
 
-KubeOnCall 本身不部署生产 Kubernetes 集群、工单系统或模型服务。它通过 HTTP、Webhook、Redis、Elasticsearch、MinIO 和外部模型接口连接这些系统。
+### Control plane
 
-## 快速开始
+The Spring Boot backend owns API contracts, identity and RBAC, workflow submission, policy
+evaluation, evidence and conclusion persistence, approval state, audit, and capability reporting.
+The React console consumes the versioned `/api/v1` surface and does not infer whether an optional
+capability is enabled.
 
-Docker Compose 是最快的本地或单机 Linux 启动方式。
+### Workflow plane
 
-### 1. 前置条件
+The preferred Ask path is asynchronous:
 
-- Docker Engine
-- Docker Compose v2
-- 完整 AI/RAG 能力所需的阿里云百炼 API Key
+```text
+POST /api/v1/executions
+  → durable execution and task
+  → Planner query/think
+  → scoped evidence collection
+  → Verifier and approval decision
+  → Executor
+  → operation closure
+  → persisted evidence, conclusion, nodes, and audit
+```
 
-Linux 首次运行 Elasticsearch 前设置：
+`POST /api/ask` and `POST /api/v1/ask` remain read-only compatibility paths. New integrations should
+use `/api/v1/executions` with a user-backed session and an `Idempotency-Key`.
+
+### Data and execution boundaries
+
+| Component                        | Responsibility                                                                                                           |
+| -------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| MySQL 8                          | Users, roles, sessions, API tokens, workflow executions, async tasks, evidence, conclusions, and migrated business facts |
+| Redis 7                          | Coordination, short-lived state, legacy compatibility, leases, deduplication, and selected workflow state                |
+| Elasticsearch 8.14               | Knowledge chunks, hybrid retrieval, and long-term memory indexes                                                         |
+| MinIO                            | Original knowledge documents and sandbox artifacts                                                                       |
+| Prometheus / Loki                | Metrics and log evidence; queries are constructed and scope-checked by the server                                        |
+| Kubernetes / MCP / HTTP adapters | External facts and actions; availability depends on deployment configuration                                             |
+| Sandbox Controller               | Optional Kubernetes Job isolation for explicitly enabled runtime modes                                                   |
+
+The control plane is not proof that every external integration is connected. A successful workflow
+means the workflow completed; it does not by itself mean the incident was resolved or that the
+conclusion had sufficient evidence.
+
+## Quick start with Docker Compose
+
+Docker Compose is the shortest local evaluation path.
+
+### Prerequisites
+
+- Docker Engine and Docker Compose v2
+- 4 vCPU, 8 GiB RAM, and 30 GiB free disk recommended for the full local stack
+- On Linux, `vm.max_map_count=262144` for Elasticsearch
+- An Aliyun Bailian/DashScope API key for real-model planning, embedding, or reranking
 
 ```bash
 sudo sysctl -w vm.max_map_count=262144
 ```
 
-### 2. 配置
+### 1. Prepare configuration
 
 ```bash
 cp .env.example .env
 chmod 600 .env
 ```
 
-编辑 `.env`，替换所有 `CHANGE_ME` 值。至少需要设置：
+Replace every `CHANGE_ME` value. At minimum, set independent MySQL passwords, the MinIO password,
+Grafana password, legacy API role tokens, and a one-time bootstrap administrator:
 
-- Viewer、Operator、Admin 三个 API Token
-- MinIO 密码
-- Alertmanager Token
-- Grafana 密码
+```dotenv
+MYSQL_PASSWORD=YOUR_APP_PASSWORD
+MYSQL_MIGRATION_PASSWORD=YOUR_MIGRATION_PASSWORD
+MYSQL_ROOT_PASSWORD=YOUR_ROOT_PASSWORD
+MINIO_ROOT_PASSWORD=YOUR_MINIO_PASSWORD
+GRAFANA_ADMIN_PASSWORD=YOUR_GRAFANA_PASSWORD
 
-基础栈可在没有模型密钥时启动，并回退到规则规划。若启用 Spring AI 规划模型，先设置 `ALIYUN_API_KEY`，再将 `SPRING_AUTOCONFIGURE_EXCLUDE` 置空并把 `SPRING_AI_OPENAI_CHAT_ENABLED=true`；当前 Spring AI `1.0.0-M2` 会无条件初始化 moderation client，因此两项必须同时调整。
-
-启用 Alertmanager 前，把同一个 Token 写入 credentials file：
-
-```bash
-mkdir -p deploy/alertmanager/secrets
-
-sed -n 's/^ALERTMANAGER_WEBHOOK_TOKEN=//p' .env \
-  > deploy/alertmanager/secrets/kubeoncall-webhook-token
-
-chmod 600 deploy/alertmanager/secrets/kubeoncall-webhook-token
+KUBEONCALL_BOOTSTRAP_ADMIN_ENABLED=true
+KUBEONCALL_BOOTSTRAP_ADMIN_USERNAME=admin
+KUBEONCALL_BOOTSTRAP_ADMIN_PASSWORD=YOUR_STRONG_ADMIN_PASSWORD
 ```
 
-### 3. 启动
+Choose one Planner mode.
+
+Real model with a fail-closed startup canary:
+
+```dotenv
+ALIYUN_API_KEY=YOUR_ALIYUN_API_KEY
+KUBEONCALL_PLANNER_MODE=REAL_MODEL
+KUBEONCALL_PLANNER_CANARY_ENABLED=true
+KUBEONCALL_PLANNER_CANARY_FAIL_FAST=true
+```
+
+Local rule fallback without a model call:
+
+```dotenv
+KUBEONCALL_PLANNER_MODE=RULE_FALLBACK
+KUBEONCALL_PLANNER_CANARY_ENABLED=false
+```
+
+Evidence collectors are fail-closed. Leave them disabled until their source and scope allowlists are
+configured:
+
+```dotenv
+KUBEONCALL_EVIDENCE_PROMETHEUS_ENABLED=false
+KUBEONCALL_EVIDENCE_LOKI_ENABLED=false
+KUBEONCALL_EVIDENCE_K8S_EVENTS_ENABLED=false
+KUBEONCALL_EVIDENCE_POD_LOGS_ENABLED=false
+```
+
+### 2. Start and verify
 
 ```bash
 docker compose config --quiet
 docker compose up -d --build
+docker compose ps
+
+curl --fail http://127.0.0.1:8080/actuator/health
+curl --fail http://127.0.0.1:8081/healthz
 ```
 
-Compose 会启动：
-
-- KubeOnCall Backend
-- KubeOnCall Console
-- Redis 7
-- Elasticsearch 8.14
-- MinIO 和一次性 bucket 初始化任务
-- Prometheus
-- Grafana
-
-启动可选 Alertmanager 和 Node Exporter：
+The default stack starts Backend, Console, MySQL, Redis, Elasticsearch, MinIO, Prometheus, Loki,
+Alloy, and Grafana. Alertmanager and Node Exporter are optional:
 
 ```bash
 docker compose --profile alerting up -d --build
 ```
 
-### 4. 验证
+Open <http://127.0.0.1:8081> and sign in with the bootstrap administrator. After the first account is
+created, set `KUBEONCALL_BOOTSTRAP_ADMIN_ENABLED=false`, remove the bootstrap username/password from
+`.env`, and restart the backend:
 
 ```bash
-docker compose ps
-docker compose logs --tail=200 kubeoncall
-curl --fail http://127.0.0.1:8080/actuator/health
-curl --fail http://127.0.0.1:8081/healthz
+docker compose up -d --force-recreate kubeoncall
 ```
 
-使用 Viewer Token 验证 API：
+### 3. Create a durable Ask execution
+
+The console is the preferred first workflow. The equivalent API sequence uses the session and CSRF
+cookies returned by login:
 
 ```bash
-VIEWER_TOKEN="$(
-  sed -n 's/^KUBEONCALL_API_VIEWER_TOKEN=//p' .env
+curl --fail \
+  -c /tmp/kubeoncall-cookies \
+  -H "Content-Type: application/json" \
+  -d '{"username":"admin","password":"YOUR_STRONG_ADMIN_PASSWORD"}' \
+  http://127.0.0.1:8080/api/v1/auth/login
+
+CSRF_TOKEN="$(
+  awk '$6 == "KOC_CSRF" { print $7 }' /tmp/kubeoncall-cookies
 )"
 
 curl --fail \
-  -H "Authorization: Bearer ${VIEWER_TOKEN}" \
-  http://127.0.0.1:8080/api/status
-```
-
-预期响应：
-
-```json
-{"service":"KubeOnCall","status":"UP"}
-```
-
-发起一次运维问答：
-
-```bash
-curl --fail \
-  -X POST http://127.0.0.1:8080/api/ask \
-  -H "Authorization: Bearer ${VIEWER_TOKEN}" \
+  -b /tmp/kubeoncall-cookies \
+  -H "X-CSRF-Token: ${CSRF_TOKEN}" \
+  -H "Idempotency-Key: quickstart-000001" \
   -H "Content-Type: application/json" \
   -d '{
-    "question": "检查 payment 服务最近的错误告警",
-    "sessionId": "quick-start"
-  }'
+    "question": "Inspect recent error signals for the payment service",
+    "sessionId": "quick-start",
+    "cluster": "local",
+    "environment": "development",
+    "namespace": "default",
+    "resourceKind": "Deployment",
+    "resourceName": "payment"
+  }' \
+  http://127.0.0.1:8080/api/v1/executions
 ```
 
-完整的 Linux、源码和 Kubernetes 安装步骤见[安装指南](docs/installation.md)。
+The command returns an accepted execution/task projection. Follow progress in the Console or query
+`GET /api/v1/executions/{executionId}` with the same session cookie.
 
-## 部署方式
+## Core workflows
 
-| 方式 | 适用场景 | 依赖范围 |
-| --- | --- | --- |
-| Docker Compose | 本地开发、单机 Linux、功能演练 | 仓库内编排应用和基础依赖 |
-| Standalone YAML | Minikube 或测试集群 | 包含应用、Redis、ES、MinIO、PVC 和初始化 Job |
-| Helm Quickstart | Kind、Minikube、临时测试集群 | 单命令部署应用与临时 MySQL/Redis/ES/MinIO |
-| Helm Production | 已有 Kubernetes 平台 | 多镜像部署；数据库、存储、监控和工具 Adapter 由平台提供 |
+### Evidence-driven diagnosis
 
-- Compose：[安装指南](docs/installation.md#2-docker-compose-快速安装)
-- Standalone YAML：[后端运行手册](docs/后端运行手册.md#单文件-kubernetes-部署)
-- Helm Quickstart、Production 和 Sandbox Release：[Chart 部署说明](deploy/helm/kubeoncall/README.md)
+The Planner can run in `RULE_FALLBACK`, `RULE_ASSISTED`, or `REAL_MODEL` mode. Model-backed modes
+require an explicit provider key. The startup canary can fail closed when authentication, model
+availability, or the structured response contract is invalid.
 
-Compose 默认把所有端口绑定到 `127.0.0.1`，并使用命名卷保存数据。需要远程访问时优先使用 SSH 隧道或 TLS 反向代理，不要把 Redis、Elasticsearch 或 MinIO 直接暴露到公网。
+Prometheus evidence uses fixed server-owned query templates; Loki queries are server-constructed,
+bounded, and redacted. Cluster and namespace allowlists gate collection. Unavailable evidence sources
+remain visible as unavailable instead of being converted into successful findings.
 
-## 配置
+### Alert lifecycle
 
-配置来源：
+Alertmanager webhooks enter a separate alarm governance path that handles normalization, stable
+fingerprints, active state, deduplication, aggregation, suppression, maintenance windows,
+acknowledgements, recovery confirmations, escalation, policy dry-runs/replay, and audit. Dedicated
+notification or incident delivery still requires a configured external adapter.
 
-1. `backend/src/main/resources/application.yml`：公共默认值。
-2. `application-local.yml` / `application-docker.yml`：运行环境覆盖。
-3. `.env`：Docker Compose 的本地 Secret 和开关，不提交 Git。
-4. Helm values 与 Kubernetes Secret：集群部署配置。
+### Knowledge, memory, and Skills
 
-主要配置组：
+- Knowledge import accepts JSONL, Runbook, and supported document formats, stores originals in
+  MinIO, and indexes parent/chunk records in Elasticsearch.
+- Retrieval supports keyword, vector, and hybrid strategies with RRF, optional reranking, trace, and
+  dataset-version controls.
+- Long-term memory supports extraction, consolidation, stale-state handling, provenance, and
+  injection into later executions.
+- Internal Markdown Skills are matched and activated at runtime. Their prompt, tool allowlist, and
+  maximum risk constrain the workflow; they are not unattended repair scripts.
 
-| 组 | 关键变量 | 默认策略 |
-| --- | --- | --- |
-| API 鉴权 | `KUBEONCALL_API_*_TOKEN` | Compose 示例启用三角色 Bearer |
-| Console/CORS | `CONSOLE_*`、`KUBEONCALL_CORS_*` | Console 监听 `8081`，仅允许显式来源 |
-| 模型 | `ALIYUN_API_KEY`、`SPRING_AI_*` | `qwen-plus` |
-| RAG | `RAG_EMBEDDING_*`、`RAG_RERANK_*` | `text-embedding-v4` + `qwen3-rerank` |
-| 记忆 | `MEMORY_*` | 外部 LLM/Tokenizer 默认关闭 |
-| MCP | `MCP_*` | 默认关闭，配置真实端点后启用 |
-| ChangeEvent | `CHANGE_EVENT_*` | 默认关闭 |
-| 通知 | `ALERT_NOTIFICATION_WEBHOOK_ENDPOINT` | 未配置时只记录和诊断 |
-| 网络 | `*_BIND_ADDRESS` | 默认只监听 `127.0.0.1` |
+### Controlled operations and sandboxing
 
-完整变量、数据边界和持久化说明见[配置参考](docs/configuration.md)。
+Tool execution is checked against catalog capabilities, Skill limits, risk, and approval policy.
+Operation closure records verification, rollback, or escalation outcomes explicitly.
 
-## 节点告警闭环
+The optional Go Sandbox Controller creates isolated Kubernetes Jobs for enabled runtime modes.
+Sandbox is disabled by default and requires released runtime images, HMAC configuration, namespace
+isolation, resource ceilings, and restrictive network policy. See the
+[Sandbox operations and acceptance guide](docs/guides/Sandbox运行与验收手册.md).
 
-仓库保留一条轻量化节点告警链路：
+## Configuration
 
-```text
-Node Exporter → Prometheus → Alertmanager → KubeOnCall
-```
+Configuration is resolved from Spring defaults, profile overlays, environment variables, and
+Kubernetes Secrets/Helm values.
 
-默认规则覆盖节点不可达、CPU、内存、磁盘和 inode；接入 kube-state-metrics 后还会启用
-`NodeNotReady` 和 `PodPendingTooLong`。集群态势页与生产指标接入步骤见
-[监控重构计划](docs/plans/active/monitoring/KubeOnCall监控能力重构实施计划.md)和
-[Kubernetes 指标接入指南](docs/guides/Kubernetes指标接入指南.md)。
+| Area          | Important settings                                                | Default boundary                                                  |
+| ------------- | ----------------------------------------------------------------- | ----------------------------------------------------------------- |
+| Planner       | `KUBEONCALL_PLANNER_MODE`, provider/model, canary timeouts        | Compose can fall back to rules; `.env.example` selects real model |
+| Evidence      | `KUBEONCALL_EVIDENCE_*`, allowed clusters/namespaces              | Disabled and fail-closed                                          |
+| Identity      | MySQL credentials, bootstrap admin, session cookie, login lockout | One-time bootstrap required for first Console login               |
+| Legacy API    | `KUBEONCALL_API_*_TOKEN`, `KUBEONCALL_LEGACY_API_ENABLED`         | Compatibility surface; prefer `/api/v1`                           |
+| RAG           | Embedding, rerank, augmentation, dataset version                  | External model calls require an API key                           |
+| Memory        | extraction, semantic duplicate detection, tokenizer               | Model-backed features are opt-in                                  |
+| MCP           | endpoint, auth mode, discovery, allowed tools                     | Disabled                                                          |
+| Sandbox       | controller endpoint, HMAC, runtime modes, ceilings                | Disabled                                                          |
+| Notifications | `ALERT_NOTIFICATION_WEBHOOK_ENDPOINT`, incident endpoint          | No real recipient delivery when unset                             |
+| Network       | bind addresses, CORS, Cookie `Secure`, NetworkPolicy              | Compose binds host ports to `127.0.0.1`                           |
 
-本地单节点 kube-state-metrics 验收：
+See the [configuration reference](docs/configuration.md) for the complete surface and data boundary.
+
+## Deployment options
+
+| Method                         | Intended use                                 | Important boundary                                                                      |
+| ------------------------------ | -------------------------------------------- | --------------------------------------------------------------------------------------- |
+| Docker Compose                 | Local development and single-host evaluation | Not highly available                                                                    |
+| Standalone Kubernetes manifest | Minikube or test clusters                    | Bundled dependencies and local persistence assumptions                                  |
+| Helm Quickstart                | Kind/Minikube acceptance                     | Temporary infrastructure; data may use `emptyDir`                                       |
+| Helm production values         | Existing Kubernetes platform                 | External MySQL, Redis, Elasticsearch, MinIO, monitoring, secrets, and adapters required |
+
+The release workflow is configured to build multi-architecture images and an OCI Helm Chart from
+`vX.Y.Z` tags. Verify that a release and its immutable digests actually exist before deployment; CI
+configuration alone is not release evidence.
+
+Deployment details:
+
+- [Installation guide](docs/installation.md)
+- [Helm chart guide](deploy/helm/kubeoncall/README.md)
+- [Backend operations guide](docs/后端运行手册.md)
+- [Kubernetes metrics integration](docs/guides/Kubernetes指标接入指南.md)
+- [Kubernetes operation closure contract](docs/guides/Kubernetes操作闭环接入指南.md)
+
+## Security and operational boundaries
+
+- Keep `.env`, API keys, webhook secrets, passwords, Cookie secrets, and production endpoints out of
+  Git and public logs.
+- Compose publishes ports on `127.0.0.1` by default. Use TLS and an authenticated reverse proxy for
+  remote access; never expose MySQL, Redis, Elasticsearch, MinIO, Prometheus, or Loki directly.
+- Session authentication uses an HttpOnly `KOC_SESSION` cookie and a separate `KOC_CSRF` token.
+  Production deployments must enable secure cookies behind HTTPS.
+- External model calls can transmit questions, retrieved knowledge, memory, or evidence. Enable each
+  integration only after reviewing its data boundary.
+- Kubernetes evidence and actions require a separately deployed, scoped adapter. Local `kubectl`
+  access is not evidence that this integration is complete.
+- Generic Webhook support is not the same as a dedicated Feishu, DingTalk, PagerDuty, or ticketing
+  adapter, and configuration is not proof of real-recipient delivery.
+- Compose volumes provide persistence, not backup, disaster recovery, capacity planning, or
+  multi-node availability.
+
+## Current limitations
+
+- Production Kubernetes fault-injection, multi-node rollout/rollback, backup/restore, capacity, and
+  high-availability acceptance remain deployment responsibilities and are not proven by local tests.
+- Kubernetes Events, current/previous Pod logs, resource-state evidence, versioned SOPs, alerts,
+  change events, CMDB, and topology depend on external sources that may be unavailable.
+- A workflow can finish successfully while its conclusion remains `PARTIALLY_SUPPORTED` or low
+  confidence because required evidence is missing.
+- Sandbox availability depends on explicitly released runtime images; unsupported modes are not
+  enabled with placeholder images.
+- The repository has no declared open-source license or private security-reporting policy.
+
+## Development
+
+Requirements:
+
+- JDK 17
+- Maven 3.9+ (the wrapper is in `backend/`)
+- Node.js 20+
+- Go version declared by `sandbox-controller/go.mod`
+- Docker for integration and end-to-end tests
 
 ```bash
-./scripts/setup-single-node-monitoring.sh
+# Backend verification, frontend tests, and production build
+make test
+
+# Spotless, Checkstyle, Prettier, ESLint, gofmt, and source-size checks
+make format-check
+
+# Real dependency integration tests
+(cd backend && ./mvnw -Pintegration-test verify)
+
+# Browser end-to-end tests
+(cd frontend && npm run e2e)
 ```
 
-验证规则和链路：
+The generated frontend API types come from [`api/openapi.json`](api/openapi.json):
 
 ```bash
-./scripts/verify-prometheus-rules.sh
-./scripts/verify-alerting-e2e.sh
+(cd frontend && npm run api:check)
 ```
 
-Compose 中的 Node Exporter 用于容器化演练；生产 Kubernetes 节点应使用 DaemonSet 或平台现有的节点监控。接入细节见 [Alertmanager 文档](deploy/alertmanager/README.md)。
-
-## API 概览
-
-| 接口 | 用途 |
-| --- | --- |
-| `GET /actuator/health` | 健康检查 |
-| `GET /actuator/prometheus` | Prometheus 指标 |
-| `GET /api/status` | 服务状态 |
-| `POST /api/ask` | 运维问答和任务编排 |
-| `POST /api/integrations/alertmanager/webhook` | Alertmanager Webhook |
-| `POST /api/integrations/change-events/{provider}` | CI/CD 变更事件 |
-| `POST /api/knowledge/ingest`、`/query` | 知识入库和检索 |
-| `POST /api/memory/search` | 长期记忆检索 |
-| `GET/POST /api/skills` | Skill 查询和治理 |
-| `GET /api/tools` | 工具目录 |
-
-启用通用 API 鉴权后，查询使用 Viewer，告警/审批等操作使用 Operator，管理写操作使用 Admin。Alertmanager 和 ChangeEvent Webhook 使用各自的签名或 Token。
-
-### 本地调试控制台
-
-应用启动后访问 [http://127.0.0.1:8081](http://127.0.0.1:8081)，可直接查看服务状态、执行统计、Tool/Skill 数量，并调试问答、审批和任意 JSON API。
-
-- Compose 中 Console 通过 Nginx 将同源 `/api` 请求转发到后端，也可切换到其他 KubeOnCall 实例。
-- Bearer Token 只保存在当前页面内存中，刷新即清除，不会写入浏览器存储。
-- 查询和问答使用 Viewer Token；审批写操作使用 Operator 或 Admin Token。
-- 每次请求展示 HTTP 状态、耗时和原始响应，最近记录也只保留在当前页面内存中。
-
-该页面是面向开发调试的轻量 Demo，不包含生产控制台所需的用户体系、权限菜单和 Secret 托管能力。
-
-## 文档
-
-- [文档索引](docs/README.md)
-- [安装指南](docs/installation.md)
-- [配置参考](docs/configuration.md)
-- [后端运行手册](docs/后端运行手册.md)
-- [阿里云模型联调](docs/阿里云模型联调.md)
-- [后端开发说明](backend/README.md)
-- [前端控制台说明](frontend/README.md)
-- [项目架构](docs/architecture/项目架构.md)
-- [贡献指南](CONTRIBUTING.md)
-
-## 仓库结构
+## Repository map
 
 ```text
 kubeoncall/
-├── .github/workflows/       # CI
-├── backend/                 # Spring Boot、Maven Wrapper、后端测试与镜像
-├── frontend/                # 独立静态控制台、契约测试与 Nginx 镜像
-├── deploy/                  # Compose 配套资源、Kubernetes、Helm、监控
-├── docs/                    # 架构、实施计划、接入指南和运行文档
-├── scripts/                 # 告警、模型、MCP、Helm 验证脚本
-├── .env.example             # 不含真实 Secret 的配置模板
-├── docker-compose.yml       # 单机编排
-└── Makefile                 # 前后端验证和 Compose 快捷入口
+├── backend/              # Spring Boot control plane, APIs, workflow, tests
+├── frontend/             # React/TypeScript operations console
+├── sandbox-controller/   # Go Kubernetes Job controller
+├── sandbox-runtimes/     # Published and validation runtime assets
+├── api/                  # OpenAPI contract consumed by the Console
+├── deploy/               # Helm, Kubernetes, monitoring, and integration assets
+├── docs/                 # Architecture, operations, guides, plans, validation records
+├── scripts/              # Verification, release, backup, restore, and integration scripts
+├── docker-compose.yml    # Local full-stack topology
+└── Makefile              # Common validation entry points
 ```
 
-## 开发
+## Documentation
 
-要求 JDK 17 和 Node.js 20+。一次验证前后端：
+- [Documentation index](docs/README.md)
+- [Architecture](docs/architecture/项目架构.md)
+- [Installation](docs/installation.md)
+- [Configuration](docs/configuration.md)
+- [AI operations validation record](docs/plans/active/ai-operations/validation/2026-07-29本地真实模型与统一证据链验收记录.md)
+- [Contributing](CONTRIBUTING.md)
 
-```bash
-make test
-```
+## Project status and license
 
-运行真实依赖集成测试：
+KubeOnCall is being actively refactored and validated. Automated tests, local real-model integration,
+and local dependency acceptance cover specific code and environment snapshots; they do not establish
+production readiness.
 
-```bash
-docker compose up -d redis elasticsearch minio minio-init
-(cd backend && ./mvnw -Pintegration-test verify)
-```
-
-CI 会执行 Maven、前端契约测试、静态资源构建、Compose 渲染以及前后端镜像构建。代码规范、提交前检查和架构边界见[贡献指南](CONTRIBUTING.md)。
-
-## 项目状态与许可证
-
-项目仍在持续重构和验证中。公开仓库只保留使用、架构、部署和贡献文档；个人计划、IDE/Agent 状态及本地实验记录由 `.gitignore` 排除。
-
-仓库当前没有独立 `LICENSE` 文件。这意味着代码尚未以明确的开源许可证对外授权；公开分发、二次使用或接受外部贡献前，应由维护者选择并添加许可证。
+No standalone `LICENSE` file is currently present. Until the maintainers add one, copying,
+redistributing, modifying, or accepting third-party contributions does not have an explicit
+open-source grant.
