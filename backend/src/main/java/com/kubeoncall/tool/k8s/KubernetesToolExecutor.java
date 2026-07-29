@@ -59,6 +59,15 @@ public class KubernetesToolExecutor implements ToolExecutor {
                         List.of("namespace", "rolloutStrategy"),
                         List.of("k8s-api")),
                 new ToolDefinition(
+                        "kubernetes.rolloutUndo",
+                        "kubernetes",
+                        "Compensating rollback to a captured Kubernetes workload revision",
+                        false,
+                        true,
+                        List.of(TaskType.RESTART_SERVICE),
+                        List.of("namespace", "revision"),
+                        List.of("k8s-api")),
+                new ToolDefinition(
                         "kubernetes.scaleWorkload",
                         "kubernetes",
                         "Scale a Kubernetes workload to the desired replica count",

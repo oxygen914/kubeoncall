@@ -48,6 +48,11 @@ class KubeOnCallPropertiesTest {
         KubeOnCallProperties properties = new KubeOnCallProperties();
 
         assertTrue(properties.getAgent().isPlannerLlmEnabled());
+        assertTrue(properties.getAgent().isPostExecutionVerificationEnabled());
+        assertEquals(120, properties.getAgent().getPostExecutionVerificationTimeoutSeconds());
+        assertEquals(5000, properties.getAgent().getPostExecutionVerificationPollMillis());
+        assertTrue(properties.getAgent().isAutomaticRollbackEnabled());
+        assertTrue(properties.getAgent().isPostExecutionEscalationEnabled());
         assertFalse(properties.getRag().isEmbeddingEnabled());
         assertEquals(168, properties.getAudit().getRetentionHours());
         assertEquals(3000, properties.getWorkflow().getNodeTimeoutMillis());

@@ -91,6 +91,44 @@ class ExecutorExecuteNodeTest {
         assertEquals("REPLAN_EXECUTION", result.retryStrategy());
     }
 
+    @Test
+    void shouldAttachStableOperationIdToMutatingToolCall() {
+        CapturingExecutor executor = new CapturingExecutor();
+        OperationClosureService closureService = org.mockito.Mockito.mock(OperationClosureService.class);
+        ExecutorExecuteNode node = new ExecutorExecuteNode(List.of(executor), closureService);
+        GraphState state = new GraphState();
+        state.setExecutionId("exec-1");
+        state.setCurrentTask(new com.kubeoncall.domain.task.Task(
+                "task-1",
+                "scale",
+                com.kubeoncall.domain.task.TaskType.SCALE_WORKLOAD,
+                com.kubeoncall.domain.task.RiskLevel.HIGH,
+                "payment-service",
+                Map.of("namespace", "prod", "replicas", 3),
+                new com.kubeoncall.domain.task.SopReference("sop-1", "scale", "1", "test")));
+        ExecutionPlan plan = new ExecutionPlan(
+                "kubernetes",
+                "scaleWorkload",
+                Map.of("namespace", "prod", "replicas", 3),
+                List.of("namespace", "replicas"),
+                List.of(),
+                Map.of(),
+                "scale",
+                null);
+        com.kubeoncall.tool.ToolDefinition definition = new com.kubeoncall.tool.ToolDefinition(
+                "kubernetes.scaleWorkload", "kubernetes", "scale", false, true, List.of(), List.of(), List.of());
+        state.getContext().put("executionPlan", plan);
+        state.getContext().put("executorToolDefinition", definition);
+        state.getContext().put("executorPayload", Map.of("toolName", "kubernetes.scaleWorkload", "complete", true));
+        org.mockito.Mockito.when(closureService.prepare(state, plan, definition))
+                .thenReturn(OperationClosureService.Preparation.ready(Map.of()));
+
+        NodeResult result = node.execute(state);
+
+        assertEquals(NodeStatus.SUCCESS, result.status());
+        assertEquals("exec-1:task-1:kubernetes.scaleWorkload", executor.parameters.get("operationId"));
+    }
+
     private static class FailingExecutor implements ToolExecutor {
 
         @Override
@@ -148,6 +186,17 @@ class ExecutorExecuteNodeTest {
         @Override
         public Map<String, Object> execute(String action, Map<String, Object> parameters) {
             return Map.of("status", "success", "httpStatus", 200, "response", Map.of("ok", true));
+        }
+    }
+
+    private static final class CapturingExecutor extends SuccessExecutor {
+
+        private Map<String, Object> parameters = Map.of();
+
+        @Override
+        public Map<String, Object> execute(String action, Map<String, Object> parameters) {
+            this.parameters = Map.copyOf(parameters);
+            return super.execute(action, parameters);
         }
     }
 }

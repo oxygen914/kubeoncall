@@ -6,6 +6,7 @@ import java.util.Map;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import com.kubeoncall.agent.node.ExecuteNode;
@@ -13,6 +14,7 @@ import com.kubeoncall.domain.graph.ExecutionPlan;
 import com.kubeoncall.domain.graph.GraphState;
 import com.kubeoncall.domain.graph.NodeResult;
 import com.kubeoncall.domain.graph.NodeStatus;
+import com.kubeoncall.tool.ToolDefinition;
 import com.kubeoncall.tool.ToolExecutor;
 
 @Component
@@ -26,11 +28,18 @@ public class ExecutorExecuteNode extends ExecuteNode {
     private static final String RETRY_STRATEGY_RETRY_TOOL_CALL = "RETRY_TOOL_CALL";
 
     private final Map<String, ToolExecutor> executorsByKind;
+    private final OperationClosureService closureService;
 
     public ExecutorExecuteNode(List<ToolExecutor> toolExecutors) {
+        this(toolExecutors, null);
+    }
+
+    @Autowired
+    public ExecutorExecuteNode(List<ToolExecutor> toolExecutors, OperationClosureService closureService) {
         this.executorsByKind = toolExecutors.stream()
                 .collect(Collectors.toMap(
                         ToolExecutor::getExecutorKind, Function.identity(), (left, right) -> left, LinkedHashMap::new));
+        this.closureService = closureService;
     }
 
     @Override
@@ -85,7 +94,7 @@ public class ExecutorExecuteNode extends ExecuteNode {
 
         String executorKind = executionPlan.executorKind();
         String action = executionPlan.action();
-        Map<String, Object> parameters = executionPlan.parameters();
+        Map<String, Object> parameters = new LinkedHashMap<>(executionPlan.parameters());
         String executionSummary = executionPlan.executionSummary();
         ToolExecutor toolExecutor = executorsByKind.get(executorKind);
 
@@ -95,6 +104,34 @@ public class ExecutorExecuteNode extends ExecuteNode {
                     NodeStatus.FAILURE,
                     "No tool executor registered for executorKind=" + executorKind,
                     Map.of("executorKind", executorKind, "action", action, "errorCode", 404));
+        }
+
+        if (closureService != null) {
+            ToolDefinition toolDefinition =
+                    state.getContext().get("executorToolDefinition") instanceof ToolDefinition definition
+                            ? definition
+                            : null;
+            OperationClosureService.Preparation preparation =
+                    closureService.prepare(state, executionPlan, toolDefinition);
+            if (!preparation.ready()) {
+                state.getContext().put(OperationClosureService.CONTEXT_KEY, preparation.details());
+                return new NodeResult(
+                        getName(),
+                        NodeStatus.FAILURE,
+                        preparation.reason(),
+                        Map.of(
+                                "errorCode",
+                                409,
+                                "executorKind",
+                                executorKind,
+                                "action",
+                                action,
+                                "closure",
+                                preparation.details()));
+            }
+            if (preparation.required()) {
+                parameters.put("operationId", operationId(state, executorKind, action));
+            }
         }
 
         Map<String, Object> toolResult = toolExecutor.execute(action, parameters);
@@ -176,5 +213,12 @@ public class ExecutorExecuteNode extends ExecuteNode {
 
     private String defaultMessage(String value, String fallback) {
         return value == null || value.isBlank() ? fallback : value;
+    }
+
+    private String operationId(GraphState state, String executorKind, String action) {
+        String executionId = state.getExecutionId() == null ? "unassigned" : state.getExecutionId();
+        String taskId =
+                state.getCurrentTask() == null ? "task" : state.getCurrentTask().taskId();
+        return executionId + ":" + taskId + ":" + executorKind + "." + action;
     }
 }

@@ -20,6 +20,7 @@ export interface ExecutionDetail extends ExecutionListItem {
   currentNode?: string | null
   resultSummary?: string | null
   errorCode?: string | null
+  errorSummary?: string | null
   requestId?: string
   traceId?: string | null
 }

@@ -131,6 +131,11 @@ kubeoncall:
   agent:
     max-loops: 3
     planner-llm-enabled: true
+    post-execution-verification-enabled: ${KUBEONCALL_POST_EXECUTION_VERIFICATION_ENABLED:true}
+    post-execution-verification-timeout-seconds: ${KUBEONCALL_POST_EXECUTION_VERIFICATION_TIMEOUT_SECONDS:120}
+    post-execution-verification-poll-millis: ${KUBEONCALL_POST_EXECUTION_VERIFICATION_POLL_MILLIS:5000}
+    automatic-rollback-enabled: ${KUBEONCALL_AUTOMATIC_ROLLBACK_ENABLED:true}
+    post-execution-escalation-enabled: ${KUBEONCALL_POST_EXECUTION_ESCALATION_ENABLED:true}
   approval:
     enabled: true
     callback-timeout-seconds: 1800

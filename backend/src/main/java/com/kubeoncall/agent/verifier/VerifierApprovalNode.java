@@ -43,6 +43,12 @@ public class VerifierApprovalNode extends ApprovalNode {
         Map<String, Object> snapshot = new LinkedHashMap<>();
         snapshot.put("taskDescription", task == null ? null : task.description());
         snapshot.put("parameters", task == null ? Map.of() : task.parameters());
+        snapshot.put(
+                "safetyClosure",
+                Map.of(
+                        "postExecutionVerification", true,
+                        "automaticRollbackWhenSupported", true,
+                        "humanEscalationOnFailure", true));
         state.setPauseMetadata(new PauseMetadata(
                 "Awaiting human approval",
                 getName(),

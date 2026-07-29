@@ -13,14 +13,17 @@ public class ExecutorAgent extends ReActAgent {
 
     private final ExecutorThinkNode executorThinkNode;
     private final ExecutorExecuteNode executorExecuteNode;
+    private final OperationClosureNode operationClosureNode;
     private final KubeOnCallProperties properties;
 
     public ExecutorAgent(
             ExecutorThinkNode executorThinkNode,
             ExecutorExecuteNode executorExecuteNode,
+            OperationClosureNode operationClosureNode,
             KubeOnCallProperties properties) {
         this.executorThinkNode = executorThinkNode;
         this.executorExecuteNode = executorExecuteNode;
+        this.operationClosureNode = operationClosureNode;
         this.properties = properties;
     }
 
@@ -40,6 +43,10 @@ public class ExecutorAgent extends ReActAgent {
 
     public com.kubeoncall.domain.graph.GraphState executePrepared(com.kubeoncall.domain.graph.GraphState state) {
         return runLoop(state, List.of(executorExecuteNode), getAgentName() + "Execute");
+    }
+
+    public com.kubeoncall.domain.graph.GraphState closePrepared(com.kubeoncall.domain.graph.GraphState state) {
+        return runLoop(state, List.of(operationClosureNode), getAgentName() + "Closure");
     }
 
     @Override

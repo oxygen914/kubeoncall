@@ -195,6 +195,9 @@ public class AskService {
             state.setCurrentLoop(0);
             executorAgent.executePrepared(state);
             if (state.getStatus() == GraphStatus.SUCCESS) {
+                executorAgent.closePrepared(state);
+            }
+            if (state.getStatus() == GraphStatus.SUCCESS) {
                 runPlannedTasks(state, state.getCurrentTaskIndex() + 1);
             }
             heartbeat.requireValid("Approval resume lease was lost while executing");
@@ -305,6 +308,10 @@ public class AskService {
             if (state.getStatus() != GraphStatus.SUCCESS) {
                 return;
             }
+            executorAgent.closePrepared(state);
+            if (state.getStatus() != GraphStatus.SUCCESS) {
+                return;
+            }
             recordCompletedTask(state, task.taskId());
             contextLifecycle.compressRuntime(state);
         }
@@ -363,7 +370,12 @@ public class AskService {
                 "executor",
                 selectedContext(
                         state,
-                        List.of("executionPlan", "executorPayload", "executorToolDefinition", "toolExecutionResult")));
+                        List.of(
+                                "executionPlan",
+                                "executorPayload",
+                                "executorToolDefinition",
+                                "toolExecutionResult",
+                                "operationClosure")));
         Map<String, Object> approval = new LinkedHashMap<>();
         approval.put("pause", state.getPauseMetadata());
         approval.put(

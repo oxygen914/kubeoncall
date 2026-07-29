@@ -52,7 +52,7 @@ export function ExecutionDetailPage() {
               </div>
               <div>
                 <dt>当前节点</dt>
-                <dd>{execution.currentNode ?? '—'}</dd>
+                <dd>{execution.currentNode ? nodeLabel(execution.currentNode) : '—'}</dd>
               </div>
               <div>
                 <dt>结果</dt>
@@ -61,6 +61,10 @@ export function ExecutionDetailPage() {
               <div>
                 <dt>错误码</dt>
                 <dd>{execution.errorCode ?? '—'}</dd>
+              </div>
+              <div>
+                <dt>错误摘要</dt>
+                <dd>{execution.errorSummary ?? '—'}</dd>
               </div>
               <div>
                 <dt>requestId</dt>
@@ -96,7 +100,7 @@ export function ExecutionDetailPage() {
                 </div>
                 <div className="koc-timeline__body">
                   <StatusBadge tone={executionTone(node.status)}>{node.status}</StatusBadge>
-                  <strong className="koc-execution-node__name">{node.nodeName}</strong>
+                  <strong className="koc-execution-node__name">{nodeLabel(node.nodeName)}</strong>
                   {node.outputSummary ? <p>{node.outputSummary}</p> : null}
                   {node.errorCode ? (
                     <p className="koc-alert koc-alert--error">错误码：{node.errorCode}</p>
@@ -113,4 +117,15 @@ export function ExecutionDetailPage() {
 
 function formatTime(value: string | null): string {
   return value ? new Date(value).toLocaleString() : '—'
+}
+
+function nodeLabel(value: string): string {
+  const labels: Record<string, string> = {
+    executorThinkNode: '生成执行计划',
+    verifierThinkNode: '安全校验',
+    verifierApprovalNode: '人工审批',
+    executorExecuteNode: '执行操作',
+    operationClosureNode: '恢复验证与回滚',
+  }
+  return labels[value] ?? value
 }
