@@ -111,7 +111,7 @@ export interface HealthPoint {
 
 export interface HealthTrend {
   scope: MonitoringScope
-  window: '1h' | '6h' | '24h' | '7d'
+  window: '1h' | '6h' | '24h' | '7d' | '30d'
   stepSeconds: number
   current: HealthPoint[]
   previous: HealthPoint[]

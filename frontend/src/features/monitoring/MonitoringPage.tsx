@@ -32,7 +32,7 @@ export function MonitoringPage() {
   const cluster = scope.cluster
   const [selectedNode, setSelectedNode] = useState('')
   const [cpuWindow, setCpuWindow] = useState<'15m' | '1h' | '6h'>('15m')
-  const [healthWindow, setHealthWindow] = useState<'1h' | '6h' | '24h' | '7d'>('6h')
+  const [healthWindow, setHealthWindow] = useState<'1h' | '6h' | '24h' | '7d' | '30d'>('6h')
   const [podPhase, setPodPhase] = useState('')
   const canReadCorrelations =
     hasPermission(session, PERMISSIONS.ALARM_READ) &&
@@ -168,13 +168,14 @@ export function MonitoringPage() {
                   <select
                     value={healthWindow}
                     onChange={(event) =>
-                      setHealthWindow(event.target.value as '1h' | '6h' | '24h' | '7d')
+                      setHealthWindow(event.target.value as '1h' | '6h' | '24h' | '7d' | '30d')
                     }
                   >
                     <option value="1h">1 小时</option>
                     <option value="6h">6 小时</option>
                     <option value="24h">24 小时</option>
                     <option value="7d">7 天</option>
+                    <option value="30d">30 天</option>
                   </select>
                 </label>
               </div>

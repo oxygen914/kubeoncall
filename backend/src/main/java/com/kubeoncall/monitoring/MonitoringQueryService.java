@@ -506,7 +506,8 @@ public class MonitoringQueryService {
         ONE_HOUR("1h", Duration.ofHours(1), Duration.ofMinutes(1)),
         SIX_HOURS("6h", Duration.ofHours(6), Duration.ofMinutes(5)),
         ONE_DAY("24h", Duration.ofDays(1), Duration.ofMinutes(15)),
-        SEVEN_DAYS("7d", Duration.ofDays(7), Duration.ofHours(1));
+        SEVEN_DAYS("7d", Duration.ofDays(7), Duration.ofHours(1)),
+        THIRTY_DAYS("30d", Duration.ofDays(30), Duration.ofHours(4));
 
         private final String value;
         private final Duration duration;
@@ -537,7 +538,7 @@ public class MonitoringQueryService {
                     return candidate;
                 }
             }
-            throw new IllegalArgumentException("window must be one of 1h, 6h, 24h, 7d");
+            throw new IllegalArgumentException("window must be one of 1h, 6h, 24h, 7d, 30d");
         }
     }
 }

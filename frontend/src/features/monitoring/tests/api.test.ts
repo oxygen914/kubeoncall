@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   getMonitoringClusters,
+  getHealthTrend,
   getMonitoringNodes,
   getMonitoringPods,
   getNodeCpuTrend,
@@ -40,12 +41,14 @@ describe('monitoring API', () => {
     await getMonitoringNodes('prod:cn')
     await getMonitoringPods('prod:cn', 'Pending')
     await getNodeCpuTrend('prod:cn', 'worker/1', '1h')
+    await getHealthTrend({ cluster: 'prod:cn', namespace: 'payments' }, '30d')
 
     expect(fetchMock.mock.calls.map(([input]) => String(input))).toEqual([
       '/api/v1/monitoring/clusters',
       '/api/v1/monitoring/nodes?cluster=prod%3Acn',
       '/api/v1/monitoring/pods?cluster=prod%3Acn&phase=Pending&limit=100',
       '/api/v1/monitoring/nodes/worker%2F1/cpu?cluster=prod%3Acn&window=1h',
+      '/api/v1/monitoring/health/trend?cluster=prod%3Acn&namespace=payments&window=30d',
     ])
   })
 })

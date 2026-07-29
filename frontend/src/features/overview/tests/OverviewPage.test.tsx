@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { OverviewPage } from '../OverviewPage'
@@ -102,6 +102,10 @@ describe('OverviewPage', () => {
             executionStatusCounts: { RUNNING: 1, SUCCEEDED: 4, FAILED: 2 },
             failureReasons: { TOOL_TIMEOUT: 2 },
             executionTrend: { '2026-07-29 09:00': 2, '2026-07-29 10:00': 5 },
+            executionStatusTrend: {
+              '2026-07-29 09:00': { SUCCEEDED: 1, FAILED: 1 },
+              '2026-07-29 10:00': { SUCCEEDED: 3, RUNNING: 2 },
+            },
             window: '24h',
           }),
         )
@@ -294,5 +298,12 @@ describe('OverviewPage', () => {
     expect(screen.getByRole('heading', { name: '今日需要关注' })).toBeInTheDocument()
     expect(screen.getByText('优先核查节点健康')).toBeInTheDocument()
     expect(screen.getAllByTestId('echart')).toHaveLength(2)
+
+    fireEvent.change(screen.getByLabelText('时间窗口'), { target: { value: '30d' } })
+    await waitFor(() => {
+      const requestedUrls = fetchMock.mock.calls.map(([input]) => String(input))
+      expect(requestedUrls).toContain('/api/v1/monitoring/health/trend?cluster=prod&window=30d')
+      expect(requestedUrls).toContain('/api/v1/monitoring/advice?cluster=prod&window=30d')
+    })
   })
 })

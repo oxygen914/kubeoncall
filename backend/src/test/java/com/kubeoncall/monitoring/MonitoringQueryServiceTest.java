@@ -222,6 +222,13 @@ class MonitoringQueryServiceTest {
         assertThat(result.comparison().direction()).isEqualTo("IMPROVING");
     }
 
+    @Test
+    void supportsBoundedThirtyDayHealthWindow() {
+        assertThat(HealthWindow.parse("30d")).isEqualTo(HealthWindow.THIRTY_DAYS);
+        assertThat(HealthWindow.THIRTY_DAYS.duration()).isEqualTo(java.time.Duration.ofDays(30));
+        assertThat(HealthWindow.THIRTY_DAYS.step()).isEqualTo(java.time.Duration.ofHours(4));
+    }
+
     private static InstantSample sample(Map<String, String> labels, double value) {
         return new InstantSample(labels, value);
     }

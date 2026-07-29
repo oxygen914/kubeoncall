@@ -45,6 +45,10 @@ test('authenticated operator can inspect the overview window and drill into exec
           executionStatusCounts: { RUNNING: 3, FAILED: 4 },
           failureReasons: { TOOL_TIMEOUT: 3, UNCLASSIFIED: 1 },
           executionTrend: { '2026-07-23 09:00': 2, '2026-07-23 10:00': 5 },
+          executionStatusTrend: {
+            '2026-07-23 09:00': { SUCCEEDED: 1, FAILED: 1 },
+            '2026-07-23 10:00': { SUCCEEDED: 2, RUNNING: 3 },
+          },
           window: new URL(route.request().url()).searchParams.get('window'),
         }),
       ),
@@ -150,7 +154,7 @@ test('authenticated operator can inspect the overview window and drill into exec
   await expect(page.getByRole('heading', { name: '概览' })).toBeVisible()
   await expect(page.getByRole('button', { name: /失败执行/ })).toContainText('4')
   await expect(page.getByRole('heading', { name: '失败原因' })).toBeVisible()
-  await expect(page.getByText('TOOL_TIMEOUT')).toBeVisible()
+  await expect(page.getByRole('rowheader', { name: 'TOOL_TIMEOUT', exact: true })).toBeVisible()
 
   await page.getByLabel('时间窗口').selectOption('6h')
   await expect.poll(() => overviewWindows).toContain('6h')

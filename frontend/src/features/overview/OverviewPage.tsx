@@ -45,13 +45,14 @@ const FailureReasonChart = lazy(async () => {
 })
 
 type RefreshMode = 'off' | '15s' | '30s' | '60s'
+type OverviewWindow = '1h' | '6h' | '24h' | '7d' | '30d'
 
 export function OverviewPage() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const { session } = useSession()
   const { scope, catalog, setCluster, setEnvironment, setNamespace } = useMonitoringScope()
-  const [window, setWindow] = useState('24h')
+  const [window, setWindow] = useState<OverviewWindow>('24h')
   const cluster = scope.cluster
   const environment = scope.environment ?? ''
   const namespace = scope.namespace ?? ''
@@ -82,17 +83,15 @@ export function OverviewPage() {
     enabled: Boolean(cluster),
     refetchInterval: refreshInterval,
   })
-  const normalizedWindow = (['1h', '6h', '24h', '7d'].includes(window) ? window : '7d') as
-    '1h' | '6h' | '24h' | '7d'
   const healthQuery = useQuery({
-    queryKey: ['overview', 'health-trend', scope, normalizedWindow],
-    queryFn: () => getHealthTrend(scope, normalizedWindow),
+    queryKey: ['overview', 'health-trend', scope, window],
+    queryFn: () => getHealthTrend(scope, window),
     enabled: Boolean(cluster),
     refetchInterval: refreshInterval,
   })
   const adviceQuery = useQuery({
-    queryKey: ['overview', 'operations-advice', scope, normalizedWindow],
-    queryFn: () => getOperationsAdvice(scope, normalizedWindow),
+    queryKey: ['overview', 'operations-advice', scope, window],
+    queryFn: () => getOperationsAdvice(scope, window),
     enabled: Boolean(cluster),
     refetchInterval: refreshInterval,
   })
@@ -189,7 +188,7 @@ export function OverviewPage() {
           <h1>概览</h1>
           <p>
             企业级 Kubernetes 可观测性与事件处置控制台
-            <span>· 当前聚合指标按后端已支持范围统计</span>
+            <span>· 监控与告警按当前范围，审批与执行保持全局聚合口径</span>
           </p>
         </div>
         <div className="koc-overview-header__meta">
@@ -248,7 +247,7 @@ export function OverviewPage() {
           <select
             aria-label="时间窗口"
             value={window}
-            onChange={(event) => setWindow(event.target.value)}
+            onChange={(event) => setWindow(event.target.value as OverviewWindow)}
           >
             <option value="1h">最近 1 小时</option>
             <option value="6h">最近 6 小时</option>
@@ -406,12 +405,15 @@ export function OverviewPage() {
         <div className="koc-overview-grid">
           <SectionPanel
             title="执行趋势"
-            description="当前后端仅提供总执行时间序列；状态拆分以分布视图单独呈现。"
+            description="按当前窗口展示执行状态堆叠趋势，旧数据源自动降级为总执行量。"
             className="koc-span-7"
             action={<PanelLink label="执行中心" onClick={() => navigate('/executions')} />}
           >
             <Suspense fallback={<LoadingState lines={5} />}>
-              <ExecutionTrendChart values={data.executionTrend} />
+              <ExecutionTrendChart
+                values={data.executionTrend}
+                statusValues={data.executionStatusTrend}
+              />
             </Suspense>
           </SectionPanel>
           <SectionPanel
@@ -488,7 +490,11 @@ export function OverviewPage() {
             <p>04 / AI OPERATIONS</p>
             <h2 id="ai-title">今日需要关注</h2>
           </div>
-          <span>基于当前指标的规则化建议，不自动执行高风险动作</span>
+          <span>
+            {adviceQuery.data?.generatedBy === 'CONFIGURED_LLM'
+              ? '模型增强建议，保持只读且不自动执行高风险动作'
+              : '确定性规则建议，不自动执行高风险动作'}
+          </span>
         </div>
         <AiInsightPanel insights={insights} />
       </section>

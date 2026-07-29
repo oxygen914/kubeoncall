@@ -72,6 +72,15 @@ public class OverviewQueryService {
                  GROUP BY DATE_FORMAT(created_at, '%Y-%m-%d %H:00')
                  ORDER BY label ASC
                 """, since);
+        Map<String, Map<String, Long>> executionStatusTrend = countByBucketAndStatus(jdbcTemplate, """
+                SELECT DATE_FORMAT(created_at, '%Y-%m-%d %H:00') AS bucket,
+                       status,
+                       COUNT(*) AS total
+                  FROM koc_workflow_execution
+                 WHERE created_at >= ?
+                 GROUP BY DATE_FORMAT(created_at, '%Y-%m-%d %H:00'), status
+                 ORDER BY bucket ASC, status ASC
+                """, since);
 
         long activeAlarms = statusCounts.getOrDefault("FIRING", 0L) + statusCounts.getOrDefault("ACKNOWLEDGED", 0L);
         long pendingApprovals = count(
@@ -96,7 +105,8 @@ public class OverviewQueryService {
                 statusCounts,
                 executionStatusCounts,
                 failureReasons,
-                executionTrend);
+                executionTrend,
+                executionStatusTrend);
     }
 
     private static long count(JdbcTemplate jdbcTemplate, String sql, Timestamp since) {
@@ -115,6 +125,21 @@ public class OverviewQueryService {
         return result;
     }
 
+    private static Map<String, Map<String, Long>> countByBucketAndStatus(
+            JdbcTemplate jdbcTemplate, String sql, Timestamp since) {
+        Map<String, Map<String, Long>> result = new LinkedHashMap<>();
+        for (Map<String, Object> row : jdbcTemplate.queryForList(sql, since)) {
+            Object bucket = row.get("bucket");
+            Object status = row.get("status");
+            Object total = row.get("total");
+            if (bucket != null && status != null && total instanceof Number count) {
+                result.computeIfAbsent(String.valueOf(bucket), ignored -> new LinkedHashMap<>())
+                        .put(String.valueOf(status), count.longValue());
+            }
+        }
+        return result;
+    }
+
     public record Overview(
             long activeAlarms,
             long pendingApprovals,
@@ -124,7 +149,8 @@ public class OverviewQueryService {
             Map<String, Long> statusCounts,
             Map<String, Long> executionStatusCounts,
             Map<String, Long> failureReasons,
-            Map<String, Long> executionTrend) {
+            Map<String, Long> executionTrend,
+            Map<String, Map<String, Long>> executionStatusTrend) {
 
         public Overview {
             severityCounts = severityCounts == null ? Map.of() : new LinkedHashMap<>(severityCounts);
@@ -133,6 +159,7 @@ public class OverviewQueryService {
                     executionStatusCounts == null ? Map.of() : new LinkedHashMap<>(executionStatusCounts);
             failureReasons = failureReasons == null ? Map.of() : new LinkedHashMap<>(failureReasons);
             executionTrend = executionTrend == null ? Map.of() : new LinkedHashMap<>(executionTrend);
+            executionStatusTrend = executionStatusTrend == null ? Map.of() : new LinkedHashMap<>(executionStatusTrend);
         }
     }
 }

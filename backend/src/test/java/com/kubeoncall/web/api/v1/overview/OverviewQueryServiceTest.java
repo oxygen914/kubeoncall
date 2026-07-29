@@ -34,7 +34,16 @@ class OverviewQueryServiceTest {
                                 Map.of("label", "RESOLVED", "total", 2L)),
                         List.of(Map.of("label", "SUCCEEDED", "total", 6L), Map.of("label", "FAILED", "total", 2L)),
                         List.of(Map.of("label", "TOOL_TIMEOUT", "total", 2L)),
-                        List.of(Map.of("label", "2026-07-20 08:00", "total", 4L)));
+                        List.of(Map.of("label", "2026-07-20 08:00", "total", 4L)),
+                        List.of(
+                                Map.of(
+                                        "bucket", "2026-07-20 08:00",
+                                        "status", "SUCCEEDED",
+                                        "total", 3L),
+                                Map.of(
+                                        "bucket", "2026-07-20 08:00",
+                                        "status", "FAILED",
+                                        "total", 1L)));
         when(jdbcTemplate.queryForObject(anyString(), eq(Long.class), any(Timestamp.class)))
                 .thenReturn(7L, 3L, 2L);
 
@@ -56,6 +65,9 @@ class OverviewQueryServiceTest {
         assertThat(overview.executionStatusCounts()).containsEntry("FAILED", 2L);
         assertThat(overview.failureReasons()).containsEntry("TOOL_TIMEOUT", 2L);
         assertThat(overview.executionTrend()).containsEntry("2026-07-20 08:00", 4L);
+        assertThat(overview.executionStatusTrend().get("2026-07-20 08:00"))
+                .containsEntry("SUCCEEDED", 3L)
+                .containsEntry("FAILED", 1L);
     }
 
     @Test

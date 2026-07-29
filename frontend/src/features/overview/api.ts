@@ -10,6 +10,7 @@ export interface OverviewData {
   executionStatusCounts: Record<string, number>
   failureReasons: Record<string, number>
   executionTrend: Record<string, number>
+  executionStatusTrend?: Record<string, Record<string, number>>
   window: string
 }
 
