@@ -1,4 +1,4 @@
-import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
+import { Link, useLocation, useSearchParams } from 'react-router-dom'
 import { AsyncState } from '@/components/feedback/AsyncState'
 import { Button } from '@/components/ui/Button'
 import { StatusBadge, type StatusTone } from '@/components/ui/StatusBadge'
@@ -13,7 +13,6 @@ const PAGE_SIZE = 20
 const LOAD_STATUSES: SkillLoadStatus[] = ['DISCOVERED', 'LOADING', 'LOADED', 'FAILED', 'DISABLED']
 
 export function SkillsListPage() {
-  const navigate = useNavigate()
   const location = useLocation()
   const [searchParams, setSearchParams] = useSearchParams()
   const { session } = useSession()
@@ -30,11 +29,6 @@ export function SkillsListPage() {
   }
   const updatePage = (nextPage: number) => {
     setSearchParams(mergeSearchParams(searchParams, { page: nextPage === 1 ? null : nextPage }))
-  }
-  const openDetail = (skillId: string) => {
-    navigate(`/skills/${encodeURIComponent(skillId)}`, {
-      state: listReturnState(location.pathname, location.search),
-    })
   }
   const query = useSkills({ page, size: PAGE_SIZE, loadStatus, query: queryText })
   const reload = useReloadSkills()
@@ -103,19 +97,16 @@ export function SkillsListPage() {
           </thead>
           <tbody>
             {(query.data?.data ?? []).map((skill) => (
-              <tr
-                key={skill.id}
-                className="koc-table__row"
-                tabIndex={0}
-                onClick={() => openDetail(skill.id)}
-                onKeyDown={(event) => {
-                  if (event.key === 'Enter' || event.key === ' ') {
-                    event.preventDefault()
-                    openDetail(skill.id)
-                  }
-                }}
-              >
-                <td className="koc-table__cell--primary">{skill.name}</td>
+              <tr key={skill.id} className="koc-table__row">
+                <td className="koc-table__cell--primary">
+                  <Link
+                    className="koc-table__primary-link"
+                    to={`/skills/${encodeURIComponent(skill.id)}`}
+                    state={listReturnState(location.pathname, location.search)}
+                  >
+                    {skill.name}
+                  </Link>
+                </td>
                 <td>{skill.skillVersion ?? '—'}</td>
                 <td>{skill.enabled ? '是' : '否'}</td>
                 <td>

@@ -158,7 +158,34 @@ test('authenticated operator can inspect the overview window and drill into exec
   await page.goto('/overview')
 
   await expect(page.getByRole('heading', { name: '概览' })).toBeVisible()
+  await expect(page.locator('.koc-overview-toolbar select')).toHaveCount(2)
+  await expect(page.locator('main').getByLabel('全局集群')).toHaveCount(0)
   await expect(page.getByRole('button', { name: /失败执行/ })).toContainText('4')
+  await page.setViewportSize({ width: 375, height: 812 })
+  await expect
+    .poll(() =>
+      page.locator('.koc-page-tabs').evaluate((element) => getComputedStyle(element).overflowY),
+    )
+    .toBe('hidden')
+  await expect
+    .poll(() =>
+      page
+        .getByLabel('时间窗口')
+        .evaluate((element) => Number.parseFloat(getComputedStyle(element).fontSize)),
+    )
+    .toBeGreaterThanOrEqual(16)
+  const metricCards = page.locator('.koc-metric-card')
+  await expect(metricCards).toHaveCount(6)
+  await expect
+    .poll(() =>
+      metricCards.evaluateAll((cards) => {
+        const first = cards[0]?.getBoundingClientRect()
+        const second = cards[1]?.getBoundingClientRect()
+        return Boolean(first && second && Math.abs(first.top - second.top) < 2)
+      }),
+    )
+    .toBe(true)
+  await page.setViewportSize({ width: 1280, height: 800 })
   await page.getByRole('link', { name: /处置分析/ }).click()
   await expect(page.getByRole('heading', { name: '失败原因' })).toBeVisible()
   await expect(page.getByRole('rowheader', { name: 'TOOL_TIMEOUT', exact: true })).toBeVisible()

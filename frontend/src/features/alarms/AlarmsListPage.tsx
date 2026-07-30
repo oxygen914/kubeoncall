@@ -1,4 +1,5 @@
-import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
+import { useEffect, useState } from 'react'
+import { Link, useLocation, useSearchParams } from 'react-router-dom'
 import { useAlarmList } from './hooks'
 import { AsyncState } from '@/components/feedback/AsyncState'
 import { StatusBadge } from '@/components/ui/StatusBadge'
@@ -17,7 +18,6 @@ const STATUSES = ['FIRING', 'ACKNOWLEDGED', 'RECOVERY_PENDING', 'RESOLVED', 'SUP
  * only renders the returned rows.
  */
 export function AlarmsListPage() {
-  const navigate = useNavigate()
   const location = useLocation()
   const [searchParams, setSearchParams] = useSearchParams()
   const page = readPageParam(searchParams.get('page'))
@@ -26,6 +26,7 @@ export function AlarmsListPage() {
   const statusValue = searchParams.get('status') ?? ''
   const status = STATUSES.includes(statusValue) ? statusValue : ''
   const q = (searchParams.get('q') ?? '').slice(0, 200)
+  const [searchDraft, setSearchDraft] = useState(q)
 
   const updateFilters = (updates: Record<string, string | null>) => {
     setSearchParams(mergeSearchParams(searchParams, { ...updates, page: null }), {
@@ -35,11 +36,24 @@ export function AlarmsListPage() {
   const updatePage = (nextPage: number) => {
     setSearchParams(mergeSearchParams(searchParams, { page: nextPage === 1 ? null : nextPage }))
   }
-  const openDetail = (alarmId: string) => {
-    navigate(`/alarms/${encodeURIComponent(alarmId)}`, {
-      state: listReturnState(location.pathname, location.search),
-    })
-  }
+  useEffect(() => {
+    setSearchDraft(q)
+  }, [q])
+
+  useEffect(() => {
+    if (searchDraft === q) return
+    const timeoutId = window.setTimeout(() => {
+      setSearchParams(
+        (current) =>
+          mergeSearchParams(current, {
+            q: searchDraft || null,
+            page: null,
+          }),
+        { replace: true },
+      )
+    }, 300)
+    return () => window.clearTimeout(timeoutId)
+  }, [q, searchDraft, setSearchParams])
 
   const { data, isLoading, error, isFetching } = useAlarmList({
     page,
@@ -97,9 +111,9 @@ export function AlarmsListPage() {
           <span>搜索</span>
           <input
             type="search"
-            value={q}
+            value={searchDraft}
             onChange={(e) => {
-              updateFilters({ q: e.target.value || null })
+              setSearchDraft(e.target.value)
             }}
             placeholder="告警名或资源名"
             maxLength={200}
@@ -127,19 +141,16 @@ export function AlarmsListPage() {
           </thead>
           <tbody>
             {rows.map((alarm) => (
-              <tr
-                key={alarm.id}
-                className="koc-table__row"
-                tabIndex={0}
-                onClick={() => openDetail(alarm.id)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault()
-                    openDetail(alarm.id)
-                  }
-                }}
-              >
-                <td className="koc-table__cell--primary">{alarm.alertName}</td>
+              <tr key={alarm.id} className="koc-table__row">
+                <td className="koc-table__cell--primary">
+                  <Link
+                    className="koc-table__primary-link"
+                    to={`/alarms/${encodeURIComponent(alarm.id)}`}
+                    state={listReturnState(location.pathname, location.search)}
+                  >
+                    {alarm.alertName}
+                  </Link>
+                </td>
                 <td>
                   <StatusBadge tone={severityTone(alarm.severity)}>{alarm.severity}</StatusBadge>
                 </td>

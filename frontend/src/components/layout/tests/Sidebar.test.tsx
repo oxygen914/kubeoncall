@@ -57,4 +57,22 @@ describe('Sidebar', () => {
     expect(screen.queryByRole('link', { name: /Token/ })).not.toBeInTheDocument()
     expect(screen.queryByRole('link', { name: /迁移/ })).not.toBeInTheDocument()
   })
+
+  it('offers an explicit close action inside the mobile drawer', () => {
+    const onNavigate = vi.fn()
+    render(
+      <MemoryRouter>
+        <Sidebar
+          collapsed={false}
+          mobileOpen
+          session={session}
+          onToggle={vi.fn()}
+          onNavigate={onNavigate}
+        />
+      </MemoryRouter>,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: '关闭主导航' }))
+    expect(onNavigate).toHaveBeenCalledOnce()
+  })
 })

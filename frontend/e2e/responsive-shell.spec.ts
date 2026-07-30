@@ -51,14 +51,23 @@ test('mobile shell exposes an adaptive drawer and compact scope controls', async
   await page.getByRole('button', { name: '打开主导航' }).click()
   await expect(sidebar).toBeVisible()
   await expect(sidebar.getByRole('link', { name: 'AI 诊断' })).toBeVisible()
+  await expect(sidebar.getByRole('button', { name: '关闭主导航' })).toBeVisible()
 
-  await page.keyboard.press('Escape')
+  await sidebar.getByRole('button', { name: '关闭主导航' }).click()
   await expect(sidebar).toBeHidden()
+  await expect(page.getByRole('button', { name: '切换到深色主题' })).toBeVisible()
   await page.getByRole('button', { name: '切换全局范围，当前集群 prod' }).click()
   await expect(page.locator('#mobile-scope-panel')).toBeVisible()
   await expect(page.locator('#mobile-scope-panel').getByLabel('全局集群')).toHaveValue('prod')
   await page.keyboard.press('Escape')
   await expect(page.locator('#mobile-scope-panel')).toBeHidden()
+  await expect
+    .poll(() =>
+      page
+        .getByLabel('向 KubeOnCall 提问')
+        .evaluate((element) => Number.parseFloat(getComputedStyle(element).fontSize)),
+    )
+    .toBeGreaterThanOrEqual(16)
   await expect
     .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth))
     .toBe(true)

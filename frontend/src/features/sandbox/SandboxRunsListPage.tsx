@@ -1,4 +1,4 @@
-import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
+import { Link, useLocation, useSearchParams } from 'react-router-dom'
 import { AsyncState } from '@/components/feedback/AsyncState'
 import { StatusBadge } from '@/components/ui/StatusBadge'
 import { useSandboxRunList } from './hooks'
@@ -18,7 +18,6 @@ const STATUSES: SandboxRunStatus[] = [
 ]
 
 export function SandboxRunsListPage() {
-  const navigate = useNavigate()
   const location = useLocation()
   const [searchParams, setSearchParams] = useSearchParams()
   const statusValue = searchParams.get('status') ?? ''
@@ -29,11 +28,6 @@ export function SandboxRunsListPage() {
   const alarmId = (searchParams.get('alarmId') ?? '').slice(0, 40)
   const updateFilters = (updates: Record<string, string | null>) => {
     setSearchParams(mergeSearchParams(searchParams, updates), { replace: true })
-  }
-  const openDetail = (runId: string) => {
-    navigate(`/sandbox-runs/${encodeURIComponent(runId)}`, {
-      state: listReturnState(location.pathname, location.search),
-    })
   }
   const {
     data: runs,
@@ -108,19 +102,16 @@ export function SandboxRunsListPage() {
           </thead>
           <tbody>
             {(runs ?? []).map((run) => (
-              <tr
-                key={run.id}
-                className="koc-table__row"
-                tabIndex={0}
-                onClick={() => openDetail(run.id)}
-                onKeyDown={(event) => {
-                  if (event.key === 'Enter' || event.key === ' ') {
-                    event.preventDefault()
-                    openDetail(run.id)
-                  }
-                }}
-              >
-                <td className="koc-mono">{run.id}</td>
+              <tr key={run.id} className="koc-table__row">
+                <td className="koc-mono">
+                  <Link
+                    className="koc-table__primary-link"
+                    to={`/sandbox-runs/${encodeURIComponent(run.id)}`}
+                    state={listReturnState(location.pathname, location.search)}
+                  >
+                    {run.id}
+                  </Link>
+                </td>
                 <td>
                   <strong>{run.mode}</strong>
                   <br />

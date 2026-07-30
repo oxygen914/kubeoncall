@@ -221,4 +221,33 @@ describe('AskPage', () => {
     const headers = secondRequest.headers as Record<string, string>
     expect(headers['Idempotency-Key']).toMatch(/^ask_.{16,}$/)
   })
+
+  it('starts a clean conversation without reusing the previous session', async () => {
+    renderPage()
+    const input = screen.getByLabelText('向 KubeOnCall 提问')
+
+    fireEvent.change(input, { target: { value: '分析 Pending Pod' } })
+    fireEvent.click(screen.getByRole('button', { name: '发送问题' }))
+    await screen.findAllByText(/发现 payment-api Pod 持续 Pending/)
+
+    fireEvent.click(screen.getByRole('button', { name: '新建会话' }))
+    expect(screen.getByRole('heading', { name: '从当前运维问题开始' })).toBeInTheDocument()
+    expect(screen.getByText('新会话')).toBeInTheDocument()
+
+    fireEvent.change(input, { target: { value: '检查新的问题' } })
+    fireEvent.click(screen.getByRole('button', { name: '发送问题' }))
+
+    await waitFor(() => {
+      const posts = fetchMock.mock.calls.filter(
+        ([, init]) => (init as RequestInit | undefined)?.method === 'POST',
+      )
+      expect(posts).toHaveLength(2)
+    })
+    const posts = fetchMock.mock.calls.filter(
+      ([, init]) => (init as RequestInit | undefined)?.method === 'POST',
+    )
+    const body = JSON.parse(String((posts[1]?.[1] as RequestInit).body)) as Record<string, unknown>
+    expect(body).not.toHaveProperty('sessionId')
+    expect(body).toMatchObject({ question: '检查新的问题', cluster: 'test-01' })
+  })
 })

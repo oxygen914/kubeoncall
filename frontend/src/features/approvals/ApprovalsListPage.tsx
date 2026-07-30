@@ -1,4 +1,4 @@
-import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
+import { Link, useLocation, useSearchParams } from 'react-router-dom'
 import { AsyncState } from '@/components/feedback/AsyncState'
 import { Button } from '@/components/ui/Button'
 import { StatusBadge } from '@/components/ui/StatusBadge'
@@ -12,7 +12,6 @@ const STATUSES: ApprovalStatus[] = ['PENDING', 'APPROVED', 'REJECTED', 'EXPIRED'
 const RISKS: ApprovalRiskLevel[] = ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL']
 
 export function ApprovalsListPage() {
-  const navigate = useNavigate()
   const location = useLocation()
   const [searchParams, setSearchParams] = useSearchParams()
   const page = readPageParam(searchParams.get('page'))
@@ -34,11 +33,6 @@ export function ApprovalsListPage() {
   }
   const updatePage = (nextPage: number) => {
     setSearchParams(mergeSearchParams(searchParams, { page: nextPage === 1 ? null : nextPage }))
-  }
-  const openDetail = (approvalId: string) => {
-    navigate(`/approvals/${encodeURIComponent(approvalId)}`, {
-      state: listReturnState(location.pathname, location.search),
-    })
   }
   const { data, isLoading, error, isFetching } = useApprovalList({
     page,
@@ -110,19 +104,16 @@ export function ApprovalsListPage() {
           </thead>
           <tbody>
             {rows.map((approval) => (
-              <tr
-                key={approval.id}
-                className="koc-table__row"
-                tabIndex={0}
-                onClick={() => openDetail(approval.id)}
-                onKeyDown={(event) => {
-                  if (event.key === 'Enter' || event.key === ' ') {
-                    event.preventDefault()
-                    openDetail(approval.id)
-                  }
-                }}
-              >
-                <td className="koc-table__cell--primary">{approval.summary}</td>
+              <tr key={approval.id} className="koc-table__row">
+                <td className="koc-table__cell--primary">
+                  <Link
+                    className="koc-table__primary-link"
+                    to={`/approvals/${encodeURIComponent(approval.id)}`}
+                    state={listReturnState(location.pathname, location.search)}
+                  >
+                    {approval.summary}
+                  </Link>
+                </td>
                 <td>
                   <StatusBadge tone={approvalTone(approval.status)}>{approval.status}</StatusBadge>
                 </td>

@@ -20,7 +20,7 @@ installGlobalErrorReporting()
 ReactDOM.createRoot(rootElement).render(
   <React.StrictMode>
     <ErrorBoundary>
-      <BrowserRouter>
+      <BrowserRouter future={{ v7_relativeSplatPath: true, v7_startTransition: true }}>
         <AppProviders>
           <App />
         </AppProviders>

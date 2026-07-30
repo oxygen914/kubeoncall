@@ -1,4 +1,4 @@
-import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
+import { Link, useLocation, useSearchParams } from 'react-router-dom'
 import { AsyncState } from '@/components/feedback/AsyncState'
 import { Button } from '@/components/ui/Button'
 import { StatusBadge, type StatusTone } from '@/components/ui/StatusBadge'
@@ -9,7 +9,6 @@ import { listReturnState, mergeSearchParams, readPageParam } from '@/lib/navigat
 const PAGE_SIZE = 20
 
 export function AuditListPage() {
-  const navigate = useNavigate()
   const location = useLocation()
   const [searchParams, setSearchParams] = useSearchParams()
   const page = readPageParam(searchParams.get('page'))
@@ -36,11 +35,6 @@ export function AuditListPage() {
   }
   const updatePage = (nextPage: number) => {
     setSearchParams(mergeSearchParams(searchParams, { page: nextPage === 1 ? null : nextPage }))
-  }
-  const openDetail = (auditId: string) => {
-    navigate(`/audit/${encodeURIComponent(auditId)}`, {
-      state: listReturnState(location.pathname, location.search),
-    })
   }
 
   return (
@@ -116,19 +110,16 @@ export function AuditListPage() {
           </thead>
           <tbody>
             {(query.data?.data ?? []).map((item) => (
-              <tr
-                key={item.id}
-                className="koc-table__row"
-                tabIndex={0}
-                onClick={() => openDetail(item.id)}
-                onKeyDown={(event) => {
-                  if (event.key === 'Enter' || event.key === ' ') {
-                    event.preventDefault()
-                    openDetail(item.id)
-                  }
-                }}
-              >
-                <td>{formatTime(item.occurredAt)}</td>
+              <tr key={item.id} className="koc-table__row">
+                <td>
+                  <Link
+                    className="koc-table__primary-link"
+                    to={`/audit/${encodeURIComponent(item.id)}`}
+                    state={listReturnState(location.pathname, location.search)}
+                  >
+                    {formatTime(item.occurredAt)}
+                  </Link>
+                </td>
                 <td>{item.actor.displayName ?? item.actor.id ?? item.actor.type}</td>
                 <td>{item.action}</td>
                 <td>

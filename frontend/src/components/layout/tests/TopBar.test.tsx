@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { describe, expect, it, vi } from 'vitest'
 import type { SessionData } from '@/api/auth'
@@ -63,12 +63,39 @@ describe('TopBar navigation', () => {
     })
     expect(screen.getByRole('button', { name: '查看活跃告警' })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: '查看当前风险概览' })).not.toBeInTheDocument()
+    expect(screen.getByRole('option', { name: '查看活跃告警' })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    )
 
     fireEvent.keyDown(window, { key: 'Escape' })
     fireEvent.click(screen.getByRole('button', { name: /Operator/ }))
-    expect(screen.getByRole('menuitem', { name: 'API Token' })).toHaveAttribute('href', '/tokens')
-    expect(screen.getByRole('menuitem', { name: '数据迁移' })).toHaveAttribute('href', '/migration')
+    expect(screen.getByRole('link', { name: 'API Token' })).toHaveAttribute('href', '/tokens')
+    expect(screen.getByRole('link', { name: '数据迁移' })).toHaveAttribute('href', '/migration')
+    expect(screen.getByRole('button', { name: '切换深色主题' })).toBeInTheDocument()
     expect(screen.queryByLabelText(/通知/)).not.toBeInTheDocument()
+  })
+
+  it('moves through command results with arrow, Home and End keys', () => {
+    render(
+      <MemoryRouter>
+        <TopBar session={session} onLogout={vi.fn()} onOpenNavigation={vi.fn()} />
+      </MemoryRouter>,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: '打开快速导航' }))
+    const input = screen.getByRole('combobox', { name: '搜索可访问页面' })
+    const options = within(screen.getByRole('listbox', { name: '快速导航结果' })).getAllByRole(
+      'option',
+    )
+    expect(options[0]).toHaveAttribute('aria-selected', 'true')
+
+    fireEvent.keyDown(input, { key: 'ArrowDown' })
+    expect(options[1]).toHaveAttribute('aria-selected', 'true')
+    fireEvent.keyDown(input, { key: 'End' })
+    expect(options.at(-1)).toHaveAttribute('aria-selected', 'true')
+    fireEvent.keyDown(input, { key: 'Home' })
+    expect(options[0]).toHaveAttribute('aria-selected', 'true')
   })
 
   it('exposes mobile navigation and scope controls without duplicating desktop behavior', () => {

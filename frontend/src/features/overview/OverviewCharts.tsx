@@ -1,23 +1,3 @@
-import { useMemo } from 'react'
-import ReactEChartsCore from 'echarts-for-react/lib/core'
-import * as echarts from 'echarts/core'
-import { BarChart } from 'echarts/charts'
-import { GridComponent, LegendComponent, TooltipComponent } from 'echarts/components'
-import { SVGRenderer } from 'echarts/renderers'
-import { useTheme } from '@/features/theme/themeContext'
-
-echarts.use([BarChart, GridComponent, LegendComponent, TooltipComponent, SVGRenderer])
-
-const LIGHT_CHART_COLORS = {
-  primary: '#2563eb',
-  success: '#15803d',
-  danger: '#dc2626',
-  warning: '#d97706',
-  neutral: '#64748b',
-  grid: '#e2e8f0',
-  text: '#5f6f85',
-}
-
 const EXECUTION_STATUS_ORDER = [
   'SUCCEEDED',
   'FAILED',
@@ -27,6 +7,10 @@ const EXECUTION_STATUS_ORDER = [
   'REJECTED',
   'CANCELLED',
 ]
+
+const CHART_WIDTH = 720
+const CHART_HEIGHT = 240
+const CHART_MARGIN = { top: 34, right: 14, bottom: 42, left: 44 }
 
 export function ExecutionTrendChart({
   values,
@@ -48,90 +32,126 @@ export function ExecutionTrendChart({
   ]
   const hasStatusTrend = statusBuckets.length > 0 && statuses.length > 0
   const buckets = hasStatusTrend ? statusBuckets : fallbackEntries.map(([bucket]) => bucket)
-  const { theme } = useTheme()
-  const colors = chartColors(theme)
-  const option = {
-    animationDuration: 180,
-    color: [colors.primary],
-    tooltip: {
-      trigger: 'axis',
-      valueFormatter: (value: number) => `${value} 次`,
-    },
-    legend: {
-      top: 0,
-      right: 0,
-      data: hasStatusTrend ? statuses : ['全部执行'],
-      textStyle: { color: colors.text, fontSize: 12 },
-    },
-    grid: { left: 42, right: 16, top: 38, bottom: 36 },
-    xAxis: {
-      type: 'category',
-      data: buckets.map(compactBucket),
-      axisTick: { alignWithLabel: true },
-      axisLabel: { color: colors.text, fontSize: 11, hideOverlap: true },
-      axisLine: { lineStyle: { color: colors.grid } },
-    },
-    yAxis: {
-      type: 'value',
-      minInterval: 1,
-      name: '次数',
-      nameTextStyle: { color: colors.text, fontSize: 11 },
-      axisLabel: { color: colors.text, fontSize: 11 },
-      splitLine: { lineStyle: { color: colors.grid, type: 'dashed' } },
-    },
-    series: hasStatusTrend
-      ? statuses.map((status) => ({
-          name: status,
-          type: 'bar',
-          stack: 'execution-status',
-          barMaxWidth: 28,
-          data: buckets.map((bucket) => statusValues?.[bucket]?.[status] ?? 0),
-          itemStyle: { color: executionStatusColor(status, colors) },
-        }))
-      : [
-          {
-            name: '全部执行',
-            type: 'bar',
-            barMaxWidth: 28,
-            data: fallbackEntries.map(([, count]) => count),
-            itemStyle: { color: colors.primary, borderRadius: [3, 3, 0, 0] },
-            emphasis: { itemStyle: { color: colors.primaryStrong } },
-          },
-        ],
-  }
 
   if (buckets.length === 0) {
     return <p className="koc-overview-empty">当前窗口无执行趋势数据。</p>
   }
 
+  const bucketValues = buckets.map((bucket) =>
+    hasStatusTrend
+      ? statuses.reduce((sum, status) => sum + (statusValues?.[bucket]?.[status] ?? 0), 0)
+      : (values[bucket] ?? 0),
+  )
+  const maxValue = Math.max(...bucketValues, 1)
+  const plotWidth = CHART_WIDTH - CHART_MARGIN.left - CHART_MARGIN.right
+  const plotHeight = CHART_HEIGHT - CHART_MARGIN.top - CHART_MARGIN.bottom
+  const bucketWidth = plotWidth / buckets.length
+  const barWidth = Math.min(30, Math.max(6, bucketWidth * 0.58))
+  const ticks = buildTicks(maxValue)
+  const labelStride = Math.max(1, Math.ceil(buckets.length / 8))
+
   return (
     <>
-      <div
-        className="koc-chart"
-        role="img"
-        aria-label={
-          hasStatusTrend ? '执行状态堆叠时间趋势图，单位为次数' : '执行总量时间趋势图，单位为次数'
-        }
-      >
-        <ReactEChartsCore
-          echarts={echarts}
-          option={option}
-          opts={{ renderer: 'svg' }}
-          style={{ height: 240 }}
-        />
+      {hasStatusTrend ? (
+        <ul className="koc-chart-legend" aria-label="执行状态图例">
+          {statuses.map((status) => (
+            <li key={status}>
+              <span data-status={status} aria-hidden="true" />
+              <code>{status}</code>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+      <div className="koc-chart">
+        <svg
+          className="koc-trend-chart"
+          viewBox={`0 0 ${CHART_WIDTH} ${CHART_HEIGHT}`}
+          role="img"
+          aria-labelledby="execution-trend-title execution-trend-description"
+          preserveAspectRatio="xMidYMid meet"
+        >
+          <title id="execution-trend-title">
+            {hasStatusTrend ? '执行状态堆叠时间趋势图' : '执行总量时间趋势图'}
+          </title>
+          <desc id="execution-trend-description">
+            横轴为时间，纵轴为执行次数；精确数据同时提供在图表后的数据表中。
+          </desc>
+
+          {ticks.map((tick) => {
+            const y =
+              CHART_MARGIN.top + plotHeight - (Math.min(tick, maxValue) / maxValue) * plotHeight
+            return (
+              <g className="koc-trend-chart__grid" key={tick}>
+                <line x1={CHART_MARGIN.left} x2={CHART_WIDTH - CHART_MARGIN.right} y1={y} y2={y} />
+                <text x={CHART_MARGIN.left - 8} y={y + 4} textAnchor="end">
+                  {tick}
+                </text>
+              </g>
+            )
+          })}
+
+          {buckets.map((bucket, index) => {
+            const centerX = CHART_MARGIN.left + bucketWidth * index + bucketWidth / 2
+            let stackedValue = 0
+            const description = hasStatusTrend
+              ? statuses
+                  .map((status) => `${status} ${statusValues?.[bucket]?.[status] ?? 0} 次`)
+                  .join('，')
+              : `全部执行 ${values[bucket] ?? 0} 次`
+            return (
+              <g key={bucket}>
+                <title>
+                  {bucket}：{description}
+                </title>
+                {(hasStatusTrend ? statuses : ['ALL']).map((status) => {
+                  const count =
+                    status === 'ALL'
+                      ? (values[bucket] ?? 0)
+                      : (statusValues?.[bucket]?.[status] ?? 0)
+                  const height = (count / maxValue) * plotHeight
+                  const y =
+                    CHART_MARGIN.top + plotHeight - ((stackedValue + count) / maxValue) * plotHeight
+                  stackedValue += count
+                  return (
+                    <rect
+                      key={status}
+                      className="koc-trend-chart__bar"
+                      data-status={status}
+                      x={centerX - barWidth / 2}
+                      y={y}
+                      width={barWidth}
+                      height={Math.max(height, count > 0 ? 1 : 0)}
+                      rx={status === statuses.at(-1) || status === 'ALL' ? 2 : 0}
+                    />
+                  )
+                })}
+                {index % labelStride === 0 || index === buckets.length - 1 ? (
+                  <text
+                    className="koc-trend-chart__axis-label"
+                    x={centerX}
+                    y={CHART_HEIGHT - 14}
+                    textAnchor="middle"
+                  >
+                    {compactBucket(bucket)}
+                  </text>
+                ) : null}
+              </g>
+            )
+          })}
+        </svg>
       </div>
       <table className="koc-visually-hidden">
         <caption>执行趋势数据</caption>
-        {hasStatusTrend ? (
-          <thead>
-            <tr>
-              <th>时间</th>
-              {statuses.map((status) => (
-                <th key={status}>{status}</th>
-              ))}
-            </tr>
-          </thead>
-        ) : null}
+        <thead>
+          <tr>
+            <th>时间</th>
+            {hasStatusTrend ? (
+              statuses.map((status) => <th key={status}>{status}</th>)
+            ) : (
+              <th>全部执行</th>
+            )}
+          </tr>
+        </thead>
         <tbody>
           {buckets.map((bucket) => (
             <tr key={bucket}>
@@ -151,76 +171,29 @@ export function ExecutionTrendChart({
   )
 }
 
-function executionStatusColor(status: string, colors: ReturnType<typeof chartColors>): string {
-  if (status === 'SUCCEEDED') return colors.success
-  if (status === 'FAILED' || status === 'REJECTED' || status === 'CANCELLED') return colors.danger
-  if (status === 'RUNNING') return colors.primary
-  if (status === 'WAITING_APPROVAL' || status === 'PENDING') return colors.warning
-  return colors.neutral
-}
-
 export function FailureReasonChart({ values }: { values: Record<string, number> }) {
   const entries = Object.entries(values).sort((a, b) => b[1] - a[1])
-  const { theme } = useTheme()
-  const colors = chartColors(theme)
-  const option = useMemo(
-    () => ({
-      animationDuration: 180,
-      tooltip: {
-        trigger: 'axis',
-        axisPointer: { type: 'shadow' },
-        valueFormatter: (value: number) => `${value} 次`,
-      },
-      grid: { left: 118, right: 28, top: 8, bottom: 22 },
-      xAxis: {
-        type: 'value',
-        minInterval: 1,
-        axisLabel: { color: colors.text, fontSize: 11 },
-        splitLine: { lineStyle: { color: colors.grid, type: 'dashed' } },
-      },
-      yAxis: {
-        type: 'category',
-        inverse: true,
-        data: entries.map(([reason]) => reason),
-        axisLabel: {
-          color: colors.text,
-          fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
-          fontSize: 11,
-          width: 104,
-          overflow: 'truncate',
-        },
-        axisLine: { show: false },
-        axisTick: { show: false },
-      },
-      series: [
-        {
-          name: '失败次数',
-          type: 'bar',
-          barMaxWidth: 18,
-          data: entries.map(([, count]) => count),
-          label: { show: true, position: 'right', color: colors.text, fontSize: 11 },
-          itemStyle: { color: colors.danger, borderRadius: [0, 3, 3, 0] },
-        },
-      ],
-    }),
-    [colors, entries],
-  )
 
   if (entries.length === 0) {
     return <p className="koc-overview-empty">当前窗口无失败执行。</p>
   }
 
-  const height = Math.max(150, entries.length * 36 + 36)
+  const maxValue = Math.max(...entries.map(([, count]) => count), 1)
   return (
     <>
-      <div className="koc-chart" role="img" aria-label="失败原因水平条形图，单位为次数">
-        <ReactEChartsCore
-          echarts={echarts}
-          option={option}
-          opts={{ renderer: 'svg' }}
-          style={{ height }}
-        />
-      </div>
+      <ol className="koc-failure-bars" aria-label="失败原因及次数">
+        {entries.map(([reason, count]) => (
+          <li key={reason}>
+            <div>
+              <code title={reason}>{reason}</code>
+              <strong>{count} 次</strong>
+            </div>
+            <span aria-hidden="true">
+              <i style={{ width: `${(count / maxValue) * 100}%` }} />
+            </span>
+          </li>
+        ))}
+      </ol>
       <table className="koc-visually-hidden">
         <caption>失败原因数据</caption>
         <tbody>
@@ -272,21 +245,14 @@ export function ExecutionStatusDistribution({ values }: { values: Record<string,
   )
 }
 
+function buildTicks(maxValue: number): number[] {
+  const tickCount = Math.min(4, Math.max(1, Math.ceil(maxValue)))
+  return Array.from({ length: tickCount + 1 }, (_, index) =>
+    Math.round((maxValue * index) / tickCount),
+  ).filter((value, index, values) => index === 0 || value !== values[index - 1])
+}
+
 function compactBucket(bucket: string): string {
   const match = bucket.match(/(\d{2}:\d{2})$/)
   return match?.[1] ?? bucket
-}
-
-function chartColors(theme: 'light' | 'dark') {
-  if (theme === 'dark') {
-    return {
-      ...LIGHT_CHART_COLORS,
-      primary: '#60a5fa',
-      primaryStrong: '#93c5fd',
-      danger: '#f87171',
-      grid: '#334155',
-      text: '#cbd5e1',
-    }
-  }
-  return { ...LIGHT_CHART_COLORS, primaryStrong: '#1d4ed8' }
 }

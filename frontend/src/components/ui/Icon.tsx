@@ -11,6 +11,7 @@ export type IconName =
   | 'change'
   | 'chevron-left'
   | 'chevron-right'
+  | 'close'
   | 'cluster'
   | 'execution'
   | 'external-link'
@@ -232,6 +233,8 @@ function iconPath(name: IconName) {
       )
     case 'menu':
       return <path d="M4 7h16M4 12h16M4 17h16" />
+    case 'close':
+      return <path d="m6 6 12 12M18 6 6 18" />
     case 'chevron-left':
       return <path d="m15 18-6-6 6-6" />
     case 'chevron-right':

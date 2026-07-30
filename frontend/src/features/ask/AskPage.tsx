@@ -27,6 +27,7 @@ interface Submission {
 }
 
 const STORAGE_KEY = 'kubeoncall.ask.conversation.v2'
+const MAX_CONVERSATION_TURNS = 20
 const suggestions = [
   '分析当前集群中处于 Pending 状态的 Pod',
   '最近有哪些 P1/P2 告警需要优先处理？',
@@ -43,6 +44,7 @@ export function AskPage() {
   )
   const [sessionId, setSessionId] = useState<string | null>(restored.sessionId)
   const [turns, setTurns] = useState<ConversationTurn[]>(restored.turns)
+  const [historyTrimmed, setHistoryTrimmed] = useState(restored.truncated)
   const [pendingQuestion, setPendingQuestion] = useState<string | null>(null)
   const [retrySubmission, setRetrySubmission] = useState<Submission | null>(null)
 
@@ -55,16 +57,20 @@ export function AskPage() {
       setQuestion('')
     },
     onSuccess: (result, submission) => {
-      setTurns((current) => [
-        ...current,
-        {
-          id: result.executionId,
-          question: submission.request.question,
-          executionId: result.executionId,
-          taskId: result.taskId,
-          submittedAt: new Date().toISOString(),
-        },
-      ])
+      setTurns((current) => {
+        const next = [
+          ...current,
+          {
+            id: result.executionId,
+            question: submission.request.question,
+            executionId: result.executionId,
+            taskId: result.taskId,
+            submittedAt: new Date().toISOString(),
+          },
+        ]
+        if (next.length > MAX_CONVERSATION_TURNS) setHistoryTrimmed(true)
+        return next.slice(-MAX_CONVERSATION_TURNS)
+      })
       setPendingQuestion(null)
     },
     onError: (_error, submission) => {
@@ -106,6 +112,25 @@ export function AskPage() {
     mutation.mutate({ request, idempotencyKey: createIdempotencyKey() })
   }
 
+  function startNewConversation() {
+    if (mutation.isPending) return
+    setSessionId(null)
+    setTurns([])
+    setHistoryTrimmed(false)
+    setPendingQuestion(null)
+    setRetrySubmission(null)
+    setQuestion('')
+    window.localStorage.removeItem(STORAGE_KEY)
+  }
+
+  const liveMessage = mutation.isPending
+    ? '正在创建持久化执行'
+    : errorMessage
+      ? `问题提交失败：${errorMessage}`
+      : latestResult
+        ? `最新执行状态：${latestResult.status}`
+        : ''
+
   return (
     <section className="koc-ask-page">
       <header className="koc-ask-header">
@@ -114,18 +139,38 @@ export function AskPage() {
           <h1>AI 诊断</h1>
           <p>结合监控、日志、事件与 SOP 形成可追溯结论；变更操作始终经过校验和审批。</p>
         </div>
-        <div className="koc-ask-header__state" aria-label="AI 助手状态">
-          <span className="koc-live-status">
-            <i aria-hidden="true" />
-            持久化工作流
-          </span>
-          <span>{sessionId ? '连续会话' : '新会话'}</span>
+        <div className="koc-ask-header__actions">
+          <div className="koc-ask-header__state" aria-label="AI 助手状态">
+            <span className="koc-live-status">
+              <i aria-hidden="true" />
+              持久化工作流
+            </span>
+            <span>{sessionId ? '连续会话' : '新会话'}</span>
+          </div>
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            disabled={mutation.isPending}
+            onClick={startNewConversation}
+          >
+            新建会话
+          </Button>
         </div>
       </header>
 
+      <p className="koc-visually-hidden" role="status" aria-live="polite" aria-atomic="true">
+        {liveMessage}
+      </p>
+
       <div className="koc-ask-layout">
         <div className="koc-ask-workspace">
-          <div className="koc-ask-transcript" aria-live="polite">
+          <div className="koc-ask-transcript">
+            {historyTrimmed ? (
+              <p className="koc-ask-history-note">
+                当前会话仅保留最近 {MAX_CONVERSATION_TURNS} 轮展示，较早记录仍可在执行中心查询。
+              </p>
+            ) : null}
             {turns.length === 0 && !pendingQuestion ? (
               <div className="koc-ask-empty">
                 <span className="koc-ask-empty__icon" aria-hidden="true">
@@ -240,6 +285,7 @@ function ConversationItem({
 
   const conclusion = result?.conclusions?.[0]
   const message = result?.answer || result?.resultSummary
+  const englishAnswer = Boolean(message && isPrimarilyEnglish(message))
   return (
     <>
       <article className="koc-ask-message koc-ask-message--user">
@@ -258,7 +304,13 @@ function ConversationItem({
             执行状态读取失败。后台任务不会因此中断，可稍后刷新或前往执行详情查看。
           </div>
         ) : message ? (
-          <div className="koc-ask-message__content koc-ask-answer">{message}</div>
+          <div
+            className="koc-ask-message__content koc-ask-answer"
+            lang={englishAnswer ? 'en' : undefined}
+          >
+            {englishAnswer ? <span className="koc-language-badge">模型原文 · English</span> : null}
+            {message}
+          </div>
         ) : (
           <div className="koc-ask-thinking">
             <span className="koc-spinner koc-spinner--sm" aria-hidden="true" />
@@ -619,37 +671,47 @@ function createIdempotencyKey() {
   return `ask_${random}`.slice(0, 128)
 }
 
-function loadConversation(): { sessionId: string | null; turns: ConversationTurn[] } {
+function loadConversation(): {
+  sessionId: string | null
+  turns: ConversationTurn[]
+  truncated: boolean
+} {
   try {
     const raw = window.localStorage.getItem(STORAGE_KEY)
-    if (!raw) return { sessionId: null, turns: [] }
+    if (!raw) return { sessionId: null, turns: [], truncated: false }
     const parsed = JSON.parse(raw) as { sessionId?: unknown; turns?: unknown }
-    const turns = Array.isArray(parsed.turns)
-      ? parsed.turns
-          .map(asRecord)
-          .filter(Boolean)
-          .filter(
-            (item) =>
-              typeof item?.executionId === 'string' &&
-              typeof item?.taskId === 'string' &&
-              typeof item?.question === 'string',
-          )
-          .slice(-20)
-          .map((item): ConversationTurn => ({
-            id: String(item?.id ?? item?.executionId),
-            question: String(item?.question),
-            executionId: String(item?.executionId),
-            taskId: String(item?.taskId),
-            submittedAt: String(item?.submittedAt ?? ''),
-          }))
-      : []
+    const parsedTurns = Array.isArray(parsed.turns) ? parsed.turns : []
+    const turns = parsedTurns
+      .map(asRecord)
+      .filter(Boolean)
+      .filter(
+        (item) =>
+          typeof item?.executionId === 'string' &&
+          typeof item?.taskId === 'string' &&
+          typeof item?.question === 'string',
+      )
+      .slice(-MAX_CONVERSATION_TURNS)
+      .map((item): ConversationTurn => ({
+        id: String(item?.id ?? item?.executionId),
+        question: String(item?.question),
+        executionId: String(item?.executionId),
+        taskId: String(item?.taskId),
+        submittedAt: String(item?.submittedAt ?? ''),
+      }))
     return {
       sessionId: typeof parsed.sessionId === 'string' ? parsed.sessionId : null,
       turns,
+      truncated: parsedTurns.length > MAX_CONVERSATION_TURNS,
     }
   } catch {
-    return { sessionId: null, turns: [] }
+    return { sessionId: null, turns: [], truncated: false }
   }
+}
+
+function isPrimarilyEnglish(value: string): boolean {
+  const latinCharacters = value.match(/[A-Za-z]/g)?.length ?? 0
+  const cjkCharacters = value.match(/[\u3400-\u9fff]/g)?.length ?? 0
+  return latinCharacters >= 20 && latinCharacters > Math.max(cjkCharacters * 3, 12)
 }
 
 function asRecord(value: unknown): Record<string, unknown> | null {

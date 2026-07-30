@@ -1,4 +1,4 @@
-import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
+import { Link, useLocation, useSearchParams } from 'react-router-dom'
 import { AsyncState } from '@/components/feedback/AsyncState'
 import { Button } from '@/components/ui/Button'
 import { StatusBadge } from '@/components/ui/StatusBadge'
@@ -19,7 +19,6 @@ const STATUSES: ExecutionStatus[] = [
 ]
 
 export function ExecutionsListPage() {
-  const navigate = useNavigate()
   const location = useLocation()
   const [searchParams, setSearchParams] = useSearchParams()
   const page = readPageParam(searchParams.get('page'))
@@ -35,11 +34,6 @@ export function ExecutionsListPage() {
   }
   const updatePage = (nextPage: number) => {
     setSearchParams(mergeSearchParams(searchParams, { page: nextPage === 1 ? null : nextPage }))
-  }
-  const openDetail = (executionId: string) => {
-    navigate(`/executions/${encodeURIComponent(executionId)}`, {
-      state: listReturnState(location.pathname, location.search),
-    })
   }
   const { data, isLoading, error, isFetching } = useExecutionList({
     page,
@@ -106,19 +100,16 @@ export function ExecutionsListPage() {
           </thead>
           <tbody>
             {rows.map((execution) => (
-              <tr
-                key={execution.id}
-                className="koc-table__row"
-                tabIndex={0}
-                onClick={() => openDetail(execution.id)}
-                onKeyDown={(event) => {
-                  if (event.key === 'Enter' || event.key === ' ') {
-                    event.preventDefault()
-                    openDetail(execution.id)
-                  }
-                }}
-              >
-                <td className="koc-table__cell--primary">{execution.summary}</td>
+              <tr key={execution.id} className="koc-table__row">
+                <td className="koc-table__cell--primary">
+                  <Link
+                    className="koc-table__primary-link"
+                    to={`/executions/${encodeURIComponent(execution.id)}`}
+                    state={listReturnState(location.pathname, location.search)}
+                  >
+                    {execution.summary}
+                  </Link>
+                </td>
                 <td>{execution.type}</td>
                 <td>
                   <StatusBadge tone={executionTone(execution.status)}>

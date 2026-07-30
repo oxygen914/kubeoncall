@@ -210,6 +210,15 @@ export function Sidebar({
         >
           <Icon name={visuallyCollapsed ? 'chevron-right' : 'chevron-left'} size={16} />
         </button>
+        <button
+          className="koc-icon-button koc-sidebar__mobile-close"
+          type="button"
+          onClick={onNavigate}
+          aria-label="关闭主导航"
+          title="关闭主导航"
+        >
+          <Icon name="close" size={18} />
+        </button>
       </div>
 
       <nav className="koc-sidebar__nav" aria-label="功能导航">

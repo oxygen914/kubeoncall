@@ -30,8 +30,6 @@
     "zod": "^3.23.8",
     "@hookform/resolvers": "^3.9.0",
     "date-fns": "^3.6.0",
-    "echarts": "^5.5.1",
-    "echarts-for-react": "^3.0.2",
     "clsx": "^2.1.1"
   },
   "devDependencies": {

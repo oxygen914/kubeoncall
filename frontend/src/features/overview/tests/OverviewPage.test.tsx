@@ -8,12 +8,6 @@ import { PERMISSIONS } from '@/features/auth/permissions'
 import { MonitoringScopeProvider } from '@/features/monitoring/MonitoringScopeProvider'
 import { ThemeProvider } from '@/features/theme/ThemeProvider'
 
-vi.mock('echarts-for-react/lib/core', () => ({
-  default: ({ option }: { option: unknown }) => (
-    <div data-testid="echart" data-option={JSON.stringify(option)} />
-  ),
-}))
-
 const meta = { requestId: 'req_overview_test', timestamp: '2026-07-29T02:00:00Z' }
 const page = { number: 1, size: 5, totalElements: 1, totalPages: 1, hasNext: false }
 
@@ -294,7 +288,7 @@ describe('OverviewPage', () => {
     expect(screen.getByRole('button', { name: /P1 \/ P2 活跃告警/ })).toHaveTextContent('1 / 1')
     expect((await screen.findAllByText('API 服务不可用')).length).toBeGreaterThan(0)
     expect(screen.getByRole('heading', { name: '今日需要关注' })).toBeInTheDocument()
-    expect(screen.getByText('优先核查节点健康')).toBeInTheDocument()
+    expect(await screen.findByText('优先核查节点健康')).toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: '执行趋势' })).not.toBeInTheDocument()
 
     fireEvent.change(screen.getByLabelText('时间窗口'), { target: { value: '30d' } })
@@ -309,10 +303,15 @@ describe('OverviewPage', () => {
     renderPage('/overview?view=analytics')
 
     expect(await screen.findByRole('heading', { name: '执行趋势' })).toBeInTheDocument()
-    expect(await screen.findByText('TOOL_TIMEOUT', {}, { timeout: 5_000 })).toBeInTheDocument()
+    expect(
+      (await screen.findAllByText('TOOL_TIMEOUT', {}, { timeout: 5_000 })).length,
+    ).toBeGreaterThan(0)
     expect(screen.getByText('重启 payment-api 工作负载')).toBeInTheDocument()
     expect(screen.getByText('payment-api 故障恢复')).toBeInTheDocument()
-    expect(screen.getAllByTestId('echart')).toHaveLength(2)
+    expect(screen.getByRole('img', { name: /执行状态堆叠时间趋势图/ })).toBeInTheDocument()
+    expect(screen.getByRole('list', { name: '失败原因及次数' })).toHaveTextContent(
+      'TOOL_TIMEOUT2 次',
+    )
     expect(screen.queryByRole('heading', { name: '当前风险摘要' })).not.toBeInTheDocument()
 
     await waitFor(() => {

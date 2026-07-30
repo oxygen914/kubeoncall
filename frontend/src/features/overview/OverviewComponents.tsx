@@ -227,7 +227,12 @@ export function AiInsightPanel({ insights }: { insights: AiInsight[] }) {
           </dl>
           <div className="koc-ai-insight__recommendation">
             <strong>推荐动作</strong>
-            <span>{insight.action}</span>
+            <span lang={isPrimarilyEnglish(insight.action) ? 'en' : undefined}>
+              {isPrimarilyEnglish(insight.action) ? (
+                <span className="koc-language-badge">模型原文 · English</span>
+              ) : null}
+              {insight.action}
+            </span>
           </div>
           {insight.analysisPath || insight.handlingPath ? (
             <footer>
@@ -257,6 +262,12 @@ export function LoadingState({ lines = 4 }: { lines?: number }) {
       ))}
     </div>
   )
+}
+
+function isPrimarilyEnglish(value: string): boolean {
+  const latinCharacters = value.match(/[A-Za-z]/g)?.length ?? 0
+  const cjkCharacters = value.match(/[\u3400-\u9fff]/g)?.length ?? 0
+  return latinCharacters >= 20 && latinCharacters > Math.max(cjkCharacters * 3, 12)
 }
 
 export function EmptyState({ title, description }: { title: string; description: string }) {

@@ -45,7 +45,7 @@
   --koc-border-strong: #c6d1df;
   --koc-text: var(--koc-neutral-900);
   --koc-text-muted: #5f6f85;
-  --koc-text-subtle: #7c8ba1;
+  --koc-text-subtle: #64748b;
   --koc-text-inverse: var(--koc-neutral-0);
 
   /* Spacing scale (4px base) */

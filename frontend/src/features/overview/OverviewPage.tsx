@@ -69,10 +69,9 @@ export function OverviewPage() {
   const queryClient = useQueryClient()
   const [searchParams] = useSearchParams()
   const { session } = useSession()
-  const { scope, catalog, setCluster, setEnvironment, setNamespace } = useMonitoringScope()
+  const { scope } = useMonitoringScope()
   const [window, setWindow] = useState<OverviewWindow>('24h')
   const cluster = scope.cluster
-  const environment = scope.environment ?? ''
   const namespace = scope.namespace ?? ''
   const [refreshMode, setRefreshMode] = useState<RefreshMode>('30s')
   const refreshInterval = refreshMode === 'off' ? false : Number.parseInt(refreshMode) * 1_000
@@ -216,48 +215,7 @@ export function OverviewPage() {
 
       <PageTabs activeId={view} label="概览视图" tabs={OVERVIEW_TABS} />
 
-      <div className="koc-overview-toolbar" aria-label="概览查看范围">
-        <label className="koc-overview-control">
-          <span>集群</span>
-          <select value={cluster} onChange={(event) => setCluster(event.target.value)}>
-            {(catalog?.clusters.length ?? 0) === 0 ? <option value="">暂无集群</option> : null}
-            {catalog?.clusters.map((item) => (
-              <option value={item.value} key={item.value}>
-                {item.label}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="koc-overview-control">
-          <span>环境</span>
-          <select
-            value={environment}
-            onChange={(event) => setEnvironment(event.target.value)}
-            disabled={!catalog?.capabilities.environmentFilterAvailable}
-          >
-            <option value="">全部环境</option>
-            {catalog?.environments.map((item) => (
-              <option value={item.value} key={item.value}>
-                {item.label}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="koc-overview-control">
-          <span>Namespace</span>
-          <select
-            value={namespace}
-            onChange={(event) => setNamespace(event.target.value)}
-            disabled={!catalog?.capabilities.namespaceFilterAvailable}
-          >
-            <option value="">全部 Namespace</option>
-            {catalog?.namespaces.map((item) => (
-              <option value={item.value} key={item.value}>
-                {item.label}
-              </option>
-            ))}
-          </select>
-        </label>
+      <div className="koc-overview-toolbar" aria-label="概览时间与刷新设置">
         <label className="koc-overview-control">
           <span>时间窗口</span>
           <select

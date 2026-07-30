@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react'
-import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
+import { Link, useLocation, useSearchParams } from 'react-router-dom'
 import { AsyncState } from '@/components/feedback/AsyncState'
 import { Button } from '@/components/ui/Button'
 import { StatusBadge } from '@/components/ui/StatusBadge'
@@ -13,7 +13,6 @@ import { listReturnState, mergeSearchParams, readPageParam } from '@/lib/navigat
 const PAGE_SIZE = 20
 
 export function MemoryListPage() {
-  const navigate = useNavigate()
   const location = useLocation()
   const [searchParams, setSearchParams] = useSearchParams()
   const { session } = useSession()
@@ -34,11 +33,6 @@ export function MemoryListPage() {
   }
   const updatePage = (nextPage: number) => {
     setSearchParams(mergeSearchParams(searchParams, { page: nextPage === 1 ? null : nextPage }))
-  }
-  const openDetail = (memoryId: string) => {
-    navigate(`/memory/${encodeURIComponent(memoryId)}`, {
-      state: listReturnState(location.pathname, location.search),
-    })
   }
   const query = useMemories({ page, size: PAGE_SIZE, status, memoryType })
   const extractionsQuery = useMemoryExtractions()
@@ -106,19 +100,16 @@ export function MemoryListPage() {
           </thead>
           <tbody>
             {(query.data?.data ?? []).map((memory) => (
-              <tr
-                key={memory.id}
-                className="koc-table__row"
-                tabIndex={0}
-                onClick={() => openDetail(memory.id)}
-                onKeyDown={(event) => {
-                  if (event.key === 'Enter' || event.key === ' ') {
-                    event.preventDefault()
-                    openDetail(memory.id)
-                  }
-                }}
-              >
-                <td className="koc-mono">{memory.id}</td>
+              <tr key={memory.id} className="koc-table__row">
+                <td className="koc-mono">
+                  <Link
+                    className="koc-table__primary-link"
+                    to={`/memory/${encodeURIComponent(memory.id)}`}
+                    state={listReturnState(location.pathname, location.search)}
+                  >
+                    {memory.id}
+                  </Link>
+                </td>
                 <td>{memory.memoryType}</td>
                 <td>
                   <StatusBadge tone={memory.status === 'ACTIVE' ? 'success' : 'neutral'}>

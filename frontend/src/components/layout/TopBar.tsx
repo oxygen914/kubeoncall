@@ -166,7 +166,7 @@ export function TopBar({ session, onLogout, onOpenNavigation }: TopBarProps) {
               onClick={() => setUserOpen((current) => !current)}
               aria-label={`打开用户菜单：${displayName}`}
               aria-expanded={userOpen}
-              aria-haspopup="menu"
+              aria-controls="topbar-user-actions"
             >
               <span className="koc-topbar__avatar" aria-hidden="true">
                 {displayName.slice(0, 1).toUpperCase()}
@@ -174,7 +174,7 @@ export function TopBar({ session, onLogout, onOpenNavigation }: TopBarProps) {
               <span>{displayName}</span>
             </button>
             {userOpen ? (
-              <div className="koc-topbar__menu" role="menu">
+              <div className="koc-topbar__menu" id="topbar-user-actions" aria-label="用户操作">
                 <div>
                   <strong>{displayName}</strong>
                   <small>{session?.user?.roles.join(' / ') || 'Authenticated user'}</small>
@@ -182,7 +182,6 @@ export function TopBar({ session, onLogout, onOpenNavigation }: TopBarProps) {
                 {hasPermission(session, PERMISSIONS.TOKEN_READ_OWN) ? (
                   <Link
                     className="koc-topbar__menu-link"
-                    role="menuitem"
                     to="/tokens"
                     onClick={() => setUserOpen(false)}
                   >
@@ -193,7 +192,6 @@ export function TopBar({ session, onLogout, onOpenNavigation }: TopBarProps) {
                 {hasPermission(session, PERMISSIONS.SYSTEM_MANAGE) ? (
                   <Link
                     className="koc-topbar__menu-link"
-                    role="menuitem"
                     to="/migration"
                     onClick={() => setUserOpen(false)}
                   >
@@ -201,7 +199,11 @@ export function TopBar({ session, onLogout, onOpenNavigation }: TopBarProps) {
                     数据迁移
                   </Link>
                 ) : null}
-                <Button variant="ghost" size="sm" role="menuitem" onClick={() => void onLogout()}>
+                <button className="koc-topbar__menu-link" type="button" onClick={toggleTheme}>
+                  <Icon name={theme === 'dark' ? 'sun' : 'moon'} size={16} />
+                  {theme === 'dark' ? '切换浅色主题' : '切换深色主题'}
+                </button>
+                <Button variant="ghost" size="sm" onClick={() => void onLogout()}>
                   <Icon name="logout" size={16} />
                   退出登录
                 </Button>
@@ -286,6 +288,7 @@ function CommandDialog({ session, onClose }: { session: SessionData | null; onCl
   const inputRef = useRef<HTMLInputElement>(null)
   const panelRef = useRef<HTMLElement>(null)
   const [query, setQuery] = useState('')
+  const [activeIndex, setActiveIndex] = useState(0)
   const destinations: Array<{
     label: string
     path: string
@@ -347,6 +350,12 @@ function CommandDialog({ session, onClose }: { session: SessionData | null; onCl
     .filter((destination) =>
       `${destination.label} ${destination.keywords}`.toLocaleLowerCase().includes(normalizedQuery),
     )
+  const resolvedActiveIndex = Math.min(activeIndex, Math.max(visibleDestinations.length - 1, 0))
+  const activeDestination = visibleDestinations[resolvedActiveIndex]
+
+  useEffect(() => {
+    setActiveIndex(0)
+  }, [query])
 
   useEffect(() => {
     inputRef.current?.focus()
@@ -398,11 +407,36 @@ function CommandDialog({ session, onClose }: { session: SessionData | null; onCl
             value={query}
             placeholder="搜索可访问页面…"
             aria-label="搜索可访问页面"
+            role="combobox"
+            aria-autocomplete="list"
+            aria-controls="command-destinations"
+            aria-expanded="true"
+            aria-activedescendant={
+              activeDestination ? `command-destination-${resolvedActiveIndex}` : undefined
+            }
             onChange={(event) => setQuery(event.target.value)}
             onKeyDown={(event) => {
-              if (event.key === 'Enter' && visibleDestinations[0]) {
+              if (event.key === 'ArrowDown') {
                 event.preventDefault()
-                go(visibleDestinations[0].path)
+                setActiveIndex((current) =>
+                  visibleDestinations.length === 0 ? 0 : (current + 1) % visibleDestinations.length,
+                )
+              } else if (event.key === 'ArrowUp') {
+                event.preventDefault()
+                setActiveIndex((current) =>
+                  visibleDestinations.length === 0
+                    ? 0
+                    : (current - 1 + visibleDestinations.length) % visibleDestinations.length,
+                )
+              } else if (event.key === 'Home') {
+                event.preventDefault()
+                setActiveIndex(0)
+              } else if (event.key === 'End') {
+                event.preventDefault()
+                setActiveIndex(Math.max(visibleDestinations.length - 1, 0))
+              } else if (event.key === 'Enter' && activeDestination) {
+                event.preventDefault()
+                go(activeDestination.path)
               }
             }}
           />
@@ -411,10 +445,22 @@ function CommandDialog({ session, onClose }: { session: SessionData | null; onCl
         <div className="koc-command__heading" id="command-title">
           快速导航
         </div>
-        <ul>
-          {visibleDestinations.map((destination) => (
-            <li key={destination.path}>
-              <button type="button" onClick={() => go(destination.path)}>
+        <ul id="command-destinations" role="listbox" aria-label="快速导航结果">
+          {visibleDestinations.map((destination, index) => (
+            <li
+              id={`command-destination-${index}`}
+              key={destination.path}
+              role="option"
+              aria-selected={index === resolvedActiveIndex}
+            >
+              <button
+                type="button"
+                tabIndex={-1}
+                data-active={index === resolvedActiveIndex || undefined}
+                onMouseMove={() => setActiveIndex(index)}
+                onFocus={() => setActiveIndex(index)}
+                onClick={() => go(destination.path)}
+              >
                 <span>{destination.label}</span>
                 <Icon name="chevron-right" size={16} />
               </button>
