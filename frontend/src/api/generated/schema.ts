@@ -3928,6 +3928,18 @@ export interface components {
                 [key: string]: number;
             };
         };
+        EscalationView: {
+            id?: string;
+            status?: string;
+            severity?: string;
+            summary?: string;
+            details?: {
+                [key: string]: Record<string, never>;
+            };
+            errorSummary?: string;
+            /** Format: date-time */
+            updatedAt?: string;
+        };
         EvidenceItem: {
             evidenceId?: string;
             executionId?: string;
@@ -4002,6 +4014,7 @@ export interface components {
             };
             evidence?: components["schemas"]["EvidenceItem"][];
             conclusions?: components["schemas"]["AiConclusion"][];
+            operationClosure?: components["schemas"]["OperationClosureView"];
             nodes?: components["schemas"]["ExecutionNodeView"][];
         };
         ExecutionNodeView: {
@@ -4022,6 +4035,23 @@ export interface components {
             errorSummary?: string;
             /** Format: int64 */
             version?: number;
+        };
+        OperationClosureView: {
+            id?: string;
+            operationId?: string;
+            phase?: string;
+            executorKind?: string;
+            action?: string;
+            target?: string;
+            details?: {
+                [key: string]: Record<string, never>;
+            };
+            errorSummary?: string;
+            /** Format: date-time */
+            startedAt?: string;
+            /** Format: date-time */
+            finishedAt?: string;
+            escalation?: components["schemas"]["EscalationView"];
         };
         RecommendedAction: {
             type?: string;

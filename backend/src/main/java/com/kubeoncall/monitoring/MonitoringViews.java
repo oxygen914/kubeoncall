@@ -65,6 +65,25 @@ public final class MonitoringViews {
             List<CpuPoint> points,
             Instant collectedAt) {}
 
+    public record MetricPoint(Instant timestamp, double value) {}
+
+    public record ContainerMemorySeries(
+            String container,
+            List<MetricPoint> workingSetBytes,
+            List<MetricPoint> rssBytes,
+            List<MetricPoint> limitBytes) {}
+
+    public record PodMemoryTimeline(
+            Scope scope,
+            String pod,
+            long stepSeconds,
+            boolean workingSetAvailable,
+            boolean rssAvailable,
+            boolean limitAvailable,
+            boolean containersTruncated,
+            List<ContainerMemorySeries> containers,
+            Instant collectedAt) {}
+
     public record HealthPoint(Instant timestamp, double readyPercent, long abnormalPods, double healthScore) {}
 
     public record HealthComparison(

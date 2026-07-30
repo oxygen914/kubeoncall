@@ -11,9 +11,11 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	policyv1 "k8s.io/api/policy/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/fields"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/kubernetes"
 )
@@ -162,19 +164,19 @@ func (reader *KubernetesReader) DescribeResource(ctx context.Context, parameters
 		if err != nil {
 			return nil, safeKubernetesError(err)
 		}
-		return podView(*pod), nil
+		return reader.podView(ctx, *pod), nil
 	case "node":
 		node, err := reader.client.CoreV1().Nodes().Get(ctx, name, metav1.GetOptions{})
 		if err != nil {
 			return nil, safeKubernetesError(err)
 		}
-		return nodeView(*node), nil
+		return reader.nodeView(ctx, *node), nil
 	case "deployment", "deploy":
 		deployment, err := reader.client.AppsV1().Deployments(namespace).Get(ctx, name, metav1.GetOptions{})
 		if err != nil {
 			return nil, safeKubernetesError(err)
 		}
-		return deploymentView(*deployment), nil
+		return deploymentView(*deployment, reader.config.AllowedConfigKeys), nil
 	case "statefulset", "sts":
 		statefulSet, err := reader.client.AppsV1().StatefulSets(namespace).Get(ctx, name, metav1.GetOptions{})
 		if err != nil {
@@ -207,7 +209,7 @@ func (reader *KubernetesReader) DescribeWorkload(ctx context.Context, parameters
 		if err != nil {
 			return nil, safeKubernetesError(err)
 		}
-		return deploymentView(*deployment), nil
+		return deploymentView(*deployment, reader.config.AllowedConfigKeys), nil
 	case "statefulset", "sts":
 		statefulSet, err := reader.client.AppsV1().StatefulSets(namespace).Get(ctx, target, metav1.GetOptions{})
 		if err != nil {
@@ -326,7 +328,7 @@ func (reader *KubernetesReader) workloadSelector(ctx context.Context, namespace,
 func (reader *KubernetesReader) describeUnknownKind(ctx context.Context, namespace, name string) (any, error) {
 	pod, podErr := reader.client.CoreV1().Pods(namespace).Get(ctx, name, metav1.GetOptions{})
 	if podErr == nil {
-		return podView(*pod), nil
+		return reader.podView(ctx, *pod), nil
 	}
 	if !apierrors.IsNotFound(podErr) {
 		return nil, safeKubernetesError(podErr)
@@ -337,7 +339,7 @@ func (reader *KubernetesReader) describeUnknownKind(ctx context.Context, namespa
 func (reader *KubernetesReader) describeUnknownWorkload(ctx context.Context, namespace, name string) (any, error) {
 	deployment, deploymentErr := reader.client.AppsV1().Deployments(namespace).Get(ctx, name, metav1.GetOptions{})
 	if deploymentErr == nil {
-		return deploymentView(*deployment), nil
+		return deploymentView(*deployment, reader.config.AllowedConfigKeys), nil
 	}
 	if !apierrors.IsNotFound(deploymentErr) {
 		return nil, safeKubernetesError(deploymentErr)
@@ -359,12 +361,15 @@ func (reader *KubernetesReader) describeUnknownWorkload(ctx context.Context, nam
 func podView(pod corev1.Pod) map[string]any {
 	containers := make([]map[string]any, 0, len(pod.Status.ContainerStatuses))
 	for _, status := range pod.Status.ContainerStatuses {
+		spec := containerSpec(pod.Spec.Containers, status.Name)
 		containers = append(containers, map[string]any{
 			"name":         status.Name,
 			"ready":        status.Ready,
 			"restartCount": status.RestartCount,
 			"state":        containerState(status.State),
 			"lastState":    containerState(status.LastTerminationState),
+			"requests":     resourceListView(spec.Resources.Requests),
+			"limits":       resourceListView(spec.Resources.Limits),
 		})
 	}
 	return map[string]any{
@@ -383,22 +388,64 @@ func podView(pod corev1.Pod) map[string]any {
 	}
 }
 
-func nodeView(node corev1.Node) map[string]any {
-	conditions := make([]map[string]any, 0, len(node.Status.Conditions))
-	ready := false
-	for _, condition := range node.Status.Conditions {
-		conditions = append(conditions, map[string]any{
-			"type":               condition.Type,
-			"status":             condition.Status,
-			"reason":             condition.Reason,
-			"message":            bounded(condition.Message, 1000),
-			"lastTransitionTime": condition.LastTransitionTime.UTC().Format(time.RFC3339Nano),
-		})
-		if condition.Type == corev1.NodeReady && condition.Status == corev1.ConditionTrue {
-			ready = true
+func (reader *KubernetesReader) podView(ctx context.Context, pod corev1.Pod) map[string]any {
+	view := podView(pod)
+	if pod.Spec.NodeName == "" {
+		view["nodeContext"] = map[string]any{
+			"collectionStatus": "EMPTY",
+			"errorType":        "POD_NOT_SCHEDULED",
+		}
+		return view
+	}
+	node, err := reader.client.CoreV1().Nodes().Get(ctx, pod.Spec.NodeName, metav1.GetOptions{})
+	if err != nil {
+		view["nodeContext"] = map[string]any{
+			"collectionStatus": "UNAVAILABLE",
+			"errorType":        safeErrorCode(err),
+			"name":             pod.Spec.NodeName,
+		}
+		return view
+	}
+	conditions, ready, memoryPressure := nodeConditionsView(*node)
+	view["nodeContext"] = map[string]any{
+		"collectionStatus": "SUCCEEDED",
+		"resource": map[string]any{
+			"kind": "Node",
+			"name": node.Name,
+			"uid":  string(node.UID),
+		},
+		"ready":          ready,
+		"memoryPressure": memoryPressure,
+		"conditions":     conditions,
+	}
+	return view
+}
+
+func containerSpec(containers []corev1.Container, name string) corev1.Container {
+	for _, container := range containers {
+		if container.Name == name {
+			return container
 		}
 	}
-	return map[string]any{
+	return corev1.Container{}
+}
+
+func resourceListView(resources corev1.ResourceList) map[string]any {
+	result := make(map[string]any)
+	if quantity, found := resources[corev1.ResourceCPU]; found {
+		result["cpu"] = quantity.String()
+		result["cpuMillis"] = quantity.MilliValue()
+	}
+	if quantity, found := resources[corev1.ResourceMemory]; found {
+		result["memory"] = quantity.String()
+		result["memoryBytes"] = quantity.Value()
+	}
+	return result
+}
+
+func (reader *KubernetesReader) nodeView(ctx context.Context, node corev1.Node) map[string]any {
+	conditions, ready, _ := nodeConditionsView(node)
+	view := map[string]any{
 		"observedAt": time.Now().UTC().Format(time.RFC3339Nano),
 		"summary":    fmt.Sprintf("Node/%s ready=%t", node.Name, ready),
 		"resource": map[string]any{
@@ -411,38 +458,329 @@ func nodeView(node corev1.Node) map[string]any {
 		"capacity":    node.Status.Capacity,
 		"allocatable": node.Status.Allocatable,
 	}
+	view["lease"] = reader.nodeLease(ctx, node.Name)
+	affectedPods, allocated, truncated, collectionErrors := reader.nodePods(ctx, node.Name)
+	view["affectedPods"] = affectedPods
+	view["affectedPodCount"] = len(affectedPods)
+	view["affectedPodsTruncated"] = truncated
+	view["allocatedRequestsWithinScope"] = allocated.view()
+	view["remainingAllocatableWithinScope"] = remainingResources(node.Status.Allocatable, allocated)
+	view["impactScope"] = map[string]any{
+		"namespaces": reader.allowedNamespaces(),
+		"coverage":   "ALLOWED_NAMESPACES",
+		"complete":   false,
+	}
+	if len(collectionErrors) > 0 {
+		view["impactCollectionErrors"] = collectionErrors
+	}
+	return view
 }
 
-func deploymentView(deployment appsv1.Deployment) map[string]any {
+func nodeConditionsView(node corev1.Node) ([]map[string]any, bool, bool) {
+	conditions := make([]map[string]any, 0, len(node.Status.Conditions))
+	ready := false
+	memoryPressure := false
+	for _, condition := range node.Status.Conditions {
+		conditions = append(conditions, map[string]any{
+			"type":               condition.Type,
+			"status":             condition.Status,
+			"reason":             condition.Reason,
+			"message":            bounded(condition.Message, 1000),
+			"lastTransitionTime": condition.LastTransitionTime.UTC().Format(time.RFC3339Nano),
+		})
+		if condition.Type == corev1.NodeReady && condition.Status == corev1.ConditionTrue {
+			ready = true
+		}
+		if condition.Type == corev1.NodeMemoryPressure && condition.Status == corev1.ConditionTrue {
+			memoryPressure = true
+		}
+	}
+	return conditions, ready, memoryPressure
+}
+
+func (reader *KubernetesReader) nodeLease(ctx context.Context, nodeName string) map[string]any {
+	lease, err := reader.client.CoordinationV1().Leases(corev1.NamespaceNodeLease).Get(
+		ctx, nodeName, metav1.GetOptions{})
+	if err != nil {
+		if apierrors.IsNotFound(err) {
+			return map[string]any{"collectionStatus": "EMPTY", "errorType": "NODE_LEASE_NOT_FOUND"}
+		}
+		return map[string]any{
+			"collectionStatus": "UNAVAILABLE",
+			"errorType":        safeErrorCode(err),
+		}
+	}
+	result := map[string]any{
+		"collectionStatus": "SUCCEEDED",
+		"name":             lease.Name,
+		"namespace":        lease.Namespace,
+		"holderIdentity":   stringValue(lease.Spec.HolderIdentity),
+	}
+	if lease.Spec.RenewTime != nil {
+		renewTime := lease.Spec.RenewTime.Time.UTC()
+		result["renewTime"] = renewTime.Format(time.RFC3339Nano)
+		result["renewAgeSeconds"] = maxInt64(0, int64(time.Since(renewTime).Seconds()))
+	}
+	if lease.Spec.LeaseDurationSeconds != nil {
+		result["leaseDurationSeconds"] = *lease.Spec.LeaseDurationSeconds
+	}
+	return result
+}
+
+func (reader *KubernetesReader) nodePods(
+	ctx context.Context,
+	nodeName string,
+) ([]map[string]any, resourceRequests, bool, []map[string]any) {
+	namespaces := reader.allowedNamespaces()
+	pdbs := make(map[string][]policyv1.PodDisruptionBudget, len(namespaces))
+	errors := make([]map[string]any, 0)
+	for _, namespace := range namespaces {
+		list, err := reader.client.PolicyV1().PodDisruptionBudgets(namespace).List(ctx, metav1.ListOptions{})
+		if err != nil {
+			errors = append(errors, collectionError(namespace, "POD_DISRUPTION_BUDGET", err))
+			continue
+		}
+		pdbs[namespace] = list.Items
+	}
+
+	pods := make([]corev1.Pod, 0)
+	selector := fields.OneTermEqualSelector("spec.nodeName", nodeName).String()
+	for _, namespace := range namespaces {
+		list, err := reader.client.CoreV1().Pods(namespace).List(
+			ctx, metav1.ListOptions{FieldSelector: selector, Limit: int64(reader.config.MaxPods + 1)})
+		if err != nil {
+			errors = append(errors, collectionError(namespace, "POD", err))
+			continue
+		}
+		pods = append(pods, list.Items...)
+	}
+	sort.Slice(pods, func(left, right int) bool {
+		if pods[left].Namespace == pods[right].Namespace {
+			return pods[left].Name < pods[right].Name
+		}
+		return pods[left].Namespace < pods[right].Namespace
+	})
+	truncated := len(pods) > reader.config.MaxPods
+	if truncated {
+		pods = pods[:reader.config.MaxPods]
+	}
+
+	items := make([]map[string]any, 0, len(pods))
+	total := resourceRequests{}
+	for _, pod := range pods {
+		requests := requestedResources(pod)
+		total.add(requests)
+		items = append(items, map[string]any{
+			"namespace":            pod.Namespace,
+			"name":                 pod.Name,
+			"uid":                  string(pod.UID),
+			"phase":                string(pod.Status.Phase),
+			"owners":               ownerReferences(pod.OwnerReferences),
+			"requests":             requests.view(),
+			"podDisruptionBudgets": matchingPDBs(pod, pdbs[pod.Namespace]),
+		})
+	}
+	return items, total, truncated, errors
+}
+
+func (reader *KubernetesReader) allowedNamespaces() []string {
+	result := make([]string, 0, len(reader.config.Namespaces))
+	for namespace := range reader.config.Namespaces {
+		result = append(result, namespace)
+	}
+	sort.Strings(result)
+	return result
+}
+
+type resourceRequests struct {
+	cpuMillis   int64
+	memoryBytes int64
+	pods        int64
+}
+
+func requestedResources(pod corev1.Pod) resourceRequests {
+	regular := resourceRequests{pods: 1}
+	for _, container := range pod.Spec.Containers {
+		regular.add(resourceList(container.Resources.Requests))
+	}
+	initMax := resourceRequests{}
+	for _, container := range pod.Spec.InitContainers {
+		initMax.max(resourceList(container.Resources.Requests))
+	}
+	regular.max(initMax)
+	regular.add(resourceList(pod.Spec.Overhead))
+	return regular
+}
+
+func resourceList(resources corev1.ResourceList) resourceRequests {
+	result := resourceRequests{}
+	if quantity, found := resources[corev1.ResourceCPU]; found {
+		result.cpuMillis = quantity.MilliValue()
+	}
+	if quantity, found := resources[corev1.ResourceMemory]; found {
+		result.memoryBytes = quantity.Value()
+	}
+	return result
+}
+
+func (resources *resourceRequests) add(other resourceRequests) {
+	resources.cpuMillis += other.cpuMillis
+	resources.memoryBytes += other.memoryBytes
+	resources.pods += other.pods
+}
+
+func (resources *resourceRequests) max(other resourceRequests) {
+	if other.cpuMillis > resources.cpuMillis {
+		resources.cpuMillis = other.cpuMillis
+	}
+	if other.memoryBytes > resources.memoryBytes {
+		resources.memoryBytes = other.memoryBytes
+	}
+	if other.pods > resources.pods {
+		resources.pods = other.pods
+	}
+}
+
+func (resources resourceRequests) view() map[string]any {
+	return map[string]any{
+		"cpuMillis":   resources.cpuMillis,
+		"memoryBytes": resources.memoryBytes,
+		"pods":        resources.pods,
+	}
+}
+
+func remainingResources(allocatable corev1.ResourceList, allocated resourceRequests) map[string]any {
+	cpuMillis := int64(0)
+	memoryBytes := int64(0)
+	pods := int64(0)
+	if quantity, found := allocatable[corev1.ResourceCPU]; found {
+		cpuMillis = quantity.MilliValue()
+	}
+	if quantity, found := allocatable[corev1.ResourceMemory]; found {
+		memoryBytes = quantity.Value()
+	}
+	if quantity, found := allocatable[corev1.ResourcePods]; found {
+		pods = quantity.Value()
+	}
+	return map[string]any{
+		"cpuMillis":   maxInt64(0, cpuMillis-allocated.cpuMillis),
+		"memoryBytes": maxInt64(0, memoryBytes-allocated.memoryBytes),
+		"pods":        maxInt64(0, pods-allocated.pods),
+	}
+}
+
+func ownerReferences(references []metav1.OwnerReference) []map[string]any {
+	result := make([]map[string]any, 0, len(references))
+	for _, reference := range references {
+		result = append(result, map[string]any{
+			"kind":       reference.Kind,
+			"name":       reference.Name,
+			"uid":        string(reference.UID),
+			"controller": booleanValue(reference.Controller),
+		})
+	}
+	return result
+}
+
+func matchingPDBs(pod corev1.Pod, budgets []policyv1.PodDisruptionBudget) []map[string]any {
+	result := make([]map[string]any, 0)
+	for _, budget := range budgets {
+		selector, err := metav1.LabelSelectorAsSelector(budget.Spec.Selector)
+		if err != nil || !selector.Matches(labels.Set(pod.Labels)) {
+			continue
+		}
+		result = append(result, map[string]any{
+			"name":               budget.Name,
+			"disruptionsAllowed": budget.Status.DisruptionsAllowed,
+			"currentHealthy":     budget.Status.CurrentHealthy,
+			"desiredHealthy":     budget.Status.DesiredHealthy,
+			"expectedPods":       budget.Status.ExpectedPods,
+		})
+	}
+	return result
+}
+
+func collectionError(namespace, resourceType string, err error) map[string]any {
+	return map[string]any{
+		"namespace":        namespace,
+		"resourceType":     resourceType,
+		"collectionStatus": "UNAVAILABLE",
+		"errorType":        safeErrorCode(err),
+	}
+}
+
+func safeErrorCode(err error) string {
+	if safe, ok := safeKubernetesError(err).(*APIError); ok {
+		return safe.Code
+	}
+	return "KUBERNETES_UNAVAILABLE"
+}
+
+func stringValue(value *string) string {
+	if value == nil {
+		return ""
+	}
+	return *value
+}
+
+func booleanValue(value *bool) bool {
+	return value != nil && *value
+}
+
+func maxInt64(left, right int64) int64 {
+	if left > right {
+		return left
+	}
+	return right
+}
+
+func deploymentView(deployment appsv1.Deployment, allowedConfigKeys map[string]struct{}) map[string]any {
 	desired := int32Value(deployment.Spec.Replicas)
 	ready := deployment.Status.ReadyReplicas
-	return map[string]any{
-		"observedAt":      time.Now().UTC().Format(time.RFC3339Nano),
-		"summary":         fmt.Sprintf("Deployment/%s ready %d/%d", deployment.Name, ready, desired),
-		"resource":        resource("Deployment", deployment.Name, string(deployment.UID)),
-		"revision":        deployment.Annotations["deployment.kubernetes.io/revision"],
-		"desiredReplicas": desired,
-		"readyReplicas":   ready,
-		"updatedReplicas": deployment.Status.UpdatedReplicas,
-		"healthy":         desired == ready,
-		"selector":        metav1.FormatLabelSelector(deployment.Spec.Selector),
-		"conditions":      deploymentConditions(deployment.Status.Conditions),
+	view := map[string]any{
+		"observedAt":         time.Now().UTC().Format(time.RFC3339Nano),
+		"summary":            fmt.Sprintf("Deployment/%s ready %d/%d", deployment.Name, ready, desired),
+		"resource":           resource("Deployment", deployment.Name, string(deployment.UID)),
+		"resourceVersion":    deployment.ResourceVersion,
+		"generation":         deployment.Generation,
+		"observedGeneration": deployment.Status.ObservedGeneration,
+		"revision":           deployment.Annotations["deployment.kubernetes.io/revision"],
+		"desiredReplicas":    desired,
+		"readyReplicas":      ready,
+		"updatedReplicas":    deployment.Status.UpdatedReplicas,
+		"healthy":            desired == ready,
+		"selector":           metav1.FormatLabelSelector(deployment.Spec.Selector),
+		"conditions":         deploymentConditions(deployment.Status.Conditions),
 	}
+	if marker := deployment.Annotations[operationHashAnnotation]; marker != "" {
+		view["operationMarker"] = marker
+	}
+	configuration, conflicts := managedConfiguration(deployment, allowedConfigKeys)
+	if len(configuration) > 0 {
+		view["configuration"] = configuration
+	}
+	if len(conflicts) > 0 {
+		view["configurationConflicts"] = conflicts
+	}
+	return view
 }
 
 func statefulSetView(statefulSet appsv1.StatefulSet) map[string]any {
 	desired := int32Value(statefulSet.Spec.Replicas)
 	ready := statefulSet.Status.ReadyReplicas
 	return map[string]any{
-		"observedAt":      time.Now().UTC().Format(time.RFC3339Nano),
-		"summary":         fmt.Sprintf("StatefulSet/%s ready %d/%d", statefulSet.Name, ready, desired),
-		"resource":        resource("StatefulSet", statefulSet.Name, string(statefulSet.UID)),
-		"revision":        statefulSet.Status.CurrentRevision,
-		"desiredReplicas": desired,
-		"readyReplicas":   ready,
-		"updatedReplicas": statefulSet.Status.UpdatedReplicas,
-		"healthy":         desired == ready,
-		"selector":        metav1.FormatLabelSelector(statefulSet.Spec.Selector),
+		"observedAt":         time.Now().UTC().Format(time.RFC3339Nano),
+		"summary":            fmt.Sprintf("StatefulSet/%s ready %d/%d", statefulSet.Name, ready, desired),
+		"resource":           resource("StatefulSet", statefulSet.Name, string(statefulSet.UID)),
+		"resourceVersion":    statefulSet.ResourceVersion,
+		"generation":         statefulSet.Generation,
+		"observedGeneration": statefulSet.Status.ObservedGeneration,
+		"revision":           statefulSet.Status.CurrentRevision,
+		"desiredReplicas":    desired,
+		"readyReplicas":      ready,
+		"updatedReplicas":    statefulSet.Status.UpdatedReplicas,
+		"healthy":            desired == ready,
+		"selector":           metav1.FormatLabelSelector(statefulSet.Spec.Selector),
 	}
 }
 
@@ -450,16 +788,56 @@ func daemonSetView(daemonSet appsv1.DaemonSet) map[string]any {
 	desired := daemonSet.Status.DesiredNumberScheduled
 	ready := daemonSet.Status.NumberReady
 	return map[string]any{
-		"observedAt":      time.Now().UTC().Format(time.RFC3339Nano),
-		"summary":         fmt.Sprintf("DaemonSet/%s ready %d/%d", daemonSet.Name, ready, desired),
-		"resource":        resource("DaemonSet", daemonSet.Name, string(daemonSet.UID)),
-		"revision":        daemonSet.Status.ObservedGeneration,
-		"desiredReplicas": desired,
-		"readyReplicas":   ready,
-		"updatedReplicas": daemonSet.Status.UpdatedNumberScheduled,
-		"healthy":         desired == ready,
-		"selector":        metav1.FormatLabelSelector(daemonSet.Spec.Selector),
+		"observedAt":         time.Now().UTC().Format(time.RFC3339Nano),
+		"summary":            fmt.Sprintf("DaemonSet/%s ready %d/%d", daemonSet.Name, ready, desired),
+		"resource":           resource("DaemonSet", daemonSet.Name, string(daemonSet.UID)),
+		"resourceVersion":    daemonSet.ResourceVersion,
+		"generation":         daemonSet.Generation,
+		"observedGeneration": daemonSet.Status.ObservedGeneration,
+		"revision":           daemonSet.Status.ObservedGeneration,
+		"desiredReplicas":    desired,
+		"readyReplicas":      ready,
+		"updatedReplicas":    daemonSet.Status.UpdatedNumberScheduled,
+		"healthy":            desired == ready,
+		"selector":           metav1.FormatLabelSelector(daemonSet.Spec.Selector),
 	}
+}
+
+func managedConfiguration(
+	deployment appsv1.Deployment,
+	allowedConfigKeys map[string]struct{},
+) (map[string]any, []string) {
+	values := make(map[string][]string)
+	for _, container := range deployment.Spec.Template.Spec.Containers {
+		for _, variable := range container.Env {
+			if _, allowed := allowedConfigKeys[variable.Name]; !allowed || variable.ValueFrom != nil {
+				continue
+			}
+			values[variable.Name] = append(values[variable.Name], variable.Value)
+		}
+	}
+	configuration := make(map[string]any)
+	conflicts := make([]string, 0)
+	for key, entries := range values {
+		if len(entries) == 0 {
+			continue
+		}
+		first := entries[0]
+		consistent := true
+		for _, value := range entries[1:] {
+			if value != first {
+				consistent = false
+				break
+			}
+		}
+		if consistent {
+			configuration[key] = first
+		} else {
+			conflicts = append(conflicts, key)
+		}
+	}
+	sort.Strings(conflicts)
+	return configuration, conflicts
 }
 
 func deploymentConditions(conditions []appsv1.DeploymentCondition) []map[string]any {

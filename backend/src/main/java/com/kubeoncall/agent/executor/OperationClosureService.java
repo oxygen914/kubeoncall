@@ -1,9 +1,12 @@
 package com.kubeoncall.agent.executor;
 
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.HexFormat;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -11,7 +14,9 @@ import java.util.Map;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import com.kubeoncall.common.config.KubeOnCallProperties;
@@ -38,20 +43,48 @@ public class OperationClosureService {
     private final KubeOnCallProperties properties;
     private final Clock clock;
     private final Sleeper sleeper;
+    private final OperationClosureFactRepository factRepository;
+    private final boolean mysqlEnabled;
+
+    public OperationClosureService(List<ToolExecutor> executors, KubeOnCallProperties properties) {
+        this(executors, properties, Clock.systemUTC(), Thread::sleep, null, false);
+    }
 
     @Autowired
-    public OperationClosureService(List<ToolExecutor> executors, KubeOnCallProperties properties) {
-        this(executors, properties, Clock.systemUTC(), Thread::sleep);
+    public OperationClosureService(
+            List<ToolExecutor> executors,
+            KubeOnCallProperties properties,
+            ObjectProvider<OperationClosureFactRepository> factRepositoryProvider,
+            @Value("${kubeoncall.mysql-enabled:false}") boolean mysqlEnabled) {
+        this(
+                executors,
+                properties,
+                Clock.systemUTC(),
+                Thread::sleep,
+                factRepositoryProvider.getIfAvailable(),
+                mysqlEnabled);
     }
 
     OperationClosureService(
             List<ToolExecutor> executors, KubeOnCallProperties properties, Clock clock, Sleeper sleeper) {
+        this(executors, properties, clock, sleeper, null, false);
+    }
+
+    OperationClosureService(
+            List<ToolExecutor> executors,
+            KubeOnCallProperties properties,
+            Clock clock,
+            Sleeper sleeper,
+            OperationClosureFactRepository factRepository,
+            boolean mysqlEnabled) {
         this.executorsByKind = executors.stream()
                 .collect(Collectors.toMap(
                         ToolExecutor::getExecutorKind, Function.identity(), (left, right) -> left, LinkedHashMap::new));
         this.properties = properties;
         this.clock = clock;
         this.sleeper = sleeper;
+        this.factRepository = factRepository;
+        this.mysqlEnabled = mysqlEnabled;
     }
 
     Preparation prepare(GraphState state, ExecutionPlan plan, ToolDefinition definition) {
@@ -70,6 +103,10 @@ public class OperationClosureService {
                     + "."
                     + plan.action());
         }
+        Map<String, Object> existingClosure = mutableMap(state.getContext().get(CONTEXT_KEY));
+        if (reusablePreparation(existingClosure, state, plan)) {
+            return Preparation.ready(existingClosure);
+        }
 
         ToolExecutor kubernetes = executorsByKind.get(KUBERNETES);
         if (kubernetes == null) {
@@ -80,7 +117,12 @@ public class OperationClosureService {
         if (!successful(snapshot) || response(snapshot).isEmpty()) {
             return Preparation.blocked("Pre-execution workload snapshot is unavailable");
         }
-        Map<String, Object> rollbackPolicy = rollbackPolicy(plan.action(), snapshot, plan.parameters());
+        Map<String, Object> mutationGuard = mutationGuard(snapshot);
+        if (mutationGuard.isEmpty()) {
+            return Preparation.blocked("Pre-execution workload identity is incomplete");
+        }
+        Map<String, Object> rollbackPolicy =
+                rollbackPolicy(plan.action(), snapshot, plan.parameters(), mutationGuard, target(state));
         if (!Boolean.TRUE.equals(rollbackPolicy.get("available"))) {
             return Preparation.blocked(
                     String.valueOf(rollbackPolicy.getOrDefault("reason", "A safe rollback snapshot is unavailable")));
@@ -89,15 +131,37 @@ public class OperationClosureService {
         Map<String, Object> closure = new LinkedHashMap<>();
         closure.put("required", true);
         closure.put("status", "PREPARED");
+        closure.put("operationId", operationId(state, plan));
         closure.put("action", plan.action());
         closure.put("target", target(state));
         closure.put("preparedAt", clock.instant().toString());
         closure.put("timeoutSeconds", timeout().toSeconds());
         closure.put("pollIntervalMillis", pollInterval().toMillis());
+        closure.put("stableWindowSeconds", stableWindow().toSeconds());
         closure.put("preSnapshot", snapshot);
+        closure.put("mutationGuard", mutationGuard);
         closure.put("rollbackPolicy", rollbackPolicy);
+        if (!persistClosure(state, plan, closure, "PREPARED", null, null)) {
+            String reason = "Durable operation closure fact could not be persisted";
+            closure.put("status", "BLOCKED");
+            closure.put("reason", reason);
+            state.getContext().put(CONTEXT_KEY, closure);
+            return Preparation.blocked(reason, closure);
+        }
         state.getContext().put(CONTEXT_KEY, closure);
         return Preparation.ready(closure);
+    }
+
+    private static boolean reusablePreparation(Map<String, Object> closure, GraphState state, ExecutionPlan plan) {
+        if (!Boolean.TRUE.equals(closure.get("required"))
+                || !"PREPARED".equals(String.valueOf(closure.get("status")))
+                || !operationId(state, plan).equals(String.valueOf(closure.get("operationId")))
+                || !plan.action().equals(String.valueOf(closure.get("action")))) {
+            return false;
+        }
+        return closure.get("preSnapshot") instanceof Map<?, ?>
+                && closure.get("rollbackPolicy") instanceof Map<?, ?>
+                && closure.get("mutationGuard") instanceof Map<?, ?>;
     }
 
     Outcome close(GraphState state) {
@@ -111,6 +175,14 @@ public class OperationClosureService {
         if (!Boolean.TRUE.equals(closure.get("required"))) {
             return Outcome.failure("BLOCKED", "Operation closure was not prepared", closure);
         }
+        String existingStatus = String.valueOf(closure.getOrDefault("status", ""));
+        if ("VERIFIED".equals(existingStatus)) {
+            return Outcome.success(closure);
+        }
+        if (List.of("ROLLED_BACK", "ESCALATED", "PERSISTENCE_FAILED", "DISPATCH_REJECTED")
+                .contains(existingStatus)) {
+            return Outcome.failure(existingStatus, "Operation closure is already terminal: " + existingStatus, closure);
+        }
 
         ToolExecutor executor = executorsByKind.get(plan.executorKind());
         if (executor == null) {
@@ -120,11 +192,16 @@ public class OperationClosureService {
 
         Instant deadline = clock.instant().plus(timeout());
         List<Map<String, Object>> attempts = new ArrayList<>();
+        Map<String, Object> expectedState = expected(plan, closure);
+        closure.put("status", "VERIFYING");
+        closure.put("verificationStartedAt", clock.instant().toString());
+        boolean persistenceHealthy = persistClosure(state, plan, closure, "VERIFYING", null, null);
+        Instant healthySince = null;
         Verification verification;
         do {
             Map<String, Object> result = executor.execute(
-                    "describeWorkload", verificationParameters(state, plan, "POST_EXECUTION", expected(plan)));
-            verification = evaluate(plan, result, expected(plan));
+                    "describeWorkload", verificationParameters(state, plan, "POST_EXECUTION", expectedState));
+            verification = evaluate(plan, result, expectedState);
             Map<String, Object> attempt = new LinkedHashMap<>();
             attempt.put("at", clock.instant().toString());
             attempt.put("status", verification.status());
@@ -132,11 +209,36 @@ public class OperationClosureService {
             attempt.put("result", result);
             attempts.add(attempt);
             if ("HEALTHY".equals(verification.status())) {
-                closure.put("status", "VERIFIED");
-                closure.put("verifiedAt", clock.instant().toString());
                 closure.put("verificationAttempts", attempts);
-                state.getContext().put(CONTEXT_KEY, closure);
-                return Outcome.success(closure);
+                if (healthySince == null) {
+                    healthySince = clock.instant();
+                    closure.put("stableSince", healthySince.toString());
+                }
+                Duration stableFor = Duration.between(healthySince, clock.instant());
+                if (stableWindow().isZero() || stableFor.compareTo(stableWindow()) >= 0) {
+                    closure.put("status", "VERIFIED");
+                    closure.put("verifiedAt", clock.instant().toString());
+                    closure.put("stableForSeconds", Math.max(0, stableFor.toSeconds()));
+                    persistenceHealthy &= persistClosure(state, plan, closure, "VERIFIED", null, clock.instant());
+                    state.getContext().put(CONTEXT_KEY, closure);
+                    if (!persistenceHealthy) {
+                        return failAndEscalate(
+                                state,
+                                plan,
+                                closure,
+                                "PERSISTENCE_FAILED",
+                                "Operation recovered but its durable closure fact is incomplete");
+                    }
+                    return Outcome.success(closure);
+                }
+                closure.put("status", "STABILIZING");
+                closure.put("stableForSeconds", Math.max(0, stableFor.toSeconds()));
+                verification = new Verification("PENDING", "Health is within the required stable window");
+                persistenceHealthy &= persistClosure(state, plan, closure, "STABILIZING", null, null);
+            } else {
+                healthySince = null;
+                closure.remove("stableSince");
+                closure.remove("stableForSeconds");
             }
             if ("FAILED".equals(verification.status())) {
                 break;
@@ -156,13 +258,33 @@ public class OperationClosureService {
 
         closure.put("verificationAttempts", attempts);
         closure.put("verificationFailure", verification.reason());
+        closure.put("status", "ROLLING_BACK");
+        persistenceHealthy &= persistClosure(state, plan, closure, "ROLLING_BACK", verification.reason(), null);
         Rollback rollback = rollback(state, plan, closure, executor);
         closure.put("rollback", rollback.details());
+        if (!persistenceHealthy) {
+            closure.put("persistenceIncomplete", true);
+        }
         String terminalStatus = rollback.succeeded() ? "ROLLED_BACK" : "ESCALATED";
         String message = rollback.succeeded()
                 ? "Post-execution verification failed; the operation was rolled back"
                 : "Post-execution verification failed and automatic recovery did not complete";
         return failAndEscalate(state, plan, closure, terminalStatus, message);
+    }
+
+    Outcome rejectDispatch(GraphState state, String message) {
+        ExecutionPlan plan = state.getContext().get("executionPlan") instanceof ExecutionPlan value ? value : null;
+        Map<String, Object> closure = mutableMap(state.getContext().get(CONTEXT_KEY));
+        if (plan == null || !Boolean.TRUE.equals(closure.get("required"))) {
+            return Outcome.failure("DISPATCH_REJECTED", message, closure);
+        }
+        closure.put("status", "DISPATCH_REJECTED");
+        closure.put("finishedAt", clock.instant().toString());
+        if (!persistClosure(state, plan, closure, "DISPATCH_REJECTED", message, clock.instant())) {
+            closure.put("persistenceIncomplete", true);
+        }
+        state.getContext().put(CONTEXT_KEY, closure);
+        return Outcome.failure("DISPATCH_REJECTED", message, closure);
     }
 
     private Rollback rollback(
@@ -179,21 +301,71 @@ public class OperationClosureService {
         parameters.put("rollback", true);
         parameters.put("rollbackOfExecution", safe(state.getExecutionId()));
         parameters.put("operationId", rollbackOperationId(state, action));
-        Map<String, Object> result = executor.execute(action, parameters);
-        if (!successful(result)) {
-            return Rollback.failed(action, parameters, result, "Rollback tool call failed");
-        }
+        parameters.put("rollbackOfOperationId", String.valueOf(closure.getOrDefault("operationId", "")));
+        Instant deadline = clock.instant().plus(timeout());
+        List<Map<String, Object>> dispatchAttempts = new ArrayList<>();
+        Map<String, Object> result;
+        do {
+            result = executor.execute(action, parameters);
+            Map<String, Object> attempt = new LinkedHashMap<>();
+            attempt.put("at", clock.instant().toString());
+            attempt.put("result", result);
+            dispatchAttempts.add(attempt);
+            if (successful(result)) {
+                break;
+            }
+            if (!ambiguousToolFailure(result)) {
+                return Rollback.failed(action, parameters, result, "Rollback tool call was rejected");
+            }
+            if (!clock.instant().isBefore(deadline)) {
+                break;
+            }
+            try {
+                sleeper.sleep(pollInterval().toMillis());
+            } catch (InterruptedException interrupted) {
+                Thread.currentThread().interrupt();
+                return Rollback.failed(action, parameters, result, "Rollback retry was interrupted");
+            }
+        } while (true);
 
-        Map<String, Object> verifyResult = executor.execute(
-                "describeWorkload",
-                verificationParameters(state, plan, "POST_ROLLBACK", mutableMap(policy.get("expected"))));
-        Verification verification = evaluateRollback(verifyResult, mutableMap(policy.get("expected")));
+        Map<String, Object> rollbackExpected = mutableMap(policy.get("expected"));
+        rollbackExpected.put("operationMarker", operationMarker(String.valueOf(parameters.get("operationId"))));
+        List<Map<String, Object>> attempts = new ArrayList<>();
+        Map<String, Object> verifyResult;
+        Verification verification;
+        do {
+            verifyResult = executor.execute(
+                    "describeWorkload", verificationParameters(state, plan, "POST_ROLLBACK", rollbackExpected));
+            verification = evaluateRollback(verifyResult, rollbackExpected);
+            Map<String, Object> attempt = new LinkedHashMap<>();
+            attempt.put("at", clock.instant().toString());
+            attempt.put("status", verification.status());
+            attempt.put("reason", verification.reason());
+            attempt.put("result", verifyResult);
+            attempts.add(attempt);
+            if ("HEALTHY".equals(verification.status()) || "FAILED".equals(verification.status())) {
+                break;
+            }
+            if (!clock.instant().isBefore(deadline)) {
+                verification = new Verification("TIMEOUT", "Rollback verification timed out");
+                break;
+            }
+            try {
+                sleeper.sleep(pollInterval().toMillis());
+            } catch (InterruptedException interrupted) {
+                Thread.currentThread().interrupt();
+                verification = new Verification("INTERRUPTED", "Rollback verification was interrupted");
+                break;
+            }
+        } while (true);
         Map<String, Object> details = new LinkedHashMap<>();
         details.put("available", true);
         details.put("action", action);
         details.put("parameters", parameters);
         details.put("result", result);
+        details.put("dispatchAttempts", dispatchAttempts);
         details.put("verification", verifyResult);
+        details.put("verificationAttempts", attempts);
         details.put("status", verification.status());
         details.put("reason", verification.reason());
         return new Rollback("HEALTHY".equals(verification.status()), details);
@@ -203,38 +375,70 @@ public class OperationClosureService {
             GraphState state, ExecutionPlan plan, Map<String, Object> closure, String status, String message) {
         closure.put("status", status);
         closure.put("finishedAt", clock.instant().toString());
-        closure.put("escalation", escalate(state, plan, status, message));
+        closure.put("escalation", escalate(state, plan, closure, status, message));
+        if (!persistClosure(state, plan, closure, status, message, clock.instant())) {
+            closure.put("persistenceIncomplete", true);
+        }
         state.getContext().put(CONTEXT_KEY, closure);
         return Outcome.failure(status, message, closure);
     }
 
-    private Map<String, Object> escalate(GraphState state, ExecutionPlan plan, String status, String message) {
+    private Map<String, Object> escalate(
+            GraphState state, ExecutionPlan plan, Map<String, Object> closure, String status, String message) {
+        Map<String, Object> escalation;
         if (!properties.getAgent().isPostExecutionEscalationEnabled()) {
-            return Map.of("status", "DISABLED");
+            escalation = Map.of("status", "DISABLED");
+        } else {
+            ToolExecutor incident = executorsByKind.get("incident");
+            if (incident == null) {
+                escalation = Map.of("status", "PENDING_MANUAL", "reason", "Incident executor is unavailable");
+            } else {
+                Task task = state.getCurrentTask();
+                Map<String, Object> parameters = new LinkedHashMap<>();
+                parameters.put("fingerprint", "execution:" + safe(state.getExecutionId()));
+                parameters.put("severity", severity(task));
+                parameters.put("summary", message);
+                parameters.put("executionId", safe(state.getExecutionId()));
+                parameters.put("target", target(state));
+                parameters.put("failedAction", plan.executorKind() + "." + plan.action());
+                parameters.put("closureStatus", status);
+                Map<String, Object> result;
+                try {
+                    result = incident.execute("escalateIncident", parameters);
+                } catch (RuntimeException exception) {
+                    result = Map.of(
+                            "status",
+                            "failed",
+                            "errorType",
+                            "INCIDENT_EXECUTOR_FAILURE",
+                            "errorMessage",
+                            exception.getClass().getSimpleName());
+                }
+                escalation = Map.of("status", successful(result) ? "DISPATCHED" : "DISPATCH_FAILED", "result", result);
+            }
         }
-        ToolExecutor incident = executorsByKind.get("incident");
-        if (incident == null) {
-            return Map.of("status", "UNAVAILABLE", "reason", "Incident executor is unavailable");
+        if (!persistEscalation(state, plan, closure, message, escalation)) {
+            Map<String, Object> incomplete = new LinkedHashMap<>(escalation);
+            incomplete.put("persistenceIncomplete", true);
+            return incomplete;
         }
-        Task task = state.getCurrentTask();
-        Map<String, Object> parameters = new LinkedHashMap<>();
-        parameters.put("fingerprint", "execution:" + safe(state.getExecutionId()));
-        parameters.put("severity", severity(task));
-        parameters.put("summary", message);
-        parameters.put("executionId", safe(state.getExecutionId()));
-        parameters.put("target", target(state));
-        parameters.put("failedAction", plan.executorKind() + "." + plan.action());
-        parameters.put("closureStatus", status);
-        Map<String, Object> result = incident.execute("escalateIncident", parameters);
-        return Map.of("status", successful(result) ? "ESCALATED" : "ESCALATION_FAILED", "result", result);
+        return escalation;
     }
 
     private Map<String, Object> rollbackPolicy(
-            String action, Map<String, Object> snapshot, Map<String, Object> originalParameters) {
+            String action,
+            Map<String, Object> snapshot,
+            Map<String, Object> originalParameters,
+            Map<String, Object> mutationGuard,
+            String target) {
         Map<String, Object> before = response(snapshot);
-        Map<String, Object> parameters = new LinkedHashMap<>();
+        Map<String, Object> parameters = new LinkedHashMap<>(mutationGuard);
         copyIfPresent(originalParameters, parameters, "namespace");
         copyIfPresent(originalParameters, parameters, "target");
+        copyIfPresent(originalParameters, parameters, "resourceKind");
+        if (!target.isBlank()) {
+            parameters.putIfAbsent("target", target);
+        }
         return switch (action) {
             case "scaleWorkload" -> {
                 Object replicas = firstPresent(before, "desiredReplicas", "replicas");
@@ -242,6 +446,7 @@ public class OperationClosureService {
                     yield unavailableRollback("Pre-execution replica count is missing");
                 }
                 parameters.put("replicas", replicas);
+                copyIfPresent(originalParameters, parameters, "replicas", "expectedCurrentReplicas");
                 yield availableRollback("scaleWorkload", parameters, Map.of("replicas", replicas));
             }
             case "patchConfig" -> {
@@ -252,6 +457,7 @@ public class OperationClosureService {
                 }
                 parameters.put("configKey", key);
                 parameters.put("desiredValue", previous);
+                copyIfPresent(originalParameters, parameters, "desiredValue", "expectedCurrentValue");
                 yield availableRollback("patchConfig", parameters, Map.of("configKey", key, "configValue", previous));
             }
             case "rolloutRestart" -> {
@@ -266,55 +472,76 @@ public class OperationClosureService {
         };
     }
 
+    private static Map<String, Object> mutationGuard(Map<String, Object> snapshot) {
+        Map<String, Object> before = response(snapshot);
+        Map<String, Object> resource = mutableMap(before.get("resource"));
+        String uid = String.valueOf(resource.getOrDefault("uid", "")).trim();
+        Object generation = before.get("generation");
+        if (uid.isBlank() || generation == null) {
+            return Map.of();
+        }
+        Map<String, Object> guard = new LinkedHashMap<>();
+        guard.put("expectedResourceUid", uid);
+        guard.put("expectedGeneration", generation);
+        String kind = String.valueOf(resource.getOrDefault("kind", "")).trim();
+        if (!kind.isBlank()) {
+            guard.put("resourceKind", kind);
+        }
+        return guard;
+    }
+
     private Verification evaluate(ExecutionPlan plan, Map<String, Object> result, Map<String, Object> expected) {
         if (!successful(result)) {
             return new Verification("PENDING", "Verification endpoint is temporarily unavailable");
         }
         Map<String, Object> body = response(result);
-        Verification explicit = explicitVerification(body);
-        if (explicit != null) {
-            return explicit;
+        Verification marker = operationMarker(body, expected, false);
+        if (marker != null) {
+            return marker;
         }
-        return switch (plan.action()) {
-            case "scaleWorkload" -> compareReplicas(body, expected.get("replicas"));
-            case "patchConfig" ->
-                compareConfig(body, String.valueOf(expected.get("configKey")), expected.get("configValue"));
-            case "rolloutRestart" -> workloadHealthy(body);
-            default -> new Verification("FAILED", "No post-execution verification policy is registered");
-        };
+        Verification explicit = explicitVerification(body);
+        Verification deterministic =
+                switch (plan.action()) {
+                    case "scaleWorkload" -> compareReplicas(body, expected.get("replicas"));
+                    case "patchConfig" ->
+                        combine(
+                                compareConfig(
+                                        body, String.valueOf(expected.get("configKey")), expected.get("configValue")),
+                                workloadRolloutHealthy(body));
+                    case "rolloutRestart" -> workloadRolloutHealthy(body);
+                    default -> new Verification("FAILED", "No post-execution verification policy is registered");
+                };
+        return withExplicitStatus(deterministic, explicit);
     }
 
     private Verification evaluateRollback(Map<String, Object> result, Map<String, Object> expected) {
         if (!successful(result)) {
-            return new Verification("FAILED", "Rollback verification endpoint failed");
+            return new Verification("PENDING", "Rollback verification endpoint is temporarily unavailable");
         }
         Map<String, Object> body = response(result);
+        Verification marker = operationMarker(body, expected, true);
+        if (marker != null) {
+            return marker;
+        }
         Verification explicit = explicitVerification(body);
-        if (explicit != null) {
-            return explicit;
-        }
+        Verification deterministic;
         if (expected.containsKey("replicas")) {
-            return compareReplicas(body, expected.get("replicas"));
-        }
-        if (expected.containsKey("configKey")) {
-            return compareConfig(body, String.valueOf(expected.get("configKey")), expected.get("configValue"));
-        }
-        if (expected.containsKey("revision")) {
+            deterministic = compareReplicas(body, expected.get("replicas"));
+        } else if (expected.containsKey("configKey")) {
+            deterministic = compareConfig(body, String.valueOf(expected.get("configKey")), expected.get("configValue"));
+        } else if (expected.containsKey("revision")) {
             Object actual = firstPresent(body, "revision", "currentRevision");
-            return valuesEqual(actual, expected.get("revision"))
+            deterministic = valuesEqual(actual, expected.get("revision"))
                     ? new Verification("HEALTHY", "Previous workload revision was restored")
-                    : new Verification("FAILED", "Workload revision was not restored");
+                    : new Verification("PENDING", "Workload revision restoration is still pending");
+        } else {
+            deterministic = new Verification("FAILED", "Rollback expectation is missing");
         }
-        return new Verification("FAILED", "Rollback expectation is missing");
+        return withExplicitStatus(deterministic, explicit);
     }
 
     private Verification explicitVerification(Map<String, Object> body) {
         Object raw = firstPresent(body, "verificationStatus", "healthStatus");
-        if (raw == null && body.get("healthy") instanceof Boolean healthy) {
-            return healthy
-                    ? new Verification("HEALTHY", "Workload reported healthy")
-                    : new Verification("FAILED", "Workload reported unhealthy");
-        }
         if (raw == null) {
             return null;
         }
@@ -344,25 +571,82 @@ public class OperationClosureService {
         return new Verification("PENDING", "Configuration propagation is still pending");
     }
 
-    private Verification workloadHealthy(Map<String, Object> body) {
+    private Verification workloadRolloutHealthy(Map<String, Object> body) {
         Object desired = firstPresent(body, "desiredReplicas", "replicas");
         Object ready = firstPresent(body, "readyReplicas", "availableReplicas");
-        if (desired != null && valuesEqual(desired, ready)) {
-            return new Verification("HEALTHY", "Workload replicas are ready after rollout");
+        Object updated = body.get("updatedReplicas");
+        long generation = longValue(body.get("generation"));
+        long observedGeneration = longValue(body.get("observedGeneration"));
+        if (desired != null
+                && valuesEqual(desired, ready)
+                && valuesEqual(desired, updated)
+                && generation > 0
+                && observedGeneration >= generation) {
+            return new Verification("HEALTHY", "Updated workload replicas are ready after rollout");
         }
         return new Verification("PENDING", "Workload rollout is still converging");
     }
 
-    private Map<String, Object> expected(ExecutionPlan plan) {
-        return switch (plan.action()) {
-            case "scaleWorkload" -> Map.of("replicas", plan.parameters().get("replicas"));
-            case "patchConfig" ->
-                Map.of(
-                        "configKey", plan.parameters().get("configKey"),
-                        "configValue", plan.parameters().get("desiredValue"));
-            case "rolloutRestart" -> Map.of("healthy", true);
-            default -> Map.of();
-        };
+    private Map<String, Object> expected(ExecutionPlan plan, Map<String, Object> closure) {
+        Map<String, Object> expected = new LinkedHashMap<>();
+        switch (plan.action()) {
+            case "scaleWorkload" -> expected.put("replicas", plan.parameters().get("replicas"));
+            case "patchConfig" -> {
+                expected.put("configKey", plan.parameters().get("configKey"));
+                expected.put("configValue", plan.parameters().get("desiredValue"));
+            }
+            case "rolloutRestart" -> expected.put("healthy", true);
+            default -> {
+                return Map.of();
+            }
+        }
+        expected.put("operationMarker", operationMarker(String.valueOf(closure.getOrDefault("operationId", ""))));
+        return expected;
+    }
+
+    private static Verification operationMarker(
+            Map<String, Object> body, Map<String, Object> expected, boolean terminalOnMismatch) {
+        Object expectedMarker = expected.get("operationMarker");
+        if (expectedMarker == null || valuesEqual(body.get("operationMarker"), expectedMarker)) {
+            return null;
+        }
+        return new Verification(
+                terminalOnMismatch ? "FAILED" : "PENDING", "Workload does not carry the expected operation marker");
+    }
+
+    private static Verification combine(Verification first, Verification second) {
+        if (!"HEALTHY".equals(first.status())) {
+            return first;
+        }
+        return second;
+    }
+
+    private static Verification withExplicitStatus(Verification deterministic, Verification explicit) {
+        if (explicit == null || "HEALTHY".equals(explicit.status())) {
+            return deterministic;
+        }
+        return explicit;
+    }
+
+    static String operationMarker(String operationId) {
+        try {
+            byte[] digest = MessageDigest.getInstance("SHA-256")
+                    .digest(safe(operationId).getBytes(StandardCharsets.UTF_8));
+            return HexFormat.of().formatHex(digest).substring(0, 32);
+        } catch (java.security.NoSuchAlgorithmException exception) {
+            throw new IllegalStateException("SHA-256 is unavailable", exception);
+        }
+    }
+
+    private static long longValue(Object value) {
+        if (value instanceof Number number) {
+            return number.longValue();
+        }
+        try {
+            return value == null ? 0 : Long.parseLong(String.valueOf(value));
+        } catch (NumberFormatException ignored) {
+            return 0;
+        }
     }
 
     private Map<String, Object> verificationParameters(
@@ -393,6 +677,82 @@ public class OperationClosureService {
         return Duration.ofMillis(Math.max(10, properties.getAgent().getPostExecutionVerificationPollMillis()));
     }
 
+    private Duration stableWindow() {
+        return Duration.ofSeconds(Math.max(0, properties.getAgent().getPostExecutionVerificationStableWindowSeconds()));
+    }
+
+    private boolean persistClosure(
+            GraphState state,
+            ExecutionPlan plan,
+            Map<String, Object> closure,
+            String phase,
+            String errorSummary,
+            Instant finishedAt) {
+        if (factRepository == null) {
+            closure.put("persistenceStatus", mysqlEnabled ? "UNAVAILABLE" : "NOT_REQUIRED");
+            return !mysqlEnabled;
+        }
+        try {
+            closure.put("persistenceStatus", "SUCCEEDED");
+            factRepository.upsertClosure(
+                    String.valueOf(closure.getOrDefault("operationId", operationId(state, plan))),
+                    safe(state.getExecutionId()),
+                    taskId(state),
+                    plan.executorKind(),
+                    plan.action(),
+                    target(state),
+                    phase,
+                    closure,
+                    errorSummary,
+                    instant(closure.get("preparedAt"), clock.instant()),
+                    finishedAt);
+            return true;
+        } catch (RuntimeException exception) {
+            closure.put("persistenceStatus", "FAILED");
+            closure.put("persistenceErrorType", exception.getClass().getSimpleName());
+            return false;
+        }
+    }
+
+    private boolean persistEscalation(
+            GraphState state,
+            ExecutionPlan plan,
+            Map<String, Object> closure,
+            String message,
+            Map<String, Object> escalation) {
+        if (factRepository == null) {
+            return !mysqlEnabled;
+        }
+        try {
+            String escalationStatus = String.valueOf(escalation.getOrDefault("status", "PENDING_MANUAL"));
+            factRepository.upsertEscalation(
+                    String.valueOf(closure.getOrDefault("operationId", operationId(state, plan))),
+                    safe(state.getExecutionId()),
+                    escalationStatus,
+                    severity(state.getCurrentTask()),
+                    message,
+                    escalation,
+                    "DISPATCH_FAILED".equals(escalationStatus) ? "Incident escalation delivery failed" : null);
+            return true;
+        } catch (RuntimeException exception) {
+            return false;
+        }
+    }
+
+    private static Instant instant(Object raw, Instant fallback) {
+        if (raw instanceof Instant value) {
+            return value;
+        }
+        if (raw != null) {
+            try {
+                return Instant.parse(String.valueOf(raw));
+            } catch (java.time.format.DateTimeParseException ignored) {
+                // Use the caller-provided collection time.
+            }
+        }
+        return fallback;
+    }
+
     private static boolean successful(Map<String, Object> result) {
         if (result == null) {
             return false;
@@ -402,6 +762,23 @@ public class OperationClosureService {
             return false;
         }
         return "success".equalsIgnoreCase(String.valueOf(result.getOrDefault("status", "failed")));
+    }
+
+    private static boolean ambiguousToolFailure(Map<String, Object> result) {
+        if (result == null) {
+            return true;
+        }
+        String errorType = String.valueOf(result.getOrDefault("errorType", ""));
+        if ("MUTATION_ADAPTER_NOT_CONFIGURED".equals(errorType)) {
+            return false;
+        }
+        Object rawHttpStatus = result.get("httpStatus");
+        int httpStatus = rawHttpStatus instanceof Number number ? number.intValue() : 0;
+        String status = String.valueOf(result.getOrDefault("status", ""));
+        return httpStatus >= 500
+                || "timeout".equalsIgnoreCase(status)
+                || "retryable".equalsIgnoreCase(status)
+                || "transient_failed".equalsIgnoreCase(status);
     }
 
     private static Map<String, Object> response(Map<String, Object> result) {
@@ -446,6 +823,13 @@ public class OperationClosureService {
         }
     }
 
+    private static void copyIfPresent(
+            Map<String, Object> source, Map<String, Object> target, String sourceKey, String targetKey) {
+        if (source.containsKey(sourceKey) && source.get(sourceKey) != null) {
+            target.put(targetKey, source.get(sourceKey));
+        }
+    }
+
     private static Map<String, Object> availableRollback(
             String action, Map<String, Object> parameters, Map<String, Object> expected) {
         Map<String, Object> policy = new LinkedHashMap<>();
@@ -462,6 +846,17 @@ public class OperationClosureService {
 
     private static String safe(String value) {
         return value == null ? "" : value;
+    }
+
+    private static String taskId(GraphState state) {
+        return state.getCurrentTask() == null ? "" : safe(state.getCurrentTask().taskId());
+    }
+
+    private static String operationId(GraphState state, ExecutionPlan plan) {
+        String executionId = state.getExecutionId() == null ? "unassigned" : state.getExecutionId();
+        String taskId =
+                state.getCurrentTask() == null ? "task" : state.getCurrentTask().taskId();
+        return executionId + ":" + taskId + ":" + plan.executorKind() + "." + plan.action();
     }
 
     private static String rollbackOperationId(GraphState state, String action) {
@@ -483,6 +878,10 @@ public class OperationClosureService {
         static Preparation blocked(String reason) {
             return new Preparation(
                     true, false, reason, Map.of("required", true, "status", "BLOCKED", "reason", reason));
+        }
+
+        static Preparation blocked(String reason, Map<String, Object> details) {
+            return new Preparation(true, false, reason, Map.copyOf(details));
         }
     }
 

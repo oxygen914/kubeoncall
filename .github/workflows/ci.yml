@@ -122,7 +122,7 @@ jobs:
         run: |
           go test ./...
           go vet ./...
-          go build ./cmd/sandbox-controller
+          go build ./cmd/...
       # A bounded fuzz pass executes the seed corpus and short mutations on every change; it is
       # intentionally separate from ordinary unit tests so malformed internal requests cannot
       # regress into a panic without failing CI.
@@ -193,6 +193,22 @@ jobs:
           push: false
           load: true
           tags: kubeoncall-sandbox-controller:ci
+      - name: Build read-only Kubernetes adapter image
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8
+        with:
+          context: ./sandbox-controller
+          file: ./sandbox-controller/Dockerfile.kubernetes-tool-adapter
+          push: false
+          load: true
+          tags: kubeoncall-kubernetes-tool-adapter:ci
+      - name: Build governed Kubernetes mutation adapter image
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8
+        with:
+          context: ./sandbox-controller
+          file: ./sandbox-controller/Dockerfile.kubernetes-mutation-adapter
+          push: false
+          load: true
+          tags: kubeoncall-kubernetes-mutation-adapter:ci
       - name: Build generated Python runtime image
         uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8
         with:
@@ -234,6 +250,8 @@ jobs:
             echo "backend image id: $(docker inspect --format='{{.Id}}' kubeoncall-backend:ci)"
             echo "console image id: $(docker inspect --format='{{.Id}}' kubeoncall-console:ci)"
             echo "sandbox controller image id: $(docker inspect --format='{{.Id}}' kubeoncall-sandbox-controller:ci)"
+            echo "read-only Kubernetes adapter image id: $(docker inspect --format='{{.Id}}' kubeoncall-kubernetes-tool-adapter:ci)"
+            echo "Kubernetes mutation adapter image id: $(docker inspect --format='{{.Id}}' kubeoncall-kubernetes-mutation-adapter:ci)"
             echo "generated Python image id: $(docker inspect --format='{{.Id}}' kubeoncall-sandbox-generated-python:ci)"
             echo "generated POSIX shell image id: $(docker inspect --format='{{.Id}}' kubeoncall-sandbox-generated-posix-shell:ci)"
             echo "manifest validation image id: $(docker inspect --format='{{.Id}}' kubeoncall-sandbox-manifest-validation:ci)"
@@ -249,6 +267,8 @@ jobs:
             kubeoncall-backend:ci \
             kubeoncall-console:ci \
             kubeoncall-sandbox-controller:ci \
+            kubeoncall-kubernetes-tool-adapter:ci \
+            kubeoncall-kubernetes-mutation-adapter:ci \
             kubeoncall-sandbox-generated-python:ci \
             kubeoncall-sandbox-generated-posix-shell:ci \
             kubeoncall-sandbox-manifest-validation:ci
@@ -293,6 +313,20 @@ jobs:
           severity: HIGH,CRITICAL
           exit-code: "1"
           ignore-unfixed: true
+      - name: Trivy scan read-only Kubernetes adapter
+        uses: aquasecurity/trivy-action@6e7b7d1fd3e4fef0c5fa8cce1229c54b2c9bd0d8
+        with:
+          image-ref: kubeoncall-kubernetes-tool-adapter:ci
+          severity: HIGH,CRITICAL
+          exit-code: "1"
+          ignore-unfixed: true
+      - name: Trivy scan governed Kubernetes mutation adapter
+        uses: aquasecurity/trivy-action@6e7b7d1fd3e4fef0c5fa8cce1229c54b2c9bd0d8
+        with:
+          image-ref: kubeoncall-kubernetes-mutation-adapter:ci
+          severity: HIGH,CRITICAL
+          exit-code: "1"
+          ignore-unfixed: true
       - name: Trivy scan generated Python runtime
         uses: aquasecurity/trivy-action@6e7b7d1fd3e4fef0c5fa8cce1229c54b2c9bd0d8
         with:
@@ -333,6 +367,18 @@ jobs:
           image-ref: kubeoncall-sandbox-controller:ci
           format: cyclonedx
           output: sandbox-controller-sbom.cdx.json
+      - name: Generate read-only Kubernetes adapter CycloneDX SBOM
+        uses: aquasecurity/trivy-action@6e7b7d1fd3e4fef0c5fa8cce1229c54b2c9bd0d8
+        with:
+          image-ref: kubeoncall-kubernetes-tool-adapter:ci
+          format: cyclonedx
+          output: kubernetes-tool-adapter-sbom.cdx.json
+      - name: Generate governed Kubernetes mutation adapter CycloneDX SBOM
+        uses: aquasecurity/trivy-action@6e7b7d1fd3e4fef0c5fa8cce1229c54b2c9bd0d8
+        with:
+          image-ref: kubeoncall-kubernetes-mutation-adapter:ci
+          format: cyclonedx
+          output: kubernetes-mutation-adapter-sbom.cdx.json
       - name: Generate generated Python CycloneDX SBOM
         uses: aquasecurity/trivy-action@6e7b7d1fd3e4fef0c5fa8cce1229c54b2c9bd0d8
         with:
@@ -358,6 +404,8 @@ jobs:
             backend-sbom.cdx.json
             console-sbom.cdx.json
             sandbox-controller-sbom.cdx.json
+            kubernetes-tool-adapter-sbom.cdx.json
+            kubernetes-mutation-adapter-sbom.cdx.json
             sandbox-generated-python-sbom.cdx.json
             sandbox-generated-posix-shell-sbom.cdx.json
             sandbox-manifest-validation-sbom.cdx.json

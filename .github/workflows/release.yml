@@ -122,6 +122,12 @@ jobs:
           - image: kubeoncall-sandbox-controller
             context: ./sandbox-controller
             dockerfile: ./sandbox-controller/Dockerfile
+          - image: kubeoncall-kubernetes-tool-adapter
+            context: ./sandbox-controller
+            dockerfile: ./sandbox-controller/Dockerfile.kubernetes-tool-adapter
+          - image: kubeoncall-kubernetes-mutation-adapter
+            context: ./sandbox-controller
+            dockerfile: ./sandbox-controller/Dockerfile.kubernetes-mutation-adapter
           - image: kubeoncall-sandbox-generated-python
             context: ./sandbox-runtimes/generated-code
             dockerfile: ./sandbox-runtimes/generated-code/python/Dockerfile
@@ -232,6 +238,8 @@ jobs:
             kubeoncall-backend \
             kubeoncall-console \
             kubeoncall-sandbox-controller \
+            kubeoncall-kubernetes-tool-adapter \
+            kubeoncall-kubernetes-mutation-adapter \
             kubeoncall-sandbox-generated-python \
             kubeoncall-sandbox-generated-posix-shell \
             kubeoncall-sandbox-manifest-validation; do
@@ -288,6 +296,8 @@ jobs:
             kubeoncall-backend \
             kubeoncall-console \
             kubeoncall-sandbox-controller \
+            kubeoncall-kubernetes-tool-adapter \
+            kubeoncall-kubernetes-mutation-adapter \
             kubeoncall-sandbox-generated-python \
             kubeoncall-sandbox-generated-posix-shell \
             kubeoncall-sandbox-manifest-validation; do

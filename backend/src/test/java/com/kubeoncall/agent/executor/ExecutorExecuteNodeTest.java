@@ -158,12 +158,71 @@ class ExecutorExecuteNodeTest {
         state.getContext().put("executorPayload", Map.of("toolName", "kubernetes.scaleWorkload", "complete", true));
         state.getContext().put("plannerMode", "REAL_MODEL");
         org.mockito.Mockito.when(closureService.prepare(state, plan, definition))
-                .thenReturn(OperationClosureService.Preparation.ready(Map.of()));
+                .thenReturn(OperationClosureService.Preparation.ready(Map.of(
+                        "operationId",
+                        "exec-1:task-1:kubernetes.scaleWorkload",
+                        "mutationGuard",
+                        Map.of(
+                                "expectedResourceUid",
+                                "deployment-uid",
+                                "expectedGeneration",
+                                7L,
+                                "resourceKind",
+                                "Deployment"))));
 
         NodeResult result = node.execute(state);
 
         assertEquals(NodeStatus.SUCCESS, result.status());
         assertEquals("exec-1:task-1:kubernetes.scaleWorkload", executor.parameters.get("operationId"));
+        assertEquals("payment-service", executor.parameters.get("target"));
+        assertEquals("deployment-uid", executor.parameters.get("expectedResourceUid"));
+        assertEquals(7L, executor.parameters.get("expectedGeneration"));
+    }
+
+    @Test
+    void shouldResolveAmbiguousMutationFailureThroughIndependentClosureVerification() {
+        TransientFailingExecutor executor = new TransientFailingExecutor();
+        OperationClosureService closureService = org.mockito.Mockito.mock(OperationClosureService.class);
+        ExecutorExecuteNode node = new ExecutorExecuteNode(List.of(executor), closureService);
+        GraphState state = new GraphState();
+        state.setExecutionId("exec-1");
+        state.setCurrentLoop(1);
+        state.setCurrentTask(new com.kubeoncall.domain.task.Task(
+                "task-1",
+                "scale",
+                com.kubeoncall.domain.task.TaskType.SCALE_WORKLOAD,
+                com.kubeoncall.domain.task.RiskLevel.HIGH,
+                "payment-service",
+                Map.of("namespace", "prod", "replicas", 3),
+                new com.kubeoncall.domain.task.SopReference("sop-1", "scale", "1", "test")));
+        ExecutionPlan plan = new ExecutionPlan(
+                "kubernetes",
+                "scaleWorkload",
+                Map.of("namespace", "prod", "replicas", 3),
+                List.of("namespace", "replicas"),
+                List.of(),
+                Map.of(),
+                "scale",
+                null);
+        ToolDefinition definition = new ToolDefinition(
+                "kubernetes.scaleWorkload", "kubernetes", "scale", false, true, List.of(), List.of(), List.of());
+        state.getContext().put("executionPlan", plan);
+        state.getContext().put("executorToolDefinition", definition);
+        state.getContext().put("executorPayload", Map.of("toolName", "kubernetes.scaleWorkload", "complete", true));
+        state.getContext().put("plannerMode", "REAL_MODEL");
+        org.mockito.Mockito.when(closureService.prepare(state, plan, definition))
+                .thenReturn(OperationClosureService.Preparation.ready(Map.of(
+                        "operationId",
+                        "exec-1:task-1:kubernetes.scaleWorkload",
+                        "mutationGuard",
+                        Map.of("expectedResourceUid", "uid-1", "expectedGeneration", 1L))));
+        org.mockito.Mockito.when(closureService.close(state))
+                .thenReturn(OperationClosureService.Outcome.success(Map.of("status", "VERIFIED")));
+
+        NodeResult result = node.execute(state);
+
+        assertEquals(NodeStatus.SUCCESS, result.status());
+        org.mockito.Mockito.verify(closureService).close(state);
     }
 
     @Test

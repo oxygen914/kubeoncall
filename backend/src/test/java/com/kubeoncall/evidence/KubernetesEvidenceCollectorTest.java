@@ -149,6 +149,92 @@ class KubernetesEvidenceCollectorTest {
         verify(kubernetes, never()).execute(eq("queryPodLogs"), anyMap());
     }
 
+    @Test
+    void shouldMapMissingPreviousContainerTextToEmptyEvidence() {
+        ToolExecutor kubernetes = new StubKubernetesExecutor() {
+            @Override
+            public Map<String, Object> execute(String action, Map<String, Object> parameters) {
+                if (Boolean.TRUE.equals(parameters.get("previous"))) {
+                    return Map.of(
+                            "status",
+                            "success",
+                            "httpStatus",
+                            200,
+                            "response",
+                            Map.of(
+                                    "errorMessage",
+                                    "previous terminated container \"app\" in pod \"payment\" not found"));
+                }
+                return Map.of("status", "success", "httpStatus", 200, "response", Map.of("items", List.of()));
+            }
+        };
+
+        EvidenceItem previous = podLogCollector(kubernetes).collect(podScope()).stream()
+                .filter(item -> Boolean.TRUE.equals(item.metadata().get("previous")))
+                .findFirst()
+                .orElseThrow();
+
+        assertEquals(EvidenceCollectionStatus.EMPTY, previous.collectionStatus());
+        assertEquals("PREVIOUS_LOG_EMPTY", previous.errorType());
+    }
+
+    @Test
+    void shouldMapKubeletPreviousLogErrorTextToUnavailableEvidence() {
+        ToolExecutor kubernetes = new StubKubernetesExecutor() {
+            @Override
+            public Map<String, Object> execute(String action, Map<String, Object> parameters) {
+                if (Boolean.TRUE.equals(parameters.get("previous"))) {
+                    return Map.of(
+                            "status",
+                            "success",
+                            "httpStatus",
+                            200,
+                            "response",
+                            Map.of(
+                                    "items",
+                                    List.of(Map.of(
+                                            "snippet",
+                                            "unable to retrieve container logs for docker://abc from kubelet"))));
+                }
+                return Map.of("status", "success", "httpStatus", 200, "response", Map.of("items", List.of()));
+            }
+        };
+
+        EvidenceItem previous = podLogCollector(kubernetes).collect(podScope()).stream()
+                .filter(item -> Boolean.TRUE.equals(item.metadata().get("previous")))
+                .findFirst()
+                .orElseThrow();
+
+        assertEquals(EvidenceCollectionStatus.UNAVAILABLE, previous.collectionStatus());
+        assertEquals("PREVIOUS_LOG_UNAVAILABLE", previous.errorType());
+    }
+
+    private static KubernetesEvidenceCollector podLogCollector(ToolExecutor kubernetes) {
+        KubeOnCallProperties properties = new KubeOnCallProperties();
+        properties.getAiOperations().setEvidenceK8sResourceStateEnabled(false);
+        properties.getAiOperations().setEvidenceK8sEventsEnabled(false);
+        properties.getAiOperations().setEvidencePodLogsEnabled(true);
+        EvidenceScopePolicy scopePolicy = mock(EvidenceScopePolicy.class);
+        when(scopePolicy.rejection(org.mockito.ArgumentMatchers.any())).thenReturn(Optional.empty());
+        return new KubernetesEvidenceCollector(
+                List.of(kubernetes),
+                properties,
+                scopePolicy,
+                new EvidenceItemFactory(new ObjectMapper(), properties),
+                mock(KubeOnCallMetricsService.class));
+    }
+
+    private static EvidenceCollectionScope podScope() {
+        return new EvidenceCollectionScope(
+                "exe_test",
+                "local",
+                "local",
+                "kubeoncall-system",
+                new EvidenceResource("Pod", "payment", "pod-uid"),
+                Instant.now().minusSeconds(300),
+                Instant.now());
+    }
+
     private static class StubKubernetesExecutor implements ToolExecutor {
 
         @Override

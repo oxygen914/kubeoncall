@@ -50,12 +50,19 @@ func NewServer(config Config, reader Reader) *Server {
 	}
 	server.mux.HandleFunc("GET /healthz", server.health)
 	server.mux.HandleFunc("GET /readyz", server.ready)
-	server.mux.HandleFunc("POST /api/tools/kubernetes", server.execute)
+	server.mux.Handle(
+		"POST /api/tools/kubernetes",
+		server.limit(http.HandlerFunc(server.execute)),
+	)
 	return server
 }
 
 func (server *Server) Handler() http.Handler {
-	return server.limit(http.TimeoutHandler(server.mux, server.config.RequestTimeout, `{"errorType":"Timeout","errorMessage":"request timed out"}`))
+	return http.TimeoutHandler(
+		server.mux,
+		server.config.RequestTimeout,
+		`{"errorType":"Timeout","errorMessage":"request timed out"}`,
+	)
 }
 
 func (server *Server) health(writer http.ResponseWriter, _ *http.Request) {

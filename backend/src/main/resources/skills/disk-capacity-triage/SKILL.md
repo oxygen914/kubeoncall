@@ -24,6 +24,7 @@ toolWhitelist:
   - prometheus.instantQuery
   - prometheus.rangeQuery
   - alerts.getActiveAlerts
+  - changes.getRecentChanges
   - alertmanager.listAlerts
 ---
 # Disk Capacity Triage

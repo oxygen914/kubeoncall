@@ -23,6 +23,7 @@ import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.kubeoncall.agent.executor.OperationClosureFactRepository;
 import com.kubeoncall.approval.mysql.ApprovalRequestRecord;
 import com.kubeoncall.approval.mysql.MySqlApprovalRepository;
 import com.kubeoncall.audit.OperationAuditWriter;
@@ -78,6 +79,7 @@ class WorkflowRuntimeIT {
     private static AsyncTaskRepository tasks;
     private static EvidenceRepository evidenceRepository;
     private static ConclusionRepository conclusionRepository;
+    private static OperationClosureFactRepository operationClosureFacts;
     private static WorkflowSubmissionService submissionService;
     private static ApprovalDecisionCommandService decisionService;
     private static WorkflowTaskResultCoordinator coordinator;
@@ -111,6 +113,7 @@ class WorkflowRuntimeIT {
         approvals = new MySqlApprovalRepository(jdbcTemplate, objectMapper, true);
         evidenceRepository = new EvidenceRepository(jdbcTemplate, objectMapper);
         conclusionRepository = new ConclusionRepository(jdbcTemplate, objectMapper);
+        operationClosureFacts = new OperationClosureFactRepository(jdbcTemplate, objectMapper);
         AsyncTaskRepository taskTarget = new AsyncTaskRepository(jdbcTemplate, objectMapper, true);
         PlatformTransactionManager transactionManager =
                 new org.springframework.jdbc.datasource.DataSourceTransactionManager(dataSource);
@@ -150,6 +153,59 @@ class WorkflowRuntimeIT {
                 new WorkflowTaskResultCoordinator(
                         executions, approvals, tasks, auditWriter, outboxWriter, new KubeOnCallProperties(), 60),
                 transactionManager);
+    }
+
+    @Test
+    void persistsVersionedOperationClosureAndEscalationFacts() {
+        Instant startedAt = Instant.parse("2026-07-30T08:00:00Z");
+        operationClosureFacts.upsertClosure(
+                "op-workflow-it-1",
+                "exe-workflow-it-closure",
+                "task-workflow-it-closure",
+                "kubernetes",
+                "scaleWorkload",
+                "prod/payment-api",
+                "PREPARED",
+                Map.of("operationId", "op-workflow-it-1", "apiKey", "must-not-be-stored"),
+                null,
+                startedAt,
+                null);
+        operationClosureFacts.upsertClosure(
+                "op-workflow-it-1",
+                "exe-workflow-it-closure",
+                "task-workflow-it-closure",
+                "kubernetes",
+                "scaleWorkload",
+                "prod/payment-api",
+                "VERIFIED",
+                Map.of("operationId", "op-workflow-it-1", "status", "VERIFIED"),
+                null,
+                startedAt,
+                startedAt.plusSeconds(30));
+
+        OperationClosureFactRepository.ClosureFact closure = operationClosureFacts
+                .findLatestClosure("exe-workflow-it-closure")
+                .orElseThrow();
+        assertThat(closure.phase()).isEqualTo("VERIFIED");
+        assertThat(closure.version()).isEqualTo(1);
+        assertThat(closure.finishedAt()).isEqualTo(startedAt.plusSeconds(30));
+        assertThat(String.valueOf(closure.details())).doesNotContain("must-not-be-stored");
+
+        operationClosureFacts.upsertEscalation(
+                "op-workflow-it-1",
+                "exe-workflow-it-closure",
+                "PENDING_MANUAL",
+                "HIGH",
+                "Rollback verification needs an operator",
+                Map.of("closureStatus", "ROLLED_BACK"),
+                null);
+
+        assertThat(operationClosureFacts.findEscalation("op-workflow-it-1"))
+                .get()
+                .satisfies(escalation -> {
+                    assertThat(escalation.status()).isEqualTo("PENDING_MANUAL");
+                    assertThat(escalation.executionId()).isEqualTo("exe-workflow-it-closure");
+                });
     }
 
     @Test

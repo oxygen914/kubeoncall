@@ -247,31 +247,50 @@ Lease=2026-07-30T06:31:02.869191Z
 构建，以避免把共享工作区中并行进行的其他 Skill/诊断改动混入本轮镜像。该结果不替代最终
 合并后的全仓门禁。
 
-## 8. 已发现但未完成的缺口
+## 8. 首轮发现项的代码收口与剩余门禁
 
-### P0：进入“独立解决”前必须完成
+本节在不改写第 4～6 节历史现场结果的前提下，同步首轮验收后完成的代码修复。标记为“代码
+完成”只表示实现和自动化通过，必须重新部署后才可把对应实景结论升级为通过。
 
-1. Node Evidence 直接采集 Lease、目标节点 Pod、owner、PDB 和剩余容量。
-2. previous-log kubelet 错误文本必须映射为 `EMPTY/UNAVAILABLE`。
-3. `/ask` 的 Namespace 范围在刷新后需可靠恢复，或在提交前强制二次确认。
-4. 变更必须接入独立变更 Adapter、幂等 operationId、审批和真实操作后稳定窗口。
-5. 验证失败必须覆盖超时、回滚、回滚复验和 Incident 人工升级。
+### 8.1 已完成代码修复、待实景复验
 
-### P1：证据完整性
+| 首轮缺口 | 本轮代码修复 | 当前判定 |
+| --- | --- | --- |
+| Node 缺 Lease、目标节点 Pod、owner、PDB 和剩余容量 | 只读 Adapter 直接读取 Node Lease，并在允许 Namespace 内关联 Pod、直接 owner、PDB、requests 和剩余 allocatable；明确标记影响面不是集群全量 | 代码完成，Node 场景待复跑 |
+| previous-log 把 kubelet/CRI 错误文本当作成功日志 | 无历史容器映射为 `EMPTY/PREVIOUS_LOG_EMPTY`；kubelet/CRI 不可读映射为 `UNAVAILABLE/PREVIOUS_LOG_UNAVAILABLE` | 代码完成，CrashLoop/OOM 待复跑 |
+| `/ask` 刷新后 Namespace 范围可能丢失 | cluster/environment/namespace 写入本地存储，刷新后先恢复并使用实时目录校验；无效范围自动重置 | 代码和前端回归完成 |
+| OOM 缺 working set/RSS/limit、requests/limits 和 Node MemoryPressure | Prometheus 增加 Pod 精确、有界时间线；Pod 资源证据增加 requests/limits 和所在节点 conditions | 代码完成，OOM 场景待复跑 |
+| 告警、变更未使用同一 evidence window | Evidence Orchestrator 从 MySQL 读模型采集同一 execution/window 的 `ALERT` 和 `CHANGE_EVENT` | 代码完成，四场景待复跑 |
+| Closure 阶段、稳定窗口和升级事实不持久 | Redis 保留可续跑图状态；MySQL V20 持久化 Closure/Escalation 事实；稳定 operationId、Deployment 操作标记、未知执行结果收敛、稳定窗口、回滚同 ID 重试/fencing/有界轮询复验和 Incident 缺失时 `PENDING_MANUAL` 已覆盖 | 代码及真实 MySQL 8 测试完成，故障注入待执行 |
+| 读写 Kubernetes Adapter 未隔离 | 只读和变更进程、端点、Token、ServiceAccount/RBAC、断路器分离；未配置变更端点时返回 503；新增受控变更 Adapter 的 action/Namespace/config key allowlist、UID/Generation guard、ConfigMap 幂等账本、同 operation 并发串行/终态保护、严格配置、探针绕过业务限流、Deployment 操作标记和四类 action 契约 | 代码与 Go 自动化/race 检查完成，测试集群真实变更待验收 |
+| 缺少可重复且不污染故障 Pod 的变更目标 | 验收清单新增健康 `remediation-target` Deployment，并为变更 Adapter 单独授予该 Namespace 的最小 Deployment/ReplicaSet RBAC | 清单 dry-run 通过，尚未实际部署演练 |
 
-1. 当前 Loki 对这些 Kubernetes Pod 没有匹配日志，Kubernetes API logs 仍是主证据。
-2. 外部 Alerts、Topology、CMDB 和 `kubernetes.describeResource` MCP 未接入，明确显示
-   `UNAVAILABLE`。
-3. OOM 缺少 working set/RSS/limit 时间线和 Node MemoryPressure 同窗证据。
-4. 告警、变更事件尚未与四类 execution 使用同一 evidence window。
+最终合并工作区的本地门禁结果为：后端 `verify -Popenapi-contract` 938 个测试通过，另有
+MySQL/Testcontainers 4 个测试并从空库执行 Flyway V1～V20；前端 96 个单测和 12 个
+Playwright 场景通过；Go 全量测试、vet、全部命令构建及变更 Adapter race 检查通过；只读和
+变更 Adapter 镜像均构建成功并验证缺少独立长 Token 时拒绝启动。Helm、Compose、工作流 YAML
+和 Kubernetes 清单静态检查通过。以上仍不替代远程 CI、新镜像部署和真实变更演练。
 
-### 环境与发布门禁
+### 8.2 仍阻塞 L3/L4 的 P0 门禁
 
-1. 本轮每个场景只完成一次最终执行，计划要求的“每场景至少三次”尚未达到。
-2. 未执行真实模型 429、5xx、超时、非法 JSON 和依赖断线演练。
-3. 当前是本地 Minikube，不是多可用区、真实 CNI/CSI、云节点或生产环境。
-4. 当前数据库存在并行通知改动导致的 Flyway V19 checksum 漂移；本地验收使用了仓库外
-   `validate-on-migrate=false` 覆盖。该覆盖严禁进入生产，必须由迁移 owner 正式修复。
+1. 在专用测试集群部署独立变更 Adapter，验证最小 RBAC/Secret/allowlist，并实测同一
+   `operationId` 重试不重复变更、参数冲突返回 409、Adapter 重启后账本仍可重放。
+2. 在统一审批中心批准后执行至少一种真实测试集群变更，并验证操作后稳定窗口。
+3. 完成 Backend/Worker 在 Planner、审批后、验证中和回滚中的进程重启恢复。
+4. 完成执行响应丢失、验证超时、自动回滚、回滚复验、Incident 不可用/投递失败的故障注入。
+5. 使用包含本轮修复的新镜像重新执行四类场景，并按计划每类补足 3 次。
+
+### 8.3 P1 与环境/发布门禁
+
+1. 当前 Loki 对这些 Kubernetes Pod 没有匹配日志，Kubernetes API logs 仍是主证据；需接通
+   集群 Pod 日志采集并验证标签和延迟。
+2. Topology、CMDB 等可选外部源仍未接入；不可用时继续显式显示 `UNAVAILABLE`，不得阻塞
+   已有本地告警/变更证据。
+3. 未执行真实模型 429、5xx、超时、非法 JSON 和依赖断线演练。
+4. 当前是本地 Minikube，不是多可用区、真实 CNI/CSI、云节点或生产环境。
+5. V19 checksum 漂移属于首轮现场的旧工作区事实；当前仓库已在干净 MySQL 8 中验证
+   Flyway V1～V20 全量迁移。已有本地旧库仍应按迁移治理处理，禁止在生产使用
+   `validate-on-migrate=false` 绕过校验。
 
 ## 9. 能力判定
 
@@ -285,8 +304,10 @@ Lease=2026-07-30T06:31:02.869191Z
 
 > KubeOnCall 已经可以独立解决 Kubernetes 运营问题。
 
-原因是本轮 AI 只完成了诊断，没有通过持久化审批执行真实修复；Node Lease/影响面、Loki、
-告警/变更、操作后稳定窗口、超时、回滚和人工升级仍未形成完整 L4 闭环。
+原因是本轮现场 AI 只完成了诊断，没有通过持久化审批执行真实修复。本轮之后虽然已在代码中
+补齐 Node Lease/允许范围影响面、OOM 时间线、告警/变更、稳定窗口、回滚和人工升级事实，
+但新代码尚未重新部署实证；Loki Pod 日志、独立变更 Adapter 的真实审批/变更、重启/故障
+注入、每场景三轮和生产灰度仍未形成完整 L4 闭环。
 
 ## 10. 环境清理结果
 

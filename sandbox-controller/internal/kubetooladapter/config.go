@@ -10,18 +10,19 @@ import (
 
 // Config defines the fail-closed boundary for the read-only Kubernetes adapter.
 type Config struct {
-	ListenAddress   string
-	BearerToken     string
-	ClusterID       string
-	Namespaces      map[string]struct{}
-	RequestTimeout  time.Duration
-	ShutdownTimeout time.Duration
-	MaxRequestBytes int64
-	MaxConcurrent   int
-	MaxEvents       int
-	MaxPods         int
-	MaxLogLines     int64
-	MaxLogBytes     int64
+	ListenAddress     string
+	BearerToken       string
+	ClusterID         string
+	Namespaces        map[string]struct{}
+	AllowedConfigKeys map[string]struct{}
+	RequestTimeout    time.Duration
+	ShutdownTimeout   time.Duration
+	MaxRequestBytes   int64
+	MaxConcurrent     int
+	MaxEvents         int
+	MaxPods           int
+	MaxLogLines       int64
+	MaxLogBytes       int64
 }
 
 // LoadConfigFromEnv requires an authentication token, one stable cluster id and at least one
@@ -29,18 +30,19 @@ type Config struct {
 // into an unscoped Kubernetes credential proxy.
 func LoadConfigFromEnv() (Config, error) {
 	config := Config{
-		ListenAddress:   env("KUBERNETES_TOOL_ADAPTER_LISTEN_ADDRESS", ":8080"),
-		BearerToken:     strings.TrimSpace(os.Getenv("KUBERNETES_TOOL_ADAPTER_BEARER_TOKEN")),
-		ClusterID:       strings.TrimSpace(os.Getenv("KUBERNETES_TOOL_ADAPTER_CLUSTER_ID")),
-		Namespaces:      csvSet(os.Getenv("KUBERNETES_TOOL_ADAPTER_ALLOWED_NAMESPACES")),
-		RequestTimeout:  durationEnv("KUBERNETES_TOOL_ADAPTER_REQUEST_TIMEOUT", 10*time.Second),
-		ShutdownTimeout: durationEnv("KUBERNETES_TOOL_ADAPTER_SHUTDOWN_TIMEOUT", 15*time.Second),
-		MaxRequestBytes: int64Env("KUBERNETES_TOOL_ADAPTER_MAX_REQUEST_BYTES", 64*1024),
-		MaxConcurrent:   intEnv("KUBERNETES_TOOL_ADAPTER_MAX_CONCURRENT", 8),
-		MaxEvents:       intEnv("KUBERNETES_TOOL_ADAPTER_MAX_EVENTS", 200),
-		MaxPods:         intEnv("KUBERNETES_TOOL_ADAPTER_MAX_PODS", 20),
-		MaxLogLines:     int64Env("KUBERNETES_TOOL_ADAPTER_MAX_LOG_LINES", 500),
-		MaxLogBytes:     int64Env("KUBERNETES_TOOL_ADAPTER_MAX_LOG_BYTES", 256*1024),
+		ListenAddress:     env("KUBERNETES_TOOL_ADAPTER_LISTEN_ADDRESS", ":8080"),
+		BearerToken:       strings.TrimSpace(os.Getenv("KUBERNETES_TOOL_ADAPTER_BEARER_TOKEN")),
+		ClusterID:         strings.TrimSpace(os.Getenv("KUBERNETES_TOOL_ADAPTER_CLUSTER_ID")),
+		Namespaces:        csvSet(os.Getenv("KUBERNETES_TOOL_ADAPTER_ALLOWED_NAMESPACES")),
+		AllowedConfigKeys: csvSet(os.Getenv("KUBERNETES_TOOL_ADAPTER_ALLOWED_CONFIG_KEYS")),
+		RequestTimeout:    durationEnv("KUBERNETES_TOOL_ADAPTER_REQUEST_TIMEOUT", 10*time.Second),
+		ShutdownTimeout:   durationEnv("KUBERNETES_TOOL_ADAPTER_SHUTDOWN_TIMEOUT", 15*time.Second),
+		MaxRequestBytes:   int64Env("KUBERNETES_TOOL_ADAPTER_MAX_REQUEST_BYTES", 64*1024),
+		MaxConcurrent:     intEnv("KUBERNETES_TOOL_ADAPTER_MAX_CONCURRENT", 8),
+		MaxEvents:         intEnv("KUBERNETES_TOOL_ADAPTER_MAX_EVENTS", 200),
+		MaxPods:           intEnv("KUBERNETES_TOOL_ADAPTER_MAX_PODS", 20),
+		MaxLogLines:       int64Env("KUBERNETES_TOOL_ADAPTER_MAX_LOG_LINES", 500),
+		MaxLogBytes:       int64Env("KUBERNETES_TOOL_ADAPTER_MAX_LOG_BYTES", 256*1024),
 	}
 	if len(config.BearerToken) < 32 {
 		return Config{}, fmt.Errorf("adapter bearer token must contain at least 32 characters")

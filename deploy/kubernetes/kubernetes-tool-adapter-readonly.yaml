@@ -36,6 +36,9 @@ rules:
   - apiGroups: [apps]
     resources: [deployments, statefulsets, daemonsets, replicasets]
     verbs: [get, list, watch]
+  - apiGroups: [policy]
+    resources: [poddisruptionbudgets]
+    verbs: [get, list, watch]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
@@ -58,6 +61,9 @@ metadata:
 rules:
   - apiGroups: [""]
     resources: [nodes]
+    verbs: [get, list]
+  - apiGroups: [coordination.k8s.io]
+    resources: [leases]
     verbs: [get, list]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
@@ -107,6 +113,10 @@ spec:
               value: local
             - name: KUBERNETES_TOOL_ADAPTER_ALLOWED_NAMESPACES
               value: kubeoncall-system
+            # Keep empty unless patchConfig is explicitly enabled on the independent mutation
+            # adapter. Only these plain environment values are included in pre-change snapshots.
+            - name: KUBERNETES_TOOL_ADAPTER_ALLOWED_CONFIG_KEYS
+              value: ""
             - name: KUBERNETES_TOOL_ADAPTER_BEARER_TOKEN
               valueFrom:
                 secretKeyRef:

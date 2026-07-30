@@ -72,7 +72,32 @@ describe('ExecutionDetailPage', () => {
 
   it('renders the recovery verification and rollback phase', () => {
     useExecutionMock.mockReturnValue({
-      data: { ...execution, currentNode: 'operationClosureNode', errorSummary: '恢复验证超时' },
+      data: {
+        ...execution,
+        currentNode: 'operationClosureNode',
+        errorSummary: '恢复验证超时',
+        operationClosure: {
+          id: 'opc_1',
+          operationId: 'exec_1:task_1:kubernetes.scaleWorkload',
+          phase: 'ROLLED_BACK',
+          executorKind: 'kubernetes',
+          action: 'scaleWorkload',
+          target: 'payment-api',
+          details: { stableWindowSeconds: 30, persistenceStatus: 'SUCCEEDED' },
+          errorSummary: 'Recovery verification timed out',
+          startedAt: '2026-07-20T12:00:01Z',
+          finishedAt: '2026-07-20T12:02:02Z',
+          escalation: {
+            id: 'ope_1',
+            status: 'PENDING_MANUAL',
+            severity: 'P2',
+            summary: 'Post-execution verification failed',
+            details: {},
+            errorSummary: null,
+            updatedAt: '2026-07-20T12:02:02Z',
+          },
+        },
+      },
       isLoading: false,
       error: null,
     })
@@ -95,6 +120,11 @@ describe('ExecutionDetailPage', () => {
     expect(
       screen.getByText('Post-execution verification failed; the operation was rolled back'),
     ).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: '操作闭环' })).toBeInTheDocument()
+    expect(screen.getByText('exec_1:task_1:kubernetes.scaleWorkload')).toBeInTheDocument()
+    expect(screen.getByText('ROLLED_BACK')).toHaveClass('koc-badge--warning')
+    expect(screen.getByText('PENDING_MANUAL')).toHaveClass('koc-badge--warning')
+    expect(screen.getByText(/人工升级：/)).toBeInTheDocument()
   })
 
   it('returns to the exact filtered list URL supplied by the list page', () => {

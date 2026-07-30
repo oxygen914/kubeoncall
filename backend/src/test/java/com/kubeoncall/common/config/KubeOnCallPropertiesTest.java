@@ -51,6 +51,7 @@ class KubeOnCallPropertiesTest {
         assertTrue(properties.getAgent().isPostExecutionVerificationEnabled());
         assertEquals(120, properties.getAgent().getPostExecutionVerificationTimeoutSeconds());
         assertEquals(5000, properties.getAgent().getPostExecutionVerificationPollMillis());
+        assertEquals(30, properties.getAgent().getPostExecutionVerificationStableWindowSeconds());
         assertTrue(properties.getAgent().isAutomaticRollbackEnabled());
         assertTrue(properties.getAgent().isPostExecutionEscalationEnabled());
         assertFalse(properties.getRag().isEmbeddingEnabled());

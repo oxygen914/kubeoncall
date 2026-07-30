@@ -223,6 +223,44 @@ class MonitoringQueryServiceTest {
     }
 
     @Test
+    void returnsBoundedPodMemoryTimelineFromServerOwnedQueries() {
+        Instant start = Instant.parse("2026-07-30T10:00:00Z");
+        Instant end = start.plusSeconds(600);
+        when(prometheus.range(
+                        anyString(),
+                        org.mockito.ArgumentMatchers.eq(start),
+                        org.mockito.ArgumentMatchers.eq(end),
+                        org.mockito.ArgumentMatchers.any()))
+                .thenAnswer(invocation -> {
+                    String query = invocation.getArgument(0);
+                    double value =
+                            query.contains("working_set") ? 12 : query.contains("container_memory_rss") ? 10 : 16;
+                    return List.of(new RangeSeries(
+                            Map.of("cluster", "prod", "namespace", "payments", "pod", "api-1", "container", "api"),
+                            List.of(new Point(start, value), new Point(end, value))));
+                });
+
+        var result = service.podMemoryTimeline("prod", "production", "payments", "api-1", start, end);
+
+        assertThat(result.stepSeconds()).isEqualTo(15);
+        assertThat(result.workingSetAvailable()).isTrue();
+        assertThat(result.rssAvailable()).isTrue();
+        assertThat(result.limitAvailable()).isTrue();
+        assertThat(result.containers()).singleElement().satisfies(container -> {
+            assertThat(container.container()).isEqualTo("api");
+            assertThat(container.workingSetBytes())
+                    .extracting(MonitoringViews.MetricPoint::value)
+                    .containsExactly(12.0, 12.0);
+            assertThat(container.rssBytes())
+                    .extracting(MonitoringViews.MetricPoint::value)
+                    .containsExactly(10.0, 10.0);
+            assertThat(container.limitBytes())
+                    .extracting(MonitoringViews.MetricPoint::value)
+                    .containsExactly(16.0, 16.0);
+        });
+    }
+
+    @Test
     void supportsBoundedThirtyDayHealthWindow() {
         assertThat(HealthWindow.parse("30d")).isEqualTo(HealthWindow.THIRTY_DAYS);
         assertThat(HealthWindow.THIRTY_DAYS.duration()).isEqualTo(java.time.Duration.ofDays(30));

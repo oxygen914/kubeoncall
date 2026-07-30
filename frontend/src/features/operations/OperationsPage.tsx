@@ -1,10 +1,7 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useSearchParams } from 'react-router-dom'
-import { AsyncState } from '@/components/feedback/AsyncState'
 import { PageTabs, type PageTab } from '@/components/navigation/PageTabs'
-import { Button } from '@/components/ui/Button'
-import { StatusBadge } from '@/components/ui/StatusBadge'
 import { hasPermission, PERMISSIONS } from '@/features/auth/permissions'
 import { useSession } from '@/features/auth/useSession'
 import {
@@ -16,10 +13,11 @@ import {
   revokeMaintenanceWindow,
   rollbackPolicy,
 } from './api'
-import { MaintenanceWindowForm } from './MaintenanceWindowForm'
-import { errorMessage, formatMatch, formatMatchers, formatTime } from './operationUtils'
+import { MaintenanceWindowsPanel } from './MaintenanceWindowsPanel'
+import { errorMessage } from './operationUtils'
 import { PolicyCatalogPanel } from './PolicyCatalogPanel'
 import { PolicySimulationPanel } from './PolicySimulationPanel'
+import { SuppressionRulesPanel } from './SuppressionRulesPanel'
 
 type OperationsView = 'policies' | 'maintenance' | 'suppression'
 
@@ -162,122 +160,29 @@ export function OperationsPage() {
       ) : null}
 
       {view === 'maintenance' && canReadMaintenance ? (
-        <section className="koc-card">
-          <h2>维护窗口</h2>
-          {canManageMaintenance ? (
-            <MaintenanceWindowForm
-              onCreated={() => {
-                setMessage('维护窗口已创建')
-                refreshMaintenance()
-              }}
-            />
-          ) : null}
-          <AsyncState
-            isLoading={windows.isLoading}
-            error={windows.error}
-            isEmpty={!windows.isLoading && (windows.data?.length ?? 0) === 0}
-            emptyMessage="暂无当前或未来维护窗口"
-          >
-            <table className="koc-table">
-              <thead>
-                <tr>
-                  <th>时间</th>
-                  <th>匹配范围</th>
-                  <th>原因</th>
-                  <th>审批</th>
-                  <th>状态</th>
-                  <th aria-label="操作" />
-                </tr>
-              </thead>
-              <tbody>
-                {(windows.data ?? []).map((window) => (
-                  <tr key={window.id}>
-                    <td>
-                      {formatTime(window.startsAt)}
-                      <br />至 {formatTime(window.endsAt)}
-                    </td>
-                    <td className="koc-mono">{formatMatchers(window.matchers)}</td>
-                    <td>{window.reason}</td>
-                    <td>
-                      {window.approvedBy}
-                      <br />
-                      <span className="koc-mono">{window.approvalReference}</span>
-                    </td>
-                    <td>
-                      <StatusBadge
-                        tone={new Date(window.startsAt) > new Date() ? 'info' : 'warning'}
-                      >
-                        {new Date(window.startsAt) > new Date() ? '计划中' : '生效中'}
-                      </StatusBadge>
-                    </td>
-                    <td>
-                      {canManageMaintenance ? (
-                        <Button
-                          size="sm"
-                          variant="danger"
-                          disabled={revokeMutation.isPending}
-                          onClick={() => revokeMutation.mutate(window.id)}
-                        >
-                          撤销
-                        </Button>
-                      ) : null}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </AsyncState>
-        </section>
+        <MaintenanceWindowsPanel
+          windows={windows.data}
+          isLoading={windows.isLoading}
+          error={windows.error}
+          canManage={canManageMaintenance}
+          isRevoking={revokeMutation.isPending}
+          onCreated={() => {
+            setMessage('维护窗口已创建')
+            refreshMaintenance()
+          }}
+          onRevoke={(windowId) => revokeMutation.mutate(windowId)}
+        />
       ) : null}
 
       {view === 'suppression' && canReadMaintenance ? (
-        <section className="koc-card">
-          <div className="koc-page__title-row">
-            <h2>抑制规则</h2>
-            {canManageMaintenance ? (
-              <Button
-                size="sm"
-                onClick={() => reloadSuppressionMutation.mutate()}
-                disabled={reloadSuppressionMutation.isPending}
-              >
-                重新加载
-              </Button>
-            ) : null}
-          </div>
-          <AsyncState isLoading={suppression.isLoading} error={suppression.error}>
-            {suppression.data ? (
-              <>
-                <p>
-                  当前版本：<StatusBadge tone="info">{suppression.data.activeVersion}</StatusBadge>
-                </p>
-                <table className="koc-table">
-                  <thead>
-                    <tr>
-                      <th>规则</th>
-                      <th>源告警</th>
-                      <th>目标告警</th>
-                      <th>关联字段</th>
-                      <th>有效期</th>
-                      <th>原因</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {suppression.data.rules.map((rule) => (
-                      <tr key={rule.id}>
-                        <td className="koc-mono">{rule.id}</td>
-                        <td>{formatMatch(rule.source)}</td>
-                        <td>{formatMatch(rule.target)}</td>
-                        <td>{rule.correlateBy.join(', ')}</td>
-                        <td>{rule.ttlSeconds}s</td>
-                        <td>{rule.reason}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </>
-            ) : null}
-          </AsyncState>
-        </section>
+        <SuppressionRulesPanel
+          catalog={suppression.data}
+          isLoading={suppression.isLoading}
+          error={suppression.error}
+          canManage={canManageMaintenance}
+          isReloading={reloadSuppressionMutation.isPending}
+          onReload={() => reloadSuppressionMutation.mutate()}
+        />
       ) : null}
     </section>
   )

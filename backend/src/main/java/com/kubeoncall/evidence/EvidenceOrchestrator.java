@@ -27,10 +27,11 @@ public class EvidenceOrchestrator {
     private final PrometheusEvidenceCollector prometheus;
     private final LokiQueryClient loki;
     private final KubernetesEvidenceCollector kubernetes;
+    private final OperationalContextEvidenceCollector operationalContext;
     private final EvidenceConflictDetector conflictDetector;
     private final ConfidenceScorer confidenceScorer;
     private final KubeOnCallProperties properties;
-    private final ExecutorService executor = Executors.newFixedThreadPool(3, runnable -> {
+    private final ExecutorService executor = Executors.newFixedThreadPool(4, runnable -> {
         Thread thread = new Thread(runnable, "evidence-collector");
         thread.setDaemon(true);
         return thread;
@@ -42,6 +43,7 @@ public class EvidenceOrchestrator {
             PrometheusEvidenceCollector prometheus,
             LokiQueryClient loki,
             KubernetesEvidenceCollector kubernetes,
+            OperationalContextEvidenceCollector operationalContext,
             EvidenceConflictDetector conflictDetector,
             ConfidenceScorer confidenceScorer,
             KubeOnCallProperties properties) {
@@ -50,6 +52,7 @@ public class EvidenceOrchestrator {
         this.prometheus = prometheus;
         this.loki = loki;
         this.kubernetes = kubernetes;
+        this.operationalContext = operationalContext;
         this.conflictDetector = conflictDetector;
         this.confidenceScorer = confidenceScorer;
         this.properties = properties;
@@ -78,6 +81,9 @@ public class EvidenceOrchestrator {
                 || properties.getAiOperations().isEvidenceK8sEventsEnabled()
                 || properties.getAiOperations().isEvidencePodLogsEnabled()) {
             futures.add(CompletableFuture.supplyAsync(() -> kubernetes.collect(scope, toolAccess), executor));
+        }
+        if (operationalContext != null) {
+            futures.add(CompletableFuture.supplyAsync(() -> operationalContext.collect(scope, toolAccess), executor));
         }
         long deadlineMillis = Math.max(500, properties.getAiOperations().getEvidenceCollectionTimeoutMillis());
         long deadlineNanos = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(deadlineMillis);
@@ -178,6 +184,16 @@ public class EvidenceOrchestrator {
         if (directPrometheusSucceeded) {
             items.removeIf(item -> item.type() == EvidenceType.METRIC
                     && "prometheus.queryRange".equals(item.source())
+                    && !item.succeeded());
+        }
+        boolean alarmReadModelAvailable = items.stream()
+                .anyMatch(item -> item.type() == EvidenceType.ALERT
+                        && "alarm-read-model".equals(item.source())
+                        && item.collectionStatus() != EvidenceCollectionStatus.UNAVAILABLE
+                        && item.collectionStatus() != EvidenceCollectionStatus.FORBIDDEN);
+        if (alarmReadModelAvailable) {
+            items.removeIf(item -> item.type() == EvidenceType.ALERT
+                    && "alerts.getActiveAlerts".equals(item.source())
                     && !item.succeeded());
         }
     }

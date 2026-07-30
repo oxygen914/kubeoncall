@@ -47,7 +47,15 @@ class EvidenceOrchestratorSkillPolicyTest {
         when(confidenceScorer.score(any(), anyBoolean(), anyBoolean(), anyInt()))
                 .thenReturn(new ConfidenceAssessment(0, "LOW", Map.of()));
         EvidenceOrchestrator orchestrator = new EvidenceOrchestrator(
-                scopeResolver, factory, prometheus, loki, kubernetes, conflictDetector, confidenceScorer, properties);
+                scopeResolver,
+                factory,
+                prometheus,
+                loki,
+                kubernetes,
+                null,
+                conflictDetector,
+                confidenceScorer,
+                properties);
         GraphState state = new GraphState();
         state.getContext().put("activatedSkillIds", List.of("node-runtime-pressure-triage"));
         state.getContext().put("activatedSkillToolWhitelist", List.of("kubernetes.describeResource"));

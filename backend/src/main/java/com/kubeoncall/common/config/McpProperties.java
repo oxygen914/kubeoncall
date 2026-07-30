@@ -36,6 +36,7 @@ class McpProperties {
             "kubernetes.describeResource",
             "prometheus.queryRange",
             "alerts.getActiveAlerts",
+            "changes.getRecentChanges",
             "inventory.*",
             "metrics.*"));
 

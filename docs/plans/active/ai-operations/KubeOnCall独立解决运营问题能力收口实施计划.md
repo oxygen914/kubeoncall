@@ -1,21 +1,36 @@
 # KubeOnCall“独立解决运营问题”能力收口实施计划
 
-> 版本：v1.5
+> 版本：v1.10
 > 日期：2026-07-30
-> 当前状态：IN_PROGRESS（本地真实模型、版本化 v2 SOP、Prometheus、Kubernetes
-> 资源状态/Events/current/previous logs 和持久化 Ask 已贯通；Pending、CrashLoopBackOff、
-> OOMKilled、Node NotReady 已完成一轮真实只读诊断，其中 OOM 与 Node 因证据缺口受限；
-> 真实变更、稳定窗口、超时、回滚和人工升级验收尚未完成）
+> 当前状态：VALIDATING（M0～M6 代码级收口完成；本地真实模型、版本化 v2 SOP、
+> Prometheus、Kubernetes 资源状态/Events/current/previous logs 和持久化 Ask 已贯通；
+> Node Lease/受影响对象、OOM 内存时间线、同窗告警/变更、稳定窗口、闭环事实及独立受控
+> 变更 Adapter 已补入代码；操作标记、未知执行结果收敛、回滚 fencing/有界轮询及独立
+> Kubernetes 断路器也已完成，但尚未使用
+> 新版本重新完成实景演练；真实审批/变更、重启/故障
+> 注入、每场景三轮和生产灰度仍待验收）
 > 目标阶段：从“可回答、可生成计划”收口到“可诊断、可受控执行、可验证、可回滚、可升级”
 > 适用范围：Kubernetes Pending、CrashLoopBackOff、OOMKilled、Node NotReady/Unavailable
 > 关联文档：[监控能力重构实施计划](../monitoring/KubeOnCall监控能力重构实施计划.md)、[Kubernetes 操作闭环接入指南](../../../guides/Kubernetes操作闭环接入指南.md)、[Kubernetes 指标接入指南](../../../guides/Kubernetes指标接入指南.md)
 >
-> 最近更新：2026-07-30，在 Minikube 中增加临时 Worker 和专用故障 Namespace，使用真实
-> 调度器、kubelet、cgroup 和节点停机完成四类故障的一轮持久化 Ask。四个最终 execution
-> 均使用真实 qwen-plus 并命中对应 v2 SOP；Node 已验证人工恢复，但 Lease/影响面尚未进入
-> 统一 Evidence。验收记录见
+> 最近更新：2026-07-30，在既有四类 Minikube 首轮验收基础上完成代码级补缺：Node
+> Evidence 增加 Lease、允许 Namespace 内受影响 Pod/owner/PDB/容量；Pod Evidence 增加
+> requests/limits 和节点 MemoryPressure；previous-log 错误语义、OOM working
+> set/RSS/limit 时间线、Ask 范围刷新恢复、同窗告警/变更、独立变更端点、稳定 operationId、
+> MySQL Closure/Escalation 事实和稳定窗口均已实现并通过自动化。随后补齐独立
+> `kubernetes-mutation-adapter`：独立 Token/RBAC、显式 action/Namespace/config key
+> allowlist、UID/Generation 防漂移、ConfigMap 幂等账本、确定性超时重试，以及
+> scale/restart/undo/受控环境变量 patch；同一 operation 并发串行、终态账本不可逆、
+> 终态过期清理、镜像与发布流水线和本地清单同步就绪。每次变更还会向 Deployment 写入由
+> `operationId` 派生的操作标记；后端只有在标记、预期状态及 rollout 收敛同时成立时才确认
+> 成功，最终 5xx/超时按未知结果进入独立验证，明确拒绝记为 `DISPATCH_REJECTED`。回滚
+> 使用同一稳定 rollback operationId 重试未知响应，并通过 `rollbackOfOperationId` 与
+> Deployment 标记 fencing 后按 deadline 轮询复验；错误的限流/超时/保留期配置会拒绝
+> Adapter 启动，健康探针不占用业务并发槽。只读与变更调用分别接入 `kubernetes` 和
+> `kubernetes-mutation` 断路器。本地最终门禁已通过，远程 CI 和新版本实景部署尚未执行。原始实景结果见
 > [四类 Kubernetes 故障 SOP 真实环境验收记录](validation/2026-07-30四类Kubernetes故障SOP真实环境验收记录.md)；
-> 尚未据此宣称真实变更闭环或生产自主运维能力完成。
+> 新代码尚未重新部署执行四类实景与真实变更，因此仍不能宣称真实变更闭环或生产自主运维
+> 能力完成。
 
 ## 1. 执行摘要
 
@@ -116,12 +131,12 @@ Kubernetes 运营问题”。
 | --- | --- | --- | --- |
 | M0 开关和能力状态 | 新增 AI Operations 配置、Planner/Evidence/持久化 Ask/Closure/UI 独立开关；能力接口和集成状态暴露实际模式 | 已实现 | 在目标环境核对所有开关组合、Secret 注入和关闭回退 |
 | M1 真实模型边界 | 新增 `REAL_MODEL`、`RULE_ASSISTED`、`RULE_FALLBACK`、`SIMULATION`、`UNAVAILABLE`；显式创建 `ChatClient`，真实模式缺 Key 时启动失败；校验结构化 Schema、响应大小、调用状态和 Token 指标；模型输入先脱敏 | 本地真实模型 canary 与错误 Key 失败关闭已通过 | 继续执行 429、5xx、超时、非法 JSON 和配额演练；测试/生产使用独立 Secret |
-| M2 统一证据 | 新增 Evidence/Conclusion 领域契约、确定性置信度、冲突检测、范围白名单、Loki `query_range`、固定 Prometheus 查询；实现独立只读 Kubernetes Adapter、Bearer 鉴权、最小 RBAC、资源状态、Events、current/previous logs 采集及有界返回；只读结论由实际 Evidence 状态确定性生成 | 单节点 Minikube 已实证真实 Pod 状态、Events、current log；无历史容器时 previous log 正确为空；Prometheus、资源状态、Event 和日志已写入同一持久化 execution 并被 Conclusion 引用 | 补齐告警、变更与版本化 SOP 同窗关联，并扩展专用故障 Namespace |
+| M2 统一证据 | 新增 Evidence/Conclusion 领域契约、确定性置信度、冲突检测、范围白名单、Loki `query_range`、固定 Prometheus 查询；独立只读 Kubernetes Adapter 支持资源状态、Events、current/previous logs、Node Lease、允许 Namespace 内受影响 Pod/owner/PDB/容量、Pod requests/limits 和所在节点 MemoryPressure；Pod 指标补充有界 working set/RSS/limit 时间线；本地告警和变更读模型按同一 evidence window 关联 | 代码完成；既有 Minikube 已实证基础资源/Event/log/Prometheus 链路；新增规范化、Node/OOM 和告警/变更关联通过单元及 Go 全量测试 | 重新部署后复验新增证据；接通 Kubernetes Pod 到 Loki 的真实采集；Topology/CMDB 仍按可选外部依赖验收 |
 | M3 Planner 降级门禁 | 所有降级原因显式记录；Verifier 和 Executor 双重禁止降级/模拟模式执行变更；同步 `/api/v1/ask` 永久限制为只读；复合请求中的后续变更必须拆成独立 execution | 已实现 | 用真实模型故障注入证明降级时不存在变更旁路 |
-| M4 持久化 Ask | Console 改用 `POST /api/v1/executions`；传递集群、环境、Namespace 和资源范围；幂等提交、轮询终态、刷新恢复、task/execution 关联和审批入口已接通；兼容同步接口保留 | 登录用户的真实模型 + 真实 Kubernetes 只读 E2E 已通过；`exe_55756f2ec7f6408f9548ccea1ff1049b` 的 Execution、Task 和 7 个节点全部成功 | 验证 Planner、执行、审批阶段进程重启恢复；补充 SSE 主通道与跨设备会话恢复 |
-| M5 操作闭环 | 变更前准备、操作后验证、超时、回滚、回滚复验和人工升级继续受 Closure 开关与变更工具门禁保护；执行详情可展示 Closure 结果；异步任务终态阶段与状态一致 | 部分完成 | Closure 阶段事实持久化、重启续跑、真实适配器幂等、验证失败/回滚/Incident 故障注入 |
-| M6 可解释前端 | Ask 页面展示回答、执行状态、Planner 模式/降级、置信度、Evidence、SOP、关联结论和推荐动作；不提供绕过审批的直接执行入口 | 主要代码完成 | 使用真实长日志、无权限、冲突证据、断线和移动/窄屏场景验收 |
-| M7 四场景验收 | Pending、CrashLoopBackOff、OOMKilled、Node NotReady 已各完成 1 次真实只读诊断；Node 完成人工停机/恢复；显式 SOP、证据和置信度已展示 | 部分完成 | 每场景补足 3 次；补齐 Node Lease/影响面、OOM 时间线、日志错误语义，并完成真实变更、超时、回滚和人工升级演练 |
+| M4 持久化 Ask | Console 改用 `POST /api/v1/executions`；传递集群、环境、Namespace 和资源范围；幂等提交、轮询终态、刷新恢复、task/execution 关联和审批入口已接通；监控范围写入本地存储并在刷新后先恢复、再用实时目录校验；兼容同步接口保持只读 | 代码完成；登录用户的真实模型 + 真实 Kubernetes 只读 E2E 已通过；前端刷新恢复有回归测试 | 验证 Planner、执行、审批阶段进程重启恢复；补充 SSE 主通道与跨设备会话恢复 |
+| M5 操作闭环 | 读写 Adapter 端点、进程、ServiceAccount、RBAC 和凭据彻底分离；独立变更 Adapter 具有显式 allowlist、UID/Generation guard、持久化 `operationId` 请求哈希/结果、同 operation 并发串行、终态不可逆、确定性超时 reconcile、终态账本保留/清理和 scale/restart/undo/受控环境变量 patch；每次变更写入 Deployment 操作标记，restart 同时标记 Pod Template；未配置变更端点时 503 失败关闭；原始 PREPARED 快照在同 operation 重试时复用；最终 5xx/超时作为未知外部结果进入独立验证，明确拒绝记为 `DISPATCH_REJECTED`；成功必须同时满足操作标记、预期状态和稳定窗口，涉及 rollout 时还必须满足 observedGeneration/updated replicas；显式 `HEALTHY` 不能替代这些确定性条件；回滚使用稳定独立 ID 重试未知响应，以 `rollbackOfOperationId` 和原操作/本次回滚标记做 fencing，并有界轮询复验；限流/超时/保留期等安全配置严格解析，探针绕过业务并发限流；只读和变更依赖分别进入独立断路器；Redis 保留可续跑图状态，MySQL V20 持久化 Closure/Escalation 审计读投影 | 代码完成；Adapter 四类 action、operationId 冲突/并发、账本写失败/终态保护/清理、未知超时恢复、回滚 fencing、严格配置、探针可用性、目标漂移及读写 Token 隔离均有 Go 自动化；闭环成功/稳定窗口/Pending/未知响应/操作标记/确定性健康校验/回滚重试与轮询/断路器/持久化失败关闭/升级有后端单测；真实 MySQL 8 已验证 V1～V20 | 在专用测试集群执行真实审批、变更、进程重启、响应丢失、验证超时、回滚和 Incident 故障注入；生产前评审 action/Namespace/config key allowlist、最大副本数和账本保留期 |
+| M6 可解释前端 | Ask 页面展示回答、执行状态、Planner 模式/降级、置信度、Evidence、SOP、关联结论和推荐动作；执行详情展示闭环阶段、稳定 `operationId` 和人工升级状态，并按验证、回滚、升级语义区分状态；不提供绕过审批的直接执行入口 | 代码完成 | 使用真实长日志、无权限、冲突证据、断线和移动/窄屏场景验收 |
+| M7 四场景验收 | Pending、CrashLoopBackOff、OOMKilled、Node NotReady 已各完成 1 次旧版本真实只读诊断；Node 完成人工停机/恢复；原验收暴露的 Node Lease/影响面、OOM 时间线和 previous-log 语义已在代码中修复；验收清单增加独立最小 RBAC 的健康 `remediation-target` Deployment，供真实 scale/restart/undo/patch 演练 | VALIDATING | 使用新版本重新执行并每场景补足 3 次；完成真实变更、超时、回滚和人工升级演练 |
 
 本轮新增的关键安全约束：
 
@@ -140,17 +155,15 @@ Kubernetes 运营问题”。
 
 | 验证项 | 结果 |
 | --- | --- |
-| 后端格式、规范和单元测试 | 当前提交基线叠加本次 AI Operations 变更的隔离快照：831 个测试通过，0 failure，0 error；Spotless、Checkstyle 通过 |
-| 最终安全收口定向测试 | Planner、Evidence、Ask、Workflow 和证据一致性相关 31 个测试通过，0 failure，0 error |
-| MySQL 8 集成测试 | `WorkflowRuntimeIT`：3 个测试通过；Flyway V1～V18 全部应用，Evidence/Conclusion 幂等投影通过 |
-| OpenAPI 契约 | `-Popenapi-contract verify` 通过；基于最新 `api/openapi.json` 重复生成前端类型后逐字一致 |
-| 前端质量门禁 | format、lint、typecheck、Vitest、production build 全部通过；29 个测试文件、72 个测试通过 |
-| 浏览器 E2E | 11 个 Playwright 场景通过 |
+| 后端格式、规范、单元和契约测试 | 最终合并工作区 `verify -Popenapi-contract`：938 个测试通过，0 failure，0 error；Spotless、Checkstyle 通过 |
+| MySQL 8 集成测试 | `WorkflowRuntimeIT`：4 个测试通过；Flyway V1～V20 从空库全部应用；Evidence/Conclusion、Closure/Escalation 幂等投影通过 |
+| Sandbox Controller / Kubernetes Adapters | `go test ./...`、`go vet ./...`、`go build ./cmd/...` 全部通过；变更 Adapter 包另通过 race 检查；Node Lease、允许范围影响面、PDB/owner/容量、Pod 节点上下文，以及受控变更四类 action、幂等重放/并发、终态保护、目标漂移和超时恢复均有回归测试 |
+| OpenAPI 契约 | `-Popenapi-contract verify` 通过；已基于最新 `api/openapi.json` 重新生成前端类型，并验证重复生成无差异 |
+| 前端质量门禁 | format、源码体积、lint、typecheck、Vitest、production build 全部通过；36 个测试文件、96 个测试通过 |
+| 浏览器 E2E | 12 个 Playwright Mock API 场景通过 |
+| 镜像与部署静态门禁 | 只读/变更 Adapter 镜像均本地构建成功，缺少独立长 Token 时均拒绝启动；Helm lint/template、Compose config、CI/Release YAML 解析及三份 Kubernetes 清单离线 dry-run 通过；远程 CI 和真实部署未执行 |
 
 真实依赖的联调结果必须另建验收报告，不得混入本地自动化结论。
-
-同一共享工作区内另有未完成的通知模块改动；其格式、final mock 和 Spring 构造器问题会使
-未提交工作区的仓库级全量门禁失败，因此不能用上述隔离结果替代最终合并后的全仓复验。
 
 ### 3.3 本地真实依赖联调记录
 
@@ -196,6 +209,50 @@ Kubernetes 运营问题”。
 完整边界和证据见
 [2026-07-30 真实 Kubernetes 只读证据链验收记录](validation/2026-07-30真实Kubernetes只读证据链验收记录.md)。
 
+### 3.4 四场景首轮验收后的代码收口
+
+本节只记录 2026-07-30 首轮实景验收后完成的代码和自动化，不把尚未重跑的结果改写为实景
+通过：
+
+1. Node 资源证据直接读取 `kube-node-lease` Lease，并在配置允许的 Namespace 内关联目标
+   节点 Pod、直接 owner、匹配 PDB、requests 和剩余 allocatable；返回值明确标记
+   `coverage=ALLOWED_NAMESPACES`、`complete=false`，不冒充集群全量影响面。
+2. Pod 资源证据包含 requests/limits 和所在 Node 的 Ready/MemoryPressure conditions；
+   Prometheus 使用服务端固定模板、Pod 精确标签和有界采样生成 working set/RSS/limit 时间线。
+3. previous-log 中“无历史容器”规范化为 `EMPTY/PREVIOUS_LOG_EMPTY`，kubelet/CRI 不可读文本
+   规范化为 `UNAVAILABLE/PREVIOUS_LOG_UNAVAILABLE`，不再作为成功业务日志。
+4. Evidence Orchestrator 从 MySQL 告警和变更读模型采集同一 execution、同一 evidence window
+   的 `ALERT`/`CHANGE_EVENT`；告警 ID、变更 ID、时间及 diff 参与稳定证据标识，摘要相同的
+   不同事实不会碰撞；本地读模型可用时不保留失败的重复外部 Alerts 证据。
+5. Ask 使用的 cluster/environment/namespace 在浏览器刷新后恢复，并在提交前重新用实时目录
+   校验；无效或已退场范围会被重置。
+6. 只读 `KUBERNETES_TOOL_ENDPOINT` 与变更 `KUBERNETES_MUTATION_TOOL_ENDPOINT` 使用独立
+   Token；未配置独立变更端点时所有 mutating action 失败关闭。仓库内独立变更 Adapter
+   使用显式 action/Namespace/config key allowlist 和独立最小 RBAC；Backend 分别使用
+   `kubernetes`、`kubernetes-mutation` 断路器隔离两条依赖链路。
+7. Closure 在执行前生成稳定 `operationId`，健康状态必须持续满足可配置稳定窗口；Redis
+   图状态负责续跑，MySQL V20 记录 PREPARED/VERIFYING/STABILIZING/VERIFIED/
+   ROLLING_BACK/ROLLED_BACK/ESCALATED 等事实和人工升级投影。
+8. Incident Tool 缺失或投递失败不会丢失升级事实；Execution 详情页可直接查看 Closure
+   阶段、脱敏事实、错误以及 `PENDING_MANUAL/DISPATCHED/DISPATCH_FAILED` 状态。
+9. 变更 Adapter 在 Kubernetes ConfigMap 中先写 `operationId` 请求哈希，再执行确定性
+   mutation；不同参数复用 ID 时 409，响应未知时保持 PENDING 并按目标状态 reconcile。
+   同一进程内相同 operation 并发请求先串行化，成功/失败终态不能被迟到结果反向覆盖；后端
+   同一 operation 重试复用原 PREPARED 快照，不会用变更后状态覆盖回滚基线。
+10. 所有变更都会在 Deployment metadata 写入 `ops.kubeoncall.io/operation-id` 哈希标记，
+    restart 同时写入 Pod Template；只读 Adapter 回传该标记。后端不再凭通用
+    `healthy=true`、显式 `HEALTHY` 或一次 Adapter 成功响应确认恢复，而是同时验证本次标记、
+    目标状态和稳定窗口，涉及 rollout 时再验证 generation/updated replicas。最终 5xx/超时
+    先按未知执行结果独立核验。回滚 5xx/超时使用同一 rollback operationId 有界重试，
+    `rollbackOfOperationId` 为必填 fencing guard；Adapter 只允许资源保留原操作标记或已写入
+    本次回滚标记时继续，随后按 deadline 轮询状态与回滚标记。明确拒绝则持久化
+    `DISPATCH_REJECTED`。所有 duration、请求大小、并发、最大副本及配置值限制采用严格解析，
+    非法值拒绝启动；业务并发饱和不阻塞 `/healthz`、`/readyz`。
+
+剩余项均为真实环境门禁：部署并验证变更 Adapter 的 RBAC/Secret/账本、审批后真实变更、
+Worker/Backend/Adapter 重启恢复、验证超时/回滚/Incident 故障注入、四场景各三轮、新代码
+实景复验和生产灰度。未完成这些门禁前，本计划保持 `VALIDATING`。
+
 ## 4. 目标架构
 
 ```mermaid
@@ -223,7 +280,9 @@ flowchart LR
     Approval -->|通过| Executor
     Approval -->|拒绝/超时| Escalation["人工升级"]
 
-    Executor --> Verify["操作后状态验证"]
+    Executor --> MutationAdapter["独立受控变更 Adapter"]
+    MutationAdapter --> OperationLedger[("Kubernetes operationId 账本")]
+    MutationAdapter --> Verify["只读 Adapter 操作后状态验证"]
     Verify -->|恢复| Done["RESOLVED"]
     Verify -->|失败或超时| Rollback["补偿回滚"]
     Rollback --> Reverify["回滚后验证"]
@@ -262,7 +321,8 @@ flowchart LR
 5. 模型输出只能生成候选计划，不能自行扩大工具白名单和权限。
 6. 规则 fallback 只能用于显式降级的只读诊断，不得生成可执行变更。
 7. 模拟结果必须带 `simulation=true`，不能参与真实恢复判定。
-8. 变更前必须校验资源 UID、`resourceVersion`、当前状态和预期状态。
+8. 变更前必须校验资源 UID、Generation、当前状态和预期状态；Kubernetes Update 继续使用
+   resourceVersion 提供并发冲突保护。
 9. 执行成功不等于问题解决；必须经过独立的操作后验证。
 10. 回滚也属于变更，必须幂等、审计并执行回滚后验证。
 11. 高风险操作继续沿用审批，不以“AI 自主”为理由降低安全门槛。
@@ -707,10 +767,13 @@ PENDING
 1. 验证持续 `PENDING` 直到 deadline 后进入 `ROLLING_BACK`。
 2. 明确 `FAILED/DEGRADED` 时可以提前回滚。
 3. 回滚动作使用独立且稳定的 rollback operationId。
-4. 回滚完成后执行 `VERIFYING_ROLLBACK`。
-5. 回滚成功时执行状态为 `ROLLED_BACK`，问题状态仍为“未解决/已恢复到安全状态”。
-6. 回滚失败、回滚不可用或回滚后仍不健康时进入 `ESCALATED`。
-7. 进程在验证或回滚阶段重启后，必须从持久化 closure phase 恢复。
+4. 回滚 5xx/超时属于结果未知，必须以同一 rollback operationId 有界重试；每次补偿都携带
+   原操作 `rollbackOfOperationId`，Adapter 通过 Deployment 标记阻止对已漂移目标继续回滚。
+5. 回滚完成后执行有界 `VERIFYING_ROLLBACK` 轮询，同时核对独立回滚操作标记和旧状态，
+   不以单次查询或通用健康字段作为成功依据。
+6. 回滚成功时执行状态为 `ROLLED_BACK`，问题状态仍为“未解决/已恢复到安全状态”。
+7. 回滚失败、回滚不可用或回滚后仍不健康时进入 `ESCALATED`。
+8. 进程在验证或回滚阶段重启后，必须从持久化 closure phase 恢复。
 
 ### 5.5 人工升级
 
@@ -853,32 +916,32 @@ Ask 每条 AI 回答拆为：
 以下工期为单个任务的参考人日，不代表固定交付日期；真实排期取决于可用后端、前端和 SRE
 投入。
 
-| ID | 工作项 | 主要交付物 | 依赖 | 参考人日 |
-| --- | --- | --- | --- | ---: |
-| AIOPS-00 | 建立基线与 Feature Flags | 基线报告、能力开关 | 无 | 2 |
-| AIOPS-01 | 真实 ChatClient 显式配置 | Model 配置和启动校验 | AIOPS-00 | 2 |
-| AIOPS-02 | 模型 canary、熔断和指标 | readiness、调用指标 | AIOPS-01 | 2 |
-| AIOPS-03 | Planner JSON Schema | 严格输出契约 | AIOPS-01 | 2 |
-| AIOPS-04 | Planner 模式与降级原因 | `plannerMode`、审计和门禁 | AIOPS-03 | 3 |
-| AIOPS-05 | Evidence v2 领域模型 | EvidenceItem、Conclusion | AIOPS-00 | 3 |
-| AIOPS-06 | Evidence 元数据持久化 | Flyway、Repository、MinIO 引用 | AIOPS-05 | 3 |
-| AIOPS-07 | Loki 受控查询 | Loki client、限流、脱敏 | AIOPS-05 | 3 |
-| AIOPS-08 | Kubernetes Events 工具 | adapter 契约和 RBAC | AIOPS-05 | 3 |
-| AIOPS-09 | current/previous Pod logs | Loki/K8s 双路径 | AIOPS-07/08 | 3 |
-| AIOPS-10 | Evidence Orchestrator | 并行采集、deadline、冲突 | AIOPS-06～09 | 4 |
-| AIOPS-11 | 置信度评分器 | 可解释评分和封顶规则 | AIOPS-10 | 2 |
-| AIOPS-12 | Execution 详情扩展 | Evidence/Conclusion/Closure API | AIOPS-06 | 3 |
-| AIOPS-13 | `/ask` 切换持久化入口 | 前端提交、幂等和恢复 | AIOPS-12 | 3 |
-| AIOPS-14 | SSE/轮询执行时间线 | 断线恢复和状态同步 | AIOPS-13 | 3 |
-| AIOPS-15 | Ask 审批恢复交互 | 审批入口和结果续接 | AIOPS-13 | 3 |
-| AIOPS-16 | Closure 阶段持久化 | verification/rollback facts | AIOPS-12 | 3 |
-| AIOPS-17 | 真实适配器闭环联调 | 快照、验证、回滚 | AIOPS-08/16 | 4 |
-| AIOPS-18 | 人工升级持久化 | Incident 和本地升级事实 | AIOPS-16 | 2 |
-| AIOPS-19 | 结论与证据 UI | 结构化回答组件 | AIOPS-11/12 | 4 |
-| AIOPS-20 | 测试集群和场景夹具 | 可重复故障注入与清理 | AIOPS-07～10 | 4 |
-| AIOPS-21 | 四场景真实验收 | 12 次基础场景报告 | AIOPS-13～20 | 5 |
-| AIOPS-22 | 超时/回滚/重启演练 | 故障注入报告 | AIOPS-16～21 | 3 |
-| AIOPS-23 | 灰度、Runbook 和发布门禁 | 上线/回滚手册、最终报告 | 全部 | 3 |
+| ID | 工作项 | 当前状态 | 主要交付物 | 依赖 | 参考人日 |
+| --- | --- | --- | --- | --- | ---: |
+| AIOPS-00 | 建立基线与 Feature Flags | DONE | 基线报告、能力开关 | 无 | 2 |
+| AIOPS-01 | 真实 ChatClient 显式配置 | DONE | Model 配置和启动校验 | AIOPS-00 | 2 |
+| AIOPS-02 | 模型 canary、熔断和指标 | VALIDATING | readiness、调用指标；错误注入待实测 | AIOPS-01 | 2 |
+| AIOPS-03 | Planner JSON Schema | DONE | 严格输出契约 | AIOPS-01 | 2 |
+| AIOPS-04 | Planner 模式与降级原因 | DONE | `plannerMode`、审计和门禁 | AIOPS-03 | 3 |
+| AIOPS-05 | Evidence v2 领域模型 | DONE | EvidenceItem、Conclusion | AIOPS-00 | 3 |
+| AIOPS-06 | Evidence 元数据持久化 | DONE | Flyway、Repository、MinIO 引用 | AIOPS-05 | 3 |
+| AIOPS-07 | Loki 受控查询 | VALIDATING | Loki client、限流、脱敏；Pod 采集待实测 | AIOPS-05 | 3 |
+| AIOPS-08 | Kubernetes Events/资源工具 | DONE | 只读 Adapter 契约和最小 RBAC | AIOPS-05 | 3 |
+| AIOPS-09 | current/previous Pod logs | DONE | Loki/K8s 双路径和错误语义 | AIOPS-07/08 | 3 |
+| AIOPS-10 | Evidence Orchestrator | DONE | 并行采集、deadline、冲突和同窗关联 | AIOPS-06～09 | 4 |
+| AIOPS-11 | 置信度评分器 | DONE | 可解释评分和封顶规则 | AIOPS-10 | 2 |
+| AIOPS-12 | Execution 详情扩展 | DONE | Evidence/Conclusion/Closure/Escalation API | AIOPS-06 | 3 |
+| AIOPS-13 | `/ask` 切换持久化入口 | DONE | 前端提交、幂等和范围恢复 | AIOPS-12 | 3 |
+| AIOPS-14 | SSE/轮询执行时间线 | VALIDATING | 断线恢复和状态同步；跨设备待实测 | AIOPS-13 | 3 |
+| AIOPS-15 | Ask 审批恢复交互 | VALIDATING | 审批入口和结果续接；重启待实测 | AIOPS-13 | 3 |
+| AIOPS-16 | Closure 阶段持久化 | DONE | Redis 续跑状态、MySQL closure/rollback facts、操作标记与未知结果收敛 | AIOPS-12 | 3 |
+| AIOPS-17 | 真实适配器闭环联调 | VALIDATING | 独立 Adapter、最小 RBAC、幂等/并发/终态保护账本、严格安全配置、回滚 fencing、Deployment 操作标记、只读/变更断路器和四类 action 契约已实现；两个镜像本地构建及失败关闭通过，测试集群真实联调待执行 | AIOPS-08/16 | 4 |
+| AIOPS-18 | 人工升级持久化 | DONE | Incident 投递状态和本地升级事实 | AIOPS-16 | 2 |
+| AIOPS-19 | 结论与证据 UI | DONE | 结构化回答和闭环事实组件 | AIOPS-11/12 | 4 |
+| AIOPS-20 | 测试集群和场景夹具 | VALIDATING | 四类故障、清理流程和受控变更目标/RBAC 已有；新版本待复跑 | AIOPS-07～10 | 4 |
+| AIOPS-21 | 四场景真实验收 | IN_PROGRESS | 已各 1 次，目标 12 次基础场景报告 | AIOPS-13～20 | 5 |
+| AIOPS-22 | 超时/回滚/重启演练 | IN_PROGRESS | 故障注入报告 | AIOPS-16～21 | 3 |
+| AIOPS-23 | 灰度、Runbook 和发布门禁 | IN_PROGRESS | 上线/回滚手册、最终报告 | 全部 | 3 |
 
 建议关键路径：
 
@@ -1086,7 +1149,7 @@ npm run e2e
 | 模型幻觉 | 错误根因或操作 | 结构化证据、确定性评分、Verifier、审批 |
 | 日志含敏感信息 | 数据泄露 | 服务端脱敏、最小片段、访问控制、审计 |
 | Events/日志延迟 | 误判正常 | freshness、数据源状态、置信度扣分 |
-| 同名资源重建 | 操作错误对象 | 使用 UID/resourceVersion，执行前重检 |
+| 同名资源重建或审批期间目标变更 | 操作错误对象 | 使用 UID/Generation guard，Kubernetes update resourceVersion 冲突保护，漂移时重新规划 |
 | Worker 重试 | 重复变更 | operationId、外部幂等、fencing |
 | 回滚本身失败 | 故障扩大 | 回滚后验证、人工升级、环境策略 |
 | 节点故障超出 K8s 控制面 | 无法自动修复基础设施 | 恢复业务副本并升级基础设施值班 |
@@ -1099,21 +1162,26 @@ npm run e2e
 只有满足以下全部条件，本计划才能从 `PLANNED/VALIDATING` 更新为 `DONE`：
 
 - [ ] 真实模型已启用，canary 和错误注入通过，模型来源可见。
-- [ ] Planner 不再静默 fallback，模拟和规则降级均被显式标记。
-- [ ] 规则 fallback 不能触发任何真实变更。
+- [x] Planner 不再静默 fallback，模拟和规则降级均被显式标记。
+- [x] 规则 fallback 不能触发任何真实变更。
 - [x] Loki、Kubernetes Events、current/previous Pod logs 已进入统一证据契约。
-- [ ] Prometheus、资源状态、告警、变更和 SOP 能与同一 execution 关联。
-- [ ] `/ask` 使用持久化 Execution，浏览器关闭和后端重启后可恢复。
+- [x] Prometheus、资源状态、告警、变更和 SOP 已在代码与自动化中按同一 execution/window
+  关联；新增 Node/OOM/告警/变更证据仍待实景复验。
+- [ ] `/ask` 使用持久化 Execution，浏览器刷新/重开范围恢复已完成；后端重启恢复仍待验收。
 - [ ] Ask 产生的审批能在统一审批中心处理并恢复原执行。
-- [ ] 所有变更操作具有快照、幂等、验证、超时和回滚策略。
-- [ ] 回滚后执行复验，失败时创建持久化人工升级事实。
-- [ ] 每个结论显示日志/Events/指标/资源状态中的相关证据、SOP 来源和置信度。
+- [x] 后端所有已注册 Kubernetes 变更具有快照、稳定 operationId、UID/Generation guard、
+  Deployment 操作标记、未知结果收敛、验证、稳定窗口、超时、回滚重试/fencing/轮询策略；
+  独立 Adapter 的外部幂等账本、安全配置、探针可用性和 action 契约已完成自动化。
+- [ ] 独立变更 Adapter 已在专用测试集群完成真实审批、幂等重放、响应未知、重启和回滚联调。
+- [ ] 回滚后复验和持久化人工升级已通过代码/自动化；真实故障注入未完成。
+- [x] 每个结论可显示日志/Events/指标/资源状态中的相关证据、SOP 来源和置信度。
 - [ ] Pending、CrashLoopBackOff、OOMKilled、Node 不可用各完成 3 次真实演练。
 - [ ] 至少完成一次验证超时、一次自动回滚和一次人工升级演练。
-- [ ] 后端和前端最终合并态全量质量门禁通过（本次 AI Operations 隔离快照 831 个后端测试
-  已通过；共享工作区并行通知改动仍需修复后复验）。
+- [x] 当前最终合并工作区全量质量门禁通过：后端 938 个测试，另有 MySQL/Testcontainers
+  4 个测试；前端 36 个文件/96 个测试、Go 全量测试和变更 Adapter race 检查、12 个
+  Playwright 场景、格式/规范/类型/构建均通过。
 - [x] 当前 OpenAPI 契约和前端生成类型无漂移。
-- [ ] 测试集群验收报告包含提交号、环境、执行 ID、证据包和清理结果。
+- [ ] 首轮测试集群报告已有环境、执行 ID、证据和清理结果；新代码复验及最终提交号待补。
 - [ ] 生产灰度、关闭开关、数据保留和紧急回滚手册完成评审。
 
 完成报告必须分别写明：

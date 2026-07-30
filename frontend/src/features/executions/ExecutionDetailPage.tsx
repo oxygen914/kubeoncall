@@ -3,7 +3,7 @@ import { AsyncState } from '@/components/feedback/AsyncState'
 import { Button } from '@/components/ui/Button'
 import { StatusBadge } from '@/components/ui/StatusBadge'
 import { useExecution, useExecutionNodes } from './hooks'
-import { executionTone } from './viewModels'
+import { executionTone, operationClosureTone, operationEscalationTone } from './viewModels'
 import { resolveListReturnPath } from '@/lib/navigation'
 
 export function ExecutionDetailPage() {
@@ -85,6 +85,69 @@ export function ExecutionDetailPage() {
           </div>
         ) : null}
       </AsyncState>
+
+      {execution?.operationClosure ? (
+        <section className="koc-card" aria-labelledby="operation-closure-title">
+          <h2 id="operation-closure-title">操作闭环</h2>
+          <dl className="koc-fields">
+            <div>
+              <dt>闭环阶段</dt>
+              <dd>
+                <StatusBadge tone={operationClosureTone(execution.operationClosure.phase)}>
+                  {execution.operationClosure.phase}
+                </StatusBadge>
+              </dd>
+            </div>
+            <div>
+              <dt>operationId</dt>
+              <dd className="koc-mono">{execution.operationClosure.operationId}</dd>
+            </div>
+            <div>
+              <dt>动作</dt>
+              <dd>
+                {execution.operationClosure.executorKind}.{execution.operationClosure.action}
+              </dd>
+            </div>
+            <div>
+              <dt>目标</dt>
+              <dd>{execution.operationClosure.target || '—'}</dd>
+            </div>
+            <div>
+              <dt>开始</dt>
+              <dd>{formatTime(execution.operationClosure.startedAt)}</dd>
+            </div>
+            <div>
+              <dt>完成</dt>
+              <dd>{formatTime(execution.operationClosure.finishedAt)}</dd>
+            </div>
+            <div>
+              <dt>错误</dt>
+              <dd>{execution.operationClosure.errorSummary || '—'}</dd>
+            </div>
+          </dl>
+          {execution.operationClosure.escalation ? (
+            <div className="koc-alert koc-alert--warning">
+              <strong>人工升级：</strong>{' '}
+              <StatusBadge
+                tone={operationEscalationTone(execution.operationClosure.escalation.status)}
+              >
+                {execution.operationClosure.escalation.status}
+              </StatusBadge>{' '}
+              · {execution.operationClosure.escalation.severity}
+              <p>{execution.operationClosure.escalation.summary}</p>
+              {execution.operationClosure.escalation.errorSummary ? (
+                <p>{execution.operationClosure.escalation.errorSummary}</p>
+              ) : null}
+            </div>
+          ) : null}
+          <details>
+            <summary>查看脱敏闭环事实</summary>
+            <pre className="koc-json">
+              {JSON.stringify(execution.operationClosure.details, null, 2)}
+            </pre>
+          </details>
+        </section>
+      ) : null}
 
       <section className="koc-detail__timeline" aria-labelledby="execution-nodes-title">
         <h2 id="execution-nodes-title">节点时间线</h2>

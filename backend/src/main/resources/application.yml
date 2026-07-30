@@ -138,6 +138,7 @@ kubeoncall:
     post-execution-verification-enabled: ${KUBEONCALL_POST_EXECUTION_VERIFICATION_ENABLED:true}
     post-execution-verification-timeout-seconds: ${KUBEONCALL_POST_EXECUTION_VERIFICATION_TIMEOUT_SECONDS:120}
     post-execution-verification-poll-millis: ${KUBEONCALL_POST_EXECUTION_VERIFICATION_POLL_MILLIS:5000}
+    post-execution-verification-stable-window-seconds: ${KUBEONCALL_POST_EXECUTION_VERIFICATION_STABLE_WINDOW_SECONDS:30}
     automatic-rollback-enabled: ${KUBEONCALL_AUTOMATIC_ROLLBACK_ENABLED:true}
     post-execution-escalation-enabled: ${KUBEONCALL_POST_EXECUTION_ESCALATION_ENABLED:true}
   ai-operations:
@@ -283,7 +284,7 @@ kubeoncall:
     dynamic-invocation-enabled: ${MCP_DYNAMIC_INVOCATION_ENABLED:false}
     dynamic-max-tools: ${MCP_DYNAMIC_MAX_TOOLS:3}
     max-response-bytes: ${MCP_MAX_RESPONSE_BYTES:262144}
-    allowed-tools: ${MCP_ALLOWED_TOOLS:knowledge.searchSop,topology.getServiceTopology,cmdb.getServiceMetadata,kubernetes.describeResource,prometheus.queryRange,alerts.getActiveAlerts,inventory.*,metrics.*}
+    allowed-tools: ${MCP_ALLOWED_TOOLS:knowledge.searchSop,topology.getServiceTopology,cmdb.getServiceMetadata,kubernetes.describeResource,prometheus.queryRange,alerts.getActiveAlerts,changes.getRecentChanges,inventory.*,metrics.*}
   change-events:
     webhook-enabled: ${CHANGE_EVENT_WEBHOOK_ENABLED:false}
     webhook-auth-mode: ${CHANGE_EVENT_WEBHOOK_AUTH_MODE:bearer}
@@ -295,9 +296,11 @@ kubeoncall:
     argocd-webhook-token: ${CHANGE_EVENT_ARGOCD_WEBHOOK_TOKEN:}
   integrations:
     kubernetes:
-      endpoint: http://localhost:18081/api/tools/kubernetes
+      endpoint: ${KUBERNETES_TOOL_ENDPOINT:http://localhost:18081/api/tools/kubernetes}
       timeout-millis: 3000
       bearer-token: ${KUBERNETES_TOOL_BEARER_TOKEN:}
+      mutation-endpoint: ${KUBERNETES_MUTATION_TOOL_ENDPOINT:}
+      mutation-bearer-token: ${KUBERNETES_MUTATION_TOOL_BEARER_TOKEN:}
     prometheus:
       endpoint: http://localhost:18082/api/tools/prometheus
       timeout-millis: 3000

@@ -25,6 +25,7 @@ toolWhitelist:
   - prometheus.instantQuery
   - prometheus.rangeQuery
   - alerts.getActiveAlerts
+  - changes.getRecentChanges
   - alertmanager.listAlerts
 ---
 # Pod CrashLoopBackOff Triage

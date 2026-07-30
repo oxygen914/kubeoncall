@@ -3,7 +3,7 @@ import { render, screen, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { MonitoringPage } from '../MonitoringPage'
-import { MonitoringScopeProvider } from '../MonitoringScopeProvider'
+import { MONITORING_SCOPE_STORAGE_KEY, MonitoringScopeProvider } from '../MonitoringScopeProvider'
 
 vi.mock('@/features/auth/useSession', () => ({
   useSession: () => ({
@@ -51,6 +51,7 @@ describe('MonitoringPage', () => {
 
   beforeEach(() => {
     kubernetesStateAvailable = false
+    window.localStorage.clear()
     fetchMock.mockReset()
     fetchMock.mockImplementation((input: RequestInfo | URL) => {
       const path = String(input)
@@ -217,6 +218,7 @@ describe('MonitoringPage', () => {
 
   afterEach(() => {
     vi.unstubAllGlobals()
+    window.localStorage.clear()
   })
 
   it('keeps the health overview focused and makes missing Kubernetes state explicit', async () => {
@@ -272,5 +274,30 @@ describe('MonitoringPage', () => {
     expect(screen.getByText('当前范围未发现明显异常')).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: '告警与变更关联' })).toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: '节点状态' })).not.toBeInTheDocument()
+  })
+
+  it('restores the persisted cluster and namespace before loading a refreshed page', async () => {
+    kubernetesStateAvailable = true
+    window.localStorage.setItem(
+      MONITORING_SCOPE_STORAGE_KEY,
+      JSON.stringify({ cluster: 'prod', environment: '', namespace: 'default' }),
+    )
+
+    renderPage('/monitoring?view=workloads')
+
+    expect(await screen.findByText('api-1')).toBeInTheDocument()
+    expect(screen.getByLabelText('当前监控范围')).toHaveTextContent('prod')
+    expect(screen.getByLabelText('当前监控范围')).toHaveTextContent('default')
+    expect(
+      fetchMock.mock.calls
+        .map(([input]) => String(input))
+        .some((url) => url.includes('/api/v1/monitoring/scopes?cluster=prod')),
+    ).toBe(true)
+    expect(
+      JSON.parse(window.localStorage.getItem(MONITORING_SCOPE_STORAGE_KEY) ?? '{}'),
+    ).toMatchObject({
+      cluster: 'prod',
+      namespace: 'default',
+    })
   })
 })

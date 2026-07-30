@@ -105,6 +105,26 @@ func TestServerRejectsMutationAndOutsideNamespace(t *testing.T) {
 	}
 }
 
+func TestServerKeepsHealthProbeAvailableWhenToolConcurrencyIsSaturated(t *testing.T) {
+	server := NewServer(testConfig(), &fakeReader{})
+	for range cap(server.semaphore) {
+		server.semaphore <- struct{}{}
+	}
+	defer func() {
+		for range cap(server.semaphore) {
+			<-server.semaphore
+		}
+	}()
+	request := httptest.NewRequest(http.MethodGet, "/healthz", nil)
+	response := httptest.NewRecorder()
+
+	server.Handler().ServeHTTP(response, request)
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("expected health probe to bypass tool concurrency limit, got %d", response.Code)
+	}
+}
+
 func TestLoadConfigFailsClosed(t *testing.T) {
 	t.Setenv("KUBERNETES_TOOL_ADAPTER_BEARER_TOKEN", "0123456789abcdef0123456789abcdef")
 	t.Setenv("KUBERNETES_TOOL_ADAPTER_CLUSTER_ID", "local")

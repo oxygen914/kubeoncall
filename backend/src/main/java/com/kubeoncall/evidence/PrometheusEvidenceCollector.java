@@ -47,6 +47,25 @@ public class PrometheusEvidenceCollector {
                 }
             }
             MonitoringViews.Summary summary = monitoring.summary(scope.cluster(), environment, scope.namespace());
+            MonitoringViews.PodMemoryTimeline memoryTimeline = null;
+            String memoryTimelineStatus = "NOT_APPLICABLE";
+            String memoryTimelineErrorType = "";
+            if ("pod".equalsIgnoreCase(scope.resource().kind())
+                    && !scope.resource().name().isBlank()) {
+                try {
+                    memoryTimeline = monitoring.podMemoryTimeline(
+                            scope.cluster(),
+                            environment,
+                            scope.namespace(),
+                            scope.resource().name(),
+                            scope.start(),
+                            scope.end());
+                    memoryTimelineStatus = memoryTimeline.containers().isEmpty() ? "EMPTY" : "SUCCEEDED";
+                } catch (RuntimeException ex) {
+                    memoryTimelineStatus = "UNAVAILABLE";
+                    memoryTimelineErrorType = "PROMETHEUS_MEMORY_TIMELINE_UNAVAILABLE";
+                }
+            }
             boolean available = summary.dataSources().nodeMetricsAvailable()
                     || summary.dataSources().kubernetesStateAvailable();
             return List.of(result(
@@ -55,6 +74,9 @@ public class PrometheusEvidenceCollector {
                     "",
                     summary,
                     environmentFilterApplied,
+                    memoryTimeline,
+                    memoryTimelineStatus,
+                    memoryTimelineErrorType,
                     startedAt));
         } catch (RuntimeException ex) {
             return List.of(
@@ -68,7 +90,7 @@ public class PrometheusEvidenceCollector {
             String errorType,
             MonitoringViews.Summary summary,
             long startedAt) {
-        return result(scope, status, errorType, summary, true, startedAt);
+        return result(scope, status, errorType, summary, true, null, "NOT_APPLICABLE", "", startedAt);
     }
 
     private EvidenceItem result(
@@ -77,6 +99,9 @@ public class PrometheusEvidenceCollector {
             String errorType,
             MonitoringViews.Summary summary,
             boolean environmentFilterApplied,
+            MonitoringViews.PodMemoryTimeline memoryTimeline,
+            String memoryTimelineStatus,
+            String memoryTimelineErrorType,
             long startedAt) {
         long latencyMs = Math.max(0, System.currentTimeMillis() - startedAt);
         metrics.recordEvidenceCollection("prometheus", status.name(), latencyMs);
@@ -87,6 +112,13 @@ public class PrometheusEvidenceCollector {
         value.put("latencyMs", latencyMs);
         value.put("query", "server-managed monitoring summary");
         value.put("environmentFilterApplied", environmentFilterApplied);
+        value.put("memoryTimelineCollectionStatus", memoryTimelineStatus);
+        if (!memoryTimelineErrorType.isBlank()) {
+            value.put("memoryTimelineErrorType", memoryTimelineErrorType);
+        }
+        if (memoryTimeline != null) {
+            value.put("memoryTimeline", memoryTimeline);
+        }
         if (summary != null) {
             value.put("observedAt", summary.collectedAt().toString());
             value.put(

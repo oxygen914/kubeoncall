@@ -149,6 +149,33 @@ public class AlarmReadRepository {
         }
     }
 
+    /** Returns bounded alarm facts observed in the same evidence window as an AI execution. */
+    public List<AlarmIncidentRecord> findBetween(
+            Instant from, Instant to, String cluster, String namespace, String resourceName, int limit) {
+        StringBuilder sql = new StringBuilder("SELECT ")
+                .append(SELECT_INCIDENT_COLUMNS)
+                .append(" FROM koc_alarm_incident WHERE deleted_at IS NULL")
+                .append(" AND last_seen BETWEEN ? AND ?");
+        List<Object> args = new ArrayList<>();
+        args.add(Timestamp.from(from == null ? Instant.EPOCH : from));
+        args.add(Timestamp.from(to == null ? Instant.now() : to));
+        if (isNotBlank(cluster)) {
+            sql.append(" AND cluster_name = ?");
+            args.add(cluster);
+        }
+        if (isNotBlank(namespace)) {
+            sql.append(" AND namespace_name = ?");
+            args.add(namespace);
+        }
+        if (isNotBlank(resourceName)) {
+            sql.append(" AND resource_name = ?");
+            args.add(resourceName);
+        }
+        sql.append(" ORDER BY last_seen DESC, id DESC LIMIT ?");
+        args.add(Math.max(1, Math.min(limit, 100)));
+        return jdbcTemplate.query(sql.toString(), new IncidentRowMapper(objectMapper), args.toArray());
+    }
+
     public List<AlarmTimelineItem> timeline(String publicId, int limit, Instant after) {
         Optional<Long> incidentId = findIdByPublicId(publicId);
         if (incidentId.isEmpty()) {

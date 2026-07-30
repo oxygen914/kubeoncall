@@ -7,6 +7,7 @@ class AgentProperties {
     private boolean postExecutionVerificationEnabled = true;
     private int postExecutionVerificationTimeoutSeconds = 120;
     private int postExecutionVerificationPollMillis = 5000;
+    private int postExecutionVerificationStableWindowSeconds = 30;
     private boolean automaticRollbackEnabled = true;
     private boolean postExecutionEscalationEnabled = true;
 
@@ -48,6 +49,14 @@ class AgentProperties {
 
     public void setPostExecutionVerificationPollMillis(int postExecutionVerificationPollMillis) {
         this.postExecutionVerificationPollMillis = postExecutionVerificationPollMillis;
+    }
+
+    public int getPostExecutionVerificationStableWindowSeconds() {
+        return postExecutionVerificationStableWindowSeconds;
+    }
+
+    public void setPostExecutionVerificationStableWindowSeconds(int postExecutionVerificationStableWindowSeconds) {
+        this.postExecutionVerificationStableWindowSeconds = postExecutionVerificationStableWindowSeconds;
     }
 
     public boolean isAutomaticRollbackEnabled() {

@@ -18,6 +18,7 @@ import org.springframework.stereotype.Service;
 
 import com.kubeoncall.monitoring.MonitoringViews.Cluster;
 import com.kubeoncall.monitoring.MonitoringViews.ClusterList;
+import com.kubeoncall.monitoring.MonitoringViews.ContainerMemorySeries;
 import com.kubeoncall.monitoring.MonitoringViews.CpuPoint;
 import com.kubeoncall.monitoring.MonitoringViews.CpuTrend;
 import com.kubeoncall.monitoring.MonitoringViews.DataSources;
@@ -28,6 +29,7 @@ import com.kubeoncall.monitoring.MonitoringViews.Node;
 import com.kubeoncall.monitoring.MonitoringViews.NodeList;
 import com.kubeoncall.monitoring.MonitoringViews.Pod;
 import com.kubeoncall.monitoring.MonitoringViews.PodList;
+import com.kubeoncall.monitoring.MonitoringViews.PodMemoryTimeline;
 import com.kubeoncall.monitoring.MonitoringViews.Scope;
 import com.kubeoncall.monitoring.MonitoringViews.ScopeCapabilities;
 import com.kubeoncall.monitoring.MonitoringViews.ScopeCatalog;
@@ -62,6 +64,14 @@ public class MonitoringQueryService {
                     + " / clamp_min(count(kube_node_status_condition{condition=\"Ready\",status=\"true\"}), 1)";
     private static final String HEALTH_ABNORMAL_PODS = "sum(max by (cluster, namespace, pod, phase)"
             + " (kube_pod_status_phase{phase=~\"Pending|Failed|Unknown\"} == 1))";
+    private static final String POD_MEMORY_WORKING_SET = "sum by (cluster, environment, namespace, pod, container)"
+            + " (container_memory_working_set_bytes{container!=\"\",container!=\"POD\"})";
+    private static final String POD_MEMORY_RSS = "sum by (cluster, environment, namespace, pod, container)"
+            + " (container_memory_rss{container!=\"\",container!=\"POD\"})";
+    private static final String POD_MEMORY_LIMIT = "max by (cluster, environment, namespace, pod, container)"
+            + " (kube_pod_container_resource_limits{resource=\"memory\",unit=\"byte\"})";
+    private static final int MAX_MEMORY_TIMELINE_CONTAINERS = 20;
+    private static final int TARGET_MEMORY_TIMELINE_POINTS = 120;
 
     private final PrometheusReadClient prometheus;
 
@@ -301,6 +311,66 @@ public class MonitoringQueryService {
         return new CpuTrend(cluster, node, window.value(), !points.isEmpty(), points, Instant.now());
     }
 
+    public PodMemoryTimeline podMemoryTimeline(
+            String cluster, String environment, String namespace, String pod, Instant start, Instant end) {
+        if (!hasText(namespace) || !hasText(pod)) {
+            throw new IllegalArgumentException("namespace and pod are required for a pod memory timeline");
+        }
+        if (start == null || end == null || start.isAfter(end)) {
+            throw new IllegalArgumentException("a valid memory timeline window is required");
+        }
+        long windowSeconds = Math.max(1, Duration.between(start, end).toSeconds());
+        long stepSeconds =
+                Math.max(15, (windowSeconds + TARGET_MEMORY_TIMELINE_POINTS - 1) / TARGET_MEMORY_TIMELINE_POINTS);
+        Duration step = Duration.ofSeconds(stepSeconds);
+        Map<String, List<MonitoringViews.MetricPoint>> workingSet = metricPointsByContainer(prometheus.range(
+                filterPod(
+                        POD_MEMORY_WORKING_SET,
+                        "container_memory_working_set_bytes",
+                        cluster,
+                        environment,
+                        namespace,
+                        pod),
+                start,
+                end,
+                step));
+        Map<String, List<MonitoringViews.MetricPoint>> rss = metricPointsByContainer(prometheus.range(
+                filterPod(POD_MEMORY_RSS, "container_memory_rss", cluster, environment, namespace, pod),
+                start,
+                end,
+                step));
+        Map<String, List<MonitoringViews.MetricPoint>> limit = metricPointsByContainer(prometheus.range(
+                filterPod(POD_MEMORY_LIMIT, "kube_pod_container_resource_limits", cluster, environment, namespace, pod),
+                start,
+                end,
+                step));
+        Set<String> containerNames = new LinkedHashSet<>();
+        containerNames.addAll(workingSet.keySet());
+        containerNames.addAll(rss.keySet());
+        containerNames.addAll(limit.keySet());
+        List<String> selectedContainers = containerNames.stream()
+                .sorted()
+                .limit(MAX_MEMORY_TIMELINE_CONTAINERS)
+                .toList();
+        List<ContainerMemorySeries> containers = selectedContainers.stream()
+                .map(container -> new ContainerMemorySeries(
+                        container,
+                        workingSet.getOrDefault(container, List.of()),
+                        rss.getOrDefault(container, List.of()),
+                        limit.getOrDefault(container, List.of())))
+                .toList();
+        return new PodMemoryTimeline(
+                new Scope(cluster, environment, namespace),
+                pod,
+                stepSeconds,
+                !workingSet.isEmpty(),
+                !rss.isEmpty(),
+                !limit.isEmpty(),
+                containerNames.size() > selectedContainers.size(),
+                containers,
+                Instant.now());
+    }
+
     public HealthTrend healthTrend(String cluster, String environment, String namespace, HealthWindow window) {
         Instant end = Instant.now();
         Instant currentStart = end.minus(window.duration());
@@ -336,6 +406,20 @@ public class MonitoringQueryService {
         addSelector(selectors, "cluster", cluster);
         addSelector(selectors, "environment", environment);
         addSelector(selectors, "namespace", namespace);
+        return filter(query, metric, selectors);
+    }
+
+    private static String filterPod(
+            String query, String metric, String cluster, String environment, String namespace, String pod) {
+        List<String> selectors = new java.util.ArrayList<>();
+        addSelector(selectors, "cluster", cluster);
+        addSelector(selectors, "environment", environment);
+        addSelector(selectors, "namespace", namespace);
+        addSelector(selectors, "pod", pod);
+        return filter(query, metric, selectors);
+    }
+
+    private static String filter(String query, String metric, List<String> selectors) {
         if (selectors.isEmpty()) {
             return query;
         }
@@ -344,6 +428,26 @@ public class MonitoringQueryService {
         return withExistingSelectors.replaceAll(
                 java.util.regex.Pattern.quote(metric) + "(?!\\{)",
                 java.util.regex.Matcher.quoteReplacement(metric + "{" + selector + "}"));
+    }
+
+    private static Map<String, List<MonitoringViews.MetricPoint>> metricPointsByContainer(List<RangeSeries> series) {
+        Map<String, List<MonitoringViews.MetricPoint>> points = new TreeMap<>();
+        for (RangeSeries item : series) {
+            String container = item.labels().get("container");
+            if (!hasText(container) || "POD".equals(container)) {
+                continue;
+            }
+            List<MonitoringViews.MetricPoint> values =
+                    points.computeIfAbsent(container, ignored -> new java.util.ArrayList<>());
+            item.points().stream()
+                    .filter(point -> Double.isFinite(point.value()))
+                    .map(point -> new MonitoringViews.MetricPoint(point.timestamp(), point.value()))
+                    .forEach(values::add);
+        }
+        points.replaceAll((container, values) -> values.stream()
+                .sorted(Comparator.comparing(MonitoringViews.MetricPoint::timestamp))
+                .toList());
+        return points;
     }
 
     private static void addSelector(List<String> selectors, String label, String value) {

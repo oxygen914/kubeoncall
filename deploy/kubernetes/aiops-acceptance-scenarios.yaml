@@ -34,6 +34,9 @@ rules:
   - apiGroups: [apps]
     resources: [deployments, statefulsets, daemonsets, replicasets]
     verbs: [get, list, watch]
+  - apiGroups: [policy]
+    resources: [poddisruptionbudgets]
+    verbs: [get, list, watch]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
@@ -48,6 +51,71 @@ roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: Role
   name: kubernetes-tool-adapter-readonly
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: kubernetes-mutation-acceptance-target
+  namespace: kubeoncall-aiops-acceptance
+rules:
+  - apiGroups: [apps]
+    resources: [deployments]
+    verbs: [get, update, patch]
+  - apiGroups: [apps]
+    resources: [replicasets]
+    verbs: [get, list]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: kubernetes-mutation-acceptance-target
+  namespace: kubeoncall-aiops-acceptance
+subjects:
+  - kind: ServiceAccount
+    name: kubernetes-mutation-adapter
+    namespace: kubeoncall-operations
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: kubernetes-mutation-acceptance-target
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: remediation-target
+  namespace: kubeoncall-aiops-acceptance
+  labels:
+    app.kubernetes.io/name: remediation-target
+    kubeoncall.io/acceptance-scenario: "true"
+    kubeoncall.io/fault-type: RemediationTarget
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: remediation-target
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: remediation-target
+    spec:
+      containers:
+        - name: target
+          image: registry.k8s.io/pause:3.10.1
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: REQUEST_TIMEOUT
+              value: 30s
+          resources:
+            requests:
+              cpu: 10m
+              memory: 8Mi
+            limits:
+              cpu: 50m
+              memory: 32Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
 ---
 apiVersion: v1
 kind: Pod

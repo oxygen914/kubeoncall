@@ -22,6 +22,7 @@ toolWhitelist:
   - prometheus.instantQuery
   - prometheus.rangeQuery
   - alerts.getActiveAlerts
+  - changes.getRecentChanges
   - alertmanager.listAlerts
 ---
 # Redis Saturation Triage

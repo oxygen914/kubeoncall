@@ -166,6 +166,13 @@ public class ExecutorExecuteNode extends ExecuteNode {
                             "errorCode",
                             403));
         }
+        Task currentTask = state.getCurrentTask();
+        if (!toolDefinition.readOnly()
+                && currentTask != null
+                && currentTask.target() != null
+                && !currentTask.target().isBlank()) {
+            parameters.putIfAbsent("target", currentTask.target());
+        }
 
         Map<String, Object> evidenceResult = evidenceBackedReadResult(state, toolDefinition, action);
         if (!evidenceResult.isEmpty()) {
@@ -191,15 +198,15 @@ public class ExecutorExecuteNode extends ExecuteNode {
                             evidenceResult));
         }
 
+        OperationClosureService.Preparation closurePreparation = null;
         if (closureService != null) {
-            OperationClosureService.Preparation preparation =
-                    closureService.prepare(state, executionPlan, toolDefinition);
-            if (!preparation.ready()) {
-                state.getContext().put(OperationClosureService.CONTEXT_KEY, preparation.details());
+            closurePreparation = closureService.prepare(state, executionPlan, toolDefinition);
+            if (!closurePreparation.ready()) {
+                state.getContext().put(OperationClosureService.CONTEXT_KEY, closurePreparation.details());
                 return new NodeResult(
                         getName(),
                         NodeStatus.FAILURE,
-                        preparation.reason(),
+                        closurePreparation.reason(),
                         Map.of(
                                 "errorCode",
                                 409,
@@ -208,10 +215,35 @@ public class ExecutorExecuteNode extends ExecuteNode {
                                 "action",
                                 action,
                                 "closure",
-                                preparation.details()));
+                                closurePreparation.details()));
             }
-            if (preparation.required()) {
-                parameters.put("operationId", operationId(state, executorKind, action));
+            if (closurePreparation.required()) {
+                Object preparedOperationId = closurePreparation.details().get("operationId");
+                if (preparedOperationId == null
+                        || String.valueOf(preparedOperationId).isBlank()) {
+                    return new NodeResult(
+                            getName(),
+                            NodeStatus.FAILURE,
+                            "Operation closure did not provide a stable operationId",
+                            Map.of(
+                                    "errorCode",
+                                    500,
+                                    "reason",
+                                    "OPERATION_ID_MISSING",
+                                    "executorKind",
+                                    executorKind,
+                                    "action",
+                                    action));
+                }
+                parameters.put("operationId", String.valueOf(preparedOperationId));
+                Object rawGuard = closurePreparation.details().get("mutationGuard");
+                if (rawGuard instanceof Map<?, ?> guard) {
+                    guard.forEach((key, value) -> {
+                        if (key != null && value != null) {
+                            parameters.put(String.valueOf(key), value);
+                        }
+                    });
+                }
             }
         }
 
@@ -236,7 +268,56 @@ public class ExecutorExecuteNode extends ExecuteNode {
                             "result", toolResult));
         }
 
-        if (httpStatus >= 400 || "failed".equalsIgnoreCase(resultStatus)) {
+        boolean failed = httpStatus >= 400 || "failed".equalsIgnoreCase(resultStatus);
+        if (failed
+                && !toolDefinition.readOnly()
+                && closureService != null
+                && closurePreparation != null
+                && closurePreparation.required()) {
+            if (ambiguousMutationFailure(httpStatus, resultStatus, toolResult)) {
+                OperationClosureService.Outcome closure = closureService.close(state);
+                return new NodeResult(
+                        getName(),
+                        closure.successful() ? NodeStatus.SUCCESS : NodeStatus.FAILURE,
+                        closure.successful()
+                                ? "Mutation response was uncertain; the desired state was independently verified"
+                                : closure.message(),
+                        Map.of(
+                                "httpStatus",
+                                httpStatus,
+                                "executorKind",
+                                executorKind,
+                                "action",
+                                action,
+                                "toolName",
+                                payload.get("toolName"),
+                                "result",
+                                toolResult,
+                                "closure",
+                                closure.details()));
+            }
+            OperationClosureService.Outcome closure = closureService.rejectDispatch(
+                    state, "Mutation adapter rejected " + executorKind + "." + action + " before execution");
+            return new NodeResult(
+                    getName(),
+                    NodeStatus.FAILURE,
+                    closure.message(),
+                    Map.of(
+                            "httpStatus",
+                            httpStatus,
+                            "executorKind",
+                            executorKind,
+                            "action",
+                            action,
+                            "toolName",
+                            payload.get("toolName"),
+                            "result",
+                            toolResult,
+                            "closure",
+                            closure.details()));
+        }
+
+        if (failed) {
             return new NodeResult(
                     getName(),
                     NodeStatus.FAILURE,
@@ -379,6 +460,17 @@ public class ExecutorExecuteNode extends ExecuteNode {
                 || "transient_failed".equalsIgnoreCase(resultStatus);
     }
 
+    private boolean ambiguousMutationFailure(int httpStatus, String resultStatus, Map<String, Object> toolResult) {
+        String errorType = String.valueOf(toolResult.getOrDefault("errorType", ""));
+        if ("MUTATION_ADAPTER_NOT_CONFIGURED".equals(errorType)) {
+            return false;
+        }
+        return httpStatus >= 500
+                || "timeout".equalsIgnoreCase(resultStatus)
+                || "retryable".equalsIgnoreCase(resultStatus)
+                || "transient_failed".equalsIgnoreCase(resultStatus);
+    }
+
     private int readHttpStatus(Map<String, Object> toolResult) {
         Object raw = toolResult.get("httpStatus");
         if (raw instanceof Number number) {
@@ -389,12 +481,5 @@ public class ExecutorExecuteNode extends ExecuteNode {
 
     private String defaultMessage(String value, String fallback) {
         return value == null || value.isBlank() ? fallback : value;
-    }
-
-    private String operationId(GraphState state, String executorKind, String action) {
-        String executionId = state.getExecutionId() == null ? "unassigned" : state.getExecutionId();
-        String taskId =
-                state.getCurrentTask() == null ? "task" : state.getCurrentTask().taskId();
-        return executionId + ":" + taskId + ":" + executorKind + "." + action;
     }
 }

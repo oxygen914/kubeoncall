@@ -15,6 +15,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.kubeoncall.agent.executor.OperationClosureFactRepository;
 import com.kubeoncall.common.config.KubeOnCallProperties;
 import com.kubeoncall.evidence.AiConclusion;
 import com.kubeoncall.evidence.ConclusionRepository;
@@ -49,6 +50,7 @@ public class ExecutionsController {
     private final ObjectProvider<AsyncTaskRepository> taskRepositoryProvider;
     private final ObjectProvider<EvidenceRepository> evidenceRepositoryProvider;
     private final ObjectProvider<ConclusionRepository> conclusionRepositoryProvider;
+    private final ObjectProvider<OperationClosureFactRepository> closureRepositoryProvider;
     private final V1Security security;
     private final KubeOnCallProperties properties;
 
@@ -58,18 +60,20 @@ public class ExecutionsController {
             ObjectProvider<AsyncTaskRepository> taskRepositoryProvider,
             ObjectProvider<EvidenceRepository> evidenceRepositoryProvider,
             ObjectProvider<ConclusionRepository> conclusionRepositoryProvider,
+            ObjectProvider<OperationClosureFactRepository> closureRepositoryProvider,
             V1Security security,
             KubeOnCallProperties properties) {
         this.repositoryProvider = repositoryProvider;
         this.taskRepositoryProvider = taskRepositoryProvider;
         this.evidenceRepositoryProvider = evidenceRepositoryProvider;
         this.conclusionRepositoryProvider = conclusionRepositoryProvider;
+        this.closureRepositoryProvider = closureRepositoryProvider;
         this.security = security;
         this.properties = properties;
     }
 
     public ExecutionsController(ObjectProvider<WorkflowExecutionRepository> repositoryProvider, V1Security security) {
-        this(repositoryProvider, null, null, null, security, null);
+        this(repositoryProvider, null, null, null, null, security, null);
     }
 
     @GetMapping
@@ -108,8 +112,9 @@ public class ExecutionsController {
         AsyncTaskRecord task = latestTask(executionId);
         List<EvidenceItem> evidence = evidence(executionId);
         List<AiConclusion> conclusions = conclusions(executionId);
+        OperationClosureView operationClosure = operationClosure(executionId);
         return ApiResponse.ok(
-                ExecutionDetail.from(execution, currentNode, nodes, task, evidence, conclusions),
+                ExecutionDetail.from(execution, currentNode, nodes, task, evidence, conclusions, operationClosure),
                 RequestIdFilter.currentRequestId());
     }
 
@@ -165,6 +170,22 @@ public class ExecutionsController {
         ConclusionRepository repository =
                 conclusionRepositoryProvider == null ? null : conclusionRepositoryProvider.getIfAvailable();
         return repository == null ? List.of() : repository.list(executionId);
+    }
+
+    private OperationClosureView operationClosure(String executionId) {
+        OperationClosureFactRepository repository =
+                closureRepositoryProvider == null ? null : closureRepositoryProvider.getIfAvailable();
+        if (repository == null) {
+            return null;
+        }
+        return repository
+                .findLatestClosure(executionId)
+                .map(closure -> {
+                    OperationClosureFactRepository.EscalationFact escalation =
+                            repository.findEscalation(closure.operationId()).orElse(null);
+                    return OperationClosureView.from(closure, escalation);
+                })
+                .orElse(null);
     }
 
     private static V1ApiException notFound(String executionId) {
@@ -252,6 +273,7 @@ public class ExecutionsController {
             Map<String, Object> details,
             List<EvidenceItem> evidence,
             List<AiConclusion> conclusions,
+            OperationClosureView operationClosure,
             List<ExecutionNodeView> nodes) {
 
         private static ExecutionDetail from(
@@ -260,7 +282,8 @@ public class ExecutionsController {
                 List<ExecutionNodeView> nodes,
                 AsyncTaskRecord task,
                 List<EvidenceItem> evidence,
-                List<AiConclusion> conclusions) {
+                List<AiConclusion> conclusions,
+                OperationClosureView operationClosure) {
             Map<String, Object> result = task == null || task.result() == null ? Map.of() : task.result();
             Map<String, Object> details = result.get("details") instanceof Map<?, ?> map ? stringMap(map) : Map.of();
             String answer = text(result.get("summary"), record.resultSummary());
@@ -290,6 +313,7 @@ public class ExecutionsController {
                     details,
                     evidence,
                     conclusions,
+                    operationClosure,
                     nodes);
         }
 
@@ -301,6 +325,58 @@ public class ExecutionsController {
 
         private static String text(Object primary, String fallback) {
             return primary == null || String.valueOf(primary).isBlank() ? fallback : String.valueOf(primary);
+        }
+    }
+
+    public record OperationClosureView(
+            String id,
+            String operationId,
+            String phase,
+            String executorKind,
+            String action,
+            String target,
+            Map<String, Object> details,
+            String errorSummary,
+            Instant startedAt,
+            Instant finishedAt,
+            EscalationView escalation) {
+
+        private static OperationClosureView from(
+                OperationClosureFactRepository.ClosureFact closure,
+                OperationClosureFactRepository.EscalationFact escalation) {
+            return new OperationClosureView(
+                    closure.id(),
+                    closure.operationId(),
+                    closure.phase(),
+                    closure.executorKind(),
+                    closure.action(),
+                    closure.target(),
+                    closure.details(),
+                    closure.errorSummary(),
+                    closure.startedAt(),
+                    closure.finishedAt(),
+                    escalation == null ? null : EscalationView.from(escalation));
+        }
+    }
+
+    public record EscalationView(
+            String id,
+            String status,
+            String severity,
+            String summary,
+            Map<String, Object> details,
+            String errorSummary,
+            Instant updatedAt) {
+
+        private static EscalationView from(OperationClosureFactRepository.EscalationFact escalation) {
+            return new EscalationView(
+                    escalation.id(),
+                    escalation.status(),
+                    escalation.severity(),
+                    escalation.summary(),
+                    escalation.details(),
+                    escalation.lastErrorSummary(),
+                    escalation.updatedAt());
         }
     }
 

@@ -73,6 +73,7 @@ public class IntegrationsController {
         List<IntegrationView> integrations = new ArrayList<>();
         integrations.add(view(
                 "kubernetes", "Kubernetes API", properties.getIntegrations().getKubernetes(), circuits));
+        integrations.add(mutationView(properties.getIntegrations().getKubernetes(), circuits));
         integrations.add(
                 view("prometheus", "Prometheus", properties.getIntegrations().getPrometheus(), circuits));
         integrations.add(view("loki", "Loki", properties.getIntegrations().getLoki(), circuits));
@@ -175,6 +176,24 @@ public class IntegrationsController {
                 circuit == null ? null : circuit.openedAt(),
                 1,
                 List.of());
+    }
+
+    private static IntegrationView mutationView(
+            KubeOnCallProperties.Endpoint endpoint, Map<String, DependencyCircuitBreaker.CircuitState> circuits) {
+        String configuredEndpoint = endpoint.getMutationEndpoint();
+        boolean configured = configuredEndpoint != null && !configuredEndpoint.isBlank();
+        DependencyCircuitBreaker.CircuitState circuit = circuits.get("kubernetes-mutation");
+        return new IntegrationView(
+                "kubernetes-mutation",
+                "Kubernetes Mutation Adapter",
+                configured,
+                configured ? sanitizeEndpoint(configuredEndpoint) : null,
+                endpoint.getTimeoutMillis(),
+                circuit == null ? "NOT_OBSERVED" : circuit.state(),
+                circuit == null ? 0 : circuit.consecutiveFailures(),
+                circuit == null ? null : circuit.openedAt(),
+                configured ? 1 : 0,
+                List.of("GOVERNED_MUTATION"));
     }
 
     private static IntegrationView providerView(

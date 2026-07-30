@@ -170,12 +170,14 @@ config:
   mcpDynamicInvocationEnabled: false
   mcpDynamicMaxTools: 3
   mcpMaxResponseBytes: 262144
-  mcpAllowedTools: knowledge.searchSop,topology.getServiceTopology,cmdb.getServiceMetadata,kubernetes.describeResource,prometheus.queryRange,alerts.getActiveAlerts,inventory.*,metrics.*
+  mcpAllowedTools: knowledge.searchSop,topology.getServiceTopology,cmdb.getServiceMetadata,kubernetes.describeResource,prometheus.queryRange,alerts.getActiveAlerts,changes.getRecentChanges,inventory.*,metrics.*
   changeEventWebhookEnabled: false
   changeEventWebhookAuthMode: bearer
   changeEventWebhookMaxPayloadBytes: 1048576
   kubernetesToolEndpoint: http://kubernetes-adapter:8080/api/tools/kubernetes
   kubernetesToolAuthEnabled: false
+  kubernetesMutationToolEndpoint: ""
+  kubernetesMutationToolAuthEnabled: false
   prometheusToolEndpoint: http://prometheus:9090
   alertmanagerToolEndpoint: http://alertmanager-adapter:8080/api/tools/alertmanager
   alertNotificationWebhookEndpoint: ""
@@ -253,6 +255,7 @@ secrets:
   minioSecretKeyKey: minio-secret-key
   aliyunApiKeyKey: aliyun-api-key
   kubernetesToolBearerTokenKey: kubernetes-tool-bearer-token
+  kubernetesMutationToolBearerTokenKey: kubernetes-mutation-tool-bearer-token
   mcpApiKeyKey: mcp-api-key
   mcpOauthClientSecretKey: mcp-oauth-client-secret
   alertmanagerWebhookTokenKey: alertmanager-webhook-token

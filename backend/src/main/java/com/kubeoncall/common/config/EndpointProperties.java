@@ -5,6 +5,8 @@ class EndpointProperties {
     private String endpoint;
     private int timeoutMillis = 3000;
     private String bearerToken;
+    private String mutationEndpoint;
+    private String mutationBearerToken;
 
     public String getEndpoint() {
         return endpoint;
@@ -28,5 +30,21 @@ class EndpointProperties {
 
     public void setBearerToken(String bearerToken) {
         this.bearerToken = bearerToken;
+    }
+
+    public String getMutationEndpoint() {
+        return mutationEndpoint;
+    }
+
+    public void setMutationEndpoint(String mutationEndpoint) {
+        this.mutationEndpoint = mutationEndpoint;
+    }
+
+    public String getMutationBearerToken() {
+        return mutationBearerToken;
+    }
+
+    public void setMutationBearerToken(String mutationBearerToken) {
+        this.mutationBearerToken = mutationBearerToken;
     }
 }

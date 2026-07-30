@@ -110,7 +110,7 @@ services:
       MCP_DYNAMIC_INVOCATION_ENABLED: ${MCP_DYNAMIC_INVOCATION_ENABLED:-false}
       MCP_DYNAMIC_MAX_TOOLS: ${MCP_DYNAMIC_MAX_TOOLS:-3}
       MCP_MAX_RESPONSE_BYTES: ${MCP_MAX_RESPONSE_BYTES:-262144}
-      MCP_ALLOWED_TOOLS: ${MCP_ALLOWED_TOOLS:-knowledge.searchSop,topology.getServiceTopology,cmdb.getServiceMetadata,kubernetes.describeResource,prometheus.queryRange,alerts.getActiveAlerts,inventory.*,metrics.*}
+      MCP_ALLOWED_TOOLS: ${MCP_ALLOWED_TOOLS:-knowledge.searchSop,topology.getServiceTopology,cmdb.getServiceMetadata,kubernetes.describeResource,prometheus.queryRange,alerts.getActiveAlerts,changes.getRecentChanges,inventory.*,metrics.*}
       CHANGE_EVENT_WEBHOOK_ENABLED: ${CHANGE_EVENT_WEBHOOK_ENABLED:-false}
       CHANGE_EVENT_WEBHOOK_AUTH_MODE: ${CHANGE_EVENT_WEBHOOK_AUTH_MODE:-bearer}
       CHANGE_EVENT_WEBHOOK_TOKEN: ${CHANGE_EVENT_WEBHOOK_TOKEN:-}
@@ -121,6 +121,8 @@ services:
       CHANGE_EVENT_ARGOCD_WEBHOOK_TOKEN: ${CHANGE_EVENT_ARGOCD_WEBHOOK_TOKEN:-}
       KUBERNETES_TOOL_ENDPOINT: ${KUBERNETES_TOOL_ENDPOINT:-http://host.docker.internal:18081/api/tools/kubernetes}
       KUBERNETES_TOOL_BEARER_TOKEN: ${KUBERNETES_TOOL_BEARER_TOKEN:-}
+      KUBERNETES_MUTATION_TOOL_ENDPOINT: ${KUBERNETES_MUTATION_TOOL_ENDPOINT:-}
+      KUBERNETES_MUTATION_TOOL_BEARER_TOKEN: ${KUBERNETES_MUTATION_TOOL_BEARER_TOKEN:-}
       PROMETHEUS_TOOL_ENDPOINT: ${PROMETHEUS_TOOL_ENDPOINT:-http://prometheus:9090}
       ALERTMANAGER_TOOL_ENDPOINT: ${ALERTMANAGER_TOOL_ENDPOINT:-http://host.docker.internal:18083/api/tools/alertmanager}
       ALERT_NOTIFICATION_WEBHOOK_ENDPOINT: ${ALERT_NOTIFICATION_WEBHOOK_ENDPOINT:-}

@@ -3,6 +3,7 @@ package com.kubeoncall.evidence;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 
 import org.springframework.stereotype.Component;
@@ -122,20 +123,30 @@ public class KubernetesEvidenceCollector {
         EvidenceCollectionStatus status = "success".equalsIgnoreCase(String.valueOf(response.get("status")))
                 ? EvidenceCollectionStatus.SUCCEEDED
                 : mapFailure(response);
+        PreviousLogClassification previousLogClassification = previous && status == EvidenceCollectionStatus.SUCCEEDED
+                ? classifyPreviousLog(response.get("response"))
+                : null;
+        if (previousLogClassification != null) {
+            status = previousLogClassification.status();
+        }
         metrics.recordEvidenceCollection("kubernetes-api:" + action, status.name(), latencyMs);
         if (status != EvidenceCollectionStatus.SUCCEEDED) {
             Map<String, Object> failed = new LinkedHashMap<>();
             failed.put("source", "kubernetes-api");
             failed.put("collectionStatus", status.name());
-            failed.put("errorType", response.getOrDefault("errorType", "KUBERNETES_UNAVAILABLE"));
+            failed.put(
+                    "errorType",
+                    previousLogClassification == null
+                            ? response.getOrDefault("errorType", "KUBERNETES_UNAVAILABLE")
+                            : previousLogClassification.errorType());
             failed.put("latencyMs", latencyMs);
             failed.put("previous", previous);
             return List.of(factory.fromMap(scope, type, failed, "kubernetes-api"));
         }
         List<Map<String, Object>> payloads = flatten(response.get("response"), type);
         if (payloads.isEmpty()) {
-            return List.of(
-                    statusItem(scope, type, EvidenceCollectionStatus.EMPTY, previous ? "PREVIOUS_LOG_EMPTY" : ""));
+            return List.of(statusItem(
+                    scope, type, EvidenceCollectionStatus.EMPTY, previous ? "PREVIOUS_LOG_EMPTY" : "", previous));
         }
         return payloads.stream()
                 .map(payload -> {
@@ -151,9 +162,21 @@ public class KubernetesEvidenceCollector {
 
     private EvidenceItem statusItem(
             EvidenceCollectionScope scope, EvidenceType type, EvidenceCollectionStatus status, String errorType) {
+        return statusItem(scope, type, status, errorType, false);
+    }
+
+    private EvidenceItem statusItem(
+            EvidenceCollectionScope scope,
+            EvidenceType type,
+            EvidenceCollectionStatus status,
+            String errorType,
+            boolean previous) {
         Map<String, Object> value = new LinkedHashMap<>();
         value.put("source", "kubernetes-api");
         value.put("collectionStatus", status.name());
+        if (type == EvidenceType.POD_LOG) {
+            value.put("previous", previous);
+        }
         if (errorType != null && !errorType.isBlank()) {
             value.put("errorType", errorType);
         }
@@ -215,6 +238,35 @@ public class KubernetesEvidenceCollector {
         return EvidenceCollectionStatus.UNAVAILABLE;
     }
 
+    private static PreviousLogClassification classifyPreviousLog(Object response) {
+        String normalized = String.valueOf(response).toLowerCase(Locale.ROOT);
+        if (normalized.isBlank()) {
+            return null;
+        }
+        boolean previousContainerAbsent = normalized.contains("previous terminated container")
+                && (normalized.contains("not found")
+                        || normalized.contains("not available")
+                        || normalized.contains("no previous"));
+        if (previousContainerAbsent
+                || normalized.contains("no previous logs")
+                || normalized.contains("previous log is not available")) {
+            return new PreviousLogClassification(EvidenceCollectionStatus.EMPTY, "PREVIOUS_LOG_EMPTY");
+        }
+        if (normalized.contains("unable to retrieve container logs")
+                || normalized.contains("kubelet")
+                || normalized.contains("dial tcp")
+                || normalized.contains("connection refused")
+                || normalized.contains("service unavailable")
+                || normalized.contains("i/o timeout")
+                || normalized.contains("tls handshake timeout")
+                || normalized.contains("context deadline exceeded")
+                || normalized.contains("kubernetes_unavailable")
+                || normalized.contains("kubernetes_timeout")) {
+            return new PreviousLogClassification(EvidenceCollectionStatus.UNAVAILABLE, "PREVIOUS_LOG_UNAVAILABLE");
+        }
+        return null;
+    }
+
     private static Map<String, Object> map(Object value) {
         return value instanceof Map<?, ?> raw ? stringMap(raw) : Map.of();
     }
@@ -230,4 +282,6 @@ public class KubernetesEvidenceCollector {
             values.put(key, value);
         }
     }
+
+    private record PreviousLogClassification(EvidenceCollectionStatus status, String errorType) {}
 }

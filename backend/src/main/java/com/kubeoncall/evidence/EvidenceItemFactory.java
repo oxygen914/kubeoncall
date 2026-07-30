@@ -63,6 +63,8 @@ public class EvidenceItemFactory {
         String rawSnippet = firstText(safeValue, "snippet", "message", "summary", "rawResponse", "response", "value");
         if (type == EvidenceType.RESOURCE_STATE) {
             rawSnippet = resourceStateSnippet(safeValue, rawSnippet);
+        } else if (type == EvidenceType.METRIC) {
+            rawSnippet = metricSnippet(safeValue, rawSnippet);
         }
         if (rawSnippet.isBlank() && status == EvidenceCollectionStatus.SUCCEEDED) {
             rawSnippet = serialize(safeValue);
@@ -148,6 +150,9 @@ public class EvidenceItemFactory {
         put(locator, "pod", value.get("pod"));
         put(locator, "container", value.get("container"));
         put(locator, "stream", value.get("stream"));
+        put(locator, "alarmId", value.get("alarmId"));
+        put(locator, "changeId", value.get("changeId"));
+        put(locator, "fingerprint", value.get("fingerprint"));
         return redactor.redactMap(locator);
     }
 
@@ -161,6 +166,13 @@ public class EvidenceItemFactory {
         put(metadata, "previous", value.get("previous"));
         put(metadata, "simulation", value.get("simulation"));
         put(metadata, "environmentFilterApplied", value.get("environmentFilterApplied"));
+        put(metadata, "severity", value.get("severity"));
+        put(metadata, "status", value.get("status"));
+        put(metadata, "metricName", value.get("metricName"));
+        put(metadata, "memoryTimelineCollectionStatus", value.get("memoryTimelineCollectionStatus"));
+        put(metadata, "memoryTimelineErrorType", value.get("memoryTimelineErrorType"));
+        put(metadata, "changeType", value.get("changeType"));
+        put(metadata, "changeSource", value.get("changeSource"));
         put(metadata, "sopId", firstPresent(value, "sopId", "runbookId", "documentId", "id"));
         put(metadata, "version", firstPresent(value, "version", "runbookVersion", "datasetVersion", "dataset_version"));
         put(metadata, "section", firstPresent(value, "section", "heading"));
@@ -219,12 +231,31 @@ public class EvidenceItemFactory {
         put(details, "phase", value.get("phase"));
         put(details, "ready", value.get("ready"));
         put(details, "nodeName", value.get("nodeName"));
+        put(details, "nodeContext", value.get("nodeContext"));
         put(details, "containers", value.get("containers"));
         put(details, "conditions", value.get("conditions"));
+        put(details, "capacity", value.get("capacity"));
+        put(details, "allocatable", value.get("allocatable"));
+        put(details, "lease", value.get("lease"));
+        put(details, "affectedPodCount", value.get("affectedPodCount"));
+        put(details, "affectedPods", value.get("affectedPods"));
+        put(details, "affectedPodsTruncated", value.get("affectedPodsTruncated"));
+        put(details, "allocatedRequestsWithinScope", value.get("allocatedRequestsWithinScope"));
+        put(details, "remainingAllocatableWithinScope", value.get("remainingAllocatableWithinScope"));
+        put(details, "impactScope", value.get("impactScope"));
+        put(details, "impactCollectionErrors", value.get("impactCollectionErrors"));
         if (details.isEmpty()) {
             return summary;
         }
         String structured = serialize(details);
+        return summary == null || summary.isBlank() ? structured : summary + "\n" + structured;
+    }
+
+    private String metricSnippet(Map<String, Object> value, String summary) {
+        if (!value.containsKey("memoryTimeline")) {
+            return summary;
+        }
+        String structured = serialize(Map.of("memoryTimeline", value.get("memoryTimeline")));
         return summary == null || summary.isBlank() ? structured : summary + "\n" + structured;
     }
 

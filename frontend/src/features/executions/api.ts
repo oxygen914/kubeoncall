@@ -32,7 +32,30 @@ export interface ExecutionDetail extends ExecutionListItem {
   details?: Record<string, unknown>
   evidence?: EvidenceItem[]
   conclusions?: AiConclusion[]
+  operationClosure?: OperationClosure | null
   nodes?: ExecutionNode[]
+}
+
+export interface OperationClosure {
+  id: string
+  operationId: string
+  phase: string
+  executorKind: string
+  action: string
+  target: string | null
+  details: Record<string, unknown>
+  errorSummary: string | null
+  startedAt: string
+  finishedAt: string | null
+  escalation: {
+    id: string
+    status: string
+    severity: string
+    summary: string
+    details: Record<string, unknown>
+    errorSummary: string | null
+    updatedAt: string
+  } | null
 }
 
 export interface EvidenceItem {

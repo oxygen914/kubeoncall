@@ -157,7 +157,16 @@ public class McpToolRegistry {
                         false,
                         List.of(TaskType.values()),
                         List.of("serviceName"),
-                        List.of("alertmanager")));
+                        List.of("alertmanager")),
+                new ToolDefinition(
+                        "changes.getRecentChanges",
+                        "changes",
+                        "Load bounded deployment and infrastructure changes from the execution evidence window",
+                        true,
+                        false,
+                        List.of(TaskType.values()),
+                        List.of("serviceName"),
+                        List.of("change-read-model")));
     }
 
     private java.util.Optional<ToolDefinition> toToolDefinition(Map<String, Object> raw) {

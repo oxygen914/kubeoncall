@@ -343,6 +343,15 @@ spec:
                   name: {{ .Values.secrets.existingSecret }}
                   key: {{ .Values.secrets.kubernetesToolBearerTokenKey }}
             {{- end }}
+            - name: KUBERNETES_MUTATION_TOOL_ENDPOINT
+              value: {{ .Values.config.kubernetesMutationToolEndpoint | quote }}
+            {{- if .Values.config.kubernetesMutationToolAuthEnabled }}
+            - name: KUBERNETES_MUTATION_TOOL_BEARER_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secrets.existingSecret }}
+                  key: {{ .Values.secrets.kubernetesMutationToolBearerTokenKey }}
+            {{- end }}
             - name: PROMETHEUS_TOOL_ENDPOINT
               value: {{ .Values.config.prometheusToolEndpoint | quote }}
             - name: ALERTMANAGER_TOOL_ENDPOINT

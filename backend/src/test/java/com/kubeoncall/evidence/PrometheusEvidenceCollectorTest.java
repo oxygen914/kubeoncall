@@ -72,6 +72,55 @@ class PrometheusEvidenceCollectorTest {
     }
 
     @Test
+    void attachesPodMemoryTimelineToMetricEvidence() {
+        KubeOnCallProperties properties = properties();
+        MonitoringQueryService monitoring = mock(MonitoringQueryService.class);
+        when(monitoring.scopes("local", "docker")).thenReturn(scopeCatalog(true));
+        when(monitoring.summary("local", "docker", "kube-system"))
+                .thenReturn(new MonitoringViews.Summary(
+                        "local",
+                        1,
+                        1,
+                        0,
+                        0,
+                        1L,
+                        Map.of("Running", 1L),
+                        10.0,
+                        new MonitoringViews.DataSources(true, true),
+                        Instant.now()));
+        Instant now = Instant.now();
+        EvidenceCollectionScope podScope = new EvidenceCollectionScope(
+                "exec_1",
+                "local",
+                "docker",
+                "kube-system",
+                new EvidenceResource("Pod", "api-1", "pod-uid"),
+                now.minusSeconds(60),
+                now);
+        when(monitoring.podMemoryTimeline("local", "docker", "kube-system", "api-1", podScope.start(), podScope.end()))
+                .thenReturn(new MonitoringViews.PodMemoryTimeline(
+                        new MonitoringViews.Scope("local", "docker", "kube-system"),
+                        "api-1",
+                        15,
+                        true,
+                        true,
+                        true,
+                        false,
+                        List.of(new MonitoringViews.ContainerMemorySeries(
+                                "api",
+                                List.of(new MonitoringViews.MetricPoint(now, 12)),
+                                List.of(new MonitoringViews.MetricPoint(now, 10)),
+                                List.of(new MonitoringViews.MetricPoint(now, 16)))),
+                        now));
+
+        EvidenceItem item = collector(properties, monitoring).collect(podScope).get(0);
+
+        assertThat(item.collectionStatus()).isEqualTo(EvidenceCollectionStatus.SUCCEEDED);
+        assertThat(item.metadata()).containsEntry("memoryTimelineCollectionStatus", "SUCCEEDED");
+        assertThat(item.snippet()).contains("memoryTimeline", "workingSetBytes", "rssBytes", "limitBytes");
+    }
+
+    @Test
     void rejectsScopesOutsideTheConfiguredAllowlistBeforeCallingPrometheus() {
         KubeOnCallProperties properties = properties();
         MonitoringQueryService monitoring = mock(MonitoringQueryService.class);

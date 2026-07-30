@@ -3,10 +3,13 @@ import { useQuery } from '@tanstack/react-query'
 import { getMonitoringScopes } from './api'
 import { MonitoringScopeContext, type MonitoringScopeContextValue } from './monitoringScopeContext'
 
+export const MONITORING_SCOPE_STORAGE_KEY = 'kubeoncall.monitoring.scope.v1'
+
 export function MonitoringScopeProvider({ children }: { children: ReactNode }) {
-  const [cluster, setClusterState] = useState('')
-  const [environment, setEnvironmentState] = useState('')
-  const [namespace, setNamespaceState] = useState('')
+  const restored = useMemo(loadMonitoringScope, [])
+  const [cluster, setClusterState] = useState(restored.cluster)
+  const [environment, setEnvironmentState] = useState(restored.environment)
+  const [namespace, setNamespaceState] = useState(restored.namespace)
   const scopesQuery = useQuery({
     queryKey: ['monitoring', 'scopes', cluster, environment],
     queryFn: () => getMonitoringScopes({ cluster, environment }),
@@ -39,6 +42,17 @@ export function MonitoringScopeProvider({ children }: { children: ReactNode }) {
     }
   }, [catalog, namespace])
 
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(
+        MONITORING_SCOPE_STORAGE_KEY,
+        JSON.stringify({ cluster, environment, namespace }),
+      )
+    } catch {
+      // Storage can be disabled by the browser; the current in-memory scope remains authoritative.
+    }
+  }, [cluster, environment, namespace])
+
   const value = useMemo<MonitoringScopeContextValue>(
     () => ({
       scope: {
@@ -64,4 +78,25 @@ export function MonitoringScopeProvider({ children }: { children: ReactNode }) {
   )
 
   return <MonitoringScopeContext.Provider value={value}>{children}</MonitoringScopeContext.Provider>
+}
+
+function loadMonitoringScope(): { cluster: string; environment: string; namespace: string } {
+  try {
+    const parsed = JSON.parse(
+      window.localStorage.getItem(MONITORING_SCOPE_STORAGE_KEY) ?? '{}',
+    ) as Record<string, unknown>
+    return {
+      cluster: boundedText(parsed.cluster, 128),
+      environment: boundedText(parsed.environment, 128),
+      namespace: boundedText(parsed.namespace, 253),
+    }
+  } catch {
+    return { cluster: '', environment: '', namespace: '' }
+  }
+}
+
+function boundedText(value: unknown, maxLength: number): string {
+  if (typeof value !== 'string') return ''
+  const normalized = value.trim()
+  return normalized.length <= maxLength ? normalized : ''
 }

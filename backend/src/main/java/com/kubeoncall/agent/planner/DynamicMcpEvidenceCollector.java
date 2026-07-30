@@ -27,7 +27,8 @@ public class DynamicMcpEvidenceCollector {
             "cmdb.getServiceMetadata",
             "kubernetes.describeResource",
             "prometheus.queryRange",
-            "alerts.getActiveAlerts");
+            "alerts.getActiveAlerts",
+            "changes.getRecentChanges");
 
     private final McpClient mcpClient;
     private final McpToolRegistry toolRegistry;
