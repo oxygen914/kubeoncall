@@ -4,7 +4,9 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 import org.junit.jupiter.api.Test;
@@ -12,6 +14,9 @@ import org.junit.jupiter.api.Test;
 import com.kubeoncall.common.config.KubeOnCallProperties;
 
 class RunbookCatalogTest {
+
+    private static final Set<String> AIOPS_ACCEPTANCE_RUNBOOKS =
+            Set.of("runbook-node-notready", "runbook-pod-crashloop", "runbook-pod-oom", "runbook-cluster-capacity");
 
     @Test
     void shouldLoadProductionRunbookAssetsWithRequiredMetadata() {
@@ -45,8 +50,24 @@ class RunbookCatalogTest {
         assertTrue(assets.stream().allMatch(asset -> asset.content().length() >= 500));
         assertTrue(assets.stream()
                 .allMatch(asset -> "runbook".equals(asset.metadata().get("document_type"))));
-        assertTrue(
-                assets.stream().allMatch(asset -> "v1".equals(asset.metadata().get("dataset_version"))));
         assertTrue(assets.stream().allMatch(asset -> asset.metadata().containsKey("owner")));
+        Map<String, RunbookAsset> byId =
+                assets.stream().collect(Collectors.toMap(RunbookAsset::runbookId, Function.identity()));
+        assertTrue(AIOPS_ACCEPTANCE_RUNBOOKS.stream().map(byId::get).allMatch(asset -> "v2"
+                .equals(asset.metadata().get("dataset_version"))));
+        assertTrue(assets.stream()
+                .filter(asset -> !AIOPS_ACCEPTANCE_RUNBOOKS.contains(asset.runbookId()))
+                .allMatch(asset -> "v1".equals(asset.metadata().get("dataset_version"))));
+        assertTrue(AIOPS_ACCEPTANCE_RUNBOOKS.stream()
+                .map(byId::get)
+                .allMatch(asset -> asset.content().contains("## Steps")
+                        && asset.content().contains("## Recovery validation")
+                        && asset.content().contains("## Timeout and human escalation")
+                        && asset.content().contains("## Rollback")
+                        && asset.content().contains("## Evidence to retain")));
+        assertTrue(AIOPS_ACCEPTANCE_RUNBOOKS.stream()
+                .map(byId::get)
+                .allMatch(asset -> "true".equals(asset.metadata().get("approvalRequired"))
+                        && "diagnose-only".equals(asset.metadata().get("automationPolicy"))));
     }
 }

@@ -1,0 +1,7 @@
+# Local-only acceptance override. Use together with docker-compose.kubernetes-evidence.yml after
+# applying deploy/kubernetes/aiops-acceptance-scenarios.yaml. It widens only the backend evidence
+# allowlist to the dedicated, resource-quota-bounded test namespace.
+services:
+  kubeoncall:
+    environment:
+      KUBEONCALL_EVIDENCE_ALLOWED_NAMESPACES: kubeoncall-system,kubeoncall-aiops-acceptance

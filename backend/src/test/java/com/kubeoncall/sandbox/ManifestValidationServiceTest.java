@@ -2,7 +2,11 @@ package com.kubeoncall.sandbox;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.nio.charset.StandardCharsets;
+import java.util.List;
+
 import org.junit.jupiter.api.Test;
+import org.springframework.core.io.ClassPathResource;
 
 class ManifestValidationServiceTest {
 
@@ -97,5 +101,20 @@ class ManifestValidationServiceTest {
                 kubectl scale deployment/api --replicas=1
                 """, null));
         assertThat(approved.valid()).isTrue();
+    }
+
+    @Test
+    void validatesAiOperationsAcceptanceRunbooks() throws Exception {
+        for (String runbookId : List.of(
+                "runbook-cluster-capacity", "runbook-pod-crashloop", "runbook-pod-oom", "runbook-node-notready")) {
+            String document =
+                    new ClassPathResource("runbooks/" + runbookId + ".md").getContentAsString(StandardCharsets.UTF_8);
+
+            var result = service.validate(new ManifestValidationService.ValidationRequest(
+                    ManifestValidationService.Type.RUNBOOK, document, null));
+
+            assertThat(result.valid()).as(runbookId).isTrue();
+            assertThat(result.findings()).as(runbookId).isEmpty();
+        }
     }
 }

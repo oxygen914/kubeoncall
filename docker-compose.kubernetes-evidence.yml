@@ -20,6 +20,17 @@ services:
     networks:
       - default
       - minikube
+  prometheus:
+    # Prometheus must share Minikube's Docker network to scrape kube-state-metrics without a
+    # host-side proxy. Keep it on a high, overridable address so a stopped Minikube worker's
+    # reserved low address cannot be reassigned to Prometheus and block node recovery.
+    volumes:
+      - ./deploy/prometheus/prometheus-single-node.yml:/etc/prometheus/prometheus.yml:ro
+      - ./deploy/prometheus/rules:/etc/prometheus/rules:ro
+    networks:
+      default:
+      minikube:
+        ipv4_address: ${KUBEONCALL_PROMETHEUS_MINIKUBE_IPV4:-192.168.58.250}
 
 networks:
   minikube:

@@ -61,6 +61,9 @@ public class EvidenceItemFactory {
         EvidenceResource resource = resource(scope.resource(), safeValue);
         Instant observedAt = instant(safeValue, "observedAt", instant(safeValue, "timestamp", Instant.now()));
         String rawSnippet = firstText(safeValue, "snippet", "message", "summary", "rawResponse", "response", "value");
+        if (type == EvidenceType.RESOURCE_STATE) {
+            rawSnippet = resourceStateSnippet(safeValue, rawSnippet);
+        }
         if (rawSnippet.isBlank() && status == EvidenceCollectionStatus.SUCCEEDED) {
             rawSnippet = serialize(safeValue);
         }
@@ -208,6 +211,21 @@ public class EvidenceItemFactory {
         } catch (Exception ex) {
             return String.valueOf(value);
         }
+    }
+
+    private String resourceStateSnippet(Map<String, Object> value, String summary) {
+        Map<String, Object> details = new LinkedHashMap<>();
+        put(details, "resource", value.get("resource"));
+        put(details, "phase", value.get("phase"));
+        put(details, "ready", value.get("ready"));
+        put(details, "nodeName", value.get("nodeName"));
+        put(details, "containers", value.get("containers"));
+        put(details, "conditions", value.get("conditions"));
+        if (details.isEmpty()) {
+            return summary;
+        }
+        String structured = serialize(details);
+        return summary == null || summary.isBlank() ? structured : summary + "\n" + structured;
     }
 
     private static Map<String, Object> stringMap(Map<?, ?> map) {

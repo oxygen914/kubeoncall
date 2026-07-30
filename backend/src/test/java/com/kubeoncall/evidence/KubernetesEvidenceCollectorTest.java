@@ -49,6 +49,12 @@ class KubernetesEvidenceCollectorTest {
 
         assertEquals(4, items.size());
         assertTrue(items.stream().anyMatch(item -> item.type() == EvidenceType.RESOURCE_STATE && item.succeeded()));
+        assertTrue(items.stream()
+                .filter(item -> item.type() == EvidenceType.RESOURCE_STATE)
+                .findFirst()
+                .orElseThrow()
+                .snippet()
+                .contains("\"exitCode\":42"));
         assertTrue(items.stream().anyMatch(item -> item.type() == EvidenceType.K8S_EVENT && item.succeeded()));
         assertEquals(
                 2,
@@ -116,6 +122,16 @@ class KubernetesEvidenceCollectorTest {
                             Map.of(
                                     "summary",
                                     "Pod is Running",
+                                    "phase",
+                                    "Running",
+                                    "containers",
+                                    List.of(Map.of(
+                                            "name",
+                                            "adapter",
+                                            "ready",
+                                            false,
+                                            "lastState",
+                                            Map.of("reason", "Error", "exitCode", 42))),
                                     "resource",
                                     Map.of("kind", "Pod", "name", "adapter-abc", "uid", "pod-uid"));
                         case "queryEvents" ->

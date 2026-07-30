@@ -1,21 +1,21 @@
 # KubeOnCall“独立解决运营问题”能力收口实施计划
 
-> 版本：v1.4
+> 版本：v1.5
 > 日期：2026-07-30
-> 当前状态：IN_PROGRESS（本地真实模型、Loki、Prometheus 和持久化 Ask 已贯通；Kubernetes
-> 只读 Evidence Adapter 已部署，并已通过登录用户的持久化 Ask 将资源状态、Events、
-> current/previous logs 和 Prometheus 指标关联到同一 execution；
-> 版本化 SOP、真实变更闭环和四场景测试集群验收尚未完成）
+> 当前状态：IN_PROGRESS（本地真实模型、版本化 v2 SOP、Prometheus、Kubernetes
+> 资源状态/Events/current/previous logs 和持久化 Ask 已贯通；Pending、CrashLoopBackOff、
+> OOMKilled、Node NotReady 已完成一轮真实只读诊断，其中 OOM 与 Node 因证据缺口受限；
+> 真实变更、稳定窗口、超时、回滚和人工升级验收尚未完成）
 > 目标阶段：从“可回答、可生成计划”收口到“可诊断、可受控执行、可验证、可回滚、可升级”
 > 适用范围：Kubernetes Pending、CrashLoopBackOff、OOMKilled、Node NotReady/Unavailable
 > 关联文档：[监控能力重构实施计划](../monitoring/KubeOnCall监控能力重构实施计划.md)、[Kubernetes 操作闭环接入指南](../../../guides/Kubernetes操作闭环接入指南.md)、[Kubernetes 指标接入指南](../../../guides/Kubernetes指标接入指南.md)
 >
-> 最近更新：2026-07-30，在单节点 Minikube 测试集群部署带 Bearer 鉴权、cluster/Namespace
-> allowlist 和最小只读 RBAC 的 Kubernetes Tool Adapter，并从 Console 通过真实模型提交
-> 持久化只读 Ask。最终 Execution、Task 和 7 个工作流节点全部成功，Conclusion 如实区分
-> `SUCCEEDED`、`EMPTY` 与 `UNAVAILABLE`。验收记录见
-> [真实 Kubernetes 只读证据链验收记录](validation/2026-07-30真实Kubernetes只读证据链验收记录.md)；
-> 尚未据此宣称真实变更闭环、多节点故障恢复或生产自主运维能力完成。
+> 最近更新：2026-07-30，在 Minikube 中增加临时 Worker 和专用故障 Namespace，使用真实
+> 调度器、kubelet、cgroup 和节点停机完成四类故障的一轮持久化 Ask。四个最终 execution
+> 均使用真实 qwen-plus 并命中对应 v2 SOP；Node 已验证人工恢复，但 Lease/影响面尚未进入
+> 统一 Evidence。验收记录见
+> [四类 Kubernetes 故障 SOP 真实环境验收记录](validation/2026-07-30四类Kubernetes故障SOP真实环境验收记录.md)；
+> 尚未据此宣称真实变更闭环或生产自主运维能力完成。
 
 ## 1. 执行摘要
 
@@ -121,7 +121,7 @@ Kubernetes 运营问题”。
 | M4 持久化 Ask | Console 改用 `POST /api/v1/executions`；传递集群、环境、Namespace 和资源范围；幂等提交、轮询终态、刷新恢复、task/execution 关联和审批入口已接通；兼容同步接口保留 | 登录用户的真实模型 + 真实 Kubernetes 只读 E2E 已通过；`exe_55756f2ec7f6408f9548ccea1ff1049b` 的 Execution、Task 和 7 个节点全部成功 | 验证 Planner、执行、审批阶段进程重启恢复；补充 SSE 主通道与跨设备会话恢复 |
 | M5 操作闭环 | 变更前准备、操作后验证、超时、回滚、回滚复验和人工升级继续受 Closure 开关与变更工具门禁保护；执行详情可展示 Closure 结果；异步任务终态阶段与状态一致 | 部分完成 | Closure 阶段事实持久化、重启续跑、真实适配器幂等、验证失败/回滚/Incident 故障注入 |
 | M6 可解释前端 | Ask 页面展示回答、执行状态、Planner 模式/降级、置信度、Evidence、SOP、关联结论和推荐动作；不提供绕过审批的直接执行入口 | 主要代码完成 | 使用真实长日志、无权限、冲突证据、断线和移动/窄屏场景验收 |
-| M7 四场景验收 | 尚未开始真实故障注入 | 未完成 | Pending、CrashLoopBackOff、OOMKilled、Node 不可用各 3 次，并完成超时、回滚和人工升级演练 |
+| M7 四场景验收 | Pending、CrashLoopBackOff、OOMKilled、Node NotReady 已各完成 1 次真实只读诊断；Node 完成人工停机/恢复；显式 SOP、证据和置信度已展示 | 部分完成 | 每场景补足 3 次；补齐 Node Lease/影响面、OOM 时间线、日志错误语义，并完成真实变更、超时、回滚和人工升级演练 |
 
 本轮新增的关键安全约束：
 

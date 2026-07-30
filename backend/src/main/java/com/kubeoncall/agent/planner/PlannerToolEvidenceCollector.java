@@ -25,15 +25,24 @@ public class PlannerToolEvidenceCollector {
 
     private final McpClient mcpClient;
     private final DynamicMcpEvidenceCollector dynamicMcpEvidenceCollector;
+    private final LocalSopEvidenceSearch localSopEvidenceSearch;
 
     public PlannerToolEvidenceCollector(McpClient mcpClient) {
-        this(mcpClient, null);
+        this(mcpClient, null, null);
+    }
+
+    public PlannerToolEvidenceCollector(McpClient mcpClient, DynamicMcpEvidenceCollector dynamicMcpEvidenceCollector) {
+        this(mcpClient, dynamicMcpEvidenceCollector, null);
     }
 
     @Autowired
-    public PlannerToolEvidenceCollector(McpClient mcpClient, DynamicMcpEvidenceCollector dynamicMcpEvidenceCollector) {
+    public PlannerToolEvidenceCollector(
+            McpClient mcpClient,
+            DynamicMcpEvidenceCollector dynamicMcpEvidenceCollector,
+            LocalSopEvidenceSearch localSopEvidenceSearch) {
         this.mcpClient = mcpClient;
         this.dynamicMcpEvidenceCollector = dynamicMcpEvidenceCollector;
+        this.localSopEvidenceSearch = localSopEvidenceSearch;
     }
 
     public Evidence collect(String request, List<String> missingSignals) {
@@ -123,14 +132,17 @@ public class PlannerToolEvidenceCollector {
         try {
             response = mcpClient.call(toolName, requestPayload);
         } catch (RuntimeException ex) {
-            return unavailable(toolName, ex.getClass().getSimpleName());
+            return localSopOrUnavailable(toolName, requestPayload, ex.getClass().getSimpleName());
         }
         if (response == null) {
-            return unavailable(toolName, "EMPTY_TOOL_RESPONSE");
+            return localSopOrUnavailable(toolName, requestPayload, "EMPTY_TOOL_RESPONSE");
         }
         String status = String.valueOf(response.getOrDefault("status", "failed"));
         if (!"success".equalsIgnoreCase(status)) {
-            return unavailable(toolName, String.valueOf(response.getOrDefault("errorType", "DEPENDENCY_UNAVAILABLE")));
+            return localSopOrUnavailable(
+                    toolName,
+                    requestPayload,
+                    String.valueOf(response.getOrDefault("errorType", "DEPENDENCY_UNAVAILABLE")));
         }
         Object body = response.get("response");
         if (body instanceof Map<?, ?> map) {
@@ -147,6 +159,23 @@ public class PlannerToolEvidenceCollector {
         wrapped.put("simulation", false);
         wrapped.put("rawResponse", body);
         return REDACTOR.redactMap(wrapped);
+    }
+
+    private Map<String, Object> localSopOrUnavailable(
+            String toolName, Map<String, Object> requestPayload, String externalErrorType) {
+        if (!"knowledge.searchSop".equals(toolName) || localSopEvidenceSearch == null) {
+            return unavailable(toolName, externalErrorType);
+        }
+        try {
+            Map<String, Object> local =
+                    localSopEvidenceSearch.search(String.valueOf(requestPayload.getOrDefault("query", "")));
+            if (local != null && !local.isEmpty()) {
+                return REDACTOR.redactMap(local);
+            }
+        } catch (RuntimeException ignored) {
+            return unavailable(toolName, "MCP_AND_LOCAL_RAG_UNAVAILABLE");
+        }
+        return unavailable(toolName, externalErrorType);
     }
 
     private Map<String, Object> unavailable(String toolName, String errorType) {
