@@ -38,7 +38,7 @@ function jsonResponse(payload: unknown): Response {
   } as Response
 }
 
-function renderPage() {
+function renderPage(initialEntry = '/overview') {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   })
@@ -72,7 +72,7 @@ function renderPage() {
     <QueryClientProvider client={queryClient}>
       <SessionContext.Provider value={sessionState}>
         <ThemeProvider>
-          <MemoryRouter>
+          <MemoryRouter initialEntries={[initialEntry]}>
             <MonitoringScopeProvider>
               <OverviewPage />
             </MonitoringScopeProvider>
@@ -287,23 +287,38 @@ describe('OverviewPage', () => {
     vi.unstubAllGlobals()
   })
 
-  it('renders an evidence-backed operations command center', async () => {
+  it('renders a focused, evidence-backed on-call workbench', async () => {
     renderPage()
 
     expect(await screen.findByRole('heading', { name: '当前风险摘要' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /P1 \/ P2 活跃告警/ })).toHaveTextContent('1 / 1')
     expect((await screen.findAllByText('API 服务不可用')).length).toBeGreaterThan(0)
-    expect(screen.getByRole('heading', { name: '执行趋势' })).toBeInTheDocument()
-    expect(await screen.findByText('TOOL_TIMEOUT')).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: '今日需要关注' })).toBeInTheDocument()
     expect(screen.getByText('优先核查节点健康')).toBeInTheDocument()
-    expect(screen.getAllByTestId('echart')).toHaveLength(2)
+    expect(screen.queryByRole('heading', { name: '执行趋势' })).not.toBeInTheDocument()
 
     fireEvent.change(screen.getByLabelText('时间窗口'), { target: { value: '30d' } })
     await waitFor(() => {
       const requestedUrls = fetchMock.mock.calls.map(([input]) => String(input))
       expect(requestedUrls).toContain('/api/v1/monitoring/health/trend?cluster=prod&window=30d')
       expect(requestedUrls).toContain('/api/v1/monitoring/advice?cluster=prod&window=30d')
+    })
+  })
+
+  it('loads execution, approval and Sandbox analysis on demand', async () => {
+    renderPage('/overview?view=analytics')
+
+    expect(await screen.findByRole('heading', { name: '执行趋势' })).toBeInTheDocument()
+    expect(await screen.findByText('TOOL_TIMEOUT', {}, { timeout: 5_000 })).toBeInTheDocument()
+    expect(screen.getByText('重启 payment-api 工作负载')).toBeInTheDocument()
+    expect(screen.getByText('payment-api 故障恢复')).toBeInTheDocument()
+    expect(screen.getAllByTestId('echart')).toHaveLength(2)
+    expect(screen.queryByRole('heading', { name: '当前风险摘要' })).not.toBeInTheDocument()
+
+    await waitFor(() => {
+      const requestedUrls = fetchMock.mock.calls.map(([input]) => String(input))
+      expect(requestedUrls.some((url) => url.startsWith('/api/v1/monitoring/summary'))).toBe(false)
+      expect(requestedUrls).toContain('/api/v1/sandbox-runs')
     })
   })
 })

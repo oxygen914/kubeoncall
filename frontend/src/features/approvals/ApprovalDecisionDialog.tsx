@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from 'react'
 import { ApiError } from '@/api/errors'
+import { useDialogFocus } from '@/components/dialog/useDialogFocus'
 import { Button } from '@/components/ui/Button'
 import { TaskStatusPanel } from '@/features/tasks/TaskStatusPanel'
 import { useDecideApproval } from './hooks'
@@ -21,6 +22,7 @@ export function ApprovalDecisionDialog({
   const [decision, setDecision] = useState(initialDecision)
   const [comment, setComment] = useState('')
   const mutation = useDecideApproval(approvalId)
+  const panelRef = useDialogFocus<HTMLFormElement>(onClose, mutation.isPending)
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -41,8 +43,22 @@ export function ApprovalDecisionDialog({
       : null
 
   return (
-    <div className="koc-dialog" role="dialog" aria-modal="true" aria-labelledby="decision-title">
-      <form className="koc-dialog__panel" onSubmit={submit}>
+    <div
+      className="koc-dialog"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="decision-title"
+      onMouseDown={() => {
+        if (!mutation.isPending) onClose()
+      }}
+    >
+      <form
+        ref={panelRef}
+        className="koc-dialog__panel"
+        tabIndex={-1}
+        onSubmit={submit}
+        onMouseDown={(event) => event.stopPropagation()}
+      >
         <h2 id="decision-title">审批决策</h2>
         <p className="koc-dialog__subtitle">
           审批 {approvalId}，基于版本 {version}。

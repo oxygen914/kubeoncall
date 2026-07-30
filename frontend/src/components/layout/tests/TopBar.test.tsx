@@ -50,7 +50,7 @@ describe('TopBar navigation', () => {
   it('searches only accessible pages and keeps API Token in the user menu', () => {
     render(
       <MemoryRouter>
-        <TopBar session={session} onLogout={vi.fn()} />
+        <TopBar session={session} onLogout={vi.fn()} onOpenNavigation={vi.fn()} />
       </MemoryRouter>,
     )
 
@@ -69,5 +69,24 @@ describe('TopBar navigation', () => {
     expect(screen.getByRole('menuitem', { name: 'API Token' })).toHaveAttribute('href', '/tokens')
     expect(screen.getByRole('menuitem', { name: '数据迁移' })).toHaveAttribute('href', '/migration')
     expect(screen.queryByLabelText(/通知/)).not.toBeInTheDocument()
+  })
+
+  it('exposes mobile navigation and scope controls without duplicating desktop behavior', () => {
+    const onOpenNavigation = vi.fn()
+    render(
+      <MemoryRouter>
+        <TopBar session={session} onLogout={vi.fn()} onOpenNavigation={onOpenNavigation} />
+      </MemoryRouter>,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: '打开主导航' }))
+    expect(onOpenNavigation).toHaveBeenCalledOnce()
+
+    const scopeButton = screen.getByRole('button', {
+      name: '切换全局范围，当前集群 prod',
+    })
+    fireEvent.click(scopeButton)
+    expect(scopeButton).toHaveAttribute('aria-expanded', 'true')
+    expect(screen.getAllByLabelText('全局集群')).toHaveLength(2)
   })
 })

@@ -1,6 +1,6 @@
 import { lazy, Suspense, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { getOverview } from './api'
 import {
   getHealthTrend,
@@ -17,6 +17,7 @@ import { useSession } from '@/features/auth/useSession'
 import { hasPermission, PERMISSIONS } from '@/features/auth/permissions'
 import { Button } from '@/components/ui/Button'
 import { Icon } from '@/components/ui/Icon'
+import { PageTabs, type PageTab } from '@/components/navigation/PageTabs'
 import { StatusBadge, type StatusTone } from '@/components/ui/StatusBadge'
 import {
   AiInsightPanel,
@@ -46,10 +47,27 @@ const FailureReasonChart = lazy(async () => {
 
 type RefreshMode = 'off' | '15s' | '30s' | '60s'
 type OverviewWindow = '1h' | '6h' | '24h' | '7d' | '30d'
+type OverviewView = 'workbench' | 'analytics'
+
+const OVERVIEW_TABS: PageTab[] = [
+  {
+    id: 'workbench',
+    label: '值班工作台',
+    description: '风险、告警与 AI 建议',
+    to: '/overview?view=workbench',
+  },
+  {
+    id: 'analytics',
+    label: '处置分析',
+    description: '执行趋势、审批与 Sandbox',
+    to: '/overview?view=analytics',
+  },
+]
 
 export function OverviewPage() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
+  const [searchParams] = useSearchParams()
   const { session } = useSession()
   const { scope, catalog, setCluster, setEnvironment, setNamespace } = useMonitoringScope()
   const [window, setWindow] = useState<OverviewWindow>('24h')
@@ -58,6 +76,7 @@ export function OverviewPage() {
   const namespace = scope.namespace ?? ''
   const [refreshMode, setRefreshMode] = useState<RefreshMode>('30s')
   const refreshInterval = refreshMode === 'off' ? false : Number.parseInt(refreshMode) * 1_000
+  const view: OverviewView = searchParams.get('view') === 'analytics' ? 'analytics' : 'workbench'
 
   const canReadAlarms = hasPermission(session, PERMISSIONS.ALARM_READ)
   const canReadApprovals = hasPermission(session, PERMISSIONS.APPROVAL_READ)
@@ -75,25 +94,25 @@ export function OverviewPage() {
   const summaryQuery = useQuery({
     queryKey: ['overview', 'monitoring-summary', scope],
     queryFn: () => getMonitoringSummary(scope),
-    enabled: Boolean(cluster),
+    enabled: Boolean(cluster && view === 'workbench'),
     refetchInterval: refreshInterval,
   })
   const podsQuery = useQuery({
     queryKey: ['overview', 'monitoring-pods', scope],
     queryFn: () => getMonitoringPods(scope),
-    enabled: Boolean(cluster),
+    enabled: Boolean(cluster && view === 'workbench'),
     refetchInterval: refreshInterval,
   })
   const healthQuery = useQuery({
     queryKey: ['overview', 'health-trend', scope, window],
     queryFn: () => getHealthTrend(scope, window),
-    enabled: Boolean(cluster),
+    enabled: Boolean(cluster && view === 'workbench'),
     refetchInterval: refreshInterval,
   })
   const adviceQuery = useQuery({
     queryKey: ['overview', 'operations-advice', scope, window],
     queryFn: () => getOperationsAdvice(scope, window),
-    enabled: Boolean(cluster),
+    enabled: Boolean(cluster && view === 'workbench'),
     refetchInterval: refreshInterval,
   })
   const alarmsQuery = useQuery({
@@ -107,39 +126,32 @@ export function OverviewPage() {
         namespace: namespace || undefined,
         sort: 'severity,asc',
       }),
-    enabled: canReadAlarms,
+    enabled: canReadAlarms && view === 'workbench',
     refetchInterval: refreshInterval,
   })
   const approvalsQuery = useQuery({
     queryKey: ['overview', 'pending-approvals'],
     queryFn: () => listApprovals({ page: 1, size: 5, status: 'PENDING' }),
-    enabled: canReadApprovals,
+    enabled: canReadApprovals && view === 'analytics',
     refetchInterval: refreshInterval,
   })
   const executionsQuery = useQuery({
     queryKey: ['overview', 'recent-executions'],
     queryFn: () => listExecutions({ page: 1, size: 6 }),
-    enabled: canReadExecutions,
+    enabled: canReadExecutions && view === 'analytics',
     refetchInterval: refreshInterval,
   })
   const sandboxQuery = useQuery({
     queryKey: ['overview', 'sandbox-runs'],
     queryFn: () => listSandboxRuns(),
-    enabled: canReadSandbox,
+    enabled: canReadSandbox && view === 'analytics',
     refetchInterval: refreshInterval,
   })
 
-  const queryStates = [
-    overviewQuery,
-    summaryQuery,
-    podsQuery,
-    healthQuery,
-    adviceQuery,
-    alarmsQuery,
-    approvalsQuery,
-    executionsQuery,
-    sandboxQuery,
-  ]
+  const queryStates =
+    view === 'workbench'
+      ? [overviewQuery, summaryQuery, podsQuery, healthQuery, adviceQuery, alarmsQuery]
+      : [overviewQuery, approvalsQuery, executionsQuery, sandboxQuery]
   const isRefreshing = queryStates.some((query) => query.isFetching)
   const updatedAt = Math.max(...queryStates.map((query) => query.dataUpdatedAt), 0)
 
@@ -201,6 +213,8 @@ export function OverviewPage() {
           <span>最近更新 {updatedAt ? formatUpdatedAt(updatedAt) : '等待数据'}</span>
         </div>
       </header>
+
+      <PageTabs activeId={view} label="概览视图" tabs={OVERVIEW_TABS} />
 
       <div className="koc-overview-toolbar" aria-label="概览查看范围">
         <label className="koc-overview-control">
@@ -276,246 +290,265 @@ export function OverviewPage() {
         </Button>
       </div>
 
-      <section className="koc-overview-section" aria-labelledby="risk-summary-title">
-        <div className="koc-overview-section__heading">
-          <div>
-            <p>01 / CURRENT RISK</p>
-            <h2 id="risk-summary-title">当前风险摘要</h2>
-          </div>
-          <span>颜色仅表示状态语义，点击可进入证据详情</span>
-        </div>
-        <div className="koc-risk-grid">
-          <MetricCard
-            label="集群健康"
-            value={clusterHealthValue(summaryQuery.data)}
-            meta={clusterHealthMeta(summaryQuery.data, healthQuery.data?.comparison)}
-            tone={clusterHealthTone(summaryQuery.data)}
-            icon="cluster"
-            onClick={() => navigate('/monitoring')}
-          />
-          <MetricCard
-            label="P1 / P2 活跃告警"
-            value={`${p1} / ${p2}`}
-            meta="同期基线未提供"
-            tone={p1 > 0 ? 'danger' : p2 > 0 ? 'warning' : 'success'}
-            icon="alarm"
-            onClick={canReadAlarms ? () => navigate('/alarms') : undefined}
-          />
-          <MetricCard
-            label="异常工作负载"
-            value={abnormalWorkloads ?? '—'}
-            meta={
-              abnormalWorkloads === null
-                ? 'kube-state-metrics 数据不可用'
-                : 'Pending / Failed / Unknown'
-            }
-            tone={
-              abnormalWorkloads === null ? 'neutral' : abnormalWorkloads > 0 ? 'warning' : 'success'
-            }
-            icon="box"
-            onClick={() => navigate('/monitoring')}
-          />
-          <MetricCard
-            label="待审批"
-            value={data.pendingApprovals}
-            meta="同期基线未提供"
-            tone={data.pendingApprovals > 0 ? 'warning' : 'success'}
-            icon="approval"
-            onClick={canReadApprovals ? () => navigate('/approvals') : undefined}
-          />
-          <MetricCard
-            label="正在执行"
-            value={data.runningExecutions}
-            meta="当前窗口总执行量趋势"
-            tone="info"
-            trend={executionTrend}
-            icon="execution"
-            onClick={canReadExecutions ? () => navigate('/executions') : undefined}
-          />
-          <MetricCard
-            label="失败执行"
-            value={data.failedExecutions}
-            meta="当前窗口总执行量趋势"
-            tone={data.failedExecutions > 0 ? 'danger' : 'success'}
-            trend={executionTrend}
-            icon="activity"
-            onClick={canReadExecutions ? () => navigate('/executions?status=FAILED') : undefined}
-          />
-        </div>
-      </section>
-
-      <section className="koc-overview-section" aria-labelledby="monitoring-title">
-        <div className="koc-overview-section__heading">
-          <div>
-            <p>02 / OBSERVABILITY</p>
-            <h2 id="monitoring-title">监控态势</h2>
-          </div>
-          <span>实时快照与活跃风险队列</span>
-        </div>
-        <div className="koc-overview-grid">
-          <SectionPanel
-            title="集群健康与工作负载"
-            description="实时快照与同口径上一周期健康基线。"
-            className="koc-span-7"
-            action={<PanelLink label="查看集群态势" onClick={() => navigate('/monitoring')} />}
-          >
-            <ClusterHealthPanel
-              isLoading={summaryQuery.isLoading || podsQuery.isLoading}
-              isError={Boolean(summaryQuery.error || podsQuery.error)}
-              cluster={cluster}
-              summary={summaryQuery.data}
-              abnormalPods={
-                podsQuery.data?.pods.filter((pod) =>
-                  ['Pending', 'Failed', 'Unknown'].includes(pod.phase),
-                ) ?? []
-              }
-              comparison={healthQuery.data?.comparison}
-              onRetry={() => {
-                void summaryQuery.refetch()
-                void podsQuery.refetch()
-                void healthQuery.refetch()
-              }}
-            />
-          </SectionPanel>
-          <SectionPanel
-            title="活跃告警队列"
-            description="P1 优先；负责人来自现有确认信息，未确认时显示未认领。"
-            className="koc-span-5"
-            action={
-              canReadAlarms ? (
-                <PanelLink label="全部告警" onClick={() => navigate('/alarms')} />
-              ) : undefined
-            }
-          >
-            {!canReadAlarms ? (
-              <NoPermissionState resource="告警" />
-            ) : alarmsQuery.isLoading ? (
-              <LoadingState />
-            ) : alarmsQuery.error ? (
-              <ErrorState onRetry={() => void alarmsQuery.refetch()} />
-            ) : (
-              <AlertList alarms={alarmsQuery.data?.data ?? []} />
-            )}
-          </SectionPanel>
-        </div>
-      </section>
-
-      <section className="koc-overview-section" aria-labelledby="response-title">
-        <div className="koc-overview-section__heading">
-          <div>
-            <p>03 / RESPONSE</p>
-            <h2 id="response-title">响应处置</h2>
-          </div>
-          <span>执行结果、失败原因与人工决策队列</span>
-        </div>
-        <div className="koc-overview-grid">
-          <SectionPanel
-            title="执行趋势"
-            description="按当前窗口展示执行状态堆叠趋势，旧数据源自动降级为总执行量。"
-            className="koc-span-7"
-            action={
-              canReadExecutions ? (
-                <PanelLink label="执行中心" onClick={() => navigate('/executions')} />
-              ) : undefined
-            }
-          >
-            <Suspense fallback={<LoadingState lines={5} />}>
-              <ExecutionTrendChart
-                values={data.executionTrend}
-                statusValues={data.executionStatusTrend}
+      {view === 'workbench' ? (
+        <>
+          <section className="koc-overview-section" aria-labelledby="risk-summary-title">
+            <div className="koc-overview-section__heading">
+              <div>
+                <p>01 / CURRENT RISK</p>
+                <h2 id="risk-summary-title">当前风险摘要</h2>
+              </div>
+              <span>颜色仅表示状态语义，点击可进入证据详情</span>
+            </div>
+            <div className="koc-risk-grid">
+              <MetricCard
+                label="集群健康"
+                value={clusterHealthValue(summaryQuery.data)}
+                meta={clusterHealthMeta(summaryQuery.data, healthQuery.data?.comparison)}
+                tone={clusterHealthTone(summaryQuery.data)}
+                icon="cluster"
+                onClick={() => navigate('/monitoring?view=overview')}
               />
-            </Suspense>
-          </SectionPanel>
-          <SectionPanel
-            title="执行状态分布"
-            description="按当前窗口汇总，状态同时使用文字与颜色。"
-            className="koc-span-5"
-          >
-            <Suspense fallback={<LoadingState lines={4} />}>
-              <ExecutionStatusDistribution values={data.executionStatusCounts} />
-            </Suspense>
-          </SectionPanel>
-          <SectionPanel
-            title="失败原因"
-            description="仅展示实际返回的原因，不强制补足 Top 5。"
-            className="koc-span-5"
-          >
-            <Suspense fallback={<LoadingState lines={4} />}>
-              <FailureReasonChart values={data.failureReasons} />
-            </Suspense>
-          </SectionPanel>
-          <SectionPanel
-            title="最近执行"
-            description="展示当前执行队列，详情保留原有路由和权限。"
-            className="koc-span-7"
-          >
-            {!canReadExecutions ? (
-              <NoPermissionState resource="执行" />
-            ) : executionsQuery.isLoading ? (
-              <LoadingState />
-            ) : executionsQuery.error ? (
-              <ErrorState onRetry={() => void executionsQuery.refetch()} />
-            ) : (
-              <ExecutionQueue executions={executionsQuery.data?.data ?? []} />
-            )}
-          </SectionPanel>
-          <SectionPanel
-            title="待审批任务"
-            description="高风险操作继续从审批详情完成决策。"
-            className="koc-span-6"
-            action={
-              canReadApprovals ? (
-                <PanelLink label="审批中心" onClick={() => navigate('/approvals')} />
-              ) : undefined
-            }
-          >
-            {!canReadApprovals ? (
-              <NoPermissionState resource="审批" />
-            ) : approvalsQuery.isLoading ? (
-              <LoadingState />
-            ) : approvalsQuery.error ? (
-              <ErrorState onRetry={() => void approvalsQuery.refetch()} />
-            ) : (
-              <ApprovalQueue approvals={approvalsQuery.data?.data ?? []} />
-            )}
-          </SectionPanel>
-          <SectionPanel
-            title="最近 Sandbox 任务"
-            description="隔离环境中的工具运行与清理状态。"
-            className="koc-span-6"
-            action={
-              canReadSandbox ? (
-                <PanelLink label="Sandbox 运行" onClick={() => navigate('/sandbox-runs')} />
-              ) : undefined
-            }
-          >
-            {!canReadSandbox ? (
-              <NoPermissionState resource="Sandbox 运行" />
-            ) : sandboxQuery.isLoading ? (
-              <LoadingState />
-            ) : sandboxQuery.error ? (
-              <ErrorState onRetry={() => void sandboxQuery.refetch()} />
-            ) : (
-              <SandboxQueue runs={sandboxQuery.data ?? []} />
-            )}
-          </SectionPanel>
-        </div>
-      </section>
+              <MetricCard
+                label="P1 / P2 活跃告警"
+                value={`${p1} / ${p2}`}
+                meta="同期基线未提供"
+                tone={p1 > 0 ? 'danger' : p2 > 0 ? 'warning' : 'success'}
+                icon="alarm"
+                onClick={canReadAlarms ? () => navigate('/alarms') : undefined}
+              />
+              <MetricCard
+                label="异常工作负载"
+                value={abnormalWorkloads ?? '—'}
+                meta={
+                  abnormalWorkloads === null
+                    ? 'kube-state-metrics 数据不可用'
+                    : 'Pending / Failed / Unknown'
+                }
+                tone={
+                  abnormalWorkloads === null
+                    ? 'neutral'
+                    : abnormalWorkloads > 0
+                      ? 'warning'
+                      : 'success'
+                }
+                icon="box"
+                onClick={() => navigate('/monitoring?view=workloads')}
+              />
+              <MetricCard
+                label="待审批"
+                value={data.pendingApprovals}
+                meta="同期基线未提供"
+                tone={data.pendingApprovals > 0 ? 'warning' : 'success'}
+                icon="approval"
+                onClick={canReadApprovals ? () => navigate('/approvals') : undefined}
+              />
+              <MetricCard
+                label="正在执行"
+                value={data.runningExecutions}
+                meta="当前窗口总执行量趋势"
+                tone="info"
+                trend={executionTrend}
+                icon="execution"
+                onClick={canReadExecutions ? () => navigate('/executions') : undefined}
+              />
+              <MetricCard
+                label="失败执行"
+                value={data.failedExecutions}
+                meta="当前窗口总执行量趋势"
+                tone={data.failedExecutions > 0 ? 'danger' : 'success'}
+                trend={executionTrend}
+                icon="activity"
+                onClick={
+                  canReadExecutions ? () => navigate('/executions?status=FAILED') : undefined
+                }
+              />
+            </div>
+          </section>
 
-      <section className="koc-overview-section" aria-labelledby="ai-title">
-        <div className="koc-overview-section__heading">
-          <div>
-            <p>04 / AI OPERATIONS</p>
-            <h2 id="ai-title">今日需要关注</h2>
+          <section className="koc-overview-section" aria-labelledby="monitoring-title">
+            <div className="koc-overview-section__heading">
+              <div>
+                <p>02 / OBSERVABILITY</p>
+                <h2 id="monitoring-title">监控态势</h2>
+              </div>
+              <span>实时快照与活跃风险队列</span>
+            </div>
+            <div className="koc-overview-grid">
+              <SectionPanel
+                title="集群健康与工作负载"
+                description="实时快照与同口径上一周期健康基线。"
+                className="koc-span-7"
+                action={
+                  <PanelLink
+                    label="查看集群态势"
+                    onClick={() => navigate('/monitoring?view=overview')}
+                  />
+                }
+              >
+                <ClusterHealthPanel
+                  isLoading={summaryQuery.isLoading || podsQuery.isLoading}
+                  isError={Boolean(summaryQuery.error || podsQuery.error)}
+                  cluster={cluster}
+                  summary={summaryQuery.data}
+                  abnormalPods={
+                    podsQuery.data?.pods.filter((pod) =>
+                      ['Pending', 'Failed', 'Unknown'].includes(pod.phase),
+                    ) ?? []
+                  }
+                  comparison={healthQuery.data?.comparison}
+                  onRetry={() => {
+                    void summaryQuery.refetch()
+                    void podsQuery.refetch()
+                    void healthQuery.refetch()
+                  }}
+                />
+              </SectionPanel>
+              <SectionPanel
+                title="活跃告警队列"
+                description="P1 优先；负责人来自现有确认信息，未确认时显示未认领。"
+                className="koc-span-5"
+                action={
+                  canReadAlarms ? (
+                    <PanelLink label="全部告警" onClick={() => navigate('/alarms')} />
+                  ) : undefined
+                }
+              >
+                {!canReadAlarms ? (
+                  <NoPermissionState resource="告警" />
+                ) : alarmsQuery.isLoading ? (
+                  <LoadingState />
+                ) : alarmsQuery.error ? (
+                  <ErrorState onRetry={() => void alarmsQuery.refetch()} />
+                ) : (
+                  <AlertList alarms={alarmsQuery.data?.data ?? []} />
+                )}
+              </SectionPanel>
+            </div>
+          </section>
+        </>
+      ) : null}
+
+      {view === 'analytics' ? (
+        <section className="koc-overview-section" aria-labelledby="response-title">
+          <div className="koc-overview-section__heading">
+            <div>
+              <p>03 / RESPONSE</p>
+              <h2 id="response-title">响应处置</h2>
+            </div>
+            <span>执行结果、失败原因与人工决策队列</span>
           </div>
-          <span>
-            {adviceQuery.data?.generatedBy === 'CONFIGURED_LLM'
-              ? '模型增强建议，保持只读且不自动执行高风险动作'
-              : '确定性规则建议，不自动执行高风险动作'}
-          </span>
-        </div>
-        <AiInsightPanel insights={insights} />
-      </section>
+          <div className="koc-overview-grid">
+            <SectionPanel
+              title="执行趋势"
+              description="按当前窗口展示执行状态堆叠趋势，旧数据源自动降级为总执行量。"
+              className="koc-span-7"
+              action={
+                canReadExecutions ? (
+                  <PanelLink label="执行中心" onClick={() => navigate('/executions')} />
+                ) : undefined
+              }
+            >
+              <Suspense fallback={<LoadingState lines={5} />}>
+                <ExecutionTrendChart
+                  values={data.executionTrend}
+                  statusValues={data.executionStatusTrend}
+                />
+              </Suspense>
+            </SectionPanel>
+            <SectionPanel
+              title="执行状态分布"
+              description="按当前窗口汇总，状态同时使用文字与颜色。"
+              className="koc-span-5"
+            >
+              <Suspense fallback={<LoadingState lines={4} />}>
+                <ExecutionStatusDistribution values={data.executionStatusCounts} />
+              </Suspense>
+            </SectionPanel>
+            <SectionPanel
+              title="失败原因"
+              description="仅展示实际返回的原因，不强制补足 Top 5。"
+              className="koc-span-5"
+            >
+              <Suspense fallback={<LoadingState lines={4} />}>
+                <FailureReasonChart values={data.failureReasons} />
+              </Suspense>
+            </SectionPanel>
+            <SectionPanel
+              title="最近执行"
+              description="展示当前执行队列，详情保留原有路由和权限。"
+              className="koc-span-7"
+            >
+              {!canReadExecutions ? (
+                <NoPermissionState resource="执行" />
+              ) : executionsQuery.isLoading ? (
+                <LoadingState />
+              ) : executionsQuery.error ? (
+                <ErrorState onRetry={() => void executionsQuery.refetch()} />
+              ) : (
+                <ExecutionQueue executions={executionsQuery.data?.data ?? []} />
+              )}
+            </SectionPanel>
+            <SectionPanel
+              title="待审批任务"
+              description="高风险操作继续从审批详情完成决策。"
+              className="koc-span-6"
+              action={
+                canReadApprovals ? (
+                  <PanelLink label="审批中心" onClick={() => navigate('/approvals')} />
+                ) : undefined
+              }
+            >
+              {!canReadApprovals ? (
+                <NoPermissionState resource="审批" />
+              ) : approvalsQuery.isLoading ? (
+                <LoadingState />
+              ) : approvalsQuery.error ? (
+                <ErrorState onRetry={() => void approvalsQuery.refetch()} />
+              ) : (
+                <ApprovalQueue approvals={approvalsQuery.data?.data ?? []} />
+              )}
+            </SectionPanel>
+            <SectionPanel
+              title="最近 Sandbox 任务"
+              description="隔离环境中的工具运行与清理状态。"
+              className="koc-span-6"
+              action={
+                canReadSandbox ? (
+                  <PanelLink label="Sandbox 运行" onClick={() => navigate('/sandbox-runs')} />
+                ) : undefined
+              }
+            >
+              {!canReadSandbox ? (
+                <NoPermissionState resource="Sandbox 运行" />
+              ) : sandboxQuery.isLoading ? (
+                <LoadingState />
+              ) : sandboxQuery.error ? (
+                <ErrorState onRetry={() => void sandboxQuery.refetch()} />
+              ) : (
+                <SandboxQueue runs={sandboxQuery.data ?? []} />
+              )}
+            </SectionPanel>
+          </div>
+        </section>
+      ) : null}
+
+      {view === 'workbench' ? (
+        <section className="koc-overview-section" aria-labelledby="ai-title">
+          <div className="koc-overview-section__heading">
+            <div>
+              <p>04 / AI OPERATIONS</p>
+              <h2 id="ai-title">今日需要关注</h2>
+            </div>
+            <span>
+              {adviceQuery.data?.generatedBy === 'CONFIGURED_LLM'
+                ? '模型增强建议，保持只读且不自动执行高风险动作'
+                : '确定性规则建议，不自动执行高风险动作'}
+            </span>
+          </div>
+          <AiInsightPanel insights={insights} />
+        </section>
+      ) : null}
     </section>
   )
 }

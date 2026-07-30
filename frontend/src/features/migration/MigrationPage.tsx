@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useSearchParams } from 'react-router-dom'
 import {
   getRedisInventory,
   getMigrationStatus,
@@ -19,11 +20,41 @@ import {
   type MigrationDiff,
 } from './api'
 import { AsyncState } from '@/components/feedback/AsyncState'
+import { PageTabs, type PageTab } from '@/components/navigation/PageTabs'
 import { Button } from '@/components/ui/Button'
 import { StatusBadge } from '@/components/ui/StatusBadge'
 import { TaskStatusPanel } from '@/features/tasks/TaskStatusPanel'
 import { cancelTask, isTaskTerminal } from '@/features/tasks/api'
 import { useTask } from '@/features/tasks/hooks'
+
+type MigrationView = 'inventory' | 'backfill' | 'cutover' | 'ledger'
+
+const MIGRATION_TABS: PageTab[] = [
+  {
+    id: 'inventory',
+    label: '数据盘点',
+    description: 'Redis Key 分类与迁移建议',
+    to: '/migration?view=inventory',
+  },
+  {
+    id: 'backfill',
+    label: '回填任务',
+    description: 'Dry-run、Apply 与进度',
+    to: '/migration?view=backfill',
+  },
+  {
+    id: 'cutover',
+    label: '切换门槛',
+    description: '读写源与 SHADOW 差异',
+    to: '/migration?view=cutover',
+  },
+  {
+    id: 'ledger',
+    label: '迁移账本',
+    description: '批次、Item 与差异处置',
+    to: '/migration?view=ledger',
+  },
+]
 
 /**
  * WBS-11 data-migration operations page. Shows the cutover flag state, Redis key inventory,
@@ -33,36 +64,51 @@ import { useTask } from '@/features/tasks/hooks'
  */
 export function MigrationPage() {
   const queryClient = useQueryClient()
+  const [searchParams] = useSearchParams()
   const [lastResult, setLastResult] = useState<string | null>(null)
+  const requestedView = searchParams.get('view')
+  const view: MigrationView =
+    requestedView === 'backfill' ||
+    requestedView === 'cutover' ||
+    requestedView === 'ledger' ||
+    requestedView === 'inventory'
+      ? requestedView
+      : 'inventory'
 
   const inventoryQuery = useQuery({
     queryKey: ['migration', 'redis-inventory'],
     queryFn: getRedisInventory,
+    enabled: view === 'inventory',
     staleTime: 30_000,
   })
   const statusQuery = useQuery({
     queryKey: ['migration', 'status'],
     queryFn: getMigrationStatus,
+    enabled: view === 'cutover',
     staleTime: 10_000,
   })
   const batchesQuery = useQuery({
     queryKey: ['migration', 'batches'],
     queryFn: () => getMigrationBatches({ size: 20 }),
+    enabled: view === 'ledger',
     staleTime: 10_000,
   })
   const diffsQuery = useQuery({
     queryKey: ['migration', 'diffs'],
     queryFn: () => getMigrationDiffs({ size: 20 }),
+    enabled: view === 'ledger',
     staleTime: 10_000,
   })
   const itemsQuery = useQuery({
     queryKey: ['migration', 'items'],
     queryFn: () => getMigrationItems({ size: 20 }),
+    enabled: view === 'ledger',
     staleTime: 10_000,
   })
   const diffStatisticsQuery = useQuery({
     queryKey: ['migration', 'diff-statistics'],
     queryFn: () => getMigrationDiffStatistics({ windowMinutes: 60 }),
+    enabled: view === 'cutover',
     staleTime: 10_000,
   })
   const resolveDiffMutation = useMutation({
@@ -86,14 +132,16 @@ export function MigrationPage() {
   return (
     <section className="koc-page">
       <header className="koc-page__header">
-        <h1>数据迁移（WBS-11）</h1>
+        <h1>数据迁移</h1>
         <p className="koc-page__subtitle">
-          Redis → MySQL 回填与灰度切换运营。回填以可取消、超时受控、限速的持久化任务运行；默认
-          dry-run，成功后再 apply。
+          管理 Redis → MySQL
+          数据回填与灰度切换。任务支持取消、超时控制和限速，并强制先演练再正式执行。
         </p>
       </header>
 
-      <div className="koc-detail">
+      <PageTabs activeId={view} label="数据迁移视图" tabs={MIGRATION_TABS} />
+
+      {view === 'inventory' ? (
         <div className="koc-detail__summary">
           <h2>Redis Key 盘点</h2>
           <AsyncState
@@ -141,14 +189,16 @@ export function MigrationPage() {
             ) : null}
           </AsyncState>
         </div>
+      ) : null}
 
+      {view === 'backfill' ? (
         <div className="koc-detail__metric">
           <h2>回填</h2>
           <p className="koc-page__subtitle">
-            把 Redis 长期事实回填到 MySQL。必须先成功完成当前面板的 dry-run，再确认一次才能 Apply。
+            把 Redis 长期事实回填到 MySQL。必须先成功完成当前面板的演练，再二次确认才能正式回填。
           </p>
           <BackfillPanel
-            title="ActiveAlarm"
+            title="活跃告警"
             description="alarm-active:* → koc_alarm_incident"
             onBackfill={backfillActiveAlarm}
             onDone={setLastResult}
@@ -158,7 +208,7 @@ export function MigrationPage() {
             }}
           />
           <BackfillPanel
-            title="Approval"
+            title="审批记录"
             description="approval-request:* → koc_approval_request"
             onBackfill={backfillApproval}
             onDone={setLastResult}
@@ -167,7 +217,7 @@ export function MigrationPage() {
             }
           />
           <BackfillPanel
-            title="Skill State"
+            title="技能状态"
             description="skill:disabled → koc_skill_state"
             onBackfill={backfillSkillState}
             onDone={setLastResult}
@@ -176,7 +226,7 @@ export function MigrationPage() {
             }
           />
           <BackfillPanel
-            title="Alarm Acknowledgement"
+            title="告警确认"
             description="alarm-ack:* → koc_alarm_acknowledgement"
             onBackfill={backfillAlarmAcknowledgements}
             onDone={setLastResult}
@@ -185,7 +235,7 @@ export function MigrationPage() {
             }
           />
           <BackfillPanel
-            title="Alarm Silence"
+            title="告警静默"
             description="alarm-silence-approval:* → koc_alarm_silence"
             onBackfill={backfillAlarmSilences}
             onDone={setLastResult}
@@ -194,7 +244,7 @@ export function MigrationPage() {
             }
           />
           <BackfillPanel
-            title="Alarm Recovery"
+            title="告警恢复"
             description="alarm-recovery:* → koc_alarm_status_history"
             onBackfill={backfillAlarmRecoveries}
             onDone={setLastResult}
@@ -203,7 +253,7 @@ export function MigrationPage() {
             }
           />
           <BackfillPanel
-            title="Execution Audit"
+            title="执行审计"
             description="execution-audit:* → koc_operation_audit"
             onBackfill={backfillExecutionAudit}
             onDone={setLastResult}
@@ -217,230 +267,238 @@ export function MigrationPage() {
             </p>
           ) : null}
         </div>
-      </div>
+      ) : null}
 
-      <div className="koc-detail__summary">
-        <h2>切换状态</h2>
-        <AsyncState
-          isLoading={statusQuery.isLoading}
-          error={statusQuery.error}
-          isEmpty={!statusQuery.isLoading && !statusQuery.data}
-        >
-          {statusQuery.data ? (
-            <dl className="koc-fields">
-              <div>
-                <dt>读源</dt>
-                <dd>
-                  <StatusBadge tone="info">{statusQuery.data.alarmReadSource}</StatusBadge>
-                </dd>
-              </div>
-              <div>
-                <dt>写模式</dt>
-                <dd>
-                  <StatusBadge tone="warning">{statusQuery.data.alarmWriteMode}</StatusBadge>
-                </dd>
-              </div>
-              <div>
-                <dt>回填 dry-run</dt>
-                <dd>{statusQuery.data.backfillDryRun ? '是' : '否'}</dd>
-              </div>
-              <div>
-                <dt>legacy API</dt>
-                <dd>{statusQuery.data.legacyApiEnabled ? '启用' : '已退役'}</dd>
-              </div>
-              <div>
-                <dt>账本可用</dt>
-                <dd>{statusQuery.data.ledgerAvailable ? '是' : '否'}</dd>
-              </div>
-            </dl>
-          ) : null}
-        </AsyncState>
-      </div>
+      {view === 'cutover' ? (
+        <>
+          <div className="koc-detail__summary">
+            <h2>切换状态</h2>
+            <AsyncState
+              isLoading={statusQuery.isLoading}
+              error={statusQuery.error}
+              isEmpty={!statusQuery.isLoading && !statusQuery.data}
+            >
+              {statusQuery.data ? (
+                <dl className="koc-fields">
+                  <div>
+                    <dt>读源</dt>
+                    <dd>
+                      <StatusBadge tone="info">{statusQuery.data.alarmReadSource}</StatusBadge>
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>写模式</dt>
+                    <dd>
+                      <StatusBadge tone="warning">{statusQuery.data.alarmWriteMode}</StatusBadge>
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>回填 dry-run</dt>
+                    <dd>{statusQuery.data.backfillDryRun ? '是' : '否'}</dd>
+                  </div>
+                  <div>
+                    <dt>legacy API</dt>
+                    <dd>{statusQuery.data.legacyApiEnabled ? '启用' : '已退役'}</dd>
+                  </div>
+                  <div>
+                    <dt>账本可用</dt>
+                    <dd>{statusQuery.data.ledgerAvailable ? '是' : '否'}</dd>
+                  </div>
+                </dl>
+              ) : null}
+            </AsyncState>
+          </div>
 
-      <div className="koc-detail__summary">
-        <h2>SHADOW 差异门槛（近 60 分钟）</h2>
-        <AsyncState
-          isLoading={diffStatisticsQuery.isLoading}
-          error={diffStatisticsQuery.error}
-          isEmpty={!diffStatisticsQuery.isLoading && !diffStatisticsQuery.data}
-        >
-          {diffStatisticsQuery.data ? (
-            <dl className="koc-fields">
-              <div>
-                <dt>比对 / 不一致</dt>
-                <dd>
-                  {diffStatisticsQuery.data.comparisonCount} /{' '}
-                  {diffStatisticsQuery.data.mismatchCount}
-                </dd>
-              </div>
-              <div>
-                <dt>不一致率 / 阈值</dt>
-                <dd>
-                  {diffStatisticsQuery.data.mismatchRatePercent.toFixed(3)}% /{' '}
-                  {diffStatisticsQuery.data.thresholdPercent.toFixed(3)}%
-                </dd>
-              </div>
-              <div>
-                <dt>未处置差异</dt>
-                <dd>{diffStatisticsQuery.data.openDiffCount}</dd>
-              </div>
-              <div>
-                <dt>门槛</dt>
-                <dd>
-                  <StatusBadge
-                    tone={diffStatisticsQuery.data.withinThreshold ? 'success' : 'danger'}
-                  >
-                    {diffStatisticsQuery.data.withinThreshold ? '通过' : '阻断'}
-                  </StatusBadge>
-                </dd>
-              </div>
-            </dl>
-          ) : null}
-        </AsyncState>
-      </div>
-
-      <div className="koc-detail__summary">
-        <h2>迁移批次</h2>
-        <AsyncState
-          isLoading={batchesQuery.isLoading}
-          error={batchesQuery.error}
-          isEmpty={!batchesQuery.isLoading && (batchesQuery.data?.data.length ?? 0) === 0}
-          emptyMessage="暂无批次记录"
-        >
-          <table className="koc-table">
-            <thead>
-              <tr>
-                <th>批次</th>
-                <th>域</th>
-                <th>模式</th>
-                <th>状态</th>
-                <th>扫描/迁移/跳过/失败</th>
-                <th>时间</th>
-              </tr>
-            </thead>
-            <tbody>
-              {(batchesQuery.data?.data ?? []).map((b) => (
-                <tr key={b.batchId}>
-                  <td className="koc-mono">{b.batchId.slice(0, 16)}</td>
-                  <td>{b.domain}</td>
-                  <td>{b.mode}</td>
-                  <td>
-                    <StatusBadge tone={b.status === 'COMPLETED' ? 'success' : 'warning'}>
-                      {b.status}
-                    </StatusBadge>
-                  </td>
-                  <td>
-                    {b.scanned}/{b.migrated}/{b.skipped}/{b.failed}
-                  </td>
-                  <td>{b.startedAt ?? '—'}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </AsyncState>
-      </div>
-
-      <div className="koc-detail__summary">
-        <h2>迁移 Item</h2>
-        <AsyncState
-          isLoading={itemsQuery.isLoading}
-          error={itemsQuery.error}
-          isEmpty={!itemsQuery.isLoading && (itemsQuery.data?.data.length ?? 0) === 0}
-          emptyMessage="暂无 item 记录"
-        >
-          <table className="koc-table">
-            <thead>
-              <tr>
-                <th>域</th>
-                <th>结果</th>
-                <th>源 Key</th>
-                <th>目标</th>
-                <th>原因</th>
-                <th>时间</th>
-              </tr>
-            </thead>
-            <tbody>
-              {(itemsQuery.data?.data ?? []).map((item) => (
-                <tr key={`${item.batchId}:${item.sourceKey}`}>
-                  <td>{item.domain}</td>
-                  <td>{item.result}</td>
-                  <td className="koc-mono">{item.sourceKey}</td>
-                  <td className="koc-mono">{item.targetPublicId ?? '—'}</td>
-                  <td>{item.reason ?? '—'}</td>
-                  <td>{item.occurredAt ?? '—'}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </AsyncState>
-      </div>
-
-      <div className="koc-detail__summary">
-        <h2>差异报告</h2>
-        <AsyncState
-          isLoading={diffsQuery.isLoading}
-          error={diffsQuery.error}
-          isEmpty={!diffsQuery.isLoading && (diffsQuery.data?.data.length ?? 0) === 0}
-          emptyMessage="暂无差异记录"
-        >
-          <table className="koc-table">
-            <thead>
-              <tr>
-                <th>类型</th>
-                <th>域</th>
-                <th>资源</th>
-                <th>Redis</th>
-                <th>MySQL</th>
-                <th>处置</th>
-                <th>时间</th>
-              </tr>
-            </thead>
-            <tbody>
-              {(diffsQuery.data?.data ?? []).map((d) => (
-                <tr key={d.publicId}>
-                  <td>
-                    <StatusBadge tone="danger">{d.diffType}</StatusBadge>
-                  </td>
-                  <td>{d.domain}</td>
-                  <td className="koc-mono">{d.resourcePublicId ?? '—'}</td>
-                  <td className="koc-mono">{d.redisSummary ?? '—'}</td>
-                  <td className="koc-mono">{d.mysqlSummary ?? '—'}</td>
-                  <td>
-                    {d.resolutionStatus === 'OPEN' ? (
-                      <Button
-                        size="sm"
-                        disabled={resolveDiffMutation.isPending}
-                        onClick={() => {
-                          const status = window.prompt(
-                            '处置状态：EXPLAINED、RESOLVED 或 ACCEPTED_RISK',
-                            'RESOLVED',
-                          )
-                          if (
-                            status !== 'EXPLAINED' &&
-                            status !== 'RESOLVED' &&
-                            status !== 'ACCEPTED_RISK'
-                          )
-                            return
-                          const note = window.prompt('处置说明（可选）') ?? undefined
-                          resolveDiffMutation.mutate({ publicId: d.publicId, status, note })
-                        }}
+          <div className="koc-detail__summary">
+            <h2>影子读差异门槛（近 60 分钟）</h2>
+            <AsyncState
+              isLoading={diffStatisticsQuery.isLoading}
+              error={diffStatisticsQuery.error}
+              isEmpty={!diffStatisticsQuery.isLoading && !diffStatisticsQuery.data}
+            >
+              {diffStatisticsQuery.data ? (
+                <dl className="koc-fields">
+                  <div>
+                    <dt>比对 / 不一致</dt>
+                    <dd>
+                      {diffStatisticsQuery.data.comparisonCount} /{' '}
+                      {diffStatisticsQuery.data.mismatchCount}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>不一致率 / 阈值</dt>
+                    <dd>
+                      {diffStatisticsQuery.data.mismatchRatePercent.toFixed(3)}% /{' '}
+                      {diffStatisticsQuery.data.thresholdPercent.toFixed(3)}%
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>未处置差异</dt>
+                    <dd>{diffStatisticsQuery.data.openDiffCount}</dd>
+                  </div>
+                  <div>
+                    <dt>门槛</dt>
+                    <dd>
+                      <StatusBadge
+                        tone={diffStatisticsQuery.data.withinThreshold ? 'success' : 'danger'}
                       >
-                        处置
-                      </Button>
-                    ) : (
-                      <span>
-                        {d.resolutionStatus}
-                        {d.resolvedBy ? ` · ${d.resolvedBy}` : ''}
-                      </span>
-                    )}
-                  </td>
-                  <td>{d.occurredAt ?? '—'}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </AsyncState>
-      </div>
+                        {diffStatisticsQuery.data.withinThreshold ? '通过' : '阻断'}
+                      </StatusBadge>
+                    </dd>
+                  </div>
+                </dl>
+              ) : null}
+            </AsyncState>
+          </div>
+        </>
+      ) : null}
+
+      {view === 'ledger' ? (
+        <>
+          <div className="koc-detail__summary">
+            <h2>迁移批次</h2>
+            <AsyncState
+              isLoading={batchesQuery.isLoading}
+              error={batchesQuery.error}
+              isEmpty={!batchesQuery.isLoading && (batchesQuery.data?.data.length ?? 0) === 0}
+              emptyMessage="暂无批次记录"
+            >
+              <table className="koc-table">
+                <thead>
+                  <tr>
+                    <th>批次</th>
+                    <th>域</th>
+                    <th>模式</th>
+                    <th>状态</th>
+                    <th>扫描/迁移/跳过/失败</th>
+                    <th>时间</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(batchesQuery.data?.data ?? []).map((b) => (
+                    <tr key={b.batchId}>
+                      <td className="koc-mono">{b.batchId.slice(0, 16)}</td>
+                      <td>{b.domain}</td>
+                      <td>{b.mode}</td>
+                      <td>
+                        <StatusBadge tone={b.status === 'COMPLETED' ? 'success' : 'warning'}>
+                          {b.status}
+                        </StatusBadge>
+                      </td>
+                      <td>
+                        {b.scanned}/{b.migrated}/{b.skipped}/{b.failed}
+                      </td>
+                      <td>{b.startedAt ?? '—'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </AsyncState>
+          </div>
+
+          <div className="koc-detail__summary">
+            <h2>迁移明细</h2>
+            <AsyncState
+              isLoading={itemsQuery.isLoading}
+              error={itemsQuery.error}
+              isEmpty={!itemsQuery.isLoading && (itemsQuery.data?.data.length ?? 0) === 0}
+              emptyMessage="暂无 item 记录"
+            >
+              <table className="koc-table">
+                <thead>
+                  <tr>
+                    <th>域</th>
+                    <th>结果</th>
+                    <th>源 Key</th>
+                    <th>目标</th>
+                    <th>原因</th>
+                    <th>时间</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(itemsQuery.data?.data ?? []).map((item) => (
+                    <tr key={`${item.batchId}:${item.sourceKey}`}>
+                      <td>{item.domain}</td>
+                      <td>{item.result}</td>
+                      <td className="koc-mono">{item.sourceKey}</td>
+                      <td className="koc-mono">{item.targetPublicId ?? '—'}</td>
+                      <td>{item.reason ?? '—'}</td>
+                      <td>{item.occurredAt ?? '—'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </AsyncState>
+          </div>
+
+          <div className="koc-detail__summary">
+            <h2>差异报告</h2>
+            <AsyncState
+              isLoading={diffsQuery.isLoading}
+              error={diffsQuery.error}
+              isEmpty={!diffsQuery.isLoading && (diffsQuery.data?.data.length ?? 0) === 0}
+              emptyMessage="暂无差异记录"
+            >
+              <table className="koc-table">
+                <thead>
+                  <tr>
+                    <th>类型</th>
+                    <th>域</th>
+                    <th>资源</th>
+                    <th>Redis</th>
+                    <th>MySQL</th>
+                    <th>处置</th>
+                    <th>时间</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(diffsQuery.data?.data ?? []).map((d) => (
+                    <tr key={d.publicId}>
+                      <td>
+                        <StatusBadge tone="danger">{d.diffType}</StatusBadge>
+                      </td>
+                      <td>{d.domain}</td>
+                      <td className="koc-mono">{d.resourcePublicId ?? '—'}</td>
+                      <td className="koc-mono">{d.redisSummary ?? '—'}</td>
+                      <td className="koc-mono">{d.mysqlSummary ?? '—'}</td>
+                      <td>
+                        {d.resolutionStatus === 'OPEN' ? (
+                          <Button
+                            size="sm"
+                            disabled={resolveDiffMutation.isPending}
+                            onClick={() => {
+                              const status = window.prompt(
+                                '处置状态：EXPLAINED、RESOLVED 或 ACCEPTED_RISK',
+                                'RESOLVED',
+                              )
+                              if (
+                                status !== 'EXPLAINED' &&
+                                status !== 'RESOLVED' &&
+                                status !== 'ACCEPTED_RISK'
+                              )
+                                return
+                              const note = window.prompt('处置说明（可选）') ?? undefined
+                              resolveDiffMutation.mutate({ publicId: d.publicId, status, note })
+                            }}
+                          >
+                            处置
+                          </Button>
+                        ) : (
+                          <span>
+                            {d.resolutionStatus}
+                            {d.resolvedBy ? ` · ${d.resolvedBy}` : ''}
+                          </span>
+                        )}
+                      </td>
+                      <td>{d.occurredAt ?? '—'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </AsyncState>
+          </div>
+        </>
+      ) : null}
     </section>
   )
 }
@@ -533,7 +591,7 @@ function BackfillPanel({
           disabled={mutation.isPending}
           onClick={() => mutation.mutate(true)}
         >
-          {mutation.isPending ? '执行中…' : 'Dry-run'}
+          {mutation.isPending ? '执行中…' : '演练（Dry-run）'}
         </Button>
         <Button
           variant="primary"
@@ -549,7 +607,7 @@ function BackfillPanel({
             }
           }}
         >
-          {dryRunSucceeded ? 'Apply' : '等待 Dry-run 成功'}
+          {dryRunSucceeded ? '正式回填（Apply）' : '等待演练成功'}
         </Button>
         {latestTaskId && taskQuery.data && !isTaskTerminal(taskQuery.data.status) ? (
           <Button

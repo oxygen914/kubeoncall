@@ -55,19 +55,19 @@ test('authenticated operator can inspect the overview window and drill into exec
     })
   })
 
-  await page.route('**/api/v1/monitoring/clusters', async (route) => {
+  await page.route('**/api/v1/monitoring/scopes**', async (route) => {
     await route.fulfill({
       contentType: 'application/json',
       body: JSON.stringify(
         envelope({
-          clusters: [
-            {
-              name: 'prod',
-              nodeMetricsAvailable: true,
-              kubernetesStateAvailable: true,
-              nodeCount: 2,
-            },
-          ],
+          clusters: [{ value: 'prod', label: 'prod', resourceCount: 2 }],
+          environments: [],
+          namespaces: [],
+          capabilities: {
+            clusterFilterAvailable: true,
+            environmentFilterAvailable: false,
+            namespaceFilterAvailable: false,
+          },
           collectedAt: '2026-07-23T10:00:00Z',
         }),
       ),
@@ -148,19 +148,27 @@ test('authenticated operator can inspect the overview window and drill into exec
       }),
     })
   })
+  await page.route('**/api/v1/sandbox-runs', async (route) => {
+    await route.fulfill({
+      contentType: 'application/json',
+      body: JSON.stringify(envelope([])),
+    })
+  })
 
   await page.goto('/overview')
 
   await expect(page.getByRole('heading', { name: '概览' })).toBeVisible()
   await expect(page.getByRole('button', { name: /失败执行/ })).toContainText('4')
+  await page.getByRole('link', { name: /处置分析/ }).click()
   await expect(page.getByRole('heading', { name: '失败原因' })).toBeVisible()
   await expect(page.getByRole('rowheader', { name: 'TOOL_TIMEOUT', exact: true })).toBeVisible()
 
   await page.getByLabel('时间窗口').selectOption('6h')
   await expect.poll(() => overviewWindows).toContain('6h')
 
+  await page.getByRole('link', { name: /值班工作台/ }).click()
   await page.getByRole('button', { name: /失败执行/ }).click()
-  await expect(page).toHaveURL(/\/executions$/)
+  await expect(page).toHaveURL(/\/executions\?status=FAILED$/)
   await expect(page.getByRole('heading', { name: '执行' })).toBeVisible()
   await expect(page.getByText('支付接口故障恢复')).toBeVisible()
 })

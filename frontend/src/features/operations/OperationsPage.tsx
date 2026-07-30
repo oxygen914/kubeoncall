@@ -1,6 +1,8 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useSearchParams } from 'react-router-dom'
 import { AsyncState } from '@/components/feedback/AsyncState'
+import { PageTabs, type PageTab } from '@/components/navigation/PageTabs'
 import { Button } from '@/components/ui/Button'
 import { StatusBadge } from '@/components/ui/StatusBadge'
 import { hasPermission, PERMISSIONS } from '@/features/auth/permissions'
@@ -19,28 +21,70 @@ import { errorMessage, formatMatch, formatMatchers, formatTime } from './operati
 import { PolicyCatalogPanel } from './PolicyCatalogPanel'
 import { PolicySimulationPanel } from './PolicySimulationPanel'
 
+type OperationsView = 'policies' | 'maintenance' | 'suppression'
+
 /** Policy, maintenance-window and suppression-rule operations. */
 export function OperationsPage() {
   const { session } = useSession()
   const queryClient = useQueryClient()
+  const [searchParams] = useSearchParams()
   const canReadPolicy = hasPermission(session, PERMISSIONS.POLICY_READ)
   const canReadMaintenance = hasPermission(session, PERMISSIONS.MAINTENANCE_READ)
   const canManagePolicy = hasPermission(session, PERMISSIONS.POLICY_MANAGE)
   const canManageMaintenance = hasPermission(session, PERMISSIONS.MAINTENANCE_MANAGE)
+  const requestedView = searchParams.get('view')
+  const view: OperationsView =
+    requestedView === 'policies' && canReadPolicy
+      ? 'policies'
+      : requestedView === 'suppression' && canReadMaintenance
+        ? 'suppression'
+        : requestedView === 'maintenance' && canReadMaintenance
+          ? 'maintenance'
+          : canReadPolicy
+            ? 'policies'
+            : 'maintenance'
+  const tabs: PageTab[] = [
+    ...(canReadPolicy
+      ? [
+          {
+            id: 'policies',
+            label: '策略版本',
+            description: '目录、演练与回滚',
+            to: '/operations?view=policies',
+          },
+        ]
+      : []),
+    ...(canReadMaintenance
+      ? [
+          {
+            id: 'maintenance',
+            label: '维护窗口',
+            description: '计划与撤销',
+            to: '/operations?view=maintenance',
+          },
+          {
+            id: 'suppression',
+            label: '抑制规则',
+            description: '版本与关联条件',
+            to: '/operations?view=suppression',
+          },
+        ]
+      : []),
+  ]
   const policies = useQuery({
     queryKey: ['operations', 'policies'],
     queryFn: getPolicies,
-    enabled: canReadPolicy,
+    enabled: canReadPolicy && view === 'policies',
   })
   const windows = useQuery({
     queryKey: ['operations', 'maintenance'],
     queryFn: getMaintenanceWindows,
-    enabled: canReadMaintenance,
+    enabled: canReadMaintenance && view === 'maintenance',
   })
   const suppression = useQuery({
     queryKey: ['operations', 'suppression'],
     queryFn: getSuppressionRules,
-    enabled: canReadMaintenance,
+    enabled: canReadMaintenance && view === 'suppression',
   })
   const [message, setMessage] = useState<string | null>(null)
 
@@ -88,10 +132,12 @@ export function OperationsPage() {
     <section className="koc-page">
       <header className="koc-page__header">
         <div>
-          <h1>告警运营</h1>
+          <h1>策略与维护</h1>
           <p className="koc-page__subtitle">管理策略版本、演练告警匹配、维护窗口和告警抑制规则。</p>
         </div>
       </header>
+
+      <PageTabs activeId={view} label="告警运营视图" tabs={tabs} />
 
       {message ? (
         <p className="koc-alert" role="status">
@@ -99,22 +145,23 @@ export function OperationsPage() {
         </p>
       ) : null}
 
-      {canReadPolicy ? (
-        <PolicyCatalogPanel
-          catalog={policies.data}
-          isLoading={policies.isLoading}
-          error={policies.error}
-          canManage={canManagePolicy}
-          isReloading={reloadPolicyMutation.isPending}
-          isRollingBack={rollbackMutation.isPending}
-          onReload={() => reloadPolicyMutation.mutate()}
-          onRollback={(version) => rollbackMutation.mutate(version)}
-        />
+      {view === 'policies' && canReadPolicy ? (
+        <>
+          <PolicyCatalogPanel
+            catalog={policies.data}
+            isLoading={policies.isLoading}
+            error={policies.error}
+            canManage={canManagePolicy}
+            isReloading={reloadPolicyMutation.isPending}
+            isRollingBack={rollbackMutation.isPending}
+            onReload={() => reloadPolicyMutation.mutate()}
+            onRollback={(version) => rollbackMutation.mutate(version)}
+          />
+          {canManagePolicy ? <PolicySimulationPanel /> : null}
+        </>
       ) : null}
 
-      {canManagePolicy ? <PolicySimulationPanel /> : null}
-
-      {canReadMaintenance ? (
+      {view === 'maintenance' && canReadMaintenance ? (
         <section className="koc-card">
           <h2>维护窗口</h2>
           {canManageMaintenance ? (
@@ -183,7 +230,7 @@ export function OperationsPage() {
         </section>
       ) : null}
 
-      {canReadMaintenance ? (
+      {view === 'suppression' && canReadMaintenance ? (
         <section className="koc-card">
           <div className="koc-page__title-row">
             <h2>抑制规则</h2>

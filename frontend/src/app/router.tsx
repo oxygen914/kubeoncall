@@ -1,33 +1,7 @@
+import { lazy } from 'react'
 import { Navigate, Route, Routes } from 'react-router-dom'
 import { AuthBoundary } from '@/features/auth/AuthBoundary'
 import { LoginPage } from '@/features/auth/LoginPage'
-import { SystemStatusPage } from '@/features/system/SystemStatusPage'
-import { OverviewPage } from '@/features/overview/OverviewPage'
-import { MonitoringPage } from '@/features/monitoring/MonitoringPage'
-import { AskPage } from '@/features/ask/AskPage'
-import { UserManagementPage } from '@/features/users/UserManagementPage'
-import { MigrationPage } from '@/features/migration/MigrationPage'
-import { AlarmsListPage } from '@/features/alarms/AlarmsListPage'
-import { AlarmDetailPage } from '@/features/alarms/AlarmDetailPage'
-import { ApprovalsListPage } from '@/features/approvals/ApprovalsListPage'
-import { ApprovalDetailPage } from '@/features/approvals/ApprovalDetailPage'
-import { ExecutionsListPage } from '@/features/executions/ExecutionsListPage'
-import { ExecutionDetailPage } from '@/features/executions/ExecutionDetailPage'
-import { KnowledgeListPage } from '@/features/knowledge/KnowledgeListPage'
-import { KnowledgeDetailPage } from '@/features/knowledge/KnowledgeDetailPage'
-import { MemoryListPage } from '@/features/memories/MemoryListPage'
-import { MemoryDetailPage } from '@/features/memories/MemoryDetailPage'
-import { SkillsListPage } from '@/features/skills/SkillsListPage'
-import { SkillDetailPage } from '@/features/skills/SkillDetailPage'
-import { AuditListPage } from '@/features/audit/AuditListPage'
-import { AuditDetailPage } from '@/features/audit/AuditDetailPage'
-import { ApiTokensPage } from '@/features/tokens/ApiTokensPage'
-import { ToolsPage } from '@/features/tools/ToolsPage'
-import { OperationsPage } from '@/features/operations/OperationsPage'
-import { ChangeEventsPage } from '@/features/changes/ChangeEventsPage'
-import { IntegrationsPage } from '@/features/integrations/IntegrationsPage'
-import { SandboxRunsListPage } from '@/features/sandbox/SandboxRunsListPage'
-import { SandboxRunDetailPage } from '@/features/sandbox/SandboxRunDetailPage'
 import { AppShell } from '@/components/layout/AppShell'
 import { ForbiddenPage } from '@/components/feedback/ForbiddenPage'
 import { NotFoundPage } from '@/components/feedback/NotFoundPage'
@@ -35,6 +9,138 @@ import { PermissionBoundary } from '@/features/auth/PermissionBoundary'
 import { PERMISSIONS, type Permission } from '@/features/auth/permissions'
 import { getDefaultConsolePath } from '@/features/auth/defaultRoute'
 import { useSession } from '@/features/auth/useSession'
+
+const SystemStatusPage = lazy(() =>
+  import('@/features/system/SystemStatusPage').then((module) => ({
+    default: module.SystemStatusPage,
+  })),
+)
+const OverviewPage = lazy(() =>
+  import('@/features/overview/OverviewPage').then((module) => ({
+    default: module.OverviewPage,
+  })),
+)
+const MonitoringPage = lazy(() =>
+  import('@/features/monitoring/MonitoringPage').then((module) => ({
+    default: module.MonitoringPage,
+  })),
+)
+const AskPage = lazy(() =>
+  import('@/features/ask/AskPage').then((module) => ({ default: module.AskPage })),
+)
+const UserManagementPage = lazy(() =>
+  import('@/features/users/UserManagementPage').then((module) => ({
+    default: module.UserManagementPage,
+  })),
+)
+const MigrationPage = lazy(() =>
+  import('@/features/migration/MigrationPage').then((module) => ({
+    default: module.MigrationPage,
+  })),
+)
+const AlarmsListPage = lazy(() =>
+  import('@/features/alarms/AlarmsListPage').then((module) => ({
+    default: module.AlarmsListPage,
+  })),
+)
+const AlarmDetailPage = lazy(() =>
+  import('@/features/alarms/AlarmDetailPage').then((module) => ({
+    default: module.AlarmDetailPage,
+  })),
+)
+const ApprovalsListPage = lazy(() =>
+  import('@/features/approvals/ApprovalsListPage').then((module) => ({
+    default: module.ApprovalsListPage,
+  })),
+)
+const ApprovalDetailPage = lazy(() =>
+  import('@/features/approvals/ApprovalDetailPage').then((module) => ({
+    default: module.ApprovalDetailPage,
+  })),
+)
+const ExecutionsListPage = lazy(() =>
+  import('@/features/executions/ExecutionsListPage').then((module) => ({
+    default: module.ExecutionsListPage,
+  })),
+)
+const ExecutionDetailPage = lazy(() =>
+  import('@/features/executions/ExecutionDetailPage').then((module) => ({
+    default: module.ExecutionDetailPage,
+  })),
+)
+const KnowledgeListPage = lazy(() =>
+  import('@/features/knowledge/KnowledgeListPage').then((module) => ({
+    default: module.KnowledgeListPage,
+  })),
+)
+const KnowledgeDetailPage = lazy(() =>
+  import('@/features/knowledge/KnowledgeDetailPage').then((module) => ({
+    default: module.KnowledgeDetailPage,
+  })),
+)
+const MemoryListPage = lazy(() =>
+  import('@/features/memories/MemoryListPage').then((module) => ({
+    default: module.MemoryListPage,
+  })),
+)
+const MemoryDetailPage = lazy(() =>
+  import('@/features/memories/MemoryDetailPage').then((module) => ({
+    default: module.MemoryDetailPage,
+  })),
+)
+const SkillsListPage = lazy(() =>
+  import('@/features/skills/SkillsListPage').then((module) => ({
+    default: module.SkillsListPage,
+  })),
+)
+const SkillDetailPage = lazy(() =>
+  import('@/features/skills/SkillDetailPage').then((module) => ({
+    default: module.SkillDetailPage,
+  })),
+)
+const AuditListPage = lazy(() =>
+  import('@/features/audit/AuditListPage').then((module) => ({
+    default: module.AuditListPage,
+  })),
+)
+const AuditDetailPage = lazy(() =>
+  import('@/features/audit/AuditDetailPage').then((module) => ({
+    default: module.AuditDetailPage,
+  })),
+)
+const ApiTokensPage = lazy(() =>
+  import('@/features/tokens/ApiTokensPage').then((module) => ({
+    default: module.ApiTokensPage,
+  })),
+)
+const ToolsPage = lazy(() =>
+  import('@/features/tools/ToolsPage').then((module) => ({ default: module.ToolsPage })),
+)
+const OperationsPage = lazy(() =>
+  import('@/features/operations/OperationsPage').then((module) => ({
+    default: module.OperationsPage,
+  })),
+)
+const ChangeEventsPage = lazy(() =>
+  import('@/features/changes/ChangeEventsPage').then((module) => ({
+    default: module.ChangeEventsPage,
+  })),
+)
+const IntegrationsPage = lazy(() =>
+  import('@/features/integrations/IntegrationsPage').then((module) => ({
+    default: module.IntegrationsPage,
+  })),
+)
+const SandboxRunsListPage = lazy(() =>
+  import('@/features/sandbox/SandboxRunsListPage').then((module) => ({
+    default: module.SandboxRunsListPage,
+  })),
+)
+const SandboxRunDetailPage = lazy(() =>
+  import('@/features/sandbox/SandboxRunDetailPage').then((module) => ({
+    default: module.SandboxRunDetailPage,
+  })),
+)
 
 /**
  * Application route table.

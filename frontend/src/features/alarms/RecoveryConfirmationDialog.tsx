@@ -1,5 +1,6 @@
-import { useEffect, useId, useState, type FormEvent } from 'react'
+import { useId, useState, type FormEvent } from 'react'
 import { ApiError } from '@/api/errors'
+import { useDialogFocus } from '@/components/dialog/useDialogFocus'
 import { Button } from '@/components/ui/Button'
 import { useConfirmAlarmRecovery } from './hooks'
 
@@ -19,14 +20,7 @@ export function RecoveryConfirmationDialog({
   const [healthCheckPassed, setHealthCheckPassed] = useState(false)
   const [note, setNote] = useState('')
   const mutation = useConfirmAlarmRecovery(alarmId)
-
-  useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape' && !mutation.isPending) onClose()
-    }
-    document.addEventListener('keydown', handleKeyDown)
-    return () => document.removeEventListener('keydown', handleKeyDown)
-  }, [mutation.isPending, onClose])
+  const panelRef = useDialogFocus<HTMLFormElement>(onClose, mutation.isPending)
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -46,8 +40,17 @@ export function RecoveryConfirmationDialog({
       aria-modal="true"
       aria-labelledby={titleId}
       aria-describedby={descriptionId}
+      onMouseDown={() => {
+        if (!mutation.isPending) onClose()
+      }}
     >
-      <form className="koc-dialog__panel" onSubmit={handleSubmit}>
+      <form
+        ref={panelRef}
+        className="koc-dialog__panel"
+        tabIndex={-1}
+        onSubmit={handleSubmit}
+        onMouseDown={(event) => event.stopPropagation()}
+      >
         <h2 id={titleId}>确认恢复</h2>
         <p id={descriptionId} className="koc-dialog__subtitle">
           确认告警 {alarmId} 的健康检查已经通过（基于版本 {version}）。

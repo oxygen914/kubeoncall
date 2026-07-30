@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { describe, expect, it, vi } from 'vitest'
 import type { SessionData } from '@/api/auth'
@@ -25,6 +25,7 @@ describe('Sidebar', () => {
       </MemoryRouter>,
     )
 
+    fireEvent.click(screen.getByRole('button', { name: '可观测性' }))
     const link = screen.getByRole('link', { name: '日志分析 （在新标签页打开）' })
     expect(link).toHaveAttribute('href', 'http://localhost:3000/d/kubeoncall-logs/kubeoncall-logs')
     expect(link).toHaveAttribute('target', '_blank')
@@ -51,7 +52,8 @@ describe('Sidebar', () => {
       </MemoryRouter>,
     )
 
-    expect(screen.getByRole('link', { name: '系统' })).toHaveAttribute('href', '/system')
+    fireEvent.click(screen.getByRole('button', { name: '管理中心' }))
+    expect(screen.getByRole('link', { name: '系统状态' })).toHaveAttribute('href', '/system')
     expect(screen.queryByRole('link', { name: /Token/ })).not.toBeInTheDocument()
     expect(screen.queryByRole('link', { name: /迁移/ })).not.toBeInTheDocument()
   })

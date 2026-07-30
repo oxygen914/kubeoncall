@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { AsyncState } from '@/components/feedback/AsyncState'
+import { PageTabs, type PageTab } from '@/components/navigation/PageTabs'
 import { Button } from '@/components/ui/Button'
 import { StatusBadge, type StatusTone } from '@/components/ui/StatusBadge'
 import { hasPermission, PERMISSIONS } from '@/features/auth/permissions'
@@ -25,9 +26,38 @@ import {
 import { useMonitoringScope } from './monitoringScopeContext'
 
 const REFRESH_INTERVAL = 15_000
+type MonitoringView = 'overview' | 'nodes' | 'workloads' | 'insights'
+
+const MONITORING_TABS: PageTab[] = [
+  {
+    id: 'overview',
+    label: '健康总览',
+    description: '数据源、指标与趋势',
+    to: '/monitoring?view=overview',
+  },
+  {
+    id: 'nodes',
+    label: '节点',
+    description: '状态与 CPU 趋势',
+    to: '/monitoring?view=nodes',
+  },
+  {
+    id: 'workloads',
+    label: '工作负载',
+    description: 'Pod 阶段与重启',
+    to: '/monitoring?view=workloads',
+  },
+  {
+    id: 'insights',
+    label: '关联研判',
+    description: '变更关联与 AI 建议',
+    to: '/monitoring?view=insights',
+  },
+]
 
 export function MonitoringPage() {
   const queryClient = useQueryClient()
+  const [searchParams] = useSearchParams()
   const { session } = useSession()
   const { scope, catalog, isLoading: scopeLoading, error: scopeError } = useMonitoringScope()
   const cluster = scope.cluster
@@ -35,6 +65,14 @@ export function MonitoringPage() {
   const [cpuWindow, setCpuWindow] = useState<'15m' | '1h' | '6h'>('15m')
   const [healthWindow, setHealthWindow] = useState<'1h' | '6h' | '24h' | '7d' | '30d'>('6h')
   const [podPhase, setPodPhase] = useState('')
+  const requestedView = searchParams.get('view')
+  const view: MonitoringView =
+    requestedView === 'nodes' ||
+    requestedView === 'workloads' ||
+    requestedView === 'insights' ||
+    requestedView === 'overview'
+      ? requestedView
+      : 'overview'
   const canReadAlarms = hasPermission(session, PERMISSIONS.ALARM_READ)
   const canReadChanges = hasPermission(session, PERMISSIONS.CHANGE_READ)
   const canAsk = hasPermission(session, PERMISSIONS.ASK_EXECUTE)
@@ -43,37 +81,37 @@ export function MonitoringPage() {
   const summaryQuery = useQuery({
     queryKey: ['monitoring', 'summary', scope],
     queryFn: () => getMonitoringSummary(scope),
-    enabled: Boolean(cluster),
+    enabled: Boolean(cluster && view === 'overview'),
     refetchInterval: REFRESH_INTERVAL,
   })
   const nodesQuery = useQuery({
     queryKey: ['monitoring', 'nodes', scope.cluster, scope.environment],
     queryFn: () => getMonitoringNodes(scope),
-    enabled: Boolean(cluster),
+    enabled: Boolean(cluster && view === 'nodes'),
     refetchInterval: REFRESH_INTERVAL,
   })
   const podsQuery = useQuery({
     queryKey: ['monitoring', 'pods', scope, podPhase],
     queryFn: () => getMonitoringPods(scope, podPhase),
-    enabled: Boolean(cluster),
+    enabled: Boolean(cluster && view === 'workloads'),
     refetchInterval: REFRESH_INTERVAL,
   })
   const healthQuery = useQuery({
     queryKey: ['monitoring', 'health', scope, healthWindow],
     queryFn: () => getHealthTrend(scope, healthWindow),
-    enabled: Boolean(cluster),
+    enabled: Boolean(cluster && view === 'overview'),
     refetchInterval: REFRESH_INTERVAL,
   })
   const correlationsQuery = useQuery({
     queryKey: ['monitoring', 'correlations', scope, healthWindow],
     queryFn: () => getMonitoringCorrelations(scope, healthWindow),
-    enabled: Boolean(cluster && canReadCorrelations),
+    enabled: Boolean(cluster && canReadCorrelations && view === 'insights'),
     refetchInterval: REFRESH_INTERVAL,
   })
   const adviceQuery = useQuery({
     queryKey: ['monitoring', 'advice', scope, healthWindow],
     queryFn: () => getOperationsAdvice(scope, healthWindow),
-    enabled: Boolean(cluster),
+    enabled: Boolean(cluster && view === 'insights'),
     refetchInterval: REFRESH_INTERVAL,
   })
   const nodes = useMemo(() => nodesQuery.data?.nodes ?? [], [nodesQuery.data])
@@ -88,14 +126,21 @@ export function MonitoringPage() {
   const cpuQuery = useQuery({
     queryKey: ['monitoring', 'cpu', scope.cluster, scope.environment, selectedNode, cpuWindow],
     queryFn: () => getNodeCpuTrend(scope, selectedNode, cpuWindow),
-    enabled: Boolean(cluster && selectedNode),
+    enabled: Boolean(cluster && selectedNode && view === 'nodes'),
     refetchInterval: REFRESH_INTERVAL,
   })
 
+  const activeQueries =
+    view === 'overview'
+      ? [summaryQuery, healthQuery]
+      : view === 'nodes'
+        ? [nodesQuery]
+        : view === 'workloads'
+          ? [podsQuery]
+          : [correlationsQuery, adviceQuery]
   const loading =
-    scopeLoading ||
-    (Boolean(cluster) && (summaryQuery.isLoading || nodesQuery.isLoading || podsQuery.isLoading))
-  const error = scopeError ?? summaryQuery.error ?? nodesQuery.error ?? podsQuery.error ?? null
+    scopeLoading || (Boolean(cluster) && activeQueries.some((query) => query.isLoading))
+  const error = scopeError ?? activeQueries.find((query) => query.error)?.error ?? null
 
   const refresh = () => queryClient.invalidateQueries({ queryKey: ['monitoring'] })
 
@@ -116,6 +161,8 @@ export function MonitoringPage() {
         </div>
       </header>
 
+      <PageTabs activeId={view} label="集群态势视图" tabs={MONITORING_TABS} />
+
       <div className="koc-filters">
         <div className="koc-monitoring__scope" aria-label="当前监控范围">
           <span>集群</span>
@@ -124,17 +171,36 @@ export function MonitoringPage() {
             {scope.environment || '全部环境'} / {scope.namespace || '全部 Namespace'}
           </span>
         </div>
-        <label className="koc-filter">
-          <span>Pod 阶段</span>
-          <select value={podPhase} onChange={(event) => setPodPhase(event.target.value)}>
-            <option value="">全部（异常优先）</option>
-            <option value="Pending">Pending</option>
-            <option value="Running">Running</option>
-            <option value="Succeeded">Succeeded</option>
-            <option value="Failed">Failed</option>
-            <option value="Unknown">Unknown</option>
-          </select>
-        </label>
+        {view === 'workloads' ? (
+          <label className="koc-filter">
+            <span>Pod 阶段</span>
+            <select value={podPhase} onChange={(event) => setPodPhase(event.target.value)}>
+              <option value="">全部（异常优先）</option>
+              <option value="Pending">Pending</option>
+              <option value="Running">Running</option>
+              <option value="Succeeded">Succeeded</option>
+              <option value="Failed">Failed</option>
+              <option value="Unknown">Unknown</option>
+            </select>
+          </label>
+        ) : null}
+        {view === 'overview' || view === 'insights' ? (
+          <label className="koc-filter">
+            <span>分析窗口</span>
+            <select
+              value={healthWindow}
+              onChange={(event) =>
+                setHealthWindow(event.target.value as '1h' | '6h' | '24h' | '7d' | '30d')
+              }
+            >
+              <option value="1h">1 小时</option>
+              <option value="6h">6 小时</option>
+              <option value="24h">24 小时</option>
+              <option value="7d">7 天</option>
+              <option value="30d">30 天</option>
+            </select>
+          </label>
+        ) : null}
       </div>
 
       <AsyncState
@@ -143,168 +209,168 @@ export function MonitoringPage() {
         isEmpty={!loading && !error && (catalog?.clusters.length ?? 0) === 0}
         emptyMessage="Prometheus 中尚未发现带 cluster/node 标签的节点，请先接入 Node Exporter。"
       >
-        {cluster && summaryQuery.data && nodesQuery.data && podsQuery.data ? (
+        {cluster ? (
           <div className="koc-monitoring">
-            <DataSourceStatus
-              nodeMetricsAvailable={summaryQuery.data.dataSources.nodeMetricsAvailable}
-              kubernetesStateAvailable={summaryQuery.data.dataSources.kubernetesStateAvailable}
-              collectedAt={summaryQuery.data.collectedAt}
-            />
-            <DataSourceNotices
-              nodeMetricsAvailable={summaryQuery.data.dataSources.nodeMetricsAvailable}
-              kubernetesStateAvailable={summaryQuery.data.dataSources.kubernetesStateAvailable}
-            />
-            <SummaryCards summary={summaryQuery.data} />
-            <PodPhaseSummary
-              counts={summaryQuery.data.podPhaseCounts}
-              available={summaryQuery.data.dataSources.kubernetesStateAvailable}
-            />
-            <section className="koc-monitoring__panel">
-              <div className="koc-monitoring__panel-title">
-                <div>
-                  <h2>集群健康趋势</h2>
-                  <p>当前窗口与紧邻上一周期使用相同口径，可直接查看环比基线。</p>
-                </div>
-                <label className="koc-filter">
-                  <span>窗口</span>
-                  <select
-                    value={healthWindow}
-                    onChange={(event) =>
-                      setHealthWindow(event.target.value as '1h' | '6h' | '24h' | '7d' | '30d')
-                    }
+            {view === 'overview' && summaryQuery.data ? (
+              <>
+                <DataSourceStatus
+                  nodeMetricsAvailable={summaryQuery.data.dataSources.nodeMetricsAvailable}
+                  kubernetesStateAvailable={summaryQuery.data.dataSources.kubernetesStateAvailable}
+                  collectedAt={summaryQuery.data.collectedAt}
+                />
+                <DataSourceNotices
+                  nodeMetricsAvailable={summaryQuery.data.dataSources.nodeMetricsAvailable}
+                  kubernetesStateAvailable={summaryQuery.data.dataSources.kubernetesStateAvailable}
+                />
+                <SummaryCards summary={summaryQuery.data} />
+                <PodPhaseSummary
+                  counts={summaryQuery.data.podPhaseCounts}
+                  available={summaryQuery.data.dataSources.kubernetesStateAvailable}
+                />
+                <section className="koc-monitoring__panel">
+                  <div className="koc-monitoring__panel-title">
+                    <div>
+                      <h2>集群健康趋势</h2>
+                      <p>当前窗口与紧邻上一周期使用相同口径，可直接查看环比基线。</p>
+                    </div>
+                  </div>
+                  <AsyncState
+                    isLoading={healthQuery.isLoading}
+                    error={healthQuery.error}
+                    isEmpty={!healthQuery.data?.current.length}
+                    emptyMessage="当前范围尚无可用的集群健康历史指标。"
                   >
-                    <option value="1h">1 小时</option>
-                    <option value="6h">6 小时</option>
-                    <option value="24h">24 小时</option>
-                    <option value="7d">7 天</option>
-                    <option value="30d">30 天</option>
-                  </select>
-                </label>
-              </div>
-              <AsyncState
-                isLoading={healthQuery.isLoading}
-                error={healthQuery.error}
-                isEmpty={!healthQuery.data?.current.length}
-                emptyMessage="当前范围尚无可用的集群健康历史指标。"
-              >
-                {healthQuery.data ? (
-                  <HealthTrendPanel
-                    current={healthQuery.data.current}
-                    previous={healthQuery.data.previous}
-                    comparison={healthQuery.data.comparison}
+                    {healthQuery.data ? (
+                      <HealthTrendPanel
+                        current={healthQuery.data.current}
+                        previous={healthQuery.data.previous}
+                        comparison={healthQuery.data.comparison}
+                      />
+                    ) : null}
+                  </AsyncState>
+                </section>
+              </>
+            ) : null}
+
+            {view === 'nodes' && nodesQuery.data ? (
+              <>
+                <section className="koc-monitoring__panel">
+                  <div className="koc-monitoring__panel-title">
+                    <div>
+                      <h2>节点状态</h2>
+                      <p>选择节点可查看 CPU 短期趋势。</p>
+                    </div>
+                  </div>
+                  <NodeTable
+                    nodes={nodesQuery.data.nodes}
+                    selectedNode={selectedNode}
+                    onSelect={setSelectedNode}
                   />
-                ) : null}
-              </AsyncState>
-            </section>
-            <section className="koc-monitoring__panel">
-              <div className="koc-monitoring__panel-title">
-                <div>
-                  <h2>节点状态</h2>
-                  <p>选择节点可查看 CPU 短期趋势。</p>
-                </div>
-              </div>
-              <NodeTable
-                nodes={nodesQuery.data.nodes}
-                selectedNode={selectedNode}
-                onSelect={setSelectedNode}
-              />
-            </section>
+                </section>
 
-            <section className="koc-monitoring__panel">
-              <div className="koc-monitoring__panel-title">
-                <div>
-                  <h2>{selectedNode ? `${selectedNode} CPU 趋势` : 'CPU 趋势'}</h2>
-                  <p>用于诊断和处置前后状态对比，不替代 Grafana 长期分析。</p>
-                </div>
-                <label className="koc-filter">
-                  <span>窗口</span>
-                  <select
-                    value={cpuWindow}
-                    onChange={(event) => setCpuWindow(event.target.value as '15m' | '1h' | '6h')}
+                <section className="koc-monitoring__panel">
+                  <div className="koc-monitoring__panel-title">
+                    <div>
+                      <h2>{selectedNode ? `${selectedNode} CPU 趋势` : 'CPU 趋势'}</h2>
+                      <p>用于诊断和处置前后状态对比，不替代 Grafana 长期分析。</p>
+                    </div>
+                    <label className="koc-filter">
+                      <span>窗口</span>
+                      <select
+                        value={cpuWindow}
+                        onChange={(event) =>
+                          setCpuWindow(event.target.value as '15m' | '1h' | '6h')
+                        }
+                      >
+                        <option value="15m">15 分钟</option>
+                        <option value="1h">1 小时</option>
+                        <option value="6h">6 小时</option>
+                      </select>
+                    </label>
+                  </div>
+                  <AsyncState
+                    isLoading={cpuQuery.isLoading}
+                    error={cpuQuery.error}
+                    isEmpty={!selectedNode || !cpuQuery.data?.points.length}
+                    emptyMessage="当前节点没有可用 CPU 趋势数据。"
                   >
-                    <option value="15m">15 分钟</option>
-                    <option value="1h">1 小时</option>
-                    <option value="6h">6 小时</option>
-                  </select>
-                </label>
-              </div>
-              <AsyncState
-                isLoading={cpuQuery.isLoading}
-                error={cpuQuery.error}
-                isEmpty={!selectedNode || !cpuQuery.data?.points.length}
-                emptyMessage="当前节点没有可用 CPU 趋势数据。"
-              >
-                <CpuChart points={cpuQuery.data?.points ?? []} />
-              </AsyncState>
-            </section>
+                    <CpuChart points={cpuQuery.data?.points ?? []} />
+                  </AsyncState>
+                </section>
+              </>
+            ) : null}
 
-            <section className="koc-monitoring__panel">
-              <div className="koc-monitoring__panel-title">
-                <div>
-                  <h2>Pod 状态</h2>
-                  <p>最多返回 100 个 Pod，非 Running 状态优先展示。</p>
-                </div>
-              </div>
-              {podsQuery.data.kubernetesStateAvailable ? (
-                <PodTable pods={podsQuery.data.pods} />
-              ) : (
-                <p className="koc-monitoring__notice" data-tone="warning">
-                  Pod 状态不可用：请部署 kube-state-metrics，并确保 Prometheus 写入 cluster/node
-                  标签。
-                </p>
-              )}
-            </section>
-
-            <div className="koc-monitoring__operations-grid">
+            {view === 'workloads' && podsQuery.data ? (
               <section className="koc-monitoring__panel">
                 <div className="koc-monitoring__panel-title">
                   <div>
-                    <h2>告警与变更关联</h2>
-                    <p>按时间、资源与 Namespace 评分，仅展示有证据的关联。</p>
+                    <h2>Pod 状态</h2>
+                    <p>最多返回 100 个 Pod，非 Running 状态优先展示。</p>
                   </div>
                 </div>
-                {!canReadCorrelations ? (
-                  <p className="koc-monitoring__notice">
-                    需要告警读取和变更读取权限才能查看关联证据。
-                  </p>
+                {podsQuery.data.kubernetesStateAvailable ? (
+                  <PodTable pods={podsQuery.data.pods} />
                 ) : (
-                  <AsyncState
-                    isLoading={correlationsQuery.isLoading}
-                    error={correlationsQuery.error}
-                    isEmpty={!correlationsQuery.data?.correlations.length}
-                    emptyMessage="当前窗口未发现可解释的告警与变更关联。"
-                  >
-                    <CorrelationList correlations={correlationsQuery.data?.correlations ?? []} />
-                  </AsyncState>
+                  <p className="koc-monitoring__notice" data-tone="warning">
+                    Pod 状态不可用：请部署 kube-state-metrics，并确保 Prometheus 写入 cluster/node
+                    标签。
+                  </p>
                 )}
               </section>
+            ) : null}
 
-              <section className="koc-monitoring__panel">
-                <div className="koc-monitoring__panel-title">
-                  <div>
-                    <h2>AI 运营建议</h2>
-                    <p>独立只读接口输出研判与建议，不会直接触发处置。</p>
+            {view === 'insights' ? (
+              <div className="koc-monitoring__operations-grid">
+                <section className="koc-monitoring__panel">
+                  <div className="koc-monitoring__panel-title">
+                    <div>
+                      <h2>告警与变更关联</h2>
+                      <p>按时间、资源与 Namespace 评分，仅展示有证据的关联。</p>
+                    </div>
                   </div>
-                  {adviceQuery.data ? (
-                    <StatusBadge tone={adviceQuery.data.modelAvailable ? 'info' : 'neutral'}>
-                      {adviceQuery.data.modelAvailable ? '模型增强' : '规则降级'}
-                    </StatusBadge>
-                  ) : null}
-                </div>
-                <AsyncState
-                  isLoading={adviceQuery.isLoading}
-                  error={adviceQuery.error}
-                  isEmpty={!adviceQuery.data?.advice.length}
-                  emptyMessage="当前没有运营建议。"
-                >
-                  <AdviceList
-                    advice={adviceQuery.data?.advice ?? []}
-                    canAsk={canAsk}
-                    canReadChanges={canReadChanges}
-                  />
-                </AsyncState>
-              </section>
-            </div>
+                  {!canReadCorrelations ? (
+                    <p className="koc-monitoring__notice">
+                      需要告警读取和变更读取权限才能查看关联证据。
+                    </p>
+                  ) : (
+                    <AsyncState
+                      isLoading={correlationsQuery.isLoading}
+                      error={correlationsQuery.error}
+                      isEmpty={!correlationsQuery.data?.correlations.length}
+                      emptyMessage="当前窗口未发现可解释的告警与变更关联。"
+                    >
+                      <CorrelationList correlations={correlationsQuery.data?.correlations ?? []} />
+                    </AsyncState>
+                  )}
+                </section>
+
+                <section className="koc-monitoring__panel">
+                  <div className="koc-monitoring__panel-title">
+                    <div>
+                      <h2>AI 运营建议</h2>
+                      <p>独立只读接口输出研判与建议，不会直接触发处置。</p>
+                    </div>
+                    {adviceQuery.data ? (
+                      <StatusBadge tone={adviceQuery.data.modelAvailable ? 'info' : 'neutral'}>
+                        {adviceQuery.data.modelAvailable ? '模型增强' : '规则降级'}
+                      </StatusBadge>
+                    ) : null}
+                  </div>
+                  <AsyncState
+                    isLoading={adviceQuery.isLoading}
+                    error={adviceQuery.error}
+                    isEmpty={!adviceQuery.data?.advice.length}
+                    emptyMessage="当前没有运营建议。"
+                  >
+                    <AdviceList
+                      advice={adviceQuery.data?.advice ?? []}
+                      canAsk={canAsk}
+                      canReadChanges={canReadChanges}
+                    />
+                  </AsyncState>
+                </section>
+              </div>
+            ) : null}
           </div>
         ) : null}
       </AsyncState>

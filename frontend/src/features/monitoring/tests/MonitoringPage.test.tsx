@@ -30,13 +30,13 @@ function jsonResponse(data: unknown): Response {
   } as Response
 }
 
-function renderPage() {
+function renderPage(initialEntry = '/monitoring') {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   })
   return render(
     <QueryClientProvider client={queryClient}>
-      <MemoryRouter>
+      <MemoryRouter initialEntries={[initialEntry]}>
         <MonitoringScopeProvider>
           <MonitoringPage />
         </MonitoringScopeProvider>
@@ -219,33 +219,58 @@ describe('MonitoringPage', () => {
     vi.unstubAllGlobals()
   })
 
-  it('renders node metrics while making missing Kubernetes state explicit', async () => {
+  it('keeps the health overview focused and makes missing Kubernetes state explicit', async () => {
     renderPage()
 
-    expect(await screen.findByText('worker-1')).toBeInTheDocument()
-    expect(screen.getAllByText('12.50%')).toHaveLength(2)
+    expect(await screen.findByRole('heading', { name: '集群健康趋势' })).toBeInTheDocument()
+    expect(screen.getByText('12.50%')).toBeInTheDocument()
     expect(screen.getByText(/kube-state-metrics 未接入/)).toBeInTheDocument()
-    expect(screen.getByText(/Pod 状态不可用/)).toBeInTheDocument()
     expect(screen.queryByText('Ready', { selector: '.koc-badge' })).not.toBeInTheDocument()
     expect(screen.getByLabelText('当前监控范围')).toHaveTextContent('prod')
-    expect(screen.getByRole('heading', { name: '集群健康趋势' })).toBeInTheDocument()
-    expect(screen.getByText('规则降级')).toBeInTheDocument()
     expect(screen.getByText('0/1')).toHaveAttribute('data-tone', 'warning')
     expect(screen.getByText('0', { selector: '.koc-overview__value' })).toHaveAttribute(
       'data-tone',
       'warning',
     )
+    expect(screen.queryByText('worker-1')).not.toBeInTheDocument()
   })
 
-  it('shows connected Kubernetes state and Pod phase data for one cluster', async () => {
+  it('loads node data only in the node view', async () => {
+    renderPage('/monitoring?view=nodes')
+
+    expect(await screen.findByText('worker-1')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: '节点状态' })).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: '集群健康趋势' })).not.toBeInTheDocument()
+    const requestedUrls = fetchMock.mock.calls.map(([input]) => String(input))
+    expect(requestedUrls.some((url) => url.startsWith('/api/v1/monitoring/summary'))).toBe(false)
+  })
+
+  it('shows connected Pod data only in the workload view', async () => {
+    kubernetesStateAvailable = true
+    renderPage('/monitoring?view=workloads')
+
+    expect(await screen.findByText('api-1')).toBeInTheDocument()
+    expect(screen.getByText('Running', { selector: '.koc-badge' })).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: '节点状态' })).not.toBeInTheDocument()
+  })
+
+  it('shows connected Kubernetes state in the health overview', async () => {
     kubernetesStateAvailable = true
     renderPage()
 
-    expect(await screen.findByText('api-1')).toBeInTheDocument()
+    await screen.findByRole('heading', { name: 'Pod 阶段分布' })
     const sources = screen.getByLabelText('监控数据源状态')
     expect(within(sources).getAllByText('已连接')).toHaveLength(2)
-    expect(screen.getByRole('heading', { name: 'Pod 阶段分布' })).toBeInTheDocument()
-    expect(screen.getByText('Ready', { selector: '.koc-badge' })).toBeInTheDocument()
+    expect(screen.getByText('1/1')).toHaveAttribute('data-tone', 'success')
     expect(screen.queryByText(/kube-state-metrics 未接入/)).not.toBeInTheDocument()
+  })
+
+  it('isolates correlation evidence and AI advice in the insights view', async () => {
+    renderPage('/monitoring?view=insights')
+
+    expect(await screen.findByText('规则降级')).toBeInTheDocument()
+    expect(screen.getByText('当前范围未发现明显异常')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: '告警与变更关联' })).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: '节点状态' })).not.toBeInTheDocument()
   })
 })

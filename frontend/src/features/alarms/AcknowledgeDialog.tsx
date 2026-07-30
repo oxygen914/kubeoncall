@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { ApiError } from '@/api/errors'
+import { useDialogFocus } from '@/components/dialog/useDialogFocus'
 import { Button } from '@/components/ui/Button'
 import { useAcknowledgeAlarm } from './hooks'
 
@@ -18,6 +19,7 @@ interface AcknowledgeDialogProps {
 export function AcknowledgeDialog({ alarmId, version, onClose }: AcknowledgeDialogProps) {
   const [reason, setReason] = useState('')
   const mutation = useAcknowledgeAlarm(alarmId)
+  const panelRef = useDialogFocus<HTMLDivElement>(onClose, mutation.isPending)
 
   const handleSubmit = async () => {
     try {
@@ -33,8 +35,21 @@ export function AcknowledgeDialog({ alarmId, version, onClose }: AcknowledgeDial
   const errorMessage = error instanceof ApiError ? error.message : undefined
 
   return (
-    <div className="koc-dialog" role="dialog" aria-modal="true" aria-labelledby="ack-title">
-      <div className="koc-dialog__panel">
+    <div
+      className="koc-dialog"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="ack-title"
+      onMouseDown={() => {
+        if (!mutation.isPending) onClose()
+      }}
+    >
+      <div
+        ref={panelRef}
+        className="koc-dialog__panel"
+        tabIndex={-1}
+        onMouseDown={(event) => event.stopPropagation()}
+      >
         <h2 id="ack-title">确认告警</h2>
         <p className="koc-dialog__subtitle">
           将告警 {alarmId} 标记为已确认（基于版本 {version}）。

@@ -1,4 +1,5 @@
-import { NavLink } from 'react-router-dom'
+import { useEffect, useMemo, useState } from 'react'
+import { NavLink, useLocation } from 'react-router-dom'
 import clsx from 'clsx'
 import { hasPermission, PERMISSIONS, type Permission } from '@/features/auth/permissions'
 import type { SessionData } from '@/api/auth'
@@ -17,25 +18,27 @@ type NavItem =
   | (NavItemBase & { to?: never; grafanaDashboard: GrafanaDashboard })
 
 interface NavSection {
+  id: string
   label: string
   items: NavItem[]
 }
 
 const NAV_SECTIONS: NavSection[] = [
   {
-    label: '日常值班',
+    id: 'on-call',
+    label: '值班工作台',
     items: [
-      { to: '/overview', label: '概览', icon: 'grid', permission: PERMISSIONS.DASHBOARD_READ },
       {
-        to: '/monitoring',
-        label: '集群态势',
-        icon: 'cluster',
+        to: '/overview',
+        label: '工作台',
+        icon: 'grid',
         permission: PERMISSIONS.DASHBOARD_READ,
       },
       { to: '/alarms', label: '告警', icon: 'alarm', permission: PERMISSIONS.ALARM_READ },
     ],
   },
   {
+    id: 'response',
     label: '诊断与处置',
     items: [
       { to: '/ask', label: 'AI 诊断', icon: 'ask', permission: PERMISSIONS.ASK_EXECUTE },
@@ -60,8 +63,15 @@ const NAV_SECTIONS: NavSection[] = [
     ],
   },
   {
-    label: '运营分析',
+    id: 'observability',
+    label: '可观测性',
     items: [
+      {
+        to: '/monitoring',
+        label: '集群态势',
+        icon: 'cluster',
+        permission: PERMISSIONS.DASHBOARD_READ,
+      },
       {
         grafanaDashboard: 'logs',
         label: '日志分析',
@@ -74,23 +84,13 @@ const NAV_SECTIONS: NavSection[] = [
         icon: 'change',
         permission: PERMISSIONS.CHANGE_READ,
       },
-      {
-        to: '/operations',
-        label: '策略与维护',
-        icon: 'activity',
-        permissions: [PERMISSIONS.POLICY_READ, PERMISSIONS.MAINTENANCE_READ],
-      },
     ],
   },
   {
-    label: '平台配置',
+    id: 'agent-capabilities',
+    label: 'Agent 能力',
     items: [
-      {
-        to: '/knowledge',
-        label: '知识库',
-        icon: 'book',
-        permission: PERMISSIONS.KNOWLEDGE_READ,
-      },
+      { to: '/knowledge', label: '知识库', icon: 'book', permission: PERMISSIONS.KNOWLEDGE_READ },
       {
         to: '/memory',
         label: '记忆',
@@ -104,6 +104,18 @@ const NAV_SECTIONS: NavSection[] = [
         permission: PERMISSIONS.SKILL_READ,
       },
       { to: '/tools', label: '工具', icon: 'tools', permission: PERMISSIONS.TOOL_READ },
+    ],
+  },
+  {
+    id: 'administration',
+    label: '管理中心',
+    items: [
+      {
+        to: '/operations',
+        label: '策略与维护',
+        icon: 'activity',
+        permissions: [PERMISSIONS.POLICY_READ, PERMISSIONS.MAINTENANCE_READ],
+      },
       {
         to: '/integrations',
         label: '集成通知',
@@ -114,7 +126,7 @@ const NAV_SECTIONS: NavSection[] = [
       { to: '/users', label: '用户', icon: 'users', permission: PERMISSIONS.SYSTEM_MANAGE },
       {
         to: '/system',
-        label: '系统',
+        label: '系统状态',
         icon: 'settings',
         permission: PERMISSIONS.SYSTEM_READ,
       },
@@ -124,23 +136,66 @@ const NAV_SECTIONS: NavSection[] = [
 
 interface SidebarProps {
   collapsed: boolean
+  mobileOpen?: boolean
   session: SessionData | null
   onToggle: () => void
+  onNavigate?: () => void
 }
 
-export function Sidebar({ collapsed, session, onToggle }: SidebarProps) {
+export function Sidebar({
+  collapsed,
+  mobileOpen = false,
+  session,
+  onToggle,
+  onNavigate,
+}: SidebarProps) {
+  const location = useLocation()
   const displayName = session?.user?.displayName ?? session?.user?.username ?? '当前用户'
+  const visuallyCollapsed = collapsed && !mobileOpen
+  const activeSectionId = useMemo(
+    () =>
+      NAV_SECTIONS.find((section) =>
+        section.items.some(
+          (item) =>
+            item.to &&
+            (location.pathname === item.to || location.pathname.startsWith(`${item.to}/`)),
+        ),
+      )?.id ?? NAV_SECTIONS[0]!.id,
+    [location.pathname],
+  )
+  const [expandedSections, setExpandedSections] = useState<Set<string>>(
+    () => new Set([activeSectionId]),
+  )
+
+  useEffect(() => {
+    setExpandedSections((current) => {
+      if (current.has(activeSectionId)) return current
+      const next = new Set(current)
+      next.add(activeSectionId)
+      return next
+    })
+  }, [activeSectionId])
+
+  const toggleSection = (sectionId: string) => {
+    setExpandedSections((current) => {
+      const next = new Set(current)
+      if (next.has(sectionId)) next.delete(sectionId)
+      else next.add(sectionId)
+      return next
+    })
+  }
 
   return (
     <aside
-      className={clsx('koc-sidebar', collapsed && 'koc-sidebar--collapsed')}
+      className={clsx('koc-sidebar', visuallyCollapsed && 'koc-sidebar--collapsed')}
+      id="primary-navigation"
       aria-label="主导航"
     >
       <div className="koc-sidebar__brand">
         <span className="koc-sidebar__brand-mark" aria-hidden="true">
           K
         </span>
-        {collapsed ? null : (
+        {visuallyCollapsed ? null : (
           <span className="koc-sidebar__brand-copy">
             <strong>KubeOnCall</strong>
             <small>Operations Console</small>
@@ -150,10 +205,10 @@ export function Sidebar({ collapsed, session, onToggle }: SidebarProps) {
           className="koc-icon-button koc-sidebar__toggle"
           type="button"
           onClick={onToggle}
-          aria-label={collapsed ? '展开导航' : '折叠导航'}
-          title={collapsed ? '展开导航' : '折叠导航'}
+          aria-label={visuallyCollapsed ? '展开导航' : '折叠导航'}
+          title={visuallyCollapsed ? '展开导航' : '折叠导航'}
         >
-          <Icon name={collapsed ? 'chevron-right' : 'chevron-left'} size={16} />
+          <Icon name={visuallyCollapsed ? 'chevron-right' : 'chevron-left'} size={16} />
         </button>
       </div>
 
@@ -162,8 +217,11 @@ export function Sidebar({ collapsed, session, onToggle }: SidebarProps) {
           <SidebarSection
             key={section.label}
             section={section}
-            collapsed={collapsed}
+            collapsed={visuallyCollapsed}
+            expanded={visuallyCollapsed || expandedSections.has(section.id)}
             session={session}
+            onNavigate={onNavigate}
+            onToggle={() => toggleSection(section.id)}
           />
         ))}
       </nav>
@@ -172,7 +230,7 @@ export function Sidebar({ collapsed, session, onToggle }: SidebarProps) {
         <span className="koc-sidebar__avatar" aria-hidden="true">
           {displayName.slice(0, 1).toUpperCase()}
         </span>
-        {collapsed ? null : (
+        {visuallyCollapsed ? null : (
           <span className="koc-sidebar__user-copy">
             <strong title={displayName}>{displayName}</strong>
             <small>已连接 · 企业工作区</small>
@@ -186,11 +244,17 @@ export function Sidebar({ collapsed, session, onToggle }: SidebarProps) {
 function SidebarSection({
   section,
   collapsed,
+  expanded,
   session,
+  onNavigate,
+  onToggle,
 }: {
   section: NavSection
   collapsed: boolean
+  expanded: boolean
   session: SessionData | null
+  onNavigate?: () => void
+  onToggle: () => void
 }) {
   const visibleItems = section.items.filter(
     (item) =>
@@ -207,9 +271,23 @@ function SidebarSection({
       {collapsed ? (
         <span className="koc-sidebar__section-divider" aria-hidden="true" />
       ) : (
-        <h2>{section.label}</h2>
+        <button
+          className="koc-sidebar__section-toggle"
+          type="button"
+          aria-controls={`sidebar-section-${section.id}`}
+          aria-expanded={expanded}
+          onClick={onToggle}
+        >
+          <span>{section.label}</span>
+          <Icon
+            className="koc-sidebar__section-chevron"
+            data-expanded={expanded}
+            name="chevron-right"
+            size={14}
+          />
+        </button>
       )}
-      <ul>
+      <ul id={`sidebar-section-${section.id}`} hidden={!expanded}>
         {visibleItems.map((item) => {
           const key = item.to ?? `grafana:${item.grafanaDashboard}`
           if (item.grafanaDashboard) {
@@ -222,6 +300,7 @@ function SidebarSection({
                   href={href}
                   target="_blank"
                   rel="noreferrer"
+                  onClick={onNavigate}
                   title={collapsed ? item.label : '在新标签页打开 Grafana Logs'}
                 >
                   <Icon name={item.icon} />
@@ -249,6 +328,7 @@ function SidebarSection({
                 className={({ isActive }) =>
                   clsx('koc-sidebar__link', isActive && 'koc-sidebar__link--active')
                 }
+                onClick={onNavigate}
                 title={collapsed ? item.label : undefined}
               >
                 <Icon name={item.icon} />

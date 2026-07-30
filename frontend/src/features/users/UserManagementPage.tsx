@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '@/api/client'
 import { ApiError } from '@/api/errors'
+import { useDialogFocus } from '@/components/dialog/useDialogFocus'
 import { AsyncState } from '@/components/feedback/AsyncState'
 import { Button } from '@/components/ui/Button'
 import { StatusBadge } from '@/components/ui/StatusBadge'
@@ -190,6 +191,7 @@ function UserAdminDialog({
   const [error, setError] = useState<string | null>(null)
   const [pending, setPending] = useState(false)
   const basePath = `/api/v1/users/${encodeURIComponent(user.id)}`
+  const panelRef = useDialogFocus<HTMLDivElement>(onClose, pending)
 
   const run = async (operation: () => Promise<unknown>, success: string) => {
     setPending(true)
@@ -209,8 +211,21 @@ function UserAdminDialog({
   }
 
   return (
-    <div className="koc-dialog" role="dialog" aria-modal="true" aria-labelledby="user-admin-title">
-      <div className="koc-dialog__panel">
+    <div
+      className="koc-dialog"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="user-admin-title"
+      onMouseDown={() => {
+        if (!pending) onClose()
+      }}
+    >
+      <div
+        ref={panelRef}
+        className="koc-dialog__panel"
+        tabIndex={-1}
+        onMouseDown={(event) => event.stopPropagation()}
+      >
         <h2 id="user-admin-title">管理用户：{user.username}</h2>
         <p className="koc-dialog__subtitle">角色变更和改密会立即撤销该用户的现有会话。</p>
 

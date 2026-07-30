@@ -52,10 +52,10 @@ describe('PermissionBoundary', () => {
     expect(screen.getByRole('link', { name: '返回可访问首页' })).toHaveAttribute('href', '/alarms')
   })
 
-  it('renders a protected route when the permission is present', () => {
+  it('renders a protected route when the permission is present', async () => {
     renderRoute('/ask', [PERMISSIONS.ASK_EXECUTE])
 
-    expect(screen.getByRole('heading', { name: 'AI 诊断' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'AI 诊断' })).toBeInTheDocument()
   })
 
   it('only exposes destinations permitted to the current account', () => {

@@ -1,5 +1,6 @@
-import { useEffect, useId, useState, type FormEvent } from 'react'
+import { useId, useState, type FormEvent } from 'react'
 import { ApiError } from '@/api/errors'
+import { useDialogFocus } from '@/components/dialog/useDialogFocus'
 import { Button } from '@/components/ui/Button'
 import { useApproveAlarmSilence } from './hooks'
 
@@ -16,14 +17,7 @@ export function SilenceApprovalDialog({ alarmId, version, onClose }: SilenceAppr
   const [expiresAt, setExpiresAt] = useState('')
   const [validationError, setValidationError] = useState('')
   const mutation = useApproveAlarmSilence(alarmId)
-
-  useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape' && !mutation.isPending) onClose()
-    }
-    document.addEventListener('keydown', handleKeyDown)
-    return () => document.removeEventListener('keydown', handleKeyDown)
-  }, [mutation.isPending, onClose])
+  const panelRef = useDialogFocus<HTMLFormElement>(onClose, mutation.isPending)
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -53,8 +47,17 @@ export function SilenceApprovalDialog({ alarmId, version, onClose }: SilenceAppr
       aria-modal="true"
       aria-labelledby={titleId}
       aria-describedby={descriptionId}
+      onMouseDown={() => {
+        if (!mutation.isPending) onClose()
+      }}
     >
-      <form className="koc-dialog__panel" onSubmit={handleSubmit}>
+      <form
+        ref={panelRef}
+        className="koc-dialog__panel"
+        tabIndex={-1}
+        onSubmit={handleSubmit}
+        onMouseDown={(event) => event.stopPropagation()}
+      >
         <h2 id={titleId}>审批静默</h2>
         <p id={descriptionId} className="koc-dialog__subtitle">
           在指定时间前静默告警 {alarmId}（基于版本 {version}）。

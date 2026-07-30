@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import type { SessionData } from '@/api/auth'
 import { Button } from '@/components/ui/Button'
@@ -10,62 +10,139 @@ import { useTheme } from '@/features/theme/themeContext'
 interface TopBarProps {
   session: SessionData | null
   onLogout: () => Promise<void>
+  onOpenNavigation: () => void
 }
 
-export function TopBar({ session, onLogout }: TopBarProps) {
+export function TopBar({ session, onLogout, onOpenNavigation }: TopBarProps) {
   const [commandOpen, setCommandOpen] = useState(false)
   const [userOpen, setUserOpen] = useState(false)
+  const [scopeOpen, setScopeOpen] = useState(false)
+  const commandTriggerRef = useRef<HTMLButtonElement>(null)
+  const userTriggerRef = useRef<HTMLButtonElement>(null)
+  const userMenuRef = useRef<HTMLDivElement>(null)
+  const scopeTriggerRef = useRef<HTMLButtonElement>(null)
+  const scopePanelRef = useRef<HTMLDivElement>(null)
   const { scope, catalog, isLoading, error, setCluster, setEnvironment, setNamespace } =
     useMonitoringScope()
   const { theme, toggleTheme } = useTheme()
 
+  const openCommand = useCallback(() => setCommandOpen(true), [])
+  const closeCommand = useCallback(() => {
+    setCommandOpen(false)
+    commandTriggerRef.current?.focus()
+  }, [])
+
   useEffect(() => {
-    const openCommand = (event: KeyboardEvent) => {
+    const openCommandShortcut = (event: KeyboardEvent) => {
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
         event.preventDefault()
-        setCommandOpen(true)
+        openCommand()
       }
     }
-    window.addEventListener('keydown', openCommand)
-    return () => window.removeEventListener('keydown', openCommand)
-  }, [])
+    window.addEventListener('keydown', openCommandShortcut)
+    return () => window.removeEventListener('keydown', openCommandShortcut)
+  }, [openCommand])
+
+  useEffect(() => {
+    if (!userOpen) return
+    const closeUserMenu = (event: PointerEvent) => {
+      if (!userMenuRef.current?.contains(event.target as Node)) setUserOpen(false)
+    }
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return
+      setUserOpen(false)
+      userTriggerRef.current?.focus()
+    }
+    window.addEventListener('pointerdown', closeUserMenu)
+    window.addEventListener('keydown', closeOnEscape)
+    return () => {
+      window.removeEventListener('pointerdown', closeUserMenu)
+      window.removeEventListener('keydown', closeOnEscape)
+    }
+  }, [userOpen])
+
+  useEffect(() => {
+    if (!scopeOpen) return
+    const closeScopePanel = (event: PointerEvent) => {
+      const target = event.target as Node
+      if (!scopePanelRef.current?.contains(target) && !scopeTriggerRef.current?.contains(target)) {
+        setScopeOpen(false)
+      }
+    }
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return
+      setScopeOpen(false)
+      scopeTriggerRef.current?.focus()
+    }
+    window.addEventListener('pointerdown', closeScopePanel)
+    window.addEventListener('keydown', closeOnEscape)
+    return () => {
+      window.removeEventListener('pointerdown', closeScopePanel)
+      window.removeEventListener('keydown', closeOnEscape)
+    }
+  }, [scopeOpen])
 
   const displayName = session?.user?.displayName ?? session?.user?.username ?? ''
 
   return (
     <>
       <header className="koc-topbar">
-        <div className="koc-topbar__scope" aria-label="当前全局查看范围">
-          <ContextSelector
-            label="集群"
-            value={scope.cluster}
-            emptyLabel={isLoading ? '发现中…' : error ? '范围不可用' : '暂无集群'}
-            options={catalog?.clusters ?? []}
-            onChange={setCluster}
-          />
-          <ContextSelector
-            label="环境"
-            value={scope.environment ?? ''}
-            emptyLabel="全部环境"
-            options={catalog?.environments ?? []}
-            onChange={setEnvironment}
-            disabled={!catalog?.capabilities.environmentFilterAvailable}
-          />
-          <ContextSelector
-            label="Namespace"
-            value={scope.namespace ?? ''}
-            emptyLabel="全部 Namespace"
-            options={catalog?.namespaces ?? []}
-            onChange={setNamespace}
-            disabled={!catalog?.capabilities.namespaceFilterAvailable}
-          />
+        <div className="koc-topbar__leading">
+          <button
+            className="koc-icon-button koc-topbar__mobile-nav"
+            type="button"
+            aria-label="打开主导航"
+            aria-controls="primary-navigation"
+            onClick={onOpenNavigation}
+          >
+            <Icon name="menu" />
+          </button>
+          <div className="koc-topbar__scope" aria-label="当前全局查看范围">
+            <ContextSelector
+              label="集群"
+              value={scope.cluster}
+              emptyLabel={isLoading ? '发现中…' : error ? '范围不可用' : '暂无集群'}
+              options={catalog?.clusters ?? []}
+              onChange={setCluster}
+            />
+            <ContextSelector
+              label="环境"
+              value={scope.environment ?? ''}
+              emptyLabel="全部环境"
+              options={catalog?.environments ?? []}
+              onChange={setEnvironment}
+              disabled={!catalog?.capabilities.environmentFilterAvailable}
+            />
+            <ContextSelector
+              label="Namespace"
+              value={scope.namespace ?? ''}
+              emptyLabel="全部 Namespace"
+              options={catalog?.namespaces ?? []}
+              onChange={setNamespace}
+              disabled={!catalog?.capabilities.namespaceFilterAvailable}
+            />
+          </div>
+          <button
+            ref={scopeTriggerRef}
+            className="koc-topbar__mobile-scope"
+            type="button"
+            aria-label={`切换全局范围，当前集群 ${scope.cluster || '未选择'}`}
+            aria-expanded={scopeOpen}
+            aria-controls="mobile-scope-panel"
+            onClick={() => setScopeOpen((current) => !current)}
+          >
+            <Icon name="cluster" size={16} />
+            <span>{scope.cluster || '选择范围'}</span>
+            <Icon name="chevron-right" size={14} />
+          </button>
         </div>
 
         <div className="koc-topbar__actions">
           <button
+            ref={commandTriggerRef}
             className="koc-command-trigger"
             type="button"
-            onClick={() => setCommandOpen(true)}
+            onClick={openCommand}
             aria-label="打开快速导航"
           >
             <Icon name="search" size={17} />
@@ -73,7 +150,7 @@ export function TopBar({ session, onLogout }: TopBarProps) {
             <kbd>⌘ K</kbd>
           </button>
           <button
-            className="koc-icon-button"
+            className="koc-icon-button koc-topbar__theme-toggle"
             type="button"
             onClick={toggleTheme}
             aria-label={theme === 'dark' ? '切换到浅色主题' : '切换到深色主题'}
@@ -81,11 +158,13 @@ export function TopBar({ session, onLogout }: TopBarProps) {
           >
             <Icon name={theme === 'dark' ? 'sun' : 'moon'} />
           </button>
-          <div className="koc-topbar__user-menu">
+          <div ref={userMenuRef} className="koc-topbar__user-menu">
             <button
+              ref={userTriggerRef}
               className="koc-topbar__user-trigger"
               type="button"
               onClick={() => setUserOpen((current) => !current)}
+              aria-label={`打开用户菜单：${displayName}`}
               aria-expanded={userOpen}
               aria-haspopup="menu"
             >
@@ -130,10 +209,35 @@ export function TopBar({ session, onLogout }: TopBarProps) {
             ) : null}
           </div>
         </div>
+        {scopeOpen ? (
+          <div ref={scopePanelRef} className="koc-topbar__scope-panel" id="mobile-scope-panel">
+            <ContextSelector
+              label="集群"
+              value={scope.cluster}
+              emptyLabel={isLoading ? '发现中…' : error ? '范围不可用' : '暂无集群'}
+              options={catalog?.clusters ?? []}
+              onChange={setCluster}
+            />
+            <ContextSelector
+              label="环境"
+              value={scope.environment ?? ''}
+              emptyLabel="全部环境"
+              options={catalog?.environments ?? []}
+              onChange={setEnvironment}
+              disabled={!catalog?.capabilities.environmentFilterAvailable}
+            />
+            <ContextSelector
+              label="Namespace"
+              value={scope.namespace ?? ''}
+              emptyLabel="全部 Namespace"
+              options={catalog?.namespaces ?? []}
+              onChange={setNamespace}
+              disabled={!catalog?.capabilities.namespaceFilterAvailable}
+            />
+          </div>
+        ) : null}
       </header>
-      {commandOpen ? (
-        <CommandDialog session={session} onClose={() => setCommandOpen(false)} />
-      ) : null}
+      {commandOpen ? <CommandDialog session={session} onClose={closeCommand} /> : null}
     </>
   )
 }
@@ -180,6 +284,7 @@ function ContextSelector({
 function CommandDialog({ session, onClose }: { session: SessionData | null; onClose: () => void }) {
   const navigate = useNavigate()
   const inputRef = useRef<HTMLInputElement>(null)
+  const panelRef = useRef<HTMLElement>(null)
   const [query, setQuery] = useState('')
   const destinations: Array<{
     label: string
@@ -189,13 +294,13 @@ function CommandDialog({ session, onClose }: { session: SessionData | null; onCl
   }> = [
     {
       label: '查看当前风险概览',
-      path: '/overview',
+      path: '/overview?view=workbench',
       permission: PERMISSIONS.DASHBOARD_READ,
       keywords: '概览 风险 dashboard',
     },
     {
       label: '进入集群态势',
-      path: '/monitoring',
+      path: '/monitoring?view=overview',
       permission: PERMISSIONS.DASHBOARD_READ,
       keywords: '集群 监控 节点 pod',
     },
@@ -245,11 +350,30 @@ function CommandDialog({ session, onClose }: { session: SessionData | null; onCl
 
   useEffect(() => {
     inputRef.current?.focus()
-    const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onClose()
+    const handleDialogKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        onClose()
+        return
+      }
+      if (event.key !== 'Tab') return
+      const focusable = Array.from(
+        panelRef.current?.querySelectorAll<HTMLElement>(
+          'button:not([disabled]), input:not([disabled]), a[href], select:not([disabled]), [tabindex]:not([tabindex="-1"])',
+        ) ?? [],
+      )
+      if (focusable.length === 0) return
+      const first = focusable[0]!
+      const last = focusable[focusable.length - 1]!
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault()
+        last.focus()
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault()
+        first.focus()
+      }
     }
-    window.addEventListener('keydown', closeOnEscape)
-    return () => window.removeEventListener('keydown', closeOnEscape)
+    window.addEventListener('keydown', handleDialogKey)
+    return () => window.removeEventListener('keydown', handleDialogKey)
   }, [onClose])
 
   const go = (path: string) => {
@@ -260,6 +384,7 @@ function CommandDialog({ session, onClose }: { session: SessionData | null; onCl
   return (
     <div className="koc-command" role="presentation" onMouseDown={onClose}>
       <section
+        ref={panelRef}
         className="koc-command__panel"
         role="dialog"
         aria-modal="true"
