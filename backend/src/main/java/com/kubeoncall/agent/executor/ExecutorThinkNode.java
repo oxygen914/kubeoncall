@@ -16,8 +16,10 @@ import com.kubeoncall.domain.graph.ExecutionPlan;
 import com.kubeoncall.domain.graph.GraphState;
 import com.kubeoncall.domain.graph.NodeResult;
 import com.kubeoncall.domain.graph.NodeStatus;
+import com.kubeoncall.domain.task.RiskLevel;
 import com.kubeoncall.domain.task.Task;
 import com.kubeoncall.service.KubeOnCallMetricsService;
+import com.kubeoncall.skill.SkillExecutionPolicy;
 import com.kubeoncall.tool.AgentToolCatalog;
 import com.kubeoncall.tool.ToolDefinition;
 
@@ -27,6 +29,10 @@ public class ExecutorThinkNode extends ThinkNode {
     private static final String RETRY_REASON_MISSING_PARAMETERS = "MISSING_PARAMETERS";
     private static final String RETRY_STRATEGY_QUERY_ADDITIONAL_CONTEXT = "QUERY_ADDITIONAL_CONTEXT";
     private static final String FAILURE_REASON_SKILL_TOOL_NOT_ALLOWED = "SKILL_TOOL_NOT_ALLOWED";
+    private static final String FAILURE_REASON_SKILL_TOOL_WHITELIST_EMPTY = "SKILL_TOOL_WHITELIST_EMPTY";
+    private static final String FAILURE_REASON_SKILL_MAX_RISK_MISSING = "SKILL_MAX_RISK_MISSING";
+    private static final String FAILURE_REASON_TASK_RISK_MISSING = "TASK_RISK_MISSING";
+    private static final String FAILURE_REASON_SKILL_MAX_RISK_EXCEEDED = "SKILL_MAX_RISK_EXCEEDED";
 
     private final AgentToolCatalog agentToolCatalog;
     private final ExecutorPlanFactory planFactory;
@@ -70,6 +76,20 @@ public class ExecutorThinkNode extends ThinkNode {
         Task task = state.getCurrentTask();
         if (task == null) {
             return new NodeResult(getName(), NodeStatus.FAILURE, "No task available for execution", Map.of());
+        }
+        SkillExecutionPolicy.ToolAccess toolAccess = SkillExecutionPolicy.toolAccess(state.getContext());
+        if (toolAccess.restricted() && toolAccess.allowedTools().isEmpty()) {
+            return emptySkillToolWhitelist(state);
+        }
+        RiskLevel skillMaxRisk = SkillExecutionPolicy.maxRisk(state.getContext());
+        if (toolAccess.restricted() && skillMaxRisk == null) {
+            return missingSkillMaxRisk(state);
+        }
+        if (toolAccess.restricted() && task.riskLevel() == null) {
+            return missingTaskRisk(state);
+        }
+        if (SkillExecutionPolicy.exceedsMaxRisk(task.riskLevel(), skillMaxRisk)) {
+            return skillRiskViolation(state, task, skillMaxRisk);
         }
 
         if (sandboxRoutingPolicy != null) {
@@ -193,6 +213,58 @@ public class ExecutorThinkNode extends ThinkNode {
                         toolDefinition.name(),
                         "parameterCount",
                         parameters.size()));
+    }
+
+    private NodeResult skillRiskViolation(GraphState state, Task task, RiskLevel skillMaxRisk) {
+        Map<String, Object> violation = Map.of(
+                "reason", FAILURE_REASON_SKILL_MAX_RISK_EXCEEDED,
+                "taskRisk", task.riskLevel().name(),
+                "maxRisk", skillMaxRisk.name(),
+                "taskType", task.taskType().name());
+        state.getContext().put("skillRiskViolation", violation);
+        if (metricsService != null) {
+            metricsService.recordSkillGovernance("max_risk_violation", "rejected");
+        }
+        state.addObservation("Executor: blocked task risk " + task.riskLevel()
+                + " because the activated skill maxRisk is " + skillMaxRisk);
+        return new NodeResult(
+                getName(),
+                NodeStatus.FAILURE,
+                "Activated skill maxRisk " + skillMaxRisk + " is below task risk " + task.riskLevel(),
+                violation);
+    }
+
+    private NodeResult emptySkillToolWhitelist(GraphState state) {
+        Map<String, Object> violation =
+                Map.of("reason", FAILURE_REASON_SKILL_TOOL_WHITELIST_EMPTY, "allowedTools", List.of());
+        state.getContext().put("skillToolWhitelistViolation", violation);
+        if (metricsService != null) {
+            metricsService.recordSkillGovernance("whitelist_empty", "rejected");
+        }
+        state.addObservation("Executor: blocked task because the activated skill tool whitelist is empty");
+        return new NodeResult(getName(), NodeStatus.FAILURE, "Activated skill has an empty tool whitelist", violation);
+    }
+
+    private NodeResult missingSkillMaxRisk(GraphState state) {
+        Map<String, Object> violation = Map.of("reason", FAILURE_REASON_SKILL_MAX_RISK_MISSING);
+        state.getContext().put("skillRiskViolation", violation);
+        if (metricsService != null) {
+            metricsService.recordSkillGovernance("max_risk_missing", "rejected");
+        }
+        state.addObservation("Executor: blocked task because the activated skill maxRisk is missing");
+        return new NodeResult(
+                getName(), NodeStatus.FAILURE, "Activated skill maxRisk is missing or invalid", violation);
+    }
+
+    private NodeResult missingTaskRisk(GraphState state) {
+        Map<String, Object> violation = Map.of("reason", FAILURE_REASON_TASK_RISK_MISSING);
+        state.getContext().put("skillRiskViolation", violation);
+        if (metricsService != null) {
+            metricsService.recordSkillGovernance("task_risk_missing", "rejected");
+        }
+        state.addObservation("Executor: blocked task because its risk level is missing");
+        return new NodeResult(
+                getName(), NodeStatus.FAILURE, "Task risk is required when an activated skill is enforced", violation);
     }
 
     private NodeResult skillToolViolation(

@@ -166,6 +166,125 @@ class ExecutorExecuteNodeTest {
         assertEquals("exec-1:task-1:kubernetes.scaleWorkload", executor.parameters.get("operationId"));
     }
 
+    @Test
+    void shouldRecheckSkillWhitelistAtTheToolDispatchBoundary() {
+        CapturingExecutor executor = new CapturingExecutor();
+        ExecutorExecuteNode node = new ExecutorExecuteNode(List.of(executor));
+        GraphState state = preparedReadOnlyState();
+        state.getContext().put("activatedSkillIds", List.of("node-runtime-pressure-triage"));
+        state.getContext().put("activatedSkillToolWhitelist", List.of("kubernetes.describeResource"));
+        state.getContext().put("activatedSkillMaxRisk", "LOW");
+
+        NodeResult result = node.execute(state);
+
+        assertEquals(NodeStatus.FAILURE, result.status());
+        assertEquals("SKILL_TOOL_NOT_ALLOWED", result.payload().get("reason"));
+        assertTrue(executor.parameters.isEmpty());
+    }
+
+    @Test
+    void shouldRecheckSkillMaxRiskAtTheToolDispatchBoundary() {
+        CapturingExecutor executor = new CapturingExecutor();
+        ExecutorExecuteNode node = new ExecutorExecuteNode(List.of(executor));
+        GraphState state = preparedReadOnlyState();
+        state.setCurrentTask(new com.kubeoncall.domain.task.Task(
+                "task-risk",
+                "query logs",
+                com.kubeoncall.domain.task.TaskType.QUERY_LOGS,
+                com.kubeoncall.domain.task.RiskLevel.MEDIUM,
+                "worker-1",
+                Map.of("namespace", "default"),
+                null));
+        state.getContext().put("activatedSkillIds", List.of("node-runtime-pressure-triage"));
+        state.getContext().put("activatedSkillToolWhitelist", List.of("kubernetes.queryLogs"));
+        state.getContext().put("activatedSkillMaxRisk", "LOW");
+
+        NodeResult result = node.execute(state);
+
+        assertEquals(NodeStatus.FAILURE, result.status());
+        assertEquals("SKILL_MAX_RISK_EXCEEDED", result.payload().get("reason"));
+        assertTrue(executor.parameters.isEmpty());
+    }
+
+    @Test
+    void shouldRejectMismatchedToolDefinitionAtTheDispatchBoundary() {
+        CapturingExecutor executor = new CapturingExecutor();
+        ExecutorExecuteNode node = new ExecutorExecuteNode(List.of(executor));
+        GraphState state = preparedReadOnlyState();
+        state.getContext()
+                .put(
+                        "executorToolDefinition",
+                        new ToolDefinition(
+                                "kubernetes.describeResource",
+                                "kubernetes",
+                                "describe",
+                                true,
+                                false,
+                                List.of(),
+                                List.of(),
+                                List.of()));
+        state.getContext().put("activatedSkillIds", List.of("node-runtime-pressure-triage"));
+        state.getContext().put("activatedSkillToolWhitelist", List.of("kubernetes.describeResource"));
+        state.getContext().put("activatedSkillMaxRisk", "LOW");
+
+        NodeResult result = node.execute(state);
+
+        assertEquals(NodeStatus.FAILURE, result.status());
+        assertEquals("EXECUTOR_TOOL_DEFINITION_MISMATCH", result.payload().get("reason"));
+        assertTrue(executor.parameters.isEmpty());
+    }
+
+    @Test
+    void shouldRejectMissingTaskRiskAtTheDispatchBoundary() {
+        CapturingExecutor executor = new CapturingExecutor();
+        ExecutorExecuteNode node = new ExecutorExecuteNode(List.of(executor));
+        GraphState state = preparedReadOnlyState();
+        state.setCurrentTask(new com.kubeoncall.domain.task.Task(
+                "task-no-risk",
+                "query logs",
+                com.kubeoncall.domain.task.TaskType.QUERY_LOGS,
+                null,
+                "worker-1",
+                Map.of("namespace", "default"),
+                null));
+        state.getContext().put("activatedSkillIds", List.of("node-runtime-pressure-triage"));
+        state.getContext().put("activatedSkillToolWhitelist", List.of("kubernetes.queryLogs"));
+        state.getContext().put("activatedSkillMaxRisk", "LOW");
+
+        NodeResult result = node.execute(state);
+
+        assertEquals(NodeStatus.FAILURE, result.status());
+        assertEquals("TASK_RISK_MISSING", result.payload().get("reason"));
+        assertTrue(executor.parameters.isEmpty());
+    }
+
+    private static GraphState preparedReadOnlyState() {
+        GraphState state = new GraphState();
+        state.setCurrentTask(new com.kubeoncall.domain.task.Task(
+                "task-read",
+                "query logs",
+                com.kubeoncall.domain.task.TaskType.QUERY_LOGS,
+                com.kubeoncall.domain.task.RiskLevel.LOW,
+                "worker-1",
+                Map.of("namespace", "default"),
+                null));
+        state.getContext()
+                .put(
+                        "executionPlan",
+                        new ExecutionPlan(
+                                "kubernetes",
+                                "queryLogs",
+                                Map.of("namespace", "default"),
+                                List.of(),
+                                List.of(),
+                                Map.of(),
+                                "query logs",
+                                null));
+        state.getContext().put("executorPayload", Map.of("toolName", "kubernetes.queryLogs", "complete", true));
+        state.getContext().put("executorToolDefinition", readOnlyQueryLogs());
+        return state;
+    }
+
     private static ToolDefinition readOnlyQueryLogs() {
         return new ToolDefinition(
                 "kubernetes.queryLogs", "kubernetes", "query logs", true, false, List.of(), List.of(), List.of());

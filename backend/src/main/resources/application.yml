@@ -321,6 +321,7 @@ kubeoncall:
       timeout-millis: 3000
   workflow:
     alarm-dedup-ttl-seconds: 600
+    diagnosis-node-timeout-millis: ${ALARM_WORKFLOW_DIAGNOSIS_NODE_TIMEOUT_MILLIS:45000}
   alarm:
     enabled: true
     policy-location: classpath:alarm-policies-node-mvp.yml
@@ -423,6 +424,7 @@ kubeoncall:
     prompt-max-chars: 4000
     prompt-token-budget: 900
     version-conflict-policy: ${SKILL_VERSION_CONFLICT_POLICY:PREFER_PROJECT}
+    automatic-alert-diagnosis-enabled: ${SKILL_AUTOMATIC_ALERT_DIAGNOSIS_ENABLED:true}
   audit:
     repository: redis
     retention-hours: 168

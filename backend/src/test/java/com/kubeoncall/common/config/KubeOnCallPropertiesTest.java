@@ -56,6 +56,7 @@ class KubeOnCallPropertiesTest {
         assertFalse(properties.getRag().isEmbeddingEnabled());
         assertEquals(168, properties.getAudit().getRetentionHours());
         assertEquals(3000, properties.getWorkflow().getNodeTimeoutMillis());
+        assertEquals(45000, properties.getWorkflow().getDiagnosisNodeTimeoutMillis());
         assertEquals("Asia/Shanghai", properties.getMemory().getTemporalNormalizationZone());
         assertEquals(
                 List.of("http://127.0.0.1:8081", "http://localhost:8081"),

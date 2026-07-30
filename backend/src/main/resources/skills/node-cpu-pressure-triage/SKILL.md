@@ -13,12 +13,17 @@ applicableTasks: [QUERY_LOGS, QUERY_METRICS]
 tags: [kubernetes, node, cpu, load, iowait]
 maxRisk: LOW
 toolWhitelist:
+  - knowledge.searchSop
   - kubernetes.describeResource
   - kubernetes.getPods
   - kubernetes.queryLogs
+  - kubernetes.queryEvents
+  - kubernetes.queryPodLogs
   - kubernetes.queryMetricsContext
+  - prometheus.queryRange
   - prometheus.instantQuery
   - prometheus.rangeQuery
+  - alerts.getActiveAlerts
   - alertmanager.listAlerts
 ---
 # Node CPU Pressure Triage

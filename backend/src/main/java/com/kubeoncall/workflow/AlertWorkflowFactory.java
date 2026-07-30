@@ -97,8 +97,10 @@ public class AlertWorkflowFactory {
     private List<AlertWorkflowDefinition> nodeMvpWorkflow() {
         return List.of(
                 new AlertWorkflowDefinition("stateCompareNode", true, List.of(), stateCompareNode),
-                // The node-monitoring MVP must still record a diagnosis and notify when optional
-                // infrastructure adapters are unavailable during an exporter outage.
+                new AlertWorkflowDefinition("knowledgeRetrieveNode", true, List.of(), knowledgeRetrieveNode),
+                // Diagnosis has no hard evidence dependency so a Prometheus/RAG outage still
+                // produces the deterministic Skill/runbook fallback and reaches notification.
+                new AlertWorkflowDefinition("intelligentDiagnosisNode", true, List.of(), intelligentDiagnosisNode),
                 new AlertWorkflowDefinition("resultPushNode", false, List.of(), resultPushNode),
                 new AlertWorkflowDefinition("notificationNode", true, List.of("resultPushNode"), notificationNode));
     }

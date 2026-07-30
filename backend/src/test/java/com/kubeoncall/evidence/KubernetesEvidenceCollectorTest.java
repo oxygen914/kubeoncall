@@ -3,7 +3,11 @@ package com.kubeoncall.evidence;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.anyMap;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.time.Instant;
@@ -16,6 +20,7 @@ import org.junit.jupiter.api.Test;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.kubeoncall.common.config.KubeOnCallProperties;
 import com.kubeoncall.service.KubeOnCallMetricsService;
+import com.kubeoncall.skill.SkillExecutionPolicy;
 import com.kubeoncall.tool.ToolDefinition;
 import com.kubeoncall.tool.ToolExecutor;
 
@@ -100,6 +105,48 @@ class KubernetesEvidenceCollectorTest {
         assertEquals(
                 EvidenceCollectionStatus.FORBIDDEN,
                 collector.collect(scope).get(0).collectionStatus());
+    }
+
+    @Test
+    void shouldCollectOnlyKubernetesEvidenceAllowedByTheSkill() {
+        KubeOnCallProperties properties = new KubeOnCallProperties();
+        properties.getAiOperations().setEvidenceK8sResourceStateEnabled(true);
+        properties.getAiOperations().setEvidenceK8sEventsEnabled(true);
+        properties.getAiOperations().setEvidencePodLogsEnabled(true);
+        EvidenceScopePolicy scopePolicy = mock(EvidenceScopePolicy.class);
+        when(scopePolicy.rejection(org.mockito.ArgumentMatchers.any())).thenReturn(Optional.empty());
+        ToolExecutor kubernetes = mock(ToolExecutor.class);
+        when(kubernetes.getExecutorKind()).thenReturn("kubernetes");
+        when(kubernetes.execute(eq("describeResource"), anyMap()))
+                .thenReturn(
+                        Map.of("status", "success", "httpStatus", 200, "response", Map.of("summary", "Node Ready")));
+        KubernetesEvidenceCollector collector = new KubernetesEvidenceCollector(
+                List.of(kubernetes),
+                properties,
+                scopePolicy,
+                new EvidenceItemFactory(new ObjectMapper(), properties),
+                mock(KubeOnCallMetricsService.class));
+        EvidenceCollectionScope scope = new EvidenceCollectionScope(
+                "exe_test",
+                "local",
+                "prod",
+                "",
+                new EvidenceResource("Node", "worker-1", "node-uid"),
+                Instant.now().minusSeconds(300),
+                Instant.now());
+
+        List<EvidenceItem> items = collector.collect(
+                scope, SkillExecutionPolicy.ToolAccess.restricted(List.of("kubernetes.describeResource")));
+
+        assertEquals(3, items.size());
+        assertTrue(items.stream().anyMatch(item -> item.type() == EvidenceType.RESOURCE_STATE && item.succeeded()));
+        assertTrue(items.stream()
+                .filter(item -> item.type() != EvidenceType.RESOURCE_STATE)
+                .allMatch(item -> item.collectionStatus() == EvidenceCollectionStatus.FORBIDDEN
+                        && "SKILL_TOOL_NOT_ALLOWED".equals(item.errorType())));
+        verify(kubernetes).execute(eq("describeResource"), anyMap());
+        verify(kubernetes, never()).execute(eq("queryEvents"), anyMap());
+        verify(kubernetes, never()).execute(eq("queryPodLogs"), anyMap());
     }
 
     private static class StubKubernetesExecutor implements ToolExecutor {

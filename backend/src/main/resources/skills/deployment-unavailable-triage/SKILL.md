@@ -13,13 +13,18 @@ applicableTasks: [QUERY_LOGS, QUERY_METRICS]
 tags: [kubernetes, deployment, rollout, availability]
 maxRisk: LOW
 toolWhitelist:
+  - knowledge.searchSop
   - kubernetes.describeResource
   - kubernetes.getPods
   - kubernetes.describeWorkload
   - kubernetes.queryLogs
+  - kubernetes.queryEvents
+  - kubernetes.queryPodLogs
   - kubernetes.queryMetricsContext
+  - prometheus.queryRange
   - prometheus.instantQuery
   - prometheus.rangeQuery
+  - alerts.getActiveAlerts
   - alertmanager.listAlerts
 ---
 # Deployment Unavailable Triage

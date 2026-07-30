@@ -6,6 +6,7 @@ import static org.mockito.ArgumentMatchers.anyMap;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -36,6 +37,16 @@ class PlannerQueryToolNodeTest {
                         "plannerMissingSignals",
                         List.of("target_replica_count_not_specified", "specific_config_key_not_identified"));
         state.getContext().put("activatedSkillIds", List.of("payment-runbook"));
+        state.getContext()
+                .put(
+                        "activatedSkillToolWhitelist",
+                        List.of(
+                                "knowledge.searchSop",
+                                "topology.getServiceTopology",
+                                "cmdb.getServiceMetadata",
+                                "kubernetes.describeResource",
+                                "prometheus.queryRange",
+                                "alerts.getActiveAlerts"));
 
         NodeResult result = node.execute(state);
 
@@ -110,6 +121,33 @@ class PlannerQueryToolNodeTest {
                                 parameters -> "kubeoncall-system".equals(parameters.get("namespace"))
                                         && "Pod".equals(parameters.get("resourceKind"))
                                         && "kubernetes-tool-adapter-abc".equals(parameters.get("resourceName"))));
+    }
+
+    @Test
+    void shouldExposeAndInvokeOnlyToolsAllowedByTheActivatedSkill() {
+        McpClient mcpClient = mock(McpClient.class);
+        when(mcpClient.call(eq("kubernetes.describeResource"), anyMap()))
+                .thenReturn(Map.of("status", "success", "response", Map.of("phase", "Ready")));
+        PlannerQueryToolNode node = node(mcpClient);
+        GraphState state = new GraphState();
+        state.setUserRequest("inspect Kubernetes Node worker-1");
+        state.getContext().put("activatedSkillIds", List.of("node-runtime-pressure-triage"));
+        state.getContext().put("activatedSkillToolWhitelist", List.of("kubernetes.describeResource"));
+
+        NodeResult result = node.execute(state);
+
+        assertEquals(1, ((List<?>) state.getContext().get("plannerAvailableTools")).size());
+        assertEquals(
+                "kubernetes.describeResource",
+                ((Map<?, ?>) ((List<?>) state.getContext().get("plannerAvailableTools")).get(0)).get("name"));
+        assertEquals("FORBIDDEN", ((Map<?, ?>) result.payload().get("sop")).get("collectionStatus"));
+        assertEquals("SUCCEEDED", ((Map<?, ?>) result.payload().get("resourceSnapshot")).get("collectionStatus"));
+        verify(mcpClient).call(eq("kubernetes.describeResource"), anyMap());
+        verify(mcpClient, never()).call(eq("knowledge.searchSop"), anyMap());
+        verify(mcpClient, never()).call(eq("topology.getServiceTopology"), anyMap());
+        verify(mcpClient, never()).call(eq("cmdb.getServiceMetadata"), anyMap());
+        verify(mcpClient, never()).call(eq("alerts.getActiveAlerts"), anyMap());
+        verify(mcpClient, never()).call(eq("prometheus.queryRange"), anyMap());
     }
 
     private static PlannerQueryToolNode node(McpClient mcpClient) {

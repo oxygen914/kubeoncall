@@ -10,6 +10,7 @@ import org.springframework.stereotype.Component;
 
 import com.kubeoncall.common.k8s.KubernetesRequestTargetParser;
 import com.kubeoncall.observability.SensitiveDataRedactor;
+import com.kubeoncall.skill.SkillExecutionPolicy;
 import com.kubeoncall.tool.mcp.McpClient;
 
 /**
@@ -46,28 +47,37 @@ public class PlannerToolEvidenceCollector {
     }
 
     public Evidence collect(String request, List<String> missingSignals) {
+        return collect(request, missingSignals, SkillExecutionPolicy.ToolAccess.unrestricted());
+    }
+
+    public Evidence collect(String request, List<String> missingSignals, SkillExecutionPolicy.ToolAccess toolAccess) {
+        SkillExecutionPolicy.ToolAccess access =
+                toolAccess == null ? SkillExecutionPolicy.ToolAccess.unrestricted() : toolAccess;
         KubernetesRequestTargetParser.Target kubernetesTarget = KubernetesRequestTargetParser.parse(request);
         String target = kubernetesTarget.hasResource() ? kubernetesTarget.resourceName() : inferTarget(request);
         String namespace =
                 kubernetesTarget.namespace().isBlank() ? inferNamespace(request) : kubernetesTarget.namespace();
         Map<String, Object> evidence = new LinkedHashMap<>();
-        evidence.put("sop", queryWithFallback("knowledge.searchSop", Map.of("query", request)));
-        evidence.put("topology", queryWithFallback("topology.getServiceTopology", Map.of("serviceName", target)));
-        evidence.put("serviceMetadata", queryWithFallback("cmdb.getServiceMetadata", Map.of("serviceName", target)));
+        evidence.put("sop", queryWithFallback("knowledge.searchSop", Map.of("query", request), access));
+        evidence.put(
+                "topology", queryWithFallback("topology.getServiceTopology", Map.of("serviceName", target), access));
+        evidence.put(
+                "serviceMetadata", queryWithFallback("cmdb.getServiceMetadata", Map.of("serviceName", target), access));
         Map<String, Object> resourceRequest = new LinkedHashMap<>();
         resourceRequest.put("resourceName", target);
         resourceRequest.put("namespace", namespace);
         if (!kubernetesTarget.resourceKind().isBlank()) {
             resourceRequest.put("resourceKind", kubernetesTarget.resourceKind());
         }
-        evidence.put("resourceSnapshot", queryWithFallback("kubernetes.describeResource", resourceRequest));
-        evidence.put("activeAlerts", queryWithFallback("alerts.getActiveAlerts", Map.of("serviceName", target)));
+        evidence.put("resourceSnapshot", queryWithFallback("kubernetes.describeResource", resourceRequest, access));
+        evidence.put(
+                "activeAlerts", queryWithFallback("alerts.getActiveAlerts", Map.of("serviceName", target), access));
         String metricQuery = "rate(http_requests_total{service=\"" + target + "\"}[5m])";
         evidence.put(
                 "metricsContext",
-                queryWithFallback("prometheus.queryRange", Map.of("query", metricQuery, "windowMinutes", 10)));
-        addDynamicMcpEvidence(evidence, request, target, namespace, missingSignals);
-        addSupplementalSignals(evidence, request, target, missingSignals);
+                queryWithFallback("prometheus.queryRange", Map.of("query", metricQuery, "windowMinutes", 10), access));
+        addDynamicMcpEvidence(evidence, request, target, namespace, missingSignals, access);
+        addSupplementalSignals(evidence, request, target, missingSignals, access);
         return new Evidence(target, evidence);
     }
 
@@ -76,12 +86,13 @@ public class PlannerToolEvidenceCollector {
             String request,
             String target,
             String namespace,
-            List<String> missingSignals) {
+            List<String> missingSignals,
+            SkillExecutionPolicy.ToolAccess toolAccess) {
         if (dynamicMcpEvidenceCollector == null) {
             return;
         }
         DynamicMcpEvidenceCollector.Result result =
-                dynamicMcpEvidenceCollector.collect(request, target, namespace, missingSignals);
+                dynamicMcpEvidenceCollector.collect(request, target, namespace, missingSignals, toolAccess);
         if (!result.attempted()) {
             return;
         }
@@ -95,14 +106,18 @@ public class PlannerToolEvidenceCollector {
     }
 
     private void addSupplementalSignals(
-            Map<String, Object> evidence, String request, String target, List<String> missingSignals) {
+            Map<String, Object> evidence,
+            String request,
+            String target,
+            List<String> missingSignals,
+            SkillExecutionPolicy.ToolAccess toolAccess) {
         if (missingSignals.isEmpty()) {
             return;
         }
         Map<String, Object> supplementalSignals = new LinkedHashMap<>();
         if (missingSignals.contains("target_replica_count_not_specified")) {
             Map<String, Object> scaleHint = queryWithFallback(
-                    "topology.getServiceTopology", Map.of("serviceName", target, "mode", "capacity_hint"));
+                    "topology.getServiceTopology", Map.of("serviceName", target, "mode", "capacity_hint"), toolAccess);
             Object replicas = scaleHint.get("recommendedReplicas");
             if (replicas instanceof Number number) {
                 supplementalSignals.put("recommendedReplicas", number.intValue());
@@ -112,8 +127,8 @@ public class PlannerToolEvidenceCollector {
             }
         }
         if (missingSignals.contains("specific_config_key_not_identified")) {
-            Map<String, Object> configHint =
-                    queryWithFallback("knowledge.searchSop", Map.of("query", request + " config key recommendation"));
+            Map<String, Object> configHint = queryWithFallback(
+                    "knowledge.searchSop", Map.of("query", request + " config key recommendation"), toolAccess);
             Object configKey = configHint.get("recommendedConfigKey");
             if (configKey != null && !String.valueOf(configKey).isBlank()) {
                 supplementalSignals.put("recommendedConfigKey", String.valueOf(configKey));
@@ -127,7 +142,11 @@ public class PlannerToolEvidenceCollector {
         }
     }
 
-    private Map<String, Object> queryWithFallback(String toolName, Map<String, Object> requestPayload) {
+    private Map<String, Object> queryWithFallback(
+            String toolName, Map<String, Object> requestPayload, SkillExecutionPolicy.ToolAccess toolAccess) {
+        if (!toolAccess.allows(toolName)) {
+            return forbidden(toolName);
+        }
         Map<String, Object> response;
         try {
             response = mcpClient.call(toolName, requestPayload);
@@ -185,6 +204,15 @@ public class PlannerToolEvidenceCollector {
         unavailable.put("simulation", false);
         unavailable.put("errorType", errorType == null || errorType.isBlank() ? "DEPENDENCY_UNAVAILABLE" : errorType);
         return unavailable;
+    }
+
+    private Map<String, Object> forbidden(String toolName) {
+        LinkedHashMap<String, Object> forbidden = new LinkedHashMap<>();
+        forbidden.put("tool", toolName);
+        forbidden.put("collectionStatus", "FORBIDDEN");
+        forbidden.put("simulation", false);
+        forbidden.put("errorType", "SKILL_TOOL_NOT_ALLOWED");
+        return forbidden;
     }
 
     private String inferTarget(String request) {

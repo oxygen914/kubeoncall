@@ -56,13 +56,15 @@ class SkillCatalogConsistencyTest {
             "NodeConntrackPressure",
             "NodeFilesystemReadOnly",
             "NodeNotReady",
+            "NodeClockOffsetHigh",
+            "NodeFileDescriptorPressure",
             "PodPendingTooLong");
 
     @Test
     void catalogShouldHaveStableDirectoriesSelectorsAndPromptBudgets() throws IOException {
         List<Skill> skills = loadSkills();
 
-        assertEquals(12, skills.size());
+        assertEquals(13, skills.size());
         assertTrue(skills.stream().noneMatch(skill -> "payment-oom-triage".equals(skill.id())));
         assertTrue(skills.stream()
                 .map(Skill::id)
@@ -107,6 +109,15 @@ class SkillCatalogConsistencyTest {
                     .toList();
             assertEquals(1, owners.size(), alertName + " must have one primary Skill");
         });
+        activePolicies.stream()
+                .filter(policy -> "node-mvp".equals(policy.actions().workflowTemplate()))
+                .forEach(policy -> {
+                    List<String> owners = skills.stream()
+                            .filter(skill -> skill.alertNames().contains(policy.name()))
+                            .map(Skill::id)
+                            .toList();
+                    assertEquals(1, owners.size(), policy.name() + " in node-mvp must have one domain Skill");
+                });
     }
 
     @Test

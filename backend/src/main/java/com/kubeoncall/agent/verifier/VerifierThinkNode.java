@@ -2,9 +2,11 @@ package com.kubeoncall.agent.verifier;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 
 import org.springframework.stereotype.Component;
 
@@ -17,6 +19,9 @@ import com.kubeoncall.domain.graph.NodeStatus;
 import com.kubeoncall.domain.task.RiskLevel;
 import com.kubeoncall.domain.task.Task;
 import com.kubeoncall.domain.task.TaskType;
+import com.kubeoncall.evidence.AiConclusion;
+import com.kubeoncall.evidence.EvidenceItem;
+import com.kubeoncall.skill.SkillExecutionPolicy;
 import com.kubeoncall.tool.AgentToolCatalog;
 import com.kubeoncall.tool.ToolDefinition;
 
@@ -74,13 +79,90 @@ public class VerifierThinkNode extends ThinkNode {
         return new NodeResult(getName(), NodeStatus.SUCCESS, "Task passed verification", evaluation.details());
     }
 
+    /**
+     * Verifies that a structured diagnosis is grounded in successful server-side evidence.
+     *
+     * <p>A model conclusion without matching evidence identifiers, or one already marked
+     * unsupported/conflicted, cannot become a verified automatic diagnosis.
+     */
+    public EvidenceVerification verifyEvidence(GraphState state) {
+        if (state == null) {
+            return EvidenceVerification.insufficient("GRAPH_STATE_MISSING");
+        }
+        List<EvidenceItem> succeeded = typed(state.getContext().get("evidenceItems"), EvidenceItem.class).stream()
+                .filter(EvidenceItem::succeeded)
+                .toList();
+        Set<String> evidenceIds = succeeded.stream()
+                .map(EvidenceItem::evidenceId)
+                .filter(id -> id != null && !id.isBlank())
+                .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
+        List<?> conflicts = state.getContext().get("evidenceConflicts") instanceof List<?> values ? values : List.of();
+        if (!conflicts.isEmpty()) {
+            return new EvidenceVerification(
+                    "CONFLICTED",
+                    "EVIDENCE_CONFLICTS_PRESENT",
+                    List.copyOf(evidenceIds),
+                    List.of(),
+                    List.of(),
+                    conflicts.size());
+        }
+        if (evidenceIds.isEmpty()) {
+            return EvidenceVerification.insufficient("NO_SUCCEEDED_EVIDENCE");
+        }
+        List<AiConclusion> conclusions = typed(state.getContext().get("conclusions"), AiConclusion.class);
+        if (conclusions.isEmpty()) {
+            return new EvidenceVerification(
+                    "PARTIAL", "STRUCTURED_CONCLUSION_MISSING", List.copyOf(evidenceIds), List.of(), List.of(), 0);
+        }
+
+        AiConclusion conclusion = conclusions.get(0);
+        List<String> conclusionRefs = conclusion.evidenceRefs().stream()
+                .filter(ref -> ref != null && !ref.isBlank())
+                .distinct()
+                .toList();
+        List<String> matchedRefs =
+                conclusionRefs.stream().filter(evidenceIds::contains).toList();
+        List<String> missingRefs = conclusionRefs.stream()
+                .filter(ref -> !evidenceIds.contains(ref))
+                .toList();
+        if ("CONFLICTED".equalsIgnoreCase(conclusion.status())) {
+            return new EvidenceVerification(
+                    "CONFLICTED", "CONCLUSION_CONFLICTED", List.copyOf(evidenceIds), matchedRefs, missingRefs, 0);
+        }
+        if (conclusionRefs.isEmpty() || matchedRefs.isEmpty()) {
+            return new EvidenceVerification(
+                    "PARTIAL",
+                    "CONCLUSION_HAS_NO_REAL_EVIDENCE_REFERENCE",
+                    List.copyOf(evidenceIds),
+                    matchedRefs,
+                    missingRefs,
+                    0);
+        }
+        if (!missingRefs.isEmpty()) {
+            return new EvidenceVerification(
+                    "PARTIAL",
+                    "CONCLUSION_EVIDENCE_REFERENCE_MISSING",
+                    List.copyOf(evidenceIds),
+                    matchedRefs,
+                    missingRefs,
+                    0);
+        }
+        if (!"SUPPORTED".equalsIgnoreCase(conclusion.status())) {
+            return new EvidenceVerification(
+                    "PARTIAL", "CONCLUSION_NOT_FULLY_SUPPORTED", List.copyOf(evidenceIds), matchedRefs, List.of(), 0);
+        }
+        return new EvidenceVerification(
+                "VERIFIED", "CONCLUSION_EVIDENCE_MATCHED", List.copyOf(evidenceIds), matchedRefs, List.of(), 0);
+    }
+
     private Evaluation evaluate(Task task, ExecutionPlan executionPlan, Map<String, Object> context) {
         List<String> reasons = new ArrayList<>();
         String description =
                 task.description() == null ? "" : task.description().toLowerCase(Locale.ROOT);
         String target = task.target() == null ? "" : task.target().toLowerCase(Locale.ROOT);
         ToolDefinition toolDefinition = resolveToolDefinition(task, executionPlan);
-        RiskLevel activatedSkillMaxRisk = readActivatedSkillMaxRisk(context);
+        RiskLevel activatedSkillMaxRisk = SkillExecutionPolicy.maxRisk(context);
+        SkillExecutionPolicy.ToolAccess toolAccess = SkillExecutionPolicy.toolAccess(context);
 
         if (context != null && context.containsKey("sandboxEvidence")) {
             if (!hasCurrentProductionRecheck(context)) {
@@ -93,6 +175,19 @@ public class VerifierThinkNode extends ThinkNode {
         if (toolDefinition == null) {
             reasons.add("No executor tool is registered for the planned task action");
             return new Evaluation("REJECT", reasons, detailMap(task, executionPlan, null, reasons, context));
+        }
+
+        if (toolAccess.restricted() && activatedSkillMaxRisk == null) {
+            reasons.add("Activated skill maxRisk is missing or invalid");
+            return new Evaluation("REJECT", reasons, detailMap(task, executionPlan, toolDefinition, reasons, context));
+        }
+        if (task.riskLevel() == null) {
+            reasons.add("Task risk is missing");
+            return new Evaluation("REJECT", reasons, detailMap(task, executionPlan, toolDefinition, reasons, context));
+        }
+        if (SkillExecutionPolicy.exceedsMaxRisk(task.riskLevel(), activatedSkillMaxRisk)) {
+            reasons.add("Activated skill maxRisk " + activatedSkillMaxRisk + " is below task risk " + task.riskLevel());
+            return new Evaluation("REJECT", reasons, detailMap(task, executionPlan, toolDefinition, reasons, context));
         }
 
         if (!toolDefinition.supportedTaskTypes().contains(task.taskType())) {
@@ -134,9 +229,6 @@ public class VerifierThinkNode extends ThinkNode {
             return new Evaluation("REJECT", reasons, detailMap(task, executionPlan, toolDefinition, reasons, context));
         }
 
-        if (activatedSkillMaxRisk != null && task.riskLevel().ordinal() > activatedSkillMaxRisk.ordinal()) {
-            reasons.add("Activated skill maxRisk " + activatedSkillMaxRisk + " is below task risk " + task.riskLevel());
-        }
         if (task.riskLevel().ordinal() >= RiskLevel.HIGH.ordinal()) {
             reasons.add("Risk level requires human approval");
         }
@@ -211,24 +303,6 @@ public class VerifierThinkNode extends ThinkNode {
         return details;
     }
 
-    private RiskLevel readActivatedSkillMaxRisk(Map<String, Object> context) {
-        if (context == null) {
-            return null;
-        }
-        Object value = context.get("activatedSkillMaxRisk");
-        if (value instanceof RiskLevel riskLevel) {
-            return riskLevel;
-        }
-        if (value == null || String.valueOf(value).isBlank()) {
-            return null;
-        }
-        try {
-            return RiskLevel.valueOf(String.valueOf(value).trim().toUpperCase(Locale.ROOT));
-        } catch (IllegalArgumentException ignored) {
-            return null;
-        }
-    }
-
     private static boolean hasCurrentProductionRecheck(Map<String, Object> context) {
         Object raw = context.get("productionRecheck");
         if (!(raw instanceof Map<?, ?> recheck)) {
@@ -241,6 +315,13 @@ public class VerifierThinkNode extends ThinkNode {
         return taskType != null && !taskType.name().startsWith("QUERY");
     }
 
+    private static <T> List<T> typed(Object value, Class<T> type) {
+        if (!(value instanceof List<?> values)) {
+            return List.of();
+        }
+        return values.stream().filter(type::isInstance).map(type::cast).toList();
+    }
+
     private void putIfPresent(Map<String, Object> details, Map<String, Object> context, String key) {
         Object value = context.get(key);
         if (value != null) {
@@ -249,4 +330,27 @@ public class VerifierThinkNode extends ThinkNode {
     }
 
     private record Evaluation(String decision, List<String> reasons, Map<String, Object> details) {}
+
+    public record EvidenceVerification(
+            String status,
+            String reason,
+            List<String> availableEvidenceRefs,
+            List<String> matchedEvidenceRefs,
+            List<String> missingEvidenceRefs,
+            int conflictCount) {
+
+        public EvidenceVerification {
+            availableEvidenceRefs = availableEvidenceRefs == null ? List.of() : List.copyOf(availableEvidenceRefs);
+            matchedEvidenceRefs = matchedEvidenceRefs == null ? List.of() : List.copyOf(matchedEvidenceRefs);
+            missingEvidenceRefs = missingEvidenceRefs == null ? List.of() : List.copyOf(missingEvidenceRefs);
+        }
+
+        public boolean verified() {
+            return "VERIFIED".equals(status);
+        }
+
+        private static EvidenceVerification insufficient(String reason) {
+            return new EvidenceVerification("INSUFFICIENT", reason, List.of(), List.of(), List.of(), 0);
+        }
+    }
 }

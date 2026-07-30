@@ -113,4 +113,54 @@ class PlannerThinkNodeTest {
         assertThat(state.getCurrentTask().riskLevel()).isEqualTo(RiskLevel.LOW);
         assertThat(state.getContext().get("plannerSource")).isEqualTo("llm+read_only_guard");
     }
+
+    @Test
+    void automaticAlertDiagnosisCannotExpandItsSkillBoundaryFromModelOutput() {
+        PlannerLlmService llmService = mock(PlannerLlmService.class);
+        ConclusionFactory conclusionFactory = mock(ConclusionFactory.class);
+        PlannerLlmDecision decision = new PlannerLlmDecision(
+                "QUERY_LOGS",
+                "HIGH",
+                "worker-1",
+                "llm",
+                TaskType.QUERY_LOGS,
+                RiskLevel.LOW,
+                Map.of("namespace", "default", "keyword", "error", "lookbackMinutes", 10),
+                List.of(),
+                List.of("unexpected-skill"),
+                "Inspect node logs");
+        when(llmService.planWithStatus(any(), any()))
+                .thenReturn(PlannerLlmResult.success(
+                        decision, PlannerMode.REAL_MODEL, "openai-compatible", "test-model", 10, Map.of()));
+        when(conclusionFactory.create(any(), any(), any()))
+                .thenReturn(new AiConclusion(
+                        "con-alert",
+                        "exe-alert",
+                        "read-only diagnosis",
+                        "P3",
+                        "PARTIALLY_SUPPORTED",
+                        List.of(),
+                        List.of(),
+                        new ConfidenceAssessment(0.2, "LOW", Map.of()),
+                        Map.of("mode", "REAL_MODEL"),
+                        null));
+        PlannerThinkNode node = new PlannerThinkNode(
+                llmService,
+                new PlannerContextAssembler(),
+                new PlannerRuleEngine(new PlannerParameterResolver(), new PlannerTaskFactory()),
+                conclusionFactory,
+                new EvidenceClaimGrounder());
+        GraphState state = new GraphState();
+        state.setExecutionId("exe-alert");
+        state.setUserRequest("Read-only diagnose node worker-1 logs");
+        state.getContext().put("automaticAlertDiagnosis", true);
+        state.getContext().put("activatedSkillIds", List.of("node-runtime-pressure-triage"));
+
+        NodeResult result = node.execute(state);
+
+        assertThat(result.status()).isEqualTo(NodeStatus.SUCCESS);
+        assertThat(state.getContext().get("activatedSkillIds")).isEqualTo(List.of("node-runtime-pressure-triage"));
+        assertThat(state.getContext().get("plannerIgnoredRequestedSkills")).isEqualTo(List.of("unexpected-skill"));
+        verify(llmService, never()).activateRequestedSkills(any(), any(), any());
+    }
 }

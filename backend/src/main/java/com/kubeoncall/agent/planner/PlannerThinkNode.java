@@ -76,11 +76,21 @@ public class PlannerThinkNode extends ThinkNode {
         PlannerLlmResult llmResult = plannerLlmService.planWithStatus(normalized, plannerKnowledge);
         PlannerLlmDecision llmDecision = llmResult.decision();
         if (llmDecision != null) {
-            SkillActivation requestedActivation = plannerLlmService.activateRequestedSkills(
-                    normalized, state.getContext(), llmDecision.requestedSkills());
-            if (requestedActivation.active()) {
-                contextAssembler.applySkillActivation(state, requestedActivation);
-                plannerKnowledge = contextAssembler.plannerKnowledge(state);
+            List<String> requestedSkills =
+                    llmDecision.requestedSkills() == null ? List.of() : llmDecision.requestedSkills();
+            if (Boolean.TRUE.equals(state.getContext().get("automaticAlertDiagnosis"))) {
+                if (!requestedSkills.isEmpty()) {
+                    state.getContext().put("plannerIgnoredRequestedSkills", requestedSkills);
+                    state.addObservation(
+                            "Planner ignored model-requested skills because the automatic alert skill boundary is locked");
+                }
+            } else {
+                SkillActivation requestedActivation =
+                        plannerLlmService.activateRequestedSkills(normalized, state.getContext(), requestedSkills);
+                if (requestedActivation.active()) {
+                    contextAssembler.applySkillActivation(state, requestedActivation);
+                    plannerKnowledge = contextAssembler.plannerKnowledge(state);
+                }
             }
             intent = ruleEngine.defaultString(llmDecision.intent(), intent);
             confidence = ruleEngine.defaultString(llmDecision.confidence(), confidence);

@@ -13,12 +13,17 @@ applicableTasks: [QUERY_LOGS, QUERY_METRICS]
 tags: [kubernetes, node, disk, filesystem, inode]
 maxRisk: LOW
 toolWhitelist:
+  - knowledge.searchSop
   - kubernetes.describeResource
   - kubernetes.getPods
   - kubernetes.queryLogs
+  - kubernetes.queryEvents
+  - kubernetes.queryPodLogs
   - kubernetes.queryMetricsContext
+  - prometheus.queryRange
   - prometheus.instantQuery
   - prometheus.rangeQuery
+  - alerts.getActiveAlerts
   - alertmanager.listAlerts
 ---
 # Disk Capacity Triage

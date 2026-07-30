@@ -8,6 +8,7 @@ import org.springframework.stereotype.Component;
 
 import com.kubeoncall.domain.graph.GraphState;
 import com.kubeoncall.skill.SkillActivation;
+import com.kubeoncall.skill.SkillExecutionPolicy;
 
 @Component
 public class PlannerContextAssembler {
@@ -95,6 +96,10 @@ public class PlannerContextAssembler {
                     .toList();
         }
         return List.of();
+    }
+
+    public SkillExecutionPolicy.ToolAccess toolAccess(GraphState state) {
+        return SkillExecutionPolicy.toolAccess(state == null ? null : state.getContext());
     }
 
     public void attachSkillKnowledge(Map<String, Object> knowledge, GraphState state) {

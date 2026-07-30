@@ -33,6 +33,7 @@ import com.kubeoncall.skill.Skill;
 import com.kubeoncall.skill.SkillActivation;
 import com.kubeoncall.skill.SkillActivationService;
 import com.kubeoncall.skill.SkillSource;
+import com.kubeoncall.workflow.diagnosis.AlertSkillDiagnosisService;
 import com.kubeoncall.workflow.node.IntelligentDiagnosisNode;
 
 class IntelligentDiagnosisNodeTest {
@@ -105,6 +106,7 @@ class IntelligentDiagnosisNodeTest {
     @Test
     void shouldActivateSkillForAlarmDiagnosis() {
         SkillActivationService activationService = mock(SkillActivationService.class);
+        AlertSkillDiagnosisService diagnosisService = mock(AlertSkillDiagnosisService.class);
         Skill skill = new Skill(
                 "pod-oom-triage",
                 "Pod OOMKilled triage",
@@ -119,16 +121,28 @@ class IntelligentDiagnosisNodeTest {
                 List.of("kubernetes.describeResource"),
                 "verify OOM evidence",
                 Map.of());
-        when(activationService.activate(any(String.class), any(Map.class)))
-                .thenReturn(new SkillActivation(
-                        List.of(skill),
-                        List.of(Map.of("id", "pod-oom-triage", "matchSource", "ALERT_NAME")),
-                        List.of("pod-oom-triage"),
+        SkillActivation activation = new SkillActivation(
+                List.of(skill),
+                List.of(Map.of("id", "pod-oom-triage", "matchSource", "ALERT_NAME")),
+                List.of("pod-oom-triage"),
+                List.of("kubernetes.describeResource"),
+                com.kubeoncall.domain.task.RiskLevel.LOW,
+                "verify OOM evidence");
+        when(activationService.activate(any(String.class), any(Map.class))).thenReturn(activation);
+        when(diagnosisService.diagnose(any(AlertWorkflowContext.class), any(SkillActivation.class)))
+                .thenReturn(new AlertSkillDiagnosisService.Outcome(
+                        true,
+                        "SKILL_AGENT_VERIFIED",
+                        true,
+                        Map.of("taskType", "QUERY_METRICS"),
+                        Map.of("status", "VERIFIED"),
+                        Map.of("used", false),
                         List.of("kubernetes.describeResource"),
-                        com.kubeoncall.domain.task.RiskLevel.LOW,
-                        "verify OOM evidence"));
-        IntelligentDiagnosisNode node =
-                new IntelligentDiagnosisNode(new KubeOnCallProperties(), new TokenBudget(), activationService);
+                        List.of(),
+                        List.of(),
+                        "agd_1"));
+        IntelligentDiagnosisNode node = new IntelligentDiagnosisNode(
+                new KubeOnCallProperties(), new TokenBudget(), activationService, diagnosisService);
         AlertWorkflowContext context = context();
 
         NodeResult result = node.execute(context);
@@ -136,6 +150,11 @@ class IntelligentDiagnosisNodeTest {
         assertEquals(List.of("pod-oom-triage"), result.payload().get("activatedSkillIds"));
         assertEquals(List.of("pod-oom-triage"), context.getAttribute("activatedSkillIds"));
         assertEquals(List.of("ALERT_NAME"), context.getAttribute("activatedSkillMatchSources"));
+        assertEquals("SKILL_AGENT_VERIFIED", result.payload().get("strategy"));
+        assertEquals(Map.of("status", "VERIFIED"), result.payload().get("skillDiagnosisVerification"));
+        assertEquals(List.of("kubernetes.describeResource"), context.getAttribute("skillDiagnosisInvokedTools"));
+        assertEquals("agd_1", context.getAttribute("skillDiagnosisAgentExecutionId"));
+        verify(diagnosisService).diagnose(context, activation);
         @SuppressWarnings("unchecked")
         ArgumentCaptor<Map<String, Object>> skillContext = ArgumentCaptor.forClass(Map.class);
         verify(activationService).activate(any(String.class), skillContext.capture());

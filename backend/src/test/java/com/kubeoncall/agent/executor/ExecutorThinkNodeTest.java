@@ -172,4 +172,88 @@ class ExecutorThinkNodeTest {
         assertEquals("kubernetes.scaleWorkload", result.payload().get("toolName"));
         verify(catalog, never()).findExecutorTool("kubernetes", "scaleWorkload");
     }
+
+    @Test
+    void shouldRejectTaskAboveActivatedSkillRiskBeforeToolResolution() {
+        AgentToolCatalog catalog = mock(AgentToolCatalog.class);
+        KubeOnCallMetricsService metricsService = mock(KubeOnCallMetricsService.class);
+        ExecutorThinkNode node = new ExecutorThinkNode(catalog, new ExecutorPlanFactory(), metricsService);
+        GraphState state = new GraphState();
+        state.getContext().put("activatedSkillIds", List.of("node-runtime-pressure-triage"));
+        state.getContext().put("activatedSkillToolWhitelist", List.of("kubernetes.queryLogs"));
+        state.getContext().put("activatedSkillMaxRisk", "LOW");
+        state.setCurrentTask(new Task(
+                "task-5",
+                "query node logs",
+                TaskType.QUERY_LOGS,
+                RiskLevel.MEDIUM,
+                "worker-1",
+                Map.of("namespace", "default"),
+                null));
+
+        NodeResult result = node.execute(state);
+
+        assertEquals(NodeStatus.FAILURE, result.status());
+        assertEquals("SKILL_MAX_RISK_EXCEEDED", result.payload().get("reason"));
+        assertFalse(state.getContext().containsKey("executorPayload"));
+        verify(catalog, never()).findExecutorTool("kubernetes", "queryLogs", List.of("kubernetes.queryLogs"));
+        verify(metricsService).recordSkillGovernance("max_risk_violation", "rejected");
+    }
+
+    @Test
+    void shouldFailClosedWhenActivatedSkillWhitelistIsEmpty() {
+        AgentToolCatalog catalog = mock(AgentToolCatalog.class);
+        KubeOnCallMetricsService metricsService = mock(KubeOnCallMetricsService.class);
+        ExecutorThinkNode node = new ExecutorThinkNode(catalog, new ExecutorPlanFactory(), metricsService);
+        GraphState state = new GraphState();
+        state.getContext().put("activatedSkillIds", List.of("broken-skill"));
+        state.getContext().put("activatedSkillToolWhitelist", List.of());
+        state.getContext().put("activatedSkillMaxRisk", "LOW");
+        state.setCurrentTask(new Task(
+                "task-6", "query node metrics", TaskType.QUERY_METRICS, RiskLevel.LOW, "worker-1", Map.of(), null));
+
+        NodeResult result = node.execute(state);
+
+        assertEquals(NodeStatus.FAILURE, result.status());
+        assertEquals("SKILL_TOOL_WHITELIST_EMPTY", result.payload().get("reason"));
+        assertFalse(state.getContext().containsKey("executorPayload"));
+        verify(metricsService).recordSkillGovernance("whitelist_empty", "rejected");
+    }
+
+    @Test
+    void shouldFailClosedWhenActivatedSkillMaxRiskIsMissing() {
+        AgentToolCatalog catalog = mock(AgentToolCatalog.class);
+        KubeOnCallMetricsService metricsService = mock(KubeOnCallMetricsService.class);
+        ExecutorThinkNode node = new ExecutorThinkNode(catalog, new ExecutorPlanFactory(), metricsService);
+        GraphState state = new GraphState();
+        state.getContext().put("activatedSkillIds", List.of("broken-skill"));
+        state.getContext().put("activatedSkillToolWhitelist", List.of("kubernetes.queryMetricsContext"));
+        state.setCurrentTask(new Task(
+                "task-7", "query node metrics", TaskType.QUERY_METRICS, RiskLevel.LOW, "worker-1", Map.of(), null));
+
+        NodeResult result = node.execute(state);
+
+        assertEquals(NodeStatus.FAILURE, result.status());
+        assertEquals("SKILL_MAX_RISK_MISSING", result.payload().get("reason"));
+        verify(metricsService).recordSkillGovernance("max_risk_missing", "rejected");
+    }
+
+    @Test
+    void shouldFailClosedWhenActivatedSkillTaskRiskIsMissing() {
+        AgentToolCatalog catalog = mock(AgentToolCatalog.class);
+        KubeOnCallMetricsService metricsService = mock(KubeOnCallMetricsService.class);
+        ExecutorThinkNode node = new ExecutorThinkNode(catalog, new ExecutorPlanFactory(), metricsService);
+        GraphState state = new GraphState();
+        state.getContext().put("activatedSkillIds", List.of("broken-skill"));
+        state.getContext().put("activatedSkillToolWhitelist", List.of("kubernetes.queryMetricsContext"));
+        state.getContext().put("activatedSkillMaxRisk", "LOW");
+        state.setCurrentTask(
+                new Task("task-8", "query node metrics", TaskType.QUERY_METRICS, null, "worker-1", Map.of(), null));
+
+        NodeResult result = node.execute(state);
+
+        assertEquals(NodeStatus.FAILURE, result.status());
+        assertEquals("TASK_RISK_MISSING", result.payload().get("reason"));
+        verify(metricsService).recordSkillGovernance("task_risk_missing", "rejected");
+    }
 }

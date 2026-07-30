@@ -11,12 +11,17 @@ applicableTasks: [QUERY_LOGS, QUERY_METRICS]
 tags: [redis, cache, latency, memory, persistence]
 maxRisk: LOW
 toolWhitelist:
+  - knowledge.searchSop
   - kubernetes.describeResource
   - kubernetes.getPods
   - kubernetes.queryLogs
+  - kubernetes.queryEvents
+  - kubernetes.queryPodLogs
   - kubernetes.queryMetricsContext
+  - prometheus.queryRange
   - prometheus.instantQuery
   - prometheus.rangeQuery
+  - alerts.getActiveAlerts
   - alertmanager.listAlerts
 ---
 # Redis Saturation Triage

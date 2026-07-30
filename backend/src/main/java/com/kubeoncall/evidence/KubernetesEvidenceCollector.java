@@ -9,6 +9,7 @@ import org.springframework.stereotype.Component;
 
 import com.kubeoncall.common.config.KubeOnCallProperties;
 import com.kubeoncall.service.KubeOnCallMetricsService;
+import com.kubeoncall.skill.SkillExecutionPolicy;
 import com.kubeoncall.tool.ToolExecutor;
 
 /** Collects typed Kubernetes Events and current/previous Pod logs through the governed executor. */
@@ -38,45 +39,75 @@ public class KubernetesEvidenceCollector {
     }
 
     public List<EvidenceItem> collect(EvidenceCollectionScope scope) {
+        return collect(scope, SkillExecutionPolicy.ToolAccess.unrestricted());
+    }
+
+    public List<EvidenceItem> collect(EvidenceCollectionScope scope, SkillExecutionPolicy.ToolAccess toolAccess) {
+        SkillExecutionPolicy.ToolAccess access =
+                toolAccess == null ? SkillExecutionPolicy.ToolAccess.unrestricted() : toolAccess;
         List<EvidenceItem> items = new ArrayList<>();
+        boolean resourceAllowed = access.allows("kubernetes.describeResource");
+        boolean eventsAllowed = access.allows("kubernetes.queryEvents");
+        boolean logsAllowed = access.allowsAny("kubernetes.queryPodLogs", "kubernetes.queryLogs");
+        addSkillRejections(items, scope, resourceAllowed, eventsAllowed, logsAllowed);
         var rejection = scopePolicy.rejection(scope);
         if (rejection.isPresent()) {
-            if (properties.getAiOperations().isEvidenceK8sResourceStateEnabled()) {
+            if (properties.getAiOperations().isEvidenceK8sResourceStateEnabled() && resourceAllowed) {
                 items.add(statusItem(
                         scope, EvidenceType.RESOURCE_STATE, EvidenceCollectionStatus.FORBIDDEN, rejection.get()));
             }
-            if (properties.getAiOperations().isEvidenceK8sEventsEnabled()) {
+            if (properties.getAiOperations().isEvidenceK8sEventsEnabled() && eventsAllowed) {
                 items.add(
                         statusItem(scope, EvidenceType.K8S_EVENT, EvidenceCollectionStatus.FORBIDDEN, rejection.get()));
             }
-            if (properties.getAiOperations().isEvidencePodLogsEnabled()) {
+            if (properties.getAiOperations().isEvidencePodLogsEnabled() && logsAllowed) {
                 items.add(statusItem(scope, EvidenceType.POD_LOG, EvidenceCollectionStatus.FORBIDDEN, rejection.get()));
             }
             return List.copyOf(items);
         }
         if (kubernetes == null) {
-            if (properties.getAiOperations().isEvidenceK8sResourceStateEnabled()) {
+            if (properties.getAiOperations().isEvidenceK8sResourceStateEnabled() && resourceAllowed) {
                 items.add(factory.unavailable(scope, EvidenceType.RESOURCE_STATE, "kubernetes-api", "CLIENT_MISSING"));
             }
-            if (properties.getAiOperations().isEvidenceK8sEventsEnabled()) {
+            if (properties.getAiOperations().isEvidenceK8sEventsEnabled() && eventsAllowed) {
                 items.add(factory.unavailable(scope, EvidenceType.K8S_EVENT, "kubernetes-api", "CLIENT_MISSING"));
             }
-            if (properties.getAiOperations().isEvidencePodLogsEnabled()) {
+            if (properties.getAiOperations().isEvidencePodLogsEnabled() && logsAllowed) {
                 items.add(factory.unavailable(scope, EvidenceType.POD_LOG, "kubernetes-api", "CLIENT_MISSING"));
             }
             return List.copyOf(items);
         }
-        if (properties.getAiOperations().isEvidenceK8sResourceStateEnabled()) {
+        if (properties.getAiOperations().isEvidenceK8sResourceStateEnabled() && resourceAllowed) {
             items.addAll(call(scope, EvidenceType.RESOURCE_STATE, "describeResource", baseParameters(scope), false));
         }
-        if (properties.getAiOperations().isEvidenceK8sEventsEnabled()) {
+        if (properties.getAiOperations().isEvidenceK8sEventsEnabled() && eventsAllowed) {
             items.addAll(call(scope, EvidenceType.K8S_EVENT, "queryEvents", baseParameters(scope), false));
         }
-        if (properties.getAiOperations().isEvidencePodLogsEnabled()) {
+        if (properties.getAiOperations().isEvidencePodLogsEnabled() && logsAllowed) {
             items.addAll(call(scope, EvidenceType.POD_LOG, "queryPodLogs", logParameters(scope, false), false));
             items.addAll(call(scope, EvidenceType.POD_LOG, "queryPodLogs", logParameters(scope, true), true));
         }
         return List.copyOf(items);
+    }
+
+    private void addSkillRejections(
+            List<EvidenceItem> items,
+            EvidenceCollectionScope scope,
+            boolean resourceAllowed,
+            boolean eventsAllowed,
+            boolean logsAllowed) {
+        if (properties.getAiOperations().isEvidenceK8sResourceStateEnabled() && !resourceAllowed) {
+            items.add(statusItem(
+                    scope, EvidenceType.RESOURCE_STATE, EvidenceCollectionStatus.FORBIDDEN, "SKILL_TOOL_NOT_ALLOWED"));
+        }
+        if (properties.getAiOperations().isEvidenceK8sEventsEnabled() && !eventsAllowed) {
+            items.add(statusItem(
+                    scope, EvidenceType.K8S_EVENT, EvidenceCollectionStatus.FORBIDDEN, "SKILL_TOOL_NOT_ALLOWED"));
+        }
+        if (properties.getAiOperations().isEvidencePodLogsEnabled() && !logsAllowed) {
+            items.add(statusItem(
+                    scope, EvidenceType.POD_LOG, EvidenceCollectionStatus.FORBIDDEN, "SKILL_TOOL_NOT_ALLOWED"));
+        }
     }
 
     private List<EvidenceItem> call(

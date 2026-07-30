@@ -10,6 +10,7 @@ import com.kubeoncall.agent.node.QueryToolNode;
 import com.kubeoncall.domain.graph.GraphState;
 import com.kubeoncall.domain.graph.NodeResult;
 import com.kubeoncall.evidence.EvidenceOrchestrator;
+import com.kubeoncall.skill.SkillExecutionPolicy;
 
 /** Coordinates planner tool candidates, read-only evidence collection, and result publication. */
 @Component
@@ -55,10 +56,11 @@ public class PlannerQueryToolNode extends QueryToolNode {
         }
         String request = contextAssembler.planningRequest(state, state.getUserRequest());
         List<String> missingSignals = contextAssembler.missingSignals(state);
-        PlannerToolEvidenceCollector.Evidence evidence = evidenceCollector.collect(request, missingSignals);
+        SkillExecutionPolicy.ToolAccess toolAccess = contextAssembler.toolAccess(state);
+        PlannerToolEvidenceCollector.Evidence evidence = evidenceCollector.collect(request, missingSignals, toolAccess);
         if (evidenceOrchestrator != null) {
             evidenceOrchestrator.collect(state, request, evidence);
         }
-        return resultAssembler.assemble(state, request, evidence, toolCandidates.select());
+        return resultAssembler.assemble(state, request, evidence, toolCandidates.select(toolAccess));
     }
 }

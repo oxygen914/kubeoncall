@@ -15,6 +15,7 @@ import java.util.Map;
 import org.junit.jupiter.api.Test;
 
 import com.kubeoncall.common.config.KubeOnCallProperties;
+import com.kubeoncall.skill.SkillExecutionPolicy;
 import com.kubeoncall.tool.mcp.McpClient;
 import com.kubeoncall.tool.mcp.McpToolRegistry;
 
@@ -74,6 +75,34 @@ class DynamicMcpEvidenceCollectorTest {
 
         assertTrue(result.invocations().isEmpty());
         assertEquals(List.of("accountId"), result.skipped().get(0).get("missingParameters"));
+        verify(client, never()).call(eq("inventory.lookupOwner"), anyMap());
+    }
+
+    @Test
+    void shouldNotInvokeDiscoveredToolOutsideActivatedSkillWhitelist() {
+        KubeOnCallProperties properties = properties();
+        McpClient client = mock(McpClient.class);
+        when(client.listTools())
+                .thenReturn(List.of(Map.of(
+                        "name",
+                        "inventory.lookupOwner",
+                        "description",
+                        "Lookup service ownership metadata",
+                        "readOnly",
+                        true,
+                        "requiredParameters",
+                        List.of("serviceName"))));
+        DynamicMcpEvidenceCollector collector =
+                new DynamicMcpEvidenceCollector(client, new McpToolRegistry(client, properties), properties);
+
+        DynamicMcpEvidenceCollector.Result result = collector.collect(
+                "who owns payment-service",
+                "payment-service",
+                "prod",
+                List.of(),
+                SkillExecutionPolicy.ToolAccess.restricted(List.of("kubernetes.describeResource")));
+
+        assertTrue(result.invocations().isEmpty());
         verify(client, never()).call(eq("inventory.lookupOwner"), anyMap());
     }
 

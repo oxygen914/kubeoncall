@@ -9,6 +9,7 @@ import java.util.Map;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import com.kubeoncall.alarm.state.ActiveAlarmState;
@@ -22,6 +23,7 @@ import com.kubeoncall.skill.SkillActivation;
 import com.kubeoncall.skill.SkillActivationService;
 import com.kubeoncall.workflow.AlertWorkflowContext;
 import com.kubeoncall.workflow.AlertWorkflowNode;
+import com.kubeoncall.workflow.diagnosis.AlertSkillDiagnosisService;
 
 /**
  * Produces a bounded, memory-aware diagnosis without executing historical remediation.
@@ -42,12 +44,23 @@ public class IntelligentDiagnosisNode implements AlertWorkflowNode {
     private final KubeOnCallProperties properties;
     private final TokenBudget tokenBudget;
     private final SkillActivationService skillActivationService;
+    private final AlertSkillDiagnosisService alertSkillDiagnosisService;
 
     public IntelligentDiagnosisNode(
             KubeOnCallProperties properties, TokenBudget tokenBudget, SkillActivationService skillActivationService) {
+        this(properties, tokenBudget, skillActivationService, null);
+    }
+
+    @Autowired
+    public IntelligentDiagnosisNode(
+            KubeOnCallProperties properties,
+            TokenBudget tokenBudget,
+            SkillActivationService skillActivationService,
+            AlertSkillDiagnosisService alertSkillDiagnosisService) {
         this.properties = properties;
         this.tokenBudget = tokenBudget;
         this.skillActivationService = skillActivationService;
+        this.alertSkillDiagnosisService = alertSkillDiagnosisService;
     }
 
     @Override
@@ -74,9 +87,12 @@ public class IntelligentDiagnosisNode implements AlertWorkflowNode {
         boolean repeatedIncident = activeCount > 1 || priorIncidentCount > 0;
         boolean memoryConsumed = !previousHandling.isEmpty();
         SkillActivation skillActivation = activateSkills(context);
+        AlertSkillDiagnosisService.Outcome skillDiagnosis = diagnoseWithSkill(context, skillActivation);
 
         Map<String, Object> diagnosis = new LinkedHashMap<>();
-        diagnosis.put("strategy", strategy(memoryConsumed, evidenceSources));
+        diagnosis.put(
+                "strategy",
+                skillDiagnosis.attempted() ? skillDiagnosis.strategy() : strategy(memoryConsumed, evidenceSources));
         diagnosis.put("repeatedIncident", repeatedIncident);
         diagnosis.put("activeCount", activeCount);
         diagnosis.put("priorIncidentCount", priorIncidentCount);
@@ -85,7 +101,8 @@ public class IntelligentDiagnosisNode implements AlertWorkflowNode {
         diagnosis.put("memoryConsumedCount", previousHandling.size());
         diagnosis.put("memoryIds", memoryIds);
         diagnosis.put("previousHandlingCandidates", previousHandling);
-        diagnosis.put("requiresLiveValidation", memoryConsumed);
+        diagnosis.put(
+                "requiresLiveValidation", memoryConsumed || skillDiagnosis.attempted() && !skillDiagnosis.verified());
         diagnosis.put("guardrails", memoryConsumed ? MEMORY_GUARDRAILS : List.of());
         diagnosis.put("activatedSkillIds", skillActivation.skillIds());
         diagnosis.put("activatedSkillMatchSources", skillActivation.matchSources());
@@ -95,6 +112,13 @@ public class IntelligentDiagnosisNode implements AlertWorkflowNode {
                 skillActivation.active()
                         ? tokenBudget.compactText(skillActivation.prompt(), Math.max(128, memoryBudget))
                         : "");
+        if (skillDiagnosis.attempted()) {
+            diagnosis.put("skillDiagnosisPlan", skillDiagnosis.plan());
+            diagnosis.put("skillDiagnosisVerification", skillDiagnosis.verification());
+            diagnosis.put("skillDiagnosisFallback", skillDiagnosis.fallback());
+            diagnosis.put("invokedTools", skillDiagnosis.invokedTools());
+            diagnosis.put("agentExecutionId", skillDiagnosis.agentExecutionId());
+        }
 
         context.putAttribute("diagnosis", diagnosis);
         context.putAttribute("alertMemoryConsumed", previousHandling.size());
@@ -112,14 +136,49 @@ public class IntelligentDiagnosisNode implements AlertWorkflowNode {
                             : skillActivation.maxRisk().name());
             context.putAttribute("skillPrompt", skillActivation.prompt());
         }
+        if (skillDiagnosis.attempted()) {
+            context.putAttribute("skillDiagnosisPlan", skillDiagnosis.plan());
+            context.putAttribute("skillDiagnosisVerification", skillDiagnosis.verification());
+            context.putAttribute("skillDiagnosisFallback", skillDiagnosis.fallback());
+            context.putAttribute("skillDiagnosisInvokedTools", skillDiagnosis.invokedTools());
+            context.putAttribute("skillDiagnosisAgentExecutionId", skillDiagnosis.agentExecutionId());
+            context.putAttribute("skillDiagnosisEvidenceItems", skillDiagnosis.evidenceItems());
+            context.putAttribute("skillDiagnosisConclusions", skillDiagnosis.conclusions());
+        }
 
         return new NodeResult(
                 "intelligentDiagnosisNode",
                 NodeStatus.SUCCESS,
-                memoryConsumed
-                        ? "Synthesized diagnosis with historical context requiring live validation"
-                        : "Synthesized diagnosis from current evidence",
+                diagnosisMessage(memoryConsumed, skillDiagnosis),
                 diagnosis);
+    }
+
+    private AlertSkillDiagnosisService.Outcome diagnoseWithSkill(
+            AlertWorkflowContext context, SkillActivation activation) {
+        if (alertSkillDiagnosisService == null || activation == null || !activation.active()) {
+            return AlertSkillDiagnosisService.Outcome.notAttempted();
+        }
+        try {
+            return alertSkillDiagnosisService.diagnose(context, activation);
+        } catch (RuntimeException ex) {
+            log.warn(
+                    "Automatic alarm diagnosis failed outside the governed Agent loop: errorType={}",
+                    ex.getClass().getSimpleName());
+            context.putAttribute("skillDiagnosisWarning", "automatic alarm diagnosis failed");
+            return AlertSkillDiagnosisService.Outcome.notAttempted();
+        }
+    }
+
+    private String diagnosisMessage(boolean memoryConsumed, AlertSkillDiagnosisService.Outcome skillDiagnosis) {
+        if (skillDiagnosis.attempted() && skillDiagnosis.verified()) {
+            return "Completed Skill-constrained read-only diagnosis with verified current evidence";
+        }
+        if (skillDiagnosis.attempted()) {
+            return "Recorded deterministic diagnosis fallback because live Skill evidence was incomplete";
+        }
+        return memoryConsumed
+                ? "Synthesized diagnosis with historical context requiring live validation"
+                : "Synthesized diagnosis from current evidence";
     }
 
     private SkillActivation activateSkills(AlertWorkflowContext context) {

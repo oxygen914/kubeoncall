@@ -5,6 +5,7 @@ import java.util.Map;
 
 import org.springframework.stereotype.Component;
 
+import com.kubeoncall.skill.SkillExecutionPolicy;
 import com.kubeoncall.tool.AgentToolCatalog;
 import com.kubeoncall.tool.ToolDefinition;
 
@@ -19,8 +20,16 @@ public class PlannerToolCandidates {
     }
 
     public Selection select() {
-        List<Map<String, Object>> tools =
-                agentToolCatalog.plannerTools().stream().map(this::toPayload).toList();
+        return select(SkillExecutionPolicy.ToolAccess.unrestricted());
+    }
+
+    public Selection select(SkillExecutionPolicy.ToolAccess toolAccess) {
+        SkillExecutionPolicy.ToolAccess access =
+                toolAccess == null ? SkillExecutionPolicy.ToolAccess.unrestricted() : toolAccess;
+        List<Map<String, Object>> tools = agentToolCatalog.plannerTools().stream()
+                .filter(tool -> access.allows(tool.name()))
+                .map(this::toPayload)
+                .toList();
         return new Selection(tools, agentToolCatalog.isPlannerReadOnly());
     }
 

@@ -158,6 +158,13 @@ public class AlertWorkflowCoordinator {
             if (Boolean.TRUE.equals(result.payload().get("dedupHit"))) {
                 toolNames.add("alarm.dedup.hit");
             }
+            Object invokedTools = result.payload().get("invokedTools");
+            if (invokedTools instanceof List<?> values) {
+                values.stream()
+                        .map(String::valueOf)
+                        .filter(value -> !value.isBlank())
+                        .forEach(toolNames::add);
+            }
         }
         if (!memoryRecall.entries().isEmpty()) {
             toolNames.add("memory.alert.recall");

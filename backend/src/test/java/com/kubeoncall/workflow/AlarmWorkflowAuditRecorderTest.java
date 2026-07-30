@@ -36,6 +36,11 @@ class AlarmWorkflowAuditRecorderTest {
         AlertWorkflowContext context = new AlertWorkflowContext(null, event, null, Instant.now());
         context.setDegraded(true);
         context.addFailedNode("diagnosis");
+        context.putAttribute("skillDiagnosisPlan", Map.of("taskType", "QUERY_METRICS"));
+        context.putAttribute("skillDiagnosisVerification", Map.of("status", "PARTIAL"));
+        context.putAttribute("skillDiagnosisFallback", Map.of("used", true, "runbookId", "runbook-1"));
+        context.putAttribute("skillDiagnosisInvokedTools", List.of("prometheus.rangeQuery"));
+        context.putAttribute("skillDiagnosisAgentExecutionId", "agd_1");
         NodeResult result = new NodeResult("diagnosis", NodeStatus.FAILURE, "tool failed", Map.of());
 
         recorder.record(new AlarmWorkflowAuditRecorder.AuditRequest(
@@ -74,6 +79,10 @@ class AlarmWorkflowAuditRecorderTest {
         assertEquals(List.of("diagnosis"), metadata.getValue().get("nodeNames"));
         assertEquals("none", metadata.getValue().get("suppressionReason"));
         assertEquals(true, metadata.getValue().get("degraded"));
+        assertEquals(Map.of("taskType", "QUERY_METRICS"), metadata.getValue().get("skillDiagnosisPlan"));
+        assertEquals(Map.of("status", "PARTIAL"), metadata.getValue().get("skillDiagnosisVerification"));
+        assertEquals(List.of("prometheus.rangeQuery"), metadata.getValue().get("skillDiagnosisInvokedTools"));
+        assertEquals("agd_1", metadata.getValue().get("skillDiagnosisAgentExecutionId"));
     }
 
     @Test

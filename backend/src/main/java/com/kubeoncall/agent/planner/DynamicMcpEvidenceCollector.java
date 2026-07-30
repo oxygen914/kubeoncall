@@ -12,6 +12,7 @@ import java.util.Set;
 import org.springframework.stereotype.Component;
 
 import com.kubeoncall.common.config.KubeOnCallProperties;
+import com.kubeoncall.skill.SkillExecutionPolicy;
 import com.kubeoncall.tool.ToolDefinition;
 import com.kubeoncall.tool.mcp.McpClient;
 import com.kubeoncall.tool.mcp.McpToolRegistry;
@@ -40,12 +41,24 @@ public class DynamicMcpEvidenceCollector {
     }
 
     public Result collect(String request, String target, String namespace, List<String> missingSignals) {
+        return collect(request, target, namespace, missingSignals, SkillExecutionPolicy.ToolAccess.unrestricted());
+    }
+
+    public Result collect(
+            String request,
+            String target,
+            String namespace,
+            List<String> missingSignals,
+            SkillExecutionPolicy.ToolAccess toolAccess) {
         if (!properties.getMcp().isDynamicInvocationEnabled()) {
             return Result.empty();
         }
+        SkillExecutionPolicy.ToolAccess access =
+                toolAccess == null ? SkillExecutionPolicy.ToolAccess.unrestricted() : toolAccess;
         List<ScoredTool> selected = toolRegistry.discoveredPlannerTools().stream()
                 .filter(ToolDefinition::readOnly)
                 .filter(tool -> !tool.requiresApproval())
+                .filter(tool -> access.allows(tool.name()))
                 .filter(tool -> !FIXED_EVIDENCE_TOOLS.contains(tool.name()))
                 .map(tool -> new ScoredTool(tool, score(tool, request, missingSignals)))
                 .filter(item -> item.score() > 0)

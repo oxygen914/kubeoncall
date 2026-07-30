@@ -18,6 +18,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.jdbc.core.JdbcTemplate;
 
 import com.kubeoncall.alarm.domain.AlarmEvaluationResult;
@@ -27,8 +28,15 @@ import com.kubeoncall.alarm.domain.AlarmStatus;
 import com.kubeoncall.alarm.domain.NormalizedAlarmEvent;
 import com.kubeoncall.audit.OperationAuditWriter;
 import com.kubeoncall.audit.OutboxWriter;
+import com.kubeoncall.domain.graph.GraphState;
 import com.kubeoncall.domain.graph.NodeResult;
 import com.kubeoncall.domain.graph.NodeStatus;
+import com.kubeoncall.evidence.EvidenceCollectionStatus;
+import com.kubeoncall.evidence.EvidenceItem;
+import com.kubeoncall.evidence.EvidencePersistenceService;
+import com.kubeoncall.evidence.EvidenceResource;
+import com.kubeoncall.evidence.EvidenceType;
+import com.kubeoncall.evidence.EvidenceWindow;
 import com.kubeoncall.workflow.execution.WorkflowExecutionRecord;
 import com.kubeoncall.workflow.execution.WorkflowExecutionRepository;
 import com.kubeoncall.workflow.execution.WorkflowNodeExecutionRecord;
@@ -41,8 +49,13 @@ class AlarmWorkflowFactRecorderTest {
         JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
         OperationAuditWriter auditWriter = mock(OperationAuditWriter.class);
         OutboxWriter outboxWriter = mock(OutboxWriter.class);
+        @SuppressWarnings("unchecked")
+        ObjectProvider<EvidencePersistenceService> persistenceProvider = mock(ObjectProvider.class);
+        EvidencePersistenceService persistenceService = mock(EvidencePersistenceService.class);
+        when(persistenceProvider.getIfAvailable()).thenReturn(persistenceService);
+        when(persistenceService.isAvailable()).thenReturn(true);
         AlarmWorkflowFactRecorder recorder =
-                new AlarmWorkflowFactRecorder(executions, jdbcTemplate, auditWriter, outboxWriter);
+                new AlarmWorkflowFactRecorder(executions, jdbcTemplate, auditWriter, outboxWriter, persistenceProvider);
         Instant startedAt = Instant.parse("2026-07-20T08:00:00Z");
         WorkflowExecutionRecord running = execution("RUNNING", 1L, startedAt, null);
         WorkflowExecutionRecord finished = execution("FAILED", 2L, startedAt, startedAt.plusSeconds(5));
@@ -111,6 +124,12 @@ class AlarmWorkflowFactRecorderTest {
                         eq("diagnosis failed"),
                         any());
         verify(jdbcTemplate).update(contains("latest_execution_id"), eq(91L), eq("alm_fact_1"));
+        ArgumentCaptor<GraphState> evidenceState = ArgumentCaptor.forClass(GraphState.class);
+        verify(persistenceService).persist(evidenceState.capture());
+        assertThat(evidenceState.getValue().getExecutionId()).isEqualTo("exe_fact_1");
+        assertThat((List<?>) evidenceState.getValue().getContext().get("evidenceItems"))
+                .extracting(item -> ((EvidenceItem) item).evidenceId())
+                .containsExactly("evd-fact-1");
 
         ArgumentCaptor<OperationAuditWriter.AuditEntry> audit =
                 ArgumentCaptor.forClass(OperationAuditWriter.AuditEntry.class);
@@ -165,6 +184,8 @@ class AlarmWorkflowFactRecorderTest {
                 startedAt,
                 "CPU high",
                 Map.of());
+        AlertWorkflowContext context = new AlertWorkflowContext(null, event, null, startedAt);
+        context.putAttribute("skillDiagnosisEvidenceItems", List.of(evidence(startedAt)));
         return new AlarmWorkflowAuditRecorder.AuditRequest(
                 "legacy-execution-1",
                 "FAILED",
@@ -178,10 +199,34 @@ class AlarmWorkflowFactRecorderTest {
                 AlarmEvaluationResult.unmatched(AlarmSeverity.P1, "test"),
                 null,
                 null,
-                null,
+                context,
                 List.of(
                         new NodeResult("diagnosis", NodeStatus.SUCCESS, "diagnosed", Map.of()),
                         new NodeResult("diagnosis", NodeStatus.FAILURE, "diagnosis failed", Map.of())),
+                Map.of());
+    }
+
+    private static EvidenceItem evidence(Instant observedAt) {
+        return new EvidenceItem(
+                "evd-fact-1",
+                "agd-fact-1",
+                EvidenceType.RESOURCE_STATE,
+                "kubernetes-api",
+                "prod",
+                "",
+                new EvidenceResource("Node", "worker-01", "node-uid"),
+                observedAt,
+                new EvidenceWindow(observedAt.minusSeconds(60), observedAt),
+                "Node Ready",
+                "Ready=True",
+                Map.of(),
+                0,
+                false,
+                false,
+                "hash-fact-1",
+                EvidenceCollectionStatus.SUCCEEDED,
+                "",
+                "",
                 Map.of());
     }
 

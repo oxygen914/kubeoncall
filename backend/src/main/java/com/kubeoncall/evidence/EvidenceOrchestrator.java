@@ -16,6 +16,7 @@ import org.springframework.stereotype.Component;
 import com.kubeoncall.agent.planner.PlannerToolEvidenceCollector;
 import com.kubeoncall.common.config.KubeOnCallProperties;
 import com.kubeoncall.domain.graph.GraphState;
+import com.kubeoncall.skill.SkillExecutionPolicy;
 
 /** Coordinates bounded multi-source collection and publishes a single Evidence v2 view. */
 @Component
@@ -58,16 +59,25 @@ public class EvidenceOrchestrator {
         EvidenceCollectionScope scope = scopeResolver.resolve(state, plannerEvidence.target());
         List<EvidenceItem> items = new ArrayList<>(factory.fromPlannerPayload(scope, plannerEvidence.payload()));
         List<CompletableFuture<List<EvidenceItem>>> futures = new ArrayList<>();
+        SkillExecutionPolicy.ToolAccess toolAccess = SkillExecutionPolicy.toolAccess(state.getContext());
         if (properties.getAiOperations().isEvidencePrometheusEnabled()) {
-            futures.add(CompletableFuture.supplyAsync(() -> prometheus.collect(scope), executor));
+            if (toolAccess.allowsAny("prometheus.queryRange", "prometheus.rangeQuery", "prometheus.instantQuery")) {
+                futures.add(CompletableFuture.supplyAsync(() -> prometheus.collect(scope), executor));
+            } else {
+                items.add(skillForbidden(scope, EvidenceType.METRIC, "prometheus"));
+            }
         }
         if (properties.getAiOperations().isEvidenceLokiEnabled()) {
-            futures.add(CompletableFuture.supplyAsync(() -> collectLoki(scope, request), executor));
+            if (toolAccess.allowsAny("loki.queryRange", "kubernetes.queryLogs", "kubernetes.queryPodLogs")) {
+                futures.add(CompletableFuture.supplyAsync(() -> collectLoki(scope, request), executor));
+            } else {
+                items.add(skillForbidden(scope, EvidenceType.POD_LOG, "loki"));
+            }
         }
         if (properties.getAiOperations().isEvidenceK8sResourceStateEnabled()
                 || properties.getAiOperations().isEvidenceK8sEventsEnabled()
                 || properties.getAiOperations().isEvidencePodLogsEnabled()) {
-            futures.add(CompletableFuture.supplyAsync(() -> kubernetes.collect(scope), executor));
+            futures.add(CompletableFuture.supplyAsync(() -> kubernetes.collect(scope, toolAccess), executor));
         }
         long deadlineMillis = Math.max(500, properties.getAiOperations().getEvidenceCollectionTimeoutMillis());
         long deadlineNanos = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(deadlineMillis);
@@ -100,6 +110,17 @@ public class EvidenceOrchestrator {
         state.getContext().put("evidenceConflicts", result.conflicts());
         state.getContext().put("evidenceConfidence", result.confidence());
         return result;
+    }
+
+    private EvidenceItem skillForbidden(EvidenceCollectionScope scope, EvidenceType type, String source) {
+        return factory.fromMap(
+                scope,
+                type,
+                Map.of(
+                        "source", source,
+                        "collectionStatus", "FORBIDDEN",
+                        "errorType", "SKILL_TOOL_NOT_ALLOWED"),
+                source);
     }
 
     private List<EvidenceItem> collectLoki(EvidenceCollectionScope scope, String request) {

@@ -10,6 +10,7 @@ class SkillProperties {
     private int promptMaxChars = 4000;
     private int promptTokenBudget = 900;
     private String versionConflictPolicy = "PREFER_PROJECT";
+    private boolean automaticAlertDiagnosisEnabled = true;
 
     public boolean isEnabled() {
         return enabled;
@@ -73,5 +74,13 @@ class SkillProperties {
 
     public void setVersionConflictPolicy(String versionConflictPolicy) {
         this.versionConflictPolicy = versionConflictPolicy;
+    }
+
+    public boolean isAutomaticAlertDiagnosisEnabled() {
+        return automaticAlertDiagnosisEnabled;
+    }
+
+    public void setAutomaticAlertDiagnosisEnabled(boolean automaticAlertDiagnosisEnabled) {
+        this.automaticAlertDiagnosisEnabled = automaticAlertDiagnosisEnabled;
     }
 }

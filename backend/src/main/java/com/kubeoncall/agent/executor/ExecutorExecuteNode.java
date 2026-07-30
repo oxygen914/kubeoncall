@@ -15,8 +15,11 @@ import com.kubeoncall.domain.graph.ExecutionPlan;
 import com.kubeoncall.domain.graph.GraphState;
 import com.kubeoncall.domain.graph.NodeResult;
 import com.kubeoncall.domain.graph.NodeStatus;
+import com.kubeoncall.domain.task.RiskLevel;
+import com.kubeoncall.domain.task.Task;
 import com.kubeoncall.evidence.EvidenceItem;
 import com.kubeoncall.evidence.EvidenceType;
+import com.kubeoncall.skill.SkillExecutionPolicy;
 import com.kubeoncall.tool.ToolDefinition;
 import com.kubeoncall.tool.ToolExecutor;
 
@@ -119,6 +122,26 @@ public class ExecutorExecuteNode extends ExecuteNode {
                     NodeStatus.FAILURE,
                     "Executor tool definition is missing",
                     Map.of("executorKind", executorKind, "action", action, "errorCode", 409));
+        }
+        String plannedToolName = executorKind + "." + action;
+        if (!plannedToolName.equals(toolDefinition.name()) || !executorKind.equals(toolDefinition.executorKind())) {
+            return new NodeResult(
+                    getName(),
+                    NodeStatus.FAILURE,
+                    "Execution plan and executor tool definition do not match",
+                    Map.of(
+                            "reason",
+                            "EXECUTOR_TOOL_DEFINITION_MISMATCH",
+                            "plannedTool",
+                            plannedToolName,
+                            "definedTool",
+                            toolDefinition.name(),
+                            "errorCode",
+                            409));
+        }
+        NodeResult skillViolation = skillViolation(state, toolDefinition, plannedToolName);
+        if (skillViolation != null) {
+            return skillViolation;
         }
         if (!toolDefinition.readOnly() && Boolean.TRUE.equals(state.getContext().get("compatibilityReadOnly"))) {
             return new NodeResult(
@@ -247,6 +270,62 @@ public class ExecutorExecuteNode extends ExecuteNode {
                         payload.get("toolName"),
                         "result",
                         toolResult));
+    }
+
+    private NodeResult skillViolation(GraphState state, ToolDefinition toolDefinition, String plannedToolName) {
+        SkillExecutionPolicy.ToolAccess toolAccess = SkillExecutionPolicy.toolAccess(state.getContext());
+        if (toolAccess.restricted() && !toolAccess.allows(plannedToolName)) {
+            Map<String, Object> details = Map.of(
+                    "reason",
+                    "SKILL_TOOL_NOT_ALLOWED",
+                    "plannedTool",
+                    plannedToolName,
+                    "allowedTools",
+                    toolAccess.allowedTools(),
+                    "errorCode",
+                    403);
+            state.getContext().put("skillToolWhitelistViolation", details);
+            return new NodeResult(
+                    getName(),
+                    NodeStatus.FAILURE,
+                    "Activated skill does not allow executor tool " + plannedToolName,
+                    details);
+        }
+        Task task = state.getCurrentTask();
+        RiskLevel maxRisk = SkillExecutionPolicy.maxRisk(state.getContext());
+        if (toolAccess.restricted() && maxRisk == null) {
+            Map<String, Object> details = Map.of("reason", "SKILL_MAX_RISK_MISSING", "errorCode", 403);
+            state.getContext().put("skillRiskViolation", details);
+            return new NodeResult(
+                    getName(), NodeStatus.FAILURE, "Activated skill maxRisk is missing or invalid", details);
+        }
+        if (toolAccess.restricted() && (task == null || task.riskLevel() == null)) {
+            Map<String, Object> details = Map.of("reason", "TASK_RISK_MISSING", "errorCode", 403);
+            state.getContext().put("skillRiskViolation", details);
+            return new NodeResult(
+                    getName(),
+                    NodeStatus.FAILURE,
+                    "Task risk is required when an activated skill is enforced",
+                    details);
+        }
+        if (task != null && SkillExecutionPolicy.exceedsMaxRisk(task.riskLevel(), maxRisk)) {
+            Map<String, Object> details = Map.of(
+                    "reason",
+                    "SKILL_MAX_RISK_EXCEEDED",
+                    "taskRisk",
+                    task.riskLevel().name(),
+                    "maxRisk",
+                    maxRisk.name(),
+                    "errorCode",
+                    403);
+            state.getContext().put("skillRiskViolation", details);
+            return new NodeResult(
+                    getName(),
+                    NodeStatus.FAILURE,
+                    "Activated skill maxRisk " + maxRisk + " is below task risk " + task.riskLevel(),
+                    details);
+        }
+        return null;
     }
 
     private Map<String, Object> evidenceBackedReadResult(GraphState state, ToolDefinition definition, String action) {

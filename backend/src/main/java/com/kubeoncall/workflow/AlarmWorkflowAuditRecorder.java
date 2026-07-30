@@ -253,6 +253,12 @@ public class AlarmWorkflowAuditRecorder {
             putIfPresent(metadata, "activatedSkillMatchSources", context.getAttribute("activatedSkillMatchSources"));
             putIfPresent(metadata, "activatedSkillMaxRisk", context.getAttribute("activatedSkillMaxRisk"));
             putIfPresent(metadata, "activatedSkillToolWhitelist", context.getAttribute("activatedSkillToolWhitelist"));
+            putIfPresent(metadata, "skillDiagnosisPlan", context.getAttribute("skillDiagnosisPlan"));
+            putIfPresent(metadata, "skillDiagnosisVerification", context.getAttribute("skillDiagnosisVerification"));
+            putIfPresent(metadata, "skillDiagnosisFallback", context.getAttribute("skillDiagnosisFallback"));
+            putIfPresent(metadata, "skillDiagnosisInvokedTools", context.getAttribute("skillDiagnosisInvokedTools"));
+            putIfPresent(
+                    metadata, "skillDiagnosisAgentExecutionId", context.getAttribute("skillDiagnosisAgentExecutionId"));
             putIfPresent(metadata, "silenceApproved", context.getAttribute("silenceApproved"));
             putIfPresent(metadata, "silenceApprovedBy", context.getAttribute("silenceApprovedBy"));
             putIfPresent(metadata, "silenceApprovalReason", context.getAttribute("silenceApprovalReason"));

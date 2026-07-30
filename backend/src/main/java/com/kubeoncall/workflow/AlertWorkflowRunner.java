@@ -14,6 +14,8 @@ import com.kubeoncall.domain.graph.NodeStatus;
 @Service
 public class AlertWorkflowRunner {
 
+    private static final String INTELLIGENT_DIAGNOSIS_NODE = "intelligentDiagnosisNode";
+
     private final AlertWorkflowFactory workflowFactory;
     private final WorkflowNodeExecutor nodeExecutor;
     private final KubeOnCallProperties properties;
@@ -26,7 +28,9 @@ public class AlertWorkflowRunner {
     }
 
     public void run(AlertWorkflowContext context, AlarmEvaluationResult evaluation) {
-        Duration nodeTimeout = Duration.ofMillis(properties.getWorkflow().getNodeTimeoutMillis());
+        Duration defaultNodeTimeout = Duration.ofMillis(properties.getWorkflow().getNodeTimeoutMillis());
+        Duration diagnosisNodeTimeout =
+                Duration.ofMillis(properties.getWorkflow().getDiagnosisNodeTimeoutMillis());
         List<AlertWorkflowDefinition> workflow = evaluation.workflowTemplate() == null
                 ? workflowFactory.buildWorkflow()
                 : workflowFactory.buildWorkflow(evaluation.workflowTemplate());
@@ -52,6 +56,8 @@ public class AlertWorkflowRunner {
                                 "completedNodes", context.getCompletedNodes())));
                 continue;
             }
+            Duration nodeTimeout =
+                    INTELLIGENT_DIAGNOSIS_NODE.equals(definition.name()) ? diagnosisNodeTimeout : defaultNodeTimeout;
             nodeExecutor.execute(definition, context, nodeTimeout);
         }
     }

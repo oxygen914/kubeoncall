@@ -6,6 +6,10 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -14,8 +18,10 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.kubeoncall.audit.OperationAuditWriter;
 import com.kubeoncall.audit.OutboxWriter;
+import com.kubeoncall.domain.graph.GraphState;
 import com.kubeoncall.domain.graph.NodeResult;
 import com.kubeoncall.domain.graph.NodeStatus;
+import com.kubeoncall.evidence.EvidencePersistenceService;
 import com.kubeoncall.workflow.execution.WorkflowExecutionRecord;
 import com.kubeoncall.workflow.execution.WorkflowExecutionRepository;
 import com.kubeoncall.workflow.execution.WorkflowNodeExecutionRecord;
@@ -25,20 +31,34 @@ import com.kubeoncall.workflow.execution.WorkflowNodeExecutionRecord;
 @ConditionalOnProperty(prefix = "kubeoncall", name = "mysql-enabled", havingValue = "true")
 public class AlarmWorkflowFactRecorder {
 
+    private static final Logger log = LoggerFactory.getLogger(AlarmWorkflowFactRecorder.class);
+
     private final WorkflowExecutionRepository executionRepository;
     private final JdbcTemplate jdbcTemplate;
     private final OperationAuditWriter auditWriter;
     private final OutboxWriter outboxWriter;
+    private final ObjectProvider<EvidencePersistenceService> evidencePersistenceServiceProvider;
 
     public AlarmWorkflowFactRecorder(
             WorkflowExecutionRepository executionRepository,
             JdbcTemplate jdbcTemplate,
             OperationAuditWriter auditWriter,
             OutboxWriter outboxWriter) {
+        this(executionRepository, jdbcTemplate, auditWriter, outboxWriter, null);
+    }
+
+    @Autowired
+    public AlarmWorkflowFactRecorder(
+            WorkflowExecutionRepository executionRepository,
+            JdbcTemplate jdbcTemplate,
+            OperationAuditWriter auditWriter,
+            OutboxWriter outboxWriter,
+            ObjectProvider<EvidencePersistenceService> evidencePersistenceServiceProvider) {
         this.executionRepository = executionRepository;
         this.jdbcTemplate = jdbcTemplate;
         this.auditWriter = auditWriter;
         this.outboxWriter = outboxWriter;
+        this.evidencePersistenceServiceProvider = evidencePersistenceServiceProvider;
     }
 
     @Transactional
@@ -72,6 +92,7 @@ public class AlarmWorkflowFactRecorder {
 
         Instant finishedAt = Instant.now();
         persistNodes(execution, request, finishedAt);
+        persistDiagnosisEvidence(execution.publicId(), request.context());
         String status = durableStatus(request.status());
         if (!executionRepository.updateStatus(
                 execution.publicId(),
@@ -114,6 +135,35 @@ public class AlarmWorkflowFactRecorder {
                         "status", finished.status(),
                         "version", finished.version()),
                 finished.requestId()));
+    }
+
+    private void persistDiagnosisEvidence(String executionPublicId, AlertWorkflowContext context) {
+        if (context == null || evidencePersistenceServiceProvider == null) {
+            return;
+        }
+        Object evidence = context.getAttribute("skillDiagnosisEvidenceItems");
+        Object conclusions = context.getAttribute("skillDiagnosisConclusions");
+        if (!(evidence instanceof java.util.List<?> evidenceItems) || evidenceItems.isEmpty()) {
+            return;
+        }
+        EvidencePersistenceService persistenceService = evidencePersistenceServiceProvider.getIfAvailable();
+        if (persistenceService == null || !persistenceService.isAvailable()) {
+            return;
+        }
+        GraphState state = new GraphState();
+        state.setExecutionId(executionPublicId);
+        state.getContext().put("evidenceItems", evidenceItems);
+        if (conclusions instanceof java.util.List<?> conclusionItems && !conclusionItems.isEmpty()) {
+            state.getContext().put("conclusions", conclusionItems);
+        }
+        try {
+            persistenceService.persist(state);
+        } catch (RuntimeException ex) {
+            log.warn(
+                    "Unable to persist automatic alarm diagnosis evidence: executionId={}, errorType={}",
+                    executionPublicId,
+                    ex.getClass().getSimpleName());
+        }
     }
 
     private void persistNodes(
