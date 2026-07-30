@@ -66,6 +66,17 @@ public class KubeOnCallMetricsService {
         increment("kubeoncall.alarm.quality", "outcome", safe(outcome));
     }
 
+    public void recordNotificationDelivery(String provider, String outcome, boolean retryable) {
+        increment(
+                "kubeoncall.notification.deliveries",
+                "provider",
+                safe(provider),
+                "outcome",
+                safe(outcome),
+                "retryable",
+                String.valueOf(retryable));
+    }
+
     public void recordAlarmDuration(String phase, String severity, long durationMs) {
         recordAmount(
                 "kubeoncall.alarm.lifecycle_duration_ms",

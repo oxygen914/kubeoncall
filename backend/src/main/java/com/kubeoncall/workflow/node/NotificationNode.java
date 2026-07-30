@@ -13,9 +13,12 @@ import org.springframework.stereotype.Component;
 
 import com.kubeoncall.alarm.domain.AlarmEvaluationResult;
 import com.kubeoncall.alarm.domain.NormalizedAlarmEvent;
+import com.kubeoncall.alarm.notification.AlarmNotificationMessageFactory;
 import com.kubeoncall.common.config.KubeOnCallProperties;
 import com.kubeoncall.domain.graph.NodeResult;
 import com.kubeoncall.domain.graph.NodeStatus;
+import com.kubeoncall.notification.application.NotificationPublishResult;
+import com.kubeoncall.notification.application.NotificationPublisher;
 import com.kubeoncall.tool.ToolExecutor;
 import com.kubeoncall.tool.http.ToolHttpClient;
 import com.kubeoncall.workflow.AlertWorkflowContext;
@@ -29,19 +32,29 @@ public class NotificationNode implements AlertWorkflowNode {
     private final Map<String, ToolExecutor> executorsByKind;
     private final ToolHttpClient toolHttpClient;
     private final KubeOnCallProperties properties;
+    private final NotificationPublisher notificationPublisher;
 
     public NotificationNode(List<ToolExecutor> toolExecutors) {
-        this(toolExecutors, null, null);
+        this(toolExecutors, null, null, null);
+    }
+
+    public NotificationNode(
+            List<ToolExecutor> toolExecutors, ToolHttpClient toolHttpClient, KubeOnCallProperties properties) {
+        this(toolExecutors, toolHttpClient, properties, null);
     }
 
     @Autowired
     public NotificationNode(
-            List<ToolExecutor> toolExecutors, ToolHttpClient toolHttpClient, KubeOnCallProperties properties) {
+            List<ToolExecutor> toolExecutors,
+            ToolHttpClient toolHttpClient,
+            KubeOnCallProperties properties,
+            NotificationPublisher notificationPublisher) {
         this.executorsByKind = toolExecutors.stream()
                 .collect(Collectors.toMap(
                         ToolExecutor::getExecutorKind, Function.identity(), (left, right) -> left, LinkedHashMap::new));
         this.toolHttpClient = toolHttpClient;
         this.properties = properties;
+        this.notificationPublisher = notificationPublisher;
     }
 
     @Override
@@ -59,6 +72,29 @@ public class NotificationNode implements AlertWorkflowNode {
         params.put("idempotencyKey", idempotencyKey);
         payload.put("idempotencyKey", idempotencyKey);
         try {
+            NotificationPublishResult durableResult = null;
+            try {
+                durableResult = publishDurably(context, idempotencyKey);
+            } catch (RuntimeException durableFailure) {
+                log.warn(
+                        "Durable notification submission failed; using legacy path: errorType={}",
+                        durableFailure.getClass().getSimpleName());
+                payload.put("durableStatus", "SUBMISSION_FAILED");
+                payload.put("durableErrorType", durableFailure.getClass().getSimpleName());
+            }
+            if (durableResult != null) {
+                payload.put("durableStatus", durableResult.status().name());
+                payload.put("deliveryIds", durableResult.deliveryIds());
+                if (durableResult.status() == NotificationPublishResult.Status.QUEUED
+                        || durableResult.status() == NotificationPublishResult.Status.ALREADY_QUEUED) {
+                    payload.put("action", "queueNotification");
+                    return new NodeResult(
+                            "notificationNode",
+                            NodeStatus.SUCCESS,
+                            "Notification queued for durable delivery",
+                            payload);
+                }
+            }
             if (directWebhookConfigured()) {
                 Map<String, Object> result = toolHttpClient.post(
                         properties.getIntegrations().getNotification().getEndpoint(),
@@ -89,6 +125,16 @@ public class NotificationNode implements AlertWorkflowNode {
             payload.put("exceptionType", ex.getClass().getSimpleName());
             return new NodeResult("notificationNode", NodeStatus.FAILURE, "Failed to send alert event", payload);
         }
+    }
+
+    private NotificationPublishResult publishDurably(AlertWorkflowContext context, String requestId) {
+        if (notificationPublisher == null || context.getNormalizedAlarm() == null) {
+            return null;
+        }
+        return notificationPublisher.publish(
+                AlarmNotificationMessageFactory.firing(
+                        context.getNormalizedAlarm(), context.getEvaluationResult(), "diagnosis-completed"),
+                requestId);
     }
 
     private boolean directWebhookConfigured() {

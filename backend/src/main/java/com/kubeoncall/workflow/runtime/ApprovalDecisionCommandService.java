@@ -6,6 +6,7 @@ import java.util.Map;
 import java.util.function.Supplier;
 
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -15,9 +16,11 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.kubeoncall.approval.mysql.ApprovalRequestRecord;
 import com.kubeoncall.approval.mysql.MySqlApprovalRepository;
 import com.kubeoncall.approval.mysql.MySqlApprovalRepository.DecisionOutcome;
+import com.kubeoncall.approval.notification.ApprovalNotificationMessageFactory;
 import com.kubeoncall.audit.OperationAuditWriter;
 import com.kubeoncall.audit.OutboxWriter;
 import com.kubeoncall.idempotency.IdempotencyService;
+import com.kubeoncall.notification.application.NotificationPublisher;
 import com.kubeoncall.task.AsyncTaskRecord;
 import com.kubeoncall.task.AsyncTaskRepository;
 import com.kubeoncall.workflow.execution.WorkflowExecutionRecord;
@@ -42,6 +45,7 @@ public class ApprovalDecisionCommandService {
     private final OutboxWriter outboxWriter;
     private final IdempotencyService idempotencyService;
     private final ObjectMapper objectMapper;
+    private final NotificationPublisher notificationPublisher;
 
     public ApprovalDecisionCommandService(
             ObjectProvider<MySqlApprovalRepository> approvalRepositoryProvider,
@@ -51,6 +55,27 @@ public class ApprovalDecisionCommandService {
             OutboxWriter outboxWriter,
             IdempotencyService idempotencyService,
             ObjectMapper objectMapper) {
+        this(
+                approvalRepositoryProvider,
+                executionRepositoryProvider,
+                taskRepositoryProvider,
+                auditWriter,
+                outboxWriter,
+                idempotencyService,
+                objectMapper,
+                null);
+    }
+
+    @Autowired
+    public ApprovalDecisionCommandService(
+            ObjectProvider<MySqlApprovalRepository> approvalRepositoryProvider,
+            ObjectProvider<WorkflowExecutionRepository> executionRepositoryProvider,
+            ObjectProvider<AsyncTaskRepository> taskRepositoryProvider,
+            OperationAuditWriter auditWriter,
+            OutboxWriter outboxWriter,
+            IdempotencyService idempotencyService,
+            ObjectMapper objectMapper,
+            NotificationPublisher notificationPublisher) {
         this.approvalRepositoryProvider = approvalRepositoryProvider;
         this.executionRepositoryProvider = executionRepositoryProvider;
         this.taskRepositoryProvider = taskRepositoryProvider;
@@ -58,6 +83,7 @@ public class ApprovalDecisionCommandService {
         this.outboxWriter = outboxWriter;
         this.idempotencyService = idempotencyService;
         this.objectMapper = objectMapper;
+        this.notificationPublisher = notificationPublisher;
     }
 
     public boolean isAvailable() {
@@ -176,6 +202,10 @@ public class ApprovalDecisionCommandService {
                         "decision", decision,
                         "taskId", task.publicId()),
                 command.requestId()));
+        if (notificationPublisher != null) {
+            notificationPublisher.publish(
+                    ApprovalNotificationMessageFactory.decided(before, decision, decidedAt), command.requestId());
+        }
         outboxWriter.enqueue(OutboxWriter.OutboxEvent.of(
                 "task",
                 task.publicId(),

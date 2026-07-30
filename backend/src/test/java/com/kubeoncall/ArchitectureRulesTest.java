@@ -34,13 +34,13 @@ class ArchitectureRulesTest {
             .dependOnClassesThat()
             .resideInAnyPackage("..web..");
 
-    // WBS-1..12 added new core packages (identity/audit/idempotency/migration/knowledge/realtime/
-    // task/worker/observability). For these we assert a tighter, false-positive-free invariant: no
-    // field of a core class may have a raw type from the web layer. Generic signature analysis
-    // (`dependOnClassesThat`) misattributes web view classes that reference core records as core→web
-    // leaks; the field-type check avoids that while still catching a real leaked web dependency held
-    // as state. A `grep "import com.kubeoncall.web"` over these packages currently returns zero, which
-    // this rule makes a permanent gate.
+    // WBS-1..12 and later foundations added new core packages (identity/audit/idempotency/migration/
+    // knowledge/realtime/task/worker/observability/notification). For these we assert a tighter,
+    // false-positive-free invariant: no field of a core class may have a raw type from the web layer.
+    // Generic signature analysis (`dependOnClassesThat`) misattributes web view classes that reference
+    // core records as core→web leaks; the field-type check avoids that while still catching a real
+    // leaked web dependency held as state. A `grep "import com.kubeoncall.web"` over these packages
+    // currently returns zero, which this rule makes a permanent gate.
     static final DescribedPredicate<JavaClass> webType = new DescribedPredicate<JavaClass>("reside in the web layer") {
         @Override
         public boolean test(JavaClass javaClass) {
@@ -63,6 +63,7 @@ class ArchitectureRulesTest {
                             || pkg.startsWith("com.kubeoncall.task")
                             || pkg.startsWith("com.kubeoncall.worker")
                             || pkg.startsWith("com.kubeoncall.observability")
+                            || pkg.startsWith("com.kubeoncall.notification")
                             || pkg.startsWith("com.kubeoncall.sandbox");
                 }
             };

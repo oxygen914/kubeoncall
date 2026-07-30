@@ -10,6 +10,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
@@ -17,6 +18,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.kubeoncall.approval.mysql.ApprovalRequestRecord;
 import com.kubeoncall.approval.mysql.MySqlApprovalRepository;
+import com.kubeoncall.approval.notification.ApprovalNotificationMessageFactory;
 import com.kubeoncall.audit.OperationAuditWriter;
 import com.kubeoncall.audit.OutboxWriter;
 import com.kubeoncall.common.config.KubeOnCallProperties;
@@ -25,6 +27,7 @@ import com.kubeoncall.domain.graph.NodeResult;
 import com.kubeoncall.domain.graph.NodeStatus;
 import com.kubeoncall.domain.graph.PauseMetadata;
 import com.kubeoncall.domain.task.Task;
+import com.kubeoncall.notification.application.NotificationPublisher;
 import com.kubeoncall.service.AskService;
 import com.kubeoncall.task.AsyncTaskRepository;
 import com.kubeoncall.task.worker.AsyncTaskContext;
@@ -49,6 +52,7 @@ public class WorkflowTaskResultCoordinator {
     private final OutboxWriter outboxWriter;
     private final Duration taskLeaseDuration;
     private final Duration approvalTtl;
+    private final NotificationPublisher notificationPublisher;
 
     public WorkflowTaskResultCoordinator(
             WorkflowExecutionRepository executionRepository,
@@ -58,6 +62,27 @@ public class WorkflowTaskResultCoordinator {
             OutboxWriter outboxWriter,
             KubeOnCallProperties properties,
             @Value("${kubeoncall.worker.task.lease-seconds:300}") long taskLeaseSeconds) {
+        this(
+                executionRepository,
+                approvalRepository,
+                taskRepository,
+                auditWriter,
+                outboxWriter,
+                properties,
+                taskLeaseSeconds,
+                null);
+    }
+
+    @Autowired
+    public WorkflowTaskResultCoordinator(
+            WorkflowExecutionRepository executionRepository,
+            MySqlApprovalRepository approvalRepository,
+            AsyncTaskRepository taskRepository,
+            OperationAuditWriter auditWriter,
+            OutboxWriter outboxWriter,
+            KubeOnCallProperties properties,
+            @Value("${kubeoncall.worker.task.lease-seconds:300}") long taskLeaseSeconds,
+            NotificationPublisher notificationPublisher) {
         this.executionRepository = executionRepository;
         this.approvalRepository = approvalRepository;
         this.taskRepository = taskRepository;
@@ -66,6 +91,7 @@ public class WorkflowTaskResultCoordinator {
         this.taskLeaseDuration = Duration.ofSeconds(Math.max(1, taskLeaseSeconds));
         this.approvalTtl =
                 Duration.ofSeconds(Math.max(1, properties.getApproval().getCallbackTimeoutSeconds()));
+        this.notificationPublisher = notificationPublisher;
     }
 
     @Transactional
@@ -181,6 +207,11 @@ public class WorkflowTaskResultCoordinator {
                             "status", approval.status(),
                             "riskLevel", approval.riskLevel()),
                     context.task().requestId()));
+            if (notificationPublisher != null) {
+                notificationPublisher.publish(
+                        ApprovalNotificationMessageFactory.requested(approval),
+                        context.task().requestId());
+            }
         }
         return new FinalizationResult(
                 durable.publicId(),

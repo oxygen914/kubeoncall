@@ -8,16 +8,19 @@ import java.util.UUID;
 import java.util.function.Supplier;
 
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.kubeoncall.alarm.notification.AlarmNotificationMessageFactory;
 import com.kubeoncall.alarm.readmodel.AlarmCommandException.Code;
 import com.kubeoncall.audit.OperationAuditWriter;
 import com.kubeoncall.audit.OutboxWriter;
 import com.kubeoncall.idempotency.IdempotencyService;
+import com.kubeoncall.notification.application.NotificationPublisher;
 
 /**
  * Transactional command side for alarm acknowledgement, recovery confirmation and silence
@@ -41,6 +44,7 @@ public class AlarmCommandService {
     private final OutboxWriter outboxWriter;
     private final IdempotencyService idempotencyService;
     private final ObjectMapper objectMapper;
+    private final NotificationPublisher notificationPublisher;
 
     public AlarmCommandService(
             ObjectProvider<JdbcTemplate> jdbcTemplateProvider,
@@ -49,12 +53,32 @@ public class AlarmCommandService {
             OutboxWriter outboxWriter,
             IdempotencyService idempotencyService,
             ObjectMapper objectMapper) {
+        this(
+                jdbcTemplateProvider,
+                readRepositoryProvider,
+                auditWriter,
+                outboxWriter,
+                idempotencyService,
+                objectMapper,
+                null);
+    }
+
+    @Autowired
+    public AlarmCommandService(
+            ObjectProvider<JdbcTemplate> jdbcTemplateProvider,
+            ObjectProvider<AlarmReadRepository> readRepositoryProvider,
+            OperationAuditWriter auditWriter,
+            OutboxWriter outboxWriter,
+            IdempotencyService idempotencyService,
+            ObjectMapper objectMapper,
+            NotificationPublisher notificationPublisher) {
         this.jdbcTemplateProvider = jdbcTemplateProvider;
         this.readRepositoryProvider = readRepositoryProvider;
         this.auditWriter = auditWriter;
         this.outboxWriter = outboxWriter;
         this.idempotencyService = idempotencyService;
         this.objectMapper = objectMapper;
+        this.notificationPublisher = notificationPublisher;
     }
 
     public boolean isAvailable() {
@@ -209,6 +233,14 @@ public class AlarmCommandService {
                         "acknowledgedAt", command.acknowledgedAt().toString(),
                         "reason", value(command.reason())),
                 command.requestId()));
+        publishLifecycle(
+                before,
+                "alarm.acknowledged",
+                "告警已确认",
+                "值班人员已确认告警，后续处置继续以 KubeOnCall 状态为准",
+                command.actorDisplayName(),
+                command.acknowledgedAt(),
+                command.requestId());
         return new AcknowledgeResult(command.alarmId(), "ACKNOWLEDGED", after, version);
     }
 
@@ -277,6 +309,14 @@ public class AlarmCommandService {
                         "confirmedBy", String.valueOf(command.actorUserId()),
                         "confirmedAt", command.confirmedAt().toString()),
                 command.requestId()));
+        publishLifecycle(
+                before,
+                "alarm.recovery.confirmed",
+                "告警恢复已确认",
+                "健康检查通过，告警已进入已解决状态",
+                command.actorDisplayName(),
+                command.confirmedAt(),
+                command.requestId());
         return new RecoveryConfirmationResult(command.alarmId(), "RESOLVED", version);
     }
 
@@ -353,7 +393,31 @@ public class AlarmCommandService {
                         "expiresAt", command.expiresAt().toString(),
                         "reason", value(command.reason())),
                 command.requestId()));
+        publishLifecycle(
+                before,
+                "alarm.silence.approved",
+                "告警静默已批准",
+                "静默操作已批准，告警状态已更新",
+                command.actorDisplayName(),
+                command.approvedAt(),
+                command.requestId());
         return new SilenceApprovalResult(command.alarmId(), "SUPPRESSED", silenceId, command.expiresAt(), version);
+    }
+
+    private void publishLifecycle(
+            AlarmIncidentRecord alarm,
+            String eventType,
+            String title,
+            String summary,
+            String actor,
+            Instant occurredAt,
+            String requestId) {
+        if (notificationPublisher == null) {
+            return;
+        }
+        notificationPublisher.publish(
+                AlarmNotificationMessageFactory.lifecycle(alarm, eventType, title, summary, actor, occurredAt),
+                requestId);
     }
 
     private JdbcTemplate requiredJdbcTemplate() {

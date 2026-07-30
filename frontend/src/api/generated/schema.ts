@@ -500,6 +500,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/integrations/notifications/{deliveryId}/replays": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["replayNotificationDelivery"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/executions": {
         parameters: {
             query?: never;
@@ -2708,6 +2724,19 @@ export interface components {
             /** Format: date-time */
             createdAt?: string;
         };
+        ReplayRequest: {
+            reason: string;
+        };
+        ApiResponseReplayView: {
+            data?: components["schemas"]["ReplayView"];
+            meta?: components["schemas"]["ResponseMeta"];
+        };
+        ReplayView: {
+            deliveryId?: string;
+            status?: string;
+            /** Format: int32 */
+            replayCount?: number;
+        };
         CreateExecutionRequest: {
             question: string;
             sessionId?: string;
@@ -3794,6 +3823,9 @@ export interface components {
             consecutiveFailures?: number;
             /** Format: date-time */
             circuitOpenedAt?: string;
+            /** Format: int32 */
+            targetCount?: number;
+            capabilities?: string[];
         };
         ListEnvelopeNotificationDeliveryView: {
             data?: components["schemas"]["NotificationDeliveryView"][];
@@ -3815,6 +3847,14 @@ export interface components {
             durationMs?: number;
             /** Format: int32 */
             attempt?: number;
+            providerKey?: string;
+            destinationId?: string;
+            eventType?: string;
+            operation?: string;
+            externalMessageId?: string;
+            retryable?: boolean;
+            /** Format: int32 */
+            replayCount?: number;
         };
         ExecutionListItem: {
             id?: string;
@@ -5253,6 +5293,32 @@ export interface operations {
                 };
                 content: {
                     "*/*": components["schemas"]["ApiResponseDocumentView"];
+                };
+            };
+        };
+    };
+    replayNotificationDelivery: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                deliveryId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReplayRequest"];
+            };
+        };
+        responses: {
+            /** @description Notification replay accepted */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseReplayView"];
                 };
             };
         };

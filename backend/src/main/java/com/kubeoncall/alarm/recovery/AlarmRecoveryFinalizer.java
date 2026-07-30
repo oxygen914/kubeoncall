@@ -8,9 +8,13 @@ import java.util.stream.Collectors;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import com.kubeoncall.alarm.domain.AlarmSeverity;
+import com.kubeoncall.alarm.notification.AlarmNotificationMessageFactory;
+import com.kubeoncall.notification.application.NotificationPublishResult;
+import com.kubeoncall.notification.application.NotificationPublisher;
 import com.kubeoncall.tool.ToolExecutor;
 
 @Service
@@ -19,11 +23,18 @@ public class AlarmRecoveryFinalizer {
     private static final Logger log = LoggerFactory.getLogger(AlarmRecoveryFinalizer.class);
 
     private final Map<String, ToolExecutor> executorsByKind;
+    private final NotificationPublisher notificationPublisher;
 
     public AlarmRecoveryFinalizer(List<ToolExecutor> toolExecutors) {
+        this(toolExecutors, null);
+    }
+
+    @Autowired
+    public AlarmRecoveryFinalizer(List<ToolExecutor> toolExecutors, NotificationPublisher notificationPublisher) {
         this.executorsByKind = toolExecutors.stream()
                 .collect(Collectors.toMap(
                         ToolExecutor::getExecutorKind, Function.identity(), (left, right) -> left, LinkedHashMap::new));
+        this.notificationPublisher = notificationPublisher;
     }
 
     public RecoveryActions finalizeRecovery(AlarmRecoveryState state, String actor, String note) {
@@ -38,7 +49,7 @@ public class AlarmRecoveryFinalizer {
         parameters.put("confirmedBy", actor);
         parameters.put("note", note == null ? "" : note);
 
-        Map<String, Object> notification = execute("alertmanager", "sendAlertEvent", parameters);
+        Map<String, Object> notification = publishOrLegacy(state, actor, note, parameters);
         Map<String, Object> resolution = execute("incident", "resolveIncident", parameters);
         boolean postmortemRequired = state.severity() == AlarmSeverity.P0 || state.severity() == AlarmSeverity.P1;
         Map<String, Object> postmortem = postmortemRequired
@@ -46,6 +57,33 @@ public class AlarmRecoveryFinalizer {
                 : Map.of("status", "not_required");
         boolean success = !isFailure(notification) && !isFailure(resolution) && !isFailure(postmortem);
         return new RecoveryActions(success, postmortemRequired, notification, resolution, postmortem);
+    }
+
+    private Map<String, Object> publishOrLegacy(
+            AlarmRecoveryState state, String actor, String note, Map<String, Object> legacyParameters) {
+        if (notificationPublisher != null) {
+            try {
+                java.time.Instant occurredAt =
+                        state.confirmedAt() == null ? java.time.Instant.now() : state.confirmedAt();
+                NotificationPublishResult result = notificationPublisher.publish(
+                        AlarmNotificationMessageFactory.recovery(state, actor, note, occurredAt), state.alarmId());
+                if (result.status() == NotificationPublishResult.Status.QUEUED
+                        || result.status() == NotificationPublishResult.Status.ALREADY_QUEUED) {
+                    return Map.of(
+                            "status",
+                            "success",
+                            "deliveryStatus",
+                            result.status().name(),
+                            "deliveryIds",
+                            result.deliveryIds());
+                }
+            } catch (RuntimeException exception) {
+                log.warn(
+                        "Durable alarm recovery notification failed; using legacy path: errorType={}",
+                        exception.getClass().getSimpleName());
+            }
+        }
+        return execute("alertmanager", "sendAlertEvent", legacyParameters);
     }
 
     private Map<String, Object> execute(String executorKind, String action, Map<String, Object> parameters) {

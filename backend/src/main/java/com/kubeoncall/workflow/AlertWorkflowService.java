@@ -4,28 +4,43 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import com.kubeoncall.alarm.domain.NormalizedAlarmEvent;
+import com.kubeoncall.alarm.notification.AlarmNotificationMessageFactory;
 import com.kubeoncall.domain.alarm.AlarmEvent;
 import com.kubeoncall.domain.graph.NodeResult;
+import com.kubeoncall.notification.application.NotificationPublisher;
 import com.kubeoncall.service.KubeOnCallMetricsService;
 
 /** Coordinates the public alarm workflow entry points without owning individual workflow branches. */
 @Service
 public class AlertWorkflowService {
 
+    private static final Logger log = LoggerFactory.getLogger(AlertWorkflowService.class);
+
     private final AlarmEventPreparationService eventPreparationService;
     private final AlertWorkflowPreflight workflowPreflight;
     private final AlertWorkflowCoordinator workflowCoordinator;
     private final KubeOnCallMetricsService metricsService;
+    private final NotificationPublisher notificationPublisher;
 
     public AlertWorkflowService(
             AlarmEventPreparationService eventPreparationService,
             AlertWorkflowPreflight workflowPreflight,
             AlertWorkflowCoordinator workflowCoordinator) {
-        this(eventPreparationService, workflowPreflight, workflowCoordinator, null);
+        this(eventPreparationService, workflowPreflight, workflowCoordinator, null, null);
+    }
+
+    public AlertWorkflowService(
+            AlarmEventPreparationService eventPreparationService,
+            AlertWorkflowPreflight workflowPreflight,
+            AlertWorkflowCoordinator workflowCoordinator,
+            KubeOnCallMetricsService metricsService) {
+        this(eventPreparationService, workflowPreflight, workflowCoordinator, metricsService, null);
     }
 
     @Autowired
@@ -33,11 +48,13 @@ public class AlertWorkflowService {
             AlarmEventPreparationService eventPreparationService,
             AlertWorkflowPreflight workflowPreflight,
             AlertWorkflowCoordinator workflowCoordinator,
-            KubeOnCallMetricsService metricsService) {
+            KubeOnCallMetricsService metricsService,
+            NotificationPublisher notificationPublisher) {
         this.eventPreparationService = eventPreparationService;
         this.workflowPreflight = workflowPreflight;
         this.workflowCoordinator = workflowCoordinator;
         this.metricsService = metricsService;
+        this.notificationPublisher = notificationPublisher;
     }
 
     /**
@@ -60,7 +77,24 @@ public class AlertWorkflowService {
         if (metricsService != null) {
             metricsService.recordAlarmQuality("actionable");
         }
+        publishInitialNotification(preflightResult.preparedAlarm());
         return workflowCoordinator.run(preflightResult, startedAt);
+    }
+
+    private void publishInitialNotification(AlarmEventPreparationService.PreparedAlarm preparedAlarm) {
+        if (notificationPublisher == null) {
+            return;
+        }
+        try {
+            notificationPublisher.publish(
+                    AlarmNotificationMessageFactory.firing(
+                            preparedAlarm.event(), preparedAlarm.evaluation(), "initial"),
+                    preparedAlarm.event().alarmId());
+        } catch (RuntimeException exception) {
+            log.warn(
+                    "Initial durable notification submission failed; diagnosis will continue: errorType={}",
+                    exception.getClass().getSimpleName());
+        }
     }
 
     private static NormalizedAlarmEvent toNormalized(AlarmEvent alarmEvent) {

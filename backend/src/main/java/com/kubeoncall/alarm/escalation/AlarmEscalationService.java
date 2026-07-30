@@ -8,13 +8,17 @@ import java.util.stream.Collectors;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import com.kubeoncall.alarm.domain.AlarmEvaluationResult;
 import com.kubeoncall.alarm.domain.AlarmSeverity;
 import com.kubeoncall.alarm.domain.NormalizedAlarmEvent;
+import com.kubeoncall.alarm.notification.AlarmNotificationMessageFactory;
 import com.kubeoncall.domain.graph.NodeResult;
 import com.kubeoncall.domain.graph.NodeStatus;
+import com.kubeoncall.notification.application.NotificationPublishResult;
+import com.kubeoncall.notification.application.NotificationPublisher;
 import com.kubeoncall.tool.ToolExecutor;
 
 @Service
@@ -23,11 +27,18 @@ public class AlarmEscalationService {
     private static final Logger log = LoggerFactory.getLogger(AlarmEscalationService.class);
 
     private final Map<String, ToolExecutor> executorsByKind;
+    private final NotificationPublisher notificationPublisher;
 
     public AlarmEscalationService(List<ToolExecutor> toolExecutors) {
+        this(toolExecutors, null);
+    }
+
+    @Autowired
+    public AlarmEscalationService(List<ToolExecutor> toolExecutors, NotificationPublisher notificationPublisher) {
         this.executorsByKind = toolExecutors.stream()
                 .collect(Collectors.toMap(
                         ToolExecutor::getExecutorKind, Function.identity(), (left, right) -> left, LinkedHashMap::new));
+        this.notificationPublisher = notificationPublisher;
     }
 
     public NodeResult escalate(
@@ -54,7 +65,7 @@ public class AlarmEscalationService {
 
         LinkedHashMap<String, Object> payload = new LinkedHashMap<>(parameters);
         payload.put("tools", List.of("alertmanager.sendAlertEvent", "incident.escalateIncident"));
-        Map<String, Object> notificationResult = execute("alertmanager", "sendAlertEvent", parameters);
+        Map<String, Object> notificationResult = publishOrLegacy(event, evaluation, count, threshold, parameters);
         Map<String, Object> incidentResult = execute("incident", "escalateIncident", parameters);
         payload.put("notificationResult", notificationResult);
         payload.put("incidentResult", incidentResult);
@@ -67,6 +78,36 @@ public class AlarmEscalationService {
                         ? "Unacknowledged alarm notification and incident escalation delivered"
                         : "Alarm escalation delivery failed",
                 payload);
+    }
+
+    private Map<String, Object> publishOrLegacy(
+            NormalizedAlarmEvent event,
+            AlarmEvaluationResult evaluation,
+            long count,
+            long threshold,
+            Map<String, Object> legacyParameters) {
+        if (notificationPublisher != null) {
+            try {
+                NotificationPublishResult result = notificationPublisher.publish(
+                        AlarmNotificationMessageFactory.escalation(event, evaluation, count, threshold),
+                        event.alarmId());
+                if (result.status() == NotificationPublishResult.Status.QUEUED
+                        || result.status() == NotificationPublishResult.Status.ALREADY_QUEUED) {
+                    return Map.of(
+                            "status",
+                            "success",
+                            "deliveryStatus",
+                            result.status().name(),
+                            "deliveryIds",
+                            result.deliveryIds());
+                }
+            } catch (RuntimeException exception) {
+                log.warn(
+                        "Durable alarm escalation notification failed; using legacy path: errorType={}",
+                        exception.getClass().getSimpleName());
+            }
+        }
+        return execute("alertmanager", "sendAlertEvent", legacyParameters);
     }
 
     private Map<String, Object> execute(String executorKind, String action, Map<String, Object> parameters) {

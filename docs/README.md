@@ -21,6 +21,7 @@ README 只保留项目定位和最短成功路径；安装、配置、部署和�
 | [Helm 部署](../deploy/helm/kubeoncall/README.md)                    | Quickstart 一键安装、多镜像 Release、生产外部依赖与 Sandbox digest 配置 |
 | [Kubernetes 指标接入指南](guides/Kubernetes指标接入指南.md)         | 接入 kube-state-metrics、Node Exporter 和生产 Prometheus                |
 | [Kubernetes 操作闭环接入指南](guides/Kubernetes操作闭环接入指南.md) | 实现操作幂等、变更前快照、恢复验证、回滚和人工升级契约                  |
+| [飞书、钉钉通知配置与验收](guides/飞书钉钉通知配置与验收指南.md)   | 配置逻辑路由、群机器人、安全边界、重试重放和真实接收验收              |
 
 ## 架构与实施计划
 
@@ -28,6 +29,7 @@ README 只保留项目定位和最短成功路径；安装、配置、部署和�
 | --------------------------------------------------------------------------------------------------------------- | ------------------------------------------------- |
 | [项目架构](architecture/项目架构.md)                                                                            | 理解模块边界、数据流和核心设计                    |
 | [监控能力重构实施计划](plans/active/monitoring/KubeOnCall监控能力重构实施计划.md)                               | 当前监控能力建设范围、阶段和验收标准              |
+| [多渠道通知底座实施计划](plans/active/notifications/KubeOnCall多渠道通知底座实施计划.md)                        | 飞书、钉钉等渠道共用底座、分阶段接入与验收边界    |
 | [自主运维闭环实施计划](plans/active/ai-operations/KubeOnCall独立解决运营问题能力收口实施计划.md)                | 真实模型、统一证据、持久化 Ask 和恢复闭环收口计划 |
 | [本地真实模型与统一证据链验收](plans/active/ai-operations/validation/2026-07-29本地真实模型与统一证据链验收记录.md) | 本地真实模型、Loki、Prometheus 与持久化 Ask 联调证据及能力边界 |
 | [Sandbox 重构计划](plans/active/sandbox/sandbox重构计划书.md)                                                   | 当前 Sandbox 重构范围、任务拆分和验收边界         |

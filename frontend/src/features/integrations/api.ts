@@ -15,6 +15,8 @@ export interface IntegrationView {
   circuitState: string
   consecutiveFailures: number
   circuitOpenedAt: string | null
+  targetCount: number
+  capabilities: string[]
 }
 
 export interface IntegrationCatalog {
@@ -24,7 +26,7 @@ export interface IntegrationCatalog {
 
 export interface NotificationDelivery {
   id: string
-  executionId: string
+  executionId: string | null
   status: string
   summary: string | null
   errorCode: string | null
@@ -33,6 +35,13 @@ export interface NotificationDelivery {
   finishedAt: string | null
   durationMs: number | null
   attempt: number
+  providerKey: string | null
+  destinationId: string | null
+  eventType: string | null
+  operation: string | null
+  externalMessageId: string | null
+  retryable: boolean
+  replayCount: number
 }
 
 export const getIntegrations = () => api.get<IntegrationCatalog>('/api/v1/integrations')

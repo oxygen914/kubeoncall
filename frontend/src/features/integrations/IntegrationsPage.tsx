@@ -23,7 +23,7 @@ export function IntegrationsPage() {
         <div>
           <h1>集成与通知</h1>
           <p className="koc-page__subtitle">
-            查看外部系统配置、进程内断路器状态和持久化通知节点执行记录。
+            查看外部系统配置、进程内断路器状态和逐目的地通知投递记录。
           </p>
         </div>
       </header>
@@ -37,6 +37,7 @@ export function IntegrationsPage() {
                 <th>依赖</th>
                 <th>配置</th>
                 <th>端点</th>
+                <th>目标/能力</th>
                 <th>超时</th>
                 <th>断路器</th>
                 <th>连续失败</th>
@@ -55,7 +56,16 @@ export function IntegrationsPage() {
                       {integration.configured ? '已配置' : '未配置'}
                     </StatusBadge>
                   </td>
-                  <td className="koc-mono">{integration.endpoint ?? '内部依赖'}</td>
+                  <td className="koc-mono">
+                    {integration.endpoint ??
+                      (integration.capabilities.length > 0 ? '受保护配置' : '内部依赖')}
+                  </td>
+                  <td>
+                    {integration.targetCount} 个
+                    {integration.capabilities.length > 0
+                      ? ` / ${integration.capabilities.join(', ')}`
+                      : ''}
+                  </td>
                   <td>
                     {integration.timeoutMillis == null ? '—' : `${integration.timeoutMillis}ms`}
                   </td>
@@ -85,6 +95,8 @@ export function IntegrationsPage() {
               <tr>
                 <th>时间</th>
                 <th>执行</th>
+                <th>渠道/目的地</th>
+                <th>事件</th>
                 <th>状态</th>
                 <th>摘要</th>
                 <th>耗时</th>
@@ -96,18 +108,36 @@ export function IntegrationsPage() {
                 <tr key={delivery.id}>
                   <td>{formatTime(delivery.finishedAt ?? delivery.startedAt)}</td>
                   <td>
-                    <Link to={`/executions/${encodeURIComponent(delivery.executionId)}`}>
-                      {delivery.executionId}
-                    </Link>
+                    {delivery.executionId ? (
+                      <Link to={`/executions/${encodeURIComponent(delivery.executionId)}`}>
+                        {delivery.executionId}
+                      </Link>
+                    ) : (
+                      <span className="koc-mono">{delivery.id}</span>
+                    )}
                   </td>
                   <td>
-                    <StatusBadge tone={delivery.status === 'SUCCEEDED' ? 'success' : 'danger'}>
+                    {delivery.providerKey ?? 'legacy'} / {delivery.destinationId ?? 'workflow'}
+                    {delivery.externalMessageId ? (
+                      <>
+                        <br />
+                        <span className="koc-mono">{delivery.externalMessageId}</span>
+                      </>
+                    ) : null}
+                  </td>
+                  <td>{delivery.eventType ?? delivery.operation ?? '—'}</td>
+                  <td>
+                    <StatusBadge tone={deliveryTone(delivery.status)}>
                       {delivery.status}
                     </StatusBadge>
                   </td>
                   <td>{delivery.summary ?? '—'}</td>
                   <td>{delivery.durationMs == null ? '—' : `${delivery.durationMs}ms`}</td>
-                  <td>{delivery.errorSummary ?? delivery.errorCode ?? '—'}</td>
+                  <td>
+                    {delivery.errorSummary ?? delivery.errorCode ?? '—'}
+                    {delivery.retryable ? '（可重试）' : ''}
+                    {delivery.replayCount > 0 ? `（已重放 ${delivery.replayCount} 次）` : ''}
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -122,6 +152,13 @@ function circuitTone(state: string): StatusTone {
   if (state === 'OPEN') return 'danger'
   if (state === 'HALF_OPEN') return 'warning'
   if (state === 'CLOSED') return 'success'
+  return 'neutral'
+}
+
+function deliveryTone(status: string): StatusTone {
+  if (status === 'SUCCEEDED' || status === 'DELIVERED') return 'success'
+  if (status === 'PENDING' || status === 'PROCESSING' || status === 'RETRYING') return 'warning'
+  if (status === 'FAILED' || status === 'DEAD_LETTER') return 'danger'
   return 'neutral'
 }
 

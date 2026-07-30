@@ -49,6 +49,10 @@ server:
 kubeoncall:
   mysql-enabled: ${KUBEONCALL_MYSQL_ENABLED:false}
   migration-only: ${KUBEONCALL_MIGRATION_ONLY:false}
+  notifications:
+    enabled: ${KUBEONCALL_NOTIFICATIONS_ENABLED:false}
+    reconcile-poll-millis: ${KUBEONCALL_NOTIFICATIONS_RECONCILE_POLL_MILLIS:5000}
+    routes: []
   api:
     default-page-size: 20
     max-page-size: 100
