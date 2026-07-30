@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { AsyncState } from '@/components/feedback/AsyncState'
 import { Button } from '@/components/ui/Button'
 import { StatusBadge } from '@/components/ui/StatusBadge'
@@ -8,16 +8,38 @@ import { useSession } from '@/features/auth/useSession'
 import { TaskStatusPanel } from '@/features/tasks/TaskStatusPanel'
 import { useCreateMemoryExtraction, useMemories, useMemoryExtractions } from './hooks'
 import type { MemoryExtractionInput, MemoryStatus } from './api'
+import { listReturnState, mergeSearchParams, readPageParam } from '@/lib/navigation'
 
 const PAGE_SIZE = 20
 
 export function MemoryListPage() {
   const navigate = useNavigate()
+  const location = useLocation()
+  const [searchParams, setSearchParams] = useSearchParams()
   const { session } = useSession()
-  const [page, setPage] = useState(1)
-  const [status, setStatus] = useState<MemoryStatus | ''>('ACTIVE')
-  const [memoryType, setMemoryType] = useState('')
+  const page = readPageParam(searchParams.get('page'))
+  const statusValue = searchParams.get('status')
+  const status: MemoryStatus | '' =
+    statusValue === 'ALL'
+      ? ''
+      : statusValue === 'ACTIVE' || statusValue === 'DELETED'
+        ? statusValue
+        : 'ACTIVE'
+  const memoryType = (searchParams.get('memoryType') ?? '').slice(0, 64)
   const [showExtraction, setShowExtraction] = useState(false)
+  const updateFilters = (updates: Record<string, string | null>) => {
+    setSearchParams(mergeSearchParams(searchParams, { ...updates, page: null }), {
+      replace: true,
+    })
+  }
+  const updatePage = (nextPage: number) => {
+    setSearchParams(mergeSearchParams(searchParams, { page: nextPage === 1 ? null : nextPage }))
+  }
+  const openDetail = (memoryId: string) => {
+    navigate(`/memory/${encodeURIComponent(memoryId)}`, {
+      state: listReturnState(location.pathname, location.search),
+    })
+  }
   const query = useMemories({ page, size: PAGE_SIZE, status, memoryType })
   const extractionsQuery = useMemoryExtractions()
   const canExtract = hasPermission(session, PERMISSIONS.MEMORY_WRITE)
@@ -44,8 +66,7 @@ export function MemoryListPage() {
           <select
             value={status}
             onChange={(event) => {
-              setStatus(event.target.value as MemoryStatus | '')
-              setPage(1)
+              updateFilters({ status: event.target.value || 'ALL' })
             }}
           >
             <option value="">全部</option>
@@ -60,8 +81,7 @@ export function MemoryListPage() {
             maxLength={64}
             placeholder="SERVICE_FACT / INCIDENT_SUMMARY"
             onChange={(event) => {
-              setMemoryType(event.target.value)
-              setPage(1)
+              updateFilters({ memoryType: event.target.value || null })
             }}
           />
         </label>
@@ -90,11 +110,11 @@ export function MemoryListPage() {
                 key={memory.id}
                 className="koc-table__row"
                 tabIndex={0}
-                onClick={() => navigate(`/memory/${memory.id}`)}
+                onClick={() => openDetail(memory.id)}
                 onKeyDown={(event) => {
                   if (event.key === 'Enter' || event.key === ' ') {
                     event.preventDefault()
-                    navigate(`/memory/${memory.id}`)
+                    openDetail(memory.id)
                   }
                 }}
               >
@@ -123,7 +143,7 @@ export function MemoryListPage() {
                 variant="ghost"
                 size="sm"
                 disabled={page <= 1}
-                onClick={() => setPage(page - 1)}
+                onClick={() => updatePage(page - 1)}
               >
                 上一页
               </Button>
@@ -131,7 +151,7 @@ export function MemoryListPage() {
                 variant="ghost"
                 size="sm"
                 disabled={!query.data.page.hasNext}
-                onClick={() => setPage(page + 1)}
+                onClick={() => updatePage(page + 1)}
               >
                 下一页
               </Button>

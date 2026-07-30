@@ -35,9 +35,10 @@ export function MonitoringPage() {
   const [cpuWindow, setCpuWindow] = useState<'15m' | '1h' | '6h'>('15m')
   const [healthWindow, setHealthWindow] = useState<'1h' | '6h' | '24h' | '7d' | '30d'>('6h')
   const [podPhase, setPodPhase] = useState('')
-  const canReadCorrelations =
-    hasPermission(session, PERMISSIONS.ALARM_READ) &&
-    hasPermission(session, PERMISSIONS.CHANGE_READ)
+  const canReadAlarms = hasPermission(session, PERMISSIONS.ALARM_READ)
+  const canReadChanges = hasPermission(session, PERMISSIONS.CHANGE_READ)
+  const canAsk = hasPermission(session, PERMISSIONS.ASK_EXECUTE)
+  const canReadCorrelations = canReadAlarms && canReadChanges
 
   const summaryQuery = useQuery({
     queryKey: ['monitoring', 'summary', scope],
@@ -296,7 +297,11 @@ export function MonitoringPage() {
                   isEmpty={!adviceQuery.data?.advice.length}
                   emptyMessage="当前没有运营建议。"
                 >
-                  <AdviceList advice={adviceQuery.data?.advice ?? []} />
+                  <AdviceList
+                    advice={adviceQuery.data?.advice ?? []}
+                    canAsk={canAsk}
+                    canReadChanges={canReadChanges}
+                  />
                 </AsyncState>
               </section>
             </div>
@@ -653,7 +658,9 @@ function CorrelationList({ correlations }: { correlations: AlarmChangeCorrelatio
             <StatusBadge tone={severityTone(correlation.severity)}>
               {correlation.severity}
             </StatusBadge>
-            <Link to={`/alarms/${correlation.alarmId}`}>{correlation.alertName}</Link>
+            <Link to={`/alarms/${encodeURIComponent(correlation.alarmId)}`}>
+              {correlation.alertName}
+            </Link>
             <span className="koc-mono">{correlation.resourceName}</span>
           </div>
           {correlation.changes.map((change) => (
@@ -670,32 +677,64 @@ function CorrelationList({ correlations }: { correlations: AlarmChangeCorrelatio
   )
 }
 
-function AdviceList({ advice }: { advice: OperationsAdvice[] }) {
+function AdviceList({
+  advice,
+  canAsk,
+  canReadChanges,
+}: {
+  advice: OperationsAdvice[]
+  canAsk: boolean
+  canReadChanges: boolean
+}) {
   return (
     <ul className="koc-monitoring__advice">
-      {advice.map((item) => (
-        <li key={item.id}>
-          <div>
-            <StatusBadge tone={severityTone(item.risk)}>{item.risk}</StatusBadge>
-            <strong>{item.title}</strong>
-            <span>{item.source === 'MODEL' ? 'AI 生成' : '规则建议'}</span>
-          </div>
-          <p>{item.summary}</p>
-          <dl>
+      {advice.map((item) => {
+        const destination = adviceDestination(item, canAsk, canReadChanges)
+        return (
+          <li key={item.id}>
             <div>
-              <dt>证据</dt>
-              <dd>{item.evidence}</dd>
+              <StatusBadge tone={severityTone(item.risk)}>{item.risk}</StatusBadge>
+              <strong>{item.title}</strong>
+              <span>{item.source === 'MODEL' ? 'AI 生成' : '规则建议'}</span>
             </div>
-            <div>
-              <dt>建议</dt>
-              <dd>{item.recommendation}</dd>
-            </div>
-          </dl>
-          <Link to={item.analysisPath}>查看分析入口</Link>
-        </li>
-      ))}
+            <p>{item.summary}</p>
+            <dl>
+              <div>
+                <dt>证据</dt>
+                <dd>{item.evidence}</dd>
+              </div>
+              <div>
+                <dt>建议</dt>
+                <dd>{item.recommendation}</dd>
+              </div>
+            </dl>
+            {destination ? <Link to={destination.path}>{destination.label}</Link> : null}
+          </li>
+        )
+      })}
     </ul>
   )
+}
+
+function adviceDestination(
+  item: OperationsAdvice,
+  canAsk: boolean,
+  canReadChanges: boolean,
+): { path: string; label: string } | null {
+  if (item.analysisPath === '/ask' && canAsk) {
+    const question =
+      `请基于当前监控范围分析“${item.title}”。现象：${item.summary}；` +
+      `已有证据：${item.evidence}`
+    return {
+      path: `/ask?question=${encodeURIComponent(question.slice(0, 4000))}`,
+      label: '发起 AI 诊断',
+    }
+  }
+  if (item.analysisPath === '/changes' && canReadChanges) {
+    return { path: '/changes', label: '查看相关变更' }
+  }
+  // `/monitoring` is the current page. Rendering it as a link creates a no-op interaction.
+  return null
 }
 
 function healthPolyline(points: HealthPoint[]): string {

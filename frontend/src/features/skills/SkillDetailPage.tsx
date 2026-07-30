@@ -1,25 +1,28 @@
-import { useNavigate, useParams } from 'react-router-dom'
+import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { AsyncState } from '@/components/feedback/AsyncState'
 import { Button } from '@/components/ui/Button'
 import { StatusBadge } from '@/components/ui/StatusBadge'
 import { hasPermission, PERMISSIONS } from '@/features/auth/permissions'
 import { useSession } from '@/features/auth/useSession'
 import { useSetSkillEnabled, useSkill } from './hooks'
+import { resolveListReturnPath } from '@/lib/navigation'
 
 export function SkillDetailPage() {
   const { skillId = '' } = useParams()
   const navigate = useNavigate()
+  const location = useLocation()
   const { session } = useSession()
   const query = useSkill(skillId)
   const stateMutation = useSetSkillEnabled(skillId)
   const skill = query.data
+  const returnTo = resolveListReturnPath(location.state, '/skills')
   const canManage = hasPermission(session, PERMISSIONS.SKILL_MANAGE)
 
   return (
     <section className="koc-page">
       <header className="koc-page__header">
         <div className="koc-page__title-row">
-          <Button variant="ghost" size="sm" onClick={() => navigate('/skills')}>
+          <Button variant="ghost" size="sm" onClick={() => navigate(returnTo)}>
             ← 返回列表
           </Button>
           <h1>Skill 详情</h1>

@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import type { SessionData } from '@/api/auth'
 import { Button } from '@/components/ui/Button'
 import { Icon } from '@/components/ui/Icon'
+import { hasPermission, PERMISSIONS, type Permission } from '@/features/auth/permissions'
 import { useMonitoringScope } from '@/features/monitoring/monitoringScopeContext'
 import { useTheme } from '@/features/theme/themeContext'
 
@@ -65,10 +66,10 @@ export function TopBar({ session, onLogout }: TopBarProps) {
             className="koc-command-trigger"
             type="button"
             onClick={() => setCommandOpen(true)}
-            aria-label="打开全局搜索或命令面板"
+            aria-label="打开快速导航"
           >
             <Icon name="search" size={17} />
-            <span>搜索资源或运行命令</span>
+            <span>快速导航</span>
             <kbd>⌘ K</kbd>
           </button>
           <button
@@ -79,19 +80,6 @@ export function TopBar({ session, onLogout }: TopBarProps) {
             title={theme === 'dark' ? '浅色主题' : '深色主题'}
           >
             <Icon name={theme === 'dark' ? 'sun' : 'moon'} />
-          </button>
-          <button
-            className="koc-icon-button"
-            type="button"
-            aria-label="查看通知"
-            title="通知中心（入口预留）"
-          >
-            <Icon name="bell" />
-            <span
-              className="koc-topbar__notification-dot"
-              role="status"
-              aria-label="存在未读通知"
-            />
           </button>
           <div className="koc-topbar__user-menu">
             <button
@@ -112,6 +100,28 @@ export function TopBar({ session, onLogout }: TopBarProps) {
                   <strong>{displayName}</strong>
                   <small>{session?.user?.roles.join(' / ') || 'Authenticated user'}</small>
                 </div>
+                {hasPermission(session, PERMISSIONS.TOKEN_READ_OWN) ? (
+                  <Link
+                    className="koc-topbar__menu-link"
+                    role="menuitem"
+                    to="/tokens"
+                    onClick={() => setUserOpen(false)}
+                  >
+                    <Icon name="key" size={16} />
+                    API Token
+                  </Link>
+                ) : null}
+                {hasPermission(session, PERMISSIONS.SYSTEM_MANAGE) ? (
+                  <Link
+                    className="koc-topbar__menu-link"
+                    role="menuitem"
+                    to="/migration"
+                    onClick={() => setUserOpen(false)}
+                  >
+                    <Icon name="change" size={16} />
+                    数据迁移
+                  </Link>
+                ) : null}
                 <Button variant="ghost" size="sm" role="menuitem" onClick={() => void onLogout()}>
                   <Icon name="logout" size={16} />
                   退出登录
@@ -121,7 +131,9 @@ export function TopBar({ session, onLogout }: TopBarProps) {
           </div>
         </div>
       </header>
-      {commandOpen ? <CommandDialog onClose={() => setCommandOpen(false)} /> : null}
+      {commandOpen ? (
+        <CommandDialog session={session} onClose={() => setCommandOpen(false)} />
+      ) : null}
     </>
   )
 }
@@ -165,16 +177,71 @@ function ContextSelector({
   )
 }
 
-function CommandDialog({ onClose }: { onClose: () => void }) {
+function CommandDialog({ session, onClose }: { session: SessionData | null; onClose: () => void }) {
   const navigate = useNavigate()
   const inputRef = useRef<HTMLInputElement>(null)
-  const destinations = [
-    { label: '查看当前风险概览', path: '/overview' },
-    { label: '进入集群态势', path: '/monitoring' },
-    { label: '查看活跃告警', path: '/alarms' },
-    { label: '查看待审批任务', path: '/approvals' },
-    { label: '向 AI 助手提问', path: '/ask' },
+  const [query, setQuery] = useState('')
+  const destinations: Array<{
+    label: string
+    path: string
+    permission: Permission
+    keywords: string
+  }> = [
+    {
+      label: '查看当前风险概览',
+      path: '/overview',
+      permission: PERMISSIONS.DASHBOARD_READ,
+      keywords: '概览 风险 dashboard',
+    },
+    {
+      label: '进入集群态势',
+      path: '/monitoring',
+      permission: PERMISSIONS.DASHBOARD_READ,
+      keywords: '集群 监控 节点 pod',
+    },
+    {
+      label: '查看活跃告警',
+      path: '/alarms',
+      permission: PERMISSIONS.ALARM_READ,
+      keywords: '告警 alarm',
+    },
+    {
+      label: '向 AI 助手提问',
+      path: '/ask',
+      permission: PERMISSIONS.ASK_EXECUTE,
+      keywords: 'AI 诊断 提问',
+    },
+    {
+      label: '查看待审批任务',
+      path: '/approvals',
+      permission: PERMISSIONS.APPROVAL_READ,
+      keywords: '审批 approval',
+    },
+    {
+      label: '查看执行记录',
+      path: '/executions',
+      permission: PERMISSIONS.EXECUTION_READ,
+      keywords: '执行 execution 失败',
+    },
+    {
+      label: '查看变更事件',
+      path: '/changes',
+      permission: PERMISSIONS.CHANGE_READ,
+      keywords: '变更 change',
+    },
+    {
+      label: '查看 Sandbox 运行',
+      path: '/sandbox-runs',
+      permission: PERMISSIONS.SANDBOX_READ,
+      keywords: 'sandbox 隔离 运行',
+    },
   ]
+  const normalizedQuery = query.trim().toLocaleLowerCase()
+  const visibleDestinations = destinations
+    .filter((destination) => hasPermission(session, destination.permission))
+    .filter((destination) =>
+      `${destination.label} ${destination.keywords}`.toLocaleLowerCase().includes(normalizedQuery),
+    )
 
   useEffect(() => {
     inputRef.current?.focus()
@@ -201,14 +268,26 @@ function CommandDialog({ onClose }: { onClose: () => void }) {
       >
         <div className="koc-command__input">
           <Icon name="search" />
-          <input ref={inputRef} placeholder="搜索页面、资源或命令…" aria-label="搜索命令" />
+          <input
+            ref={inputRef}
+            value={query}
+            placeholder="搜索可访问页面…"
+            aria-label="搜索可访问页面"
+            onChange={(event) => setQuery(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter' && visibleDestinations[0]) {
+                event.preventDefault()
+                go(visibleDestinations[0].path)
+              }
+            }}
+          />
           <kbd>Esc</kbd>
         </div>
         <div className="koc-command__heading" id="command-title">
           快速导航
         </div>
         <ul>
-          {destinations.map((destination) => (
+          {visibleDestinations.map((destination) => (
             <li key={destination.path}>
               <button type="button" onClick={() => go(destination.path)}>
                 <span>{destination.label}</span>
@@ -217,7 +296,12 @@ function CommandDialog({ onClose }: { onClose: () => void }) {
             </li>
           ))}
         </ul>
-        <p>资源全文检索将在统一搜索接口接入后启用；当前仅提供安全的页面导航。</p>
+        {visibleDestinations.length === 0 ? (
+          <p className="koc-command__empty" role="status">
+            没有匹配的可访问页面。
+          </p>
+        ) : null}
+        <p>仅搜索当前账号有权限访问的 Console 页面。</p>
       </section>
     </div>
   )

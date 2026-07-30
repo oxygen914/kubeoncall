@@ -273,6 +273,15 @@ secrets:
 console:
   enabled: true
   replicaCount: 2
+  # Build-once runtime settings served as /config/runtime.json. Keep Grafana empty when no
+  # browser-reachable Grafana endpoint exists; the Console will hide that external link.
+  runtimeConfig:
+    apiBaseUrl: ""
+    ssePath: /api/v1/events/stream
+    environment: ""
+    release: ""
+    supportUrl: ""
+    grafanaBaseUrl: ""
   image:
     repository: ghcr.io/oxygen914/kubeoncall-console
     tag: ""

@@ -95,7 +95,11 @@ export function AlertList({ alarms }: { alarms: AlarmListItem[] }) {
         <span>状态</span>
       </div>
       {alarms.map((alarm) => (
-        <Link className="koc-alert-list__row" to={`/alarms/${alarm.id}`} key={alarm.id}>
+        <Link
+          className="koc-alert-list__row"
+          to={`/alarms/${encodeURIComponent(alarm.id)}`}
+          key={alarm.id}
+        >
           <span className="koc-alert-list__primary">
             <SeverityBadge severity={alarm.severity} />
             <strong title={alarm.alertName}>{alarm.alertName}</strong>
@@ -128,7 +132,7 @@ export function ApprovalQueue({ approvals }: { approvals: ApprovalListItem[] }) 
     <ul className="koc-work-queue">
       {approvals.map((approval) => (
         <li key={approval.id}>
-          <Link to={`/approvals/${approval.id}`}>
+          <Link to={`/approvals/${encodeURIComponent(approval.id)}`}>
             <span>
               <strong title={approval.summary}>{approval.summary}</strong>
               <code>{approval.executionId}</code>
@@ -155,7 +159,7 @@ export function SandboxQueue({ runs }: { runs: SandboxRun[] }) {
     <ul className="koc-work-queue">
       {recentRuns.map((run) => (
         <li key={run.id}>
-          <Link to={`/sandbox-runs/${run.id}`}>
+          <Link to={`/sandbox-runs/${encodeURIComponent(run.id)}`}>
             <span>
               <strong title={run.toolId}>{run.toolId}</strong>
               <code>{run.id}</code>
@@ -181,8 +185,10 @@ export interface AiInsight {
   relatedChange: string
   evidence: string
   action: string
-  analysisPath: string
+  analysisPath?: string
+  analysisLabel?: string
   handlingPath?: string
+  handlingLabel?: string
   source?: 'MODEL' | 'RULE_ENGINE_FALLBACK'
 }
 
@@ -223,24 +229,20 @@ export function AiInsightPanel({ insights }: { insights: AiInsight[] }) {
             <strong>推荐动作</strong>
             <span>{insight.action}</span>
           </div>
-          <footer>
-            <Link className="koc-btn koc-btn--secondary koc-btn--sm" to={insight.analysisPath}>
-              查看分析
-            </Link>
-            {insight.handlingPath ? (
-              <Link className="koc-btn koc-btn--primary koc-btn--sm" to={insight.handlingPath}>
-                创建处置任务
-              </Link>
-            ) : (
-              <Button
-                size="sm"
-                disabled
-                title="当前没有可复用的告警处置入口，不能在概览页伪造执行请求"
-              >
-                创建处置任务
-              </Button>
-            )}
-          </footer>
+          {insight.analysisPath || insight.handlingPath ? (
+            <footer>
+              {insight.analysisPath ? (
+                <Link className="koc-btn koc-btn--secondary koc-btn--sm" to={insight.analysisPath}>
+                  {insight.analysisLabel ?? '查看分析'}
+                </Link>
+              ) : null}
+              {insight.handlingPath ? (
+                <Link className="koc-btn koc-btn--primary koc-btn--sm" to={insight.handlingPath}>
+                  {insight.handlingLabel ?? '查看告警并处置'}
+                </Link>
+              ) : null}
+            </footer>
+          ) : null}
         </article>
       ))}
     </div>

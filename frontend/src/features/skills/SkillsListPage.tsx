@@ -1,5 +1,4 @@
-import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { AsyncState } from '@/components/feedback/AsyncState'
 import { Button } from '@/components/ui/Button'
 import { StatusBadge, type StatusTone } from '@/components/ui/StatusBadge'
@@ -8,15 +7,35 @@ import { useSession } from '@/features/auth/useSession'
 import { TaskStatusPanel } from '@/features/tasks/TaskStatusPanel'
 import { useReloadSkills, useSkills } from './hooks'
 import type { SkillLoadStatus } from './api'
+import { listReturnState, mergeSearchParams, readPageParam } from '@/lib/navigation'
 
 const PAGE_SIZE = 20
+const LOAD_STATUSES: SkillLoadStatus[] = ['DISCOVERED', 'LOADING', 'LOADED', 'FAILED', 'DISABLED']
 
 export function SkillsListPage() {
   const navigate = useNavigate()
+  const location = useLocation()
+  const [searchParams, setSearchParams] = useSearchParams()
   const { session } = useSession()
-  const [page, setPage] = useState(1)
-  const [loadStatus, setLoadStatus] = useState<SkillLoadStatus | ''>('')
-  const [queryText, setQueryText] = useState('')
+  const page = readPageParam(searchParams.get('page'))
+  const loadStatusValue = searchParams.get('loadStatus') ?? ''
+  const loadStatus = LOAD_STATUSES.includes(loadStatusValue as SkillLoadStatus)
+    ? (loadStatusValue as SkillLoadStatus)
+    : ''
+  const queryText = (searchParams.get('q') ?? '').slice(0, 255)
+  const updateFilters = (updates: Record<string, string | null>) => {
+    setSearchParams(mergeSearchParams(searchParams, { ...updates, page: null }), {
+      replace: true,
+    })
+  }
+  const updatePage = (nextPage: number) => {
+    setSearchParams(mergeSearchParams(searchParams, { page: nextPage === 1 ? null : nextPage }))
+  }
+  const openDetail = (skillId: string) => {
+    navigate(`/skills/${encodeURIComponent(skillId)}`, {
+      state: listReturnState(location.pathname, location.search),
+    })
+  }
   const query = useSkills({ page, size: PAGE_SIZE, loadStatus, query: queryText })
   const reload = useReloadSkills()
   const canManage = hasPermission(session, PERMISSIONS.SKILL_MANAGE)
@@ -42,12 +61,11 @@ export function SkillsListPage() {
           <select
             value={loadStatus}
             onChange={(event) => {
-              setLoadStatus(event.target.value as SkillLoadStatus | '')
-              setPage(1)
+              updateFilters({ loadStatus: event.target.value || null })
             }}
           >
             <option value="">全部</option>
-            {['DISCOVERED', 'LOADING', 'LOADED', 'FAILED', 'DISABLED'].map((status) => (
+            {LOAD_STATUSES.map((status) => (
               <option key={status} value={status}>
                 {status}
               </option>
@@ -60,8 +78,7 @@ export function SkillsListPage() {
             value={queryText}
             maxLength={255}
             onChange={(event) => {
-              setQueryText(event.target.value)
-              setPage(1)
+              updateFilters({ q: event.target.value || null })
             }}
           />
         </label>
@@ -90,11 +107,11 @@ export function SkillsListPage() {
                 key={skill.id}
                 className="koc-table__row"
                 tabIndex={0}
-                onClick={() => navigate(`/skills/${skill.id}`)}
+                onClick={() => openDetail(skill.id)}
                 onKeyDown={(event) => {
                   if (event.key === 'Enter' || event.key === ' ') {
                     event.preventDefault()
-                    navigate(`/skills/${skill.id}`)
+                    openDetail(skill.id)
                   }
                 }}
               >
@@ -121,7 +138,7 @@ export function SkillsListPage() {
                 variant="ghost"
                 size="sm"
                 disabled={page <= 1}
-                onClick={() => setPage(page - 1)}
+                onClick={() => updatePage(page - 1)}
               >
                 上一页
               </Button>
@@ -129,7 +146,7 @@ export function SkillsListPage() {
                 variant="ghost"
                 size="sm"
                 disabled={!query.data.page.hasNext}
-                onClick={() => setPage(page + 1)}
+                onClick={() => updatePage(page + 1)}
               >
                 下一页
               </Button>

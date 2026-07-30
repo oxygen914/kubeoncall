@@ -23,7 +23,7 @@ interface NavSection {
 
 const NAV_SECTIONS: NavSection[] = [
   {
-    label: '监控中心',
+    label: '日常值班',
     items: [
       { to: '/overview', label: '概览', icon: 'grid', permission: PERMISSIONS.DASHBOARD_READ },
       {
@@ -33,29 +33,12 @@ const NAV_SECTIONS: NavSection[] = [
         permission: PERMISSIONS.DASHBOARD_READ,
       },
       { to: '/alarms', label: '告警', icon: 'alarm', permission: PERMISSIONS.ALARM_READ },
-      {
-        grafanaDashboard: 'logs',
-        label: '日志分析',
-        icon: 'logs',
-        permission: PERMISSIONS.DASHBOARD_READ,
-      },
-      {
-        to: '/changes',
-        label: '变更事件',
-        icon: 'change',
-        permission: PERMISSIONS.CHANGE_READ,
-      },
     ],
   },
   {
-    label: '响应处置',
+    label: '诊断与处置',
     items: [
-      {
-        to: '/operations',
-        label: '告警运营',
-        icon: 'activity',
-        permissions: [PERMISSIONS.POLICY_READ, PERMISSIONS.MAINTENANCE_READ],
-      },
+      { to: '/ask', label: 'AI 诊断', icon: 'ask', permission: PERMISSIONS.ASK_EXECUTE },
       {
         to: '/approvals',
         label: '审批',
@@ -77,9 +60,31 @@ const NAV_SECTIONS: NavSection[] = [
     ],
   },
   {
-    label: 'AI 助手',
+    label: '运营分析',
     items: [
-      { to: '/ask', label: '提问', icon: 'ask', permission: PERMISSIONS.ASK_EXECUTE },
+      {
+        grafanaDashboard: 'logs',
+        label: '日志分析',
+        icon: 'logs',
+        permission: PERMISSIONS.DASHBOARD_READ,
+      },
+      {
+        to: '/changes',
+        label: '变更事件',
+        icon: 'change',
+        permission: PERMISSIONS.CHANGE_READ,
+      },
+      {
+        to: '/operations',
+        label: '策略与维护',
+        icon: 'activity',
+        permissions: [PERMISSIONS.POLICY_READ, PERMISSIONS.MAINTENANCE_READ],
+      },
+    ],
+  },
+  {
+    label: '平台配置',
+    items: [
       {
         to: '/knowledge',
         label: '知识库',
@@ -99,11 +104,6 @@ const NAV_SECTIONS: NavSection[] = [
         permission: PERMISSIONS.SKILL_READ,
       },
       { to: '/tools', label: '工具', icon: 'tools', permission: PERMISSIONS.TOOL_READ },
-    ],
-  },
-  {
-    label: '平台治理',
-    items: [
       {
         to: '/integrations',
         label: '集成通知',
@@ -113,17 +113,10 @@ const NAV_SECTIONS: NavSection[] = [
       { to: '/audit', label: '审计', icon: 'shield', permission: PERMISSIONS.AUDIT_READ },
       { to: '/users', label: '用户', icon: 'users', permission: PERMISSIONS.SYSTEM_MANAGE },
       {
-        to: '/tokens',
-        label: 'API Token',
-        icon: 'key',
-        permission: PERMISSIONS.TOKEN_READ_OWN,
-      },
-      { to: '/system', label: '系统', icon: 'settings' },
-      {
-        to: '/migration',
-        label: '数据迁移',
-        icon: 'change',
-        permission: PERMISSIONS.SYSTEM_MANAGE,
+        to: '/system',
+        label: '系统',
+        icon: 'settings',
+        permission: PERMISSIONS.SYSTEM_READ,
       },
     ],
   },

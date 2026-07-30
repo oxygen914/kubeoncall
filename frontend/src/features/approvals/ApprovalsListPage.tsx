@@ -1,11 +1,11 @@
-import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { AsyncState } from '@/components/feedback/AsyncState'
 import { Button } from '@/components/ui/Button'
 import { StatusBadge } from '@/components/ui/StatusBadge'
 import { useApprovalList } from './hooks'
 import type { ApprovalRiskLevel, ApprovalStatus } from './api'
 import { approvalTone, riskTone } from './viewModels'
+import { listReturnState, mergeSearchParams, readPageParam } from '@/lib/navigation'
 
 const PAGE_SIZE = 20
 const STATUSES: ApprovalStatus[] = ['PENDING', 'APPROVED', 'REJECTED', 'EXPIRED', 'CANCELLED']
@@ -13,9 +13,33 @@ const RISKS: ApprovalRiskLevel[] = ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL']
 
 export function ApprovalsListPage() {
   const navigate = useNavigate()
-  const [page, setPage] = useState(1)
-  const [status, setStatus] = useState<ApprovalStatus | ''>('PENDING')
-  const [risk, setRisk] = useState<ApprovalRiskLevel | ''>('')
+  const location = useLocation()
+  const [searchParams, setSearchParams] = useSearchParams()
+  const page = readPageParam(searchParams.get('page'))
+  const statusValue = searchParams.get('status')
+  const status =
+    statusValue === 'ALL'
+      ? ''
+      : STATUSES.includes(statusValue as ApprovalStatus)
+        ? (statusValue as ApprovalStatus)
+        : 'PENDING'
+  const riskValue = searchParams.get('risk') ?? ''
+  const risk = RISKS.includes(riskValue as ApprovalRiskLevel)
+    ? (riskValue as ApprovalRiskLevel)
+    : ''
+  const updateFilters = (updates: Record<string, string | null>) => {
+    setSearchParams(mergeSearchParams(searchParams, { ...updates, page: null }), {
+      replace: true,
+    })
+  }
+  const updatePage = (nextPage: number) => {
+    setSearchParams(mergeSearchParams(searchParams, { page: nextPage === 1 ? null : nextPage }))
+  }
+  const openDetail = (approvalId: string) => {
+    navigate(`/approvals/${encodeURIComponent(approvalId)}`, {
+      state: listReturnState(location.pathname, location.search),
+    })
+  }
   const { data, isLoading, error, isFetching } = useApprovalList({
     page,
     size: PAGE_SIZE,
@@ -38,8 +62,7 @@ export function ApprovalsListPage() {
           <select
             value={status}
             onChange={(event) => {
-              setStatus(event.target.value as ApprovalStatus | '')
-              setPage(1)
+              updateFilters({ status: event.target.value || 'ALL' })
             }}
           >
             <option value="">全部</option>
@@ -55,8 +78,7 @@ export function ApprovalsListPage() {
           <select
             value={risk}
             onChange={(event) => {
-              setRisk(event.target.value as ApprovalRiskLevel | '')
-              setPage(1)
+              updateFilters({ risk: event.target.value || null })
             }}
           >
             <option value="">全部</option>
@@ -92,11 +114,11 @@ export function ApprovalsListPage() {
                 key={approval.id}
                 className="koc-table__row"
                 tabIndex={0}
-                onClick={() => navigate(`/approvals/${approval.id}`)}
+                onClick={() => openDetail(approval.id)}
                 onKeyDown={(event) => {
                   if (event.key === 'Enter' || event.key === ' ') {
                     event.preventDefault()
-                    navigate(`/approvals/${approval.id}`)
+                    openDetail(approval.id)
                   }
                 }}
               >
@@ -128,7 +150,7 @@ export function ApprovalsListPage() {
                 variant="ghost"
                 size="sm"
                 disabled={page <= 1}
-                onClick={() => setPage((value) => Math.max(1, value - 1))}
+                onClick={() => updatePage(Math.max(1, page - 1))}
               >
                 上一页
               </Button>
@@ -136,7 +158,7 @@ export function ApprovalsListPage() {
                 variant="ghost"
                 size="sm"
                 disabled={!pageInfo.hasNext}
-                onClick={() => setPage((value) => value + 1)}
+                onClick={() => updatePage(page + 1)}
               >
                 下一页
               </Button>

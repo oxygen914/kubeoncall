@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { AsyncState } from '@/components/feedback/AsyncState'
 import { Button } from '@/components/ui/Button'
 import { StatusBadge } from '@/components/ui/StatusBadge'
@@ -10,15 +10,18 @@ import {
   useKnowledgeDocument,
   useRestoreKnowledgeDocument,
 } from './hooks'
+import { resolveListReturnPath } from '@/lib/navigation'
 
 export function KnowledgeDetailPage() {
   const { documentId = '' } = useParams()
   const navigate = useNavigate()
+  const location = useLocation()
   const { session } = useSession()
   const query = useKnowledgeDocument(documentId)
   const deletion = useDeleteKnowledgeDocument(documentId)
   const restoration = useRestoreKnowledgeDocument(documentId)
   const [reason, setReason] = useState('')
+  const returnTo = resolveListReturnPath(location.state, '/knowledge')
   const document = query.data
   const canManage = hasPermission(session, PERMISSIONS.KNOWLEDGE_DELETE)
 
@@ -26,7 +29,7 @@ export function KnowledgeDetailPage() {
     <section className="koc-page">
       <header className="koc-page__header">
         <div className="koc-page__title-row">
-          <Button variant="ghost" size="sm" onClick={() => navigate('/knowledge')}>
+          <Button variant="ghost" size="sm" onClick={() => navigate(returnTo)}>
             ← 返回列表
           </Button>
           <h1>知识文档详情</h1>

@@ -63,6 +63,7 @@ export function OverviewPage() {
   const canReadApprovals = hasPermission(session, PERMISSIONS.APPROVAL_READ)
   const canReadExecutions = hasPermission(session, PERMISSIONS.EXECUTION_READ)
   const canReadSandbox = hasPermission(session, PERMISSIONS.SANDBOX_READ)
+  const canReadChanges = hasPermission(session, PERMISSIONS.CHANGE_READ)
   const canAsk = hasPermission(session, PERMISSIONS.ASK_EXECUTE)
 
   const overviewQuery = useQuery({
@@ -169,7 +170,7 @@ export function OverviewPage() {
     : null
   const executionTrend = Object.values(data.executionTrend)
   const insights = adviceQuery.data
-    ? adviceQuery.data.advice.map(toAiInsight)
+    ? adviceQuery.data.advice.map((item) => toAiInsight(item, canAsk, canReadChanges))
     : buildInsights({
         p1,
         p2,
@@ -177,7 +178,8 @@ export function OverviewPage() {
         abnormalWorkloads,
         notReadyNodes: summaryQuery.data?.notReadyNodes ?? null,
         alarm: alarmsQuery.data?.data[0],
-        canAsk,
+        canReadAlarms,
+        canReadExecutions,
       })
 
   return (
@@ -297,7 +299,7 @@ export function OverviewPage() {
             meta="同期基线未提供"
             tone={p1 > 0 ? 'danger' : p2 > 0 ? 'warning' : 'success'}
             icon="alarm"
-            onClick={() => navigate('/alarms')}
+            onClick={canReadAlarms ? () => navigate('/alarms') : undefined}
           />
           <MetricCard
             label="异常工作负载"
@@ -319,7 +321,7 @@ export function OverviewPage() {
             meta="同期基线未提供"
             tone={data.pendingApprovals > 0 ? 'warning' : 'success'}
             icon="approval"
-            onClick={() => navigate('/approvals')}
+            onClick={canReadApprovals ? () => navigate('/approvals') : undefined}
           />
           <MetricCard
             label="正在执行"
@@ -328,7 +330,7 @@ export function OverviewPage() {
             tone="info"
             trend={executionTrend}
             icon="execution"
-            onClick={() => navigate('/executions')}
+            onClick={canReadExecutions ? () => navigate('/executions') : undefined}
           />
           <MetricCard
             label="失败执行"
@@ -337,7 +339,7 @@ export function OverviewPage() {
             tone={data.failedExecutions > 0 ? 'danger' : 'success'}
             trend={executionTrend}
             icon="activity"
-            onClick={() => navigate('/executions')}
+            onClick={canReadExecutions ? () => navigate('/executions?status=FAILED') : undefined}
           />
         </div>
       </section>
@@ -379,7 +381,11 @@ export function OverviewPage() {
             title="活跃告警队列"
             description="P1 优先；负责人来自现有确认信息，未确认时显示未认领。"
             className="koc-span-5"
-            action={<PanelLink label="全部告警" onClick={() => navigate('/alarms')} />}
+            action={
+              canReadAlarms ? (
+                <PanelLink label="全部告警" onClick={() => navigate('/alarms')} />
+              ) : undefined
+            }
           >
             {!canReadAlarms ? (
               <NoPermissionState resource="告警" />
@@ -407,7 +413,11 @@ export function OverviewPage() {
             title="执行趋势"
             description="按当前窗口展示执行状态堆叠趋势，旧数据源自动降级为总执行量。"
             className="koc-span-7"
-            action={<PanelLink label="执行中心" onClick={() => navigate('/executions')} />}
+            action={
+              canReadExecutions ? (
+                <PanelLink label="执行中心" onClick={() => navigate('/executions')} />
+              ) : undefined
+            }
           >
             <Suspense fallback={<LoadingState lines={5} />}>
               <ExecutionTrendChart
@@ -453,7 +463,11 @@ export function OverviewPage() {
             title="待审批任务"
             description="高风险操作继续从审批详情完成决策。"
             className="koc-span-6"
-            action={<PanelLink label="审批中心" onClick={() => navigate('/approvals')} />}
+            action={
+              canReadApprovals ? (
+                <PanelLink label="审批中心" onClick={() => navigate('/approvals')} />
+              ) : undefined
+            }
           >
             {!canReadApprovals ? (
               <NoPermissionState resource="审批" />
@@ -469,7 +483,11 @@ export function OverviewPage() {
             title="最近 Sandbox 任务"
             description="隔离环境中的工具运行与清理状态。"
             className="koc-span-6"
-            action={<PanelLink label="Sandbox 运行" onClick={() => navigate('/sandbox-runs')} />}
+            action={
+              canReadSandbox ? (
+                <PanelLink label="Sandbox 运行" onClick={() => navigate('/sandbox-runs')} />
+              ) : undefined
+            }
           >
             {!canReadSandbox ? (
               <NoPermissionState resource="Sandbox 运行" />
@@ -608,7 +626,7 @@ function ExecutionQueue({
         <span>耗时</span>
       </div>
       {executions.map((execution) => (
-        <Link to={`/executions/${execution.id}`} key={execution.id}>
+        <Link to={`/executions/${encodeURIComponent(execution.id)}`} key={execution.id}>
           <span>
             <strong title={execution.summary}>{execution.summary}</strong>
             <code>{execution.id}</code>
@@ -638,7 +656,8 @@ function buildInsights({
   abnormalWorkloads,
   notReadyNodes,
   alarm,
-  canAsk,
+  canReadAlarms,
+  canReadExecutions,
 }: {
   p1: number
   p2: number
@@ -646,9 +665,9 @@ function buildInsights({
   abnormalWorkloads: number | null
   notReadyNodes: number | null
   alarm: Awaited<ReturnType<typeof listAlarms>>['data'][number] | undefined
-  canAsk: boolean
+  canReadAlarms: boolean
+  canReadExecutions: boolean
 }): AiInsight[] {
-  const analysisPath = canAsk ? '/ask' : alarm ? `/alarms/${alarm.id}` : '/overview'
   const insights: AiInsight[] = []
   if (p1 > 0 || p2 > 0) {
     insights.push({
@@ -661,8 +680,12 @@ function buildInsights({
       relatedChange: '概览接口未提供变更关联数据',
       evidence: `severityCounts: P1=${p1}, P2=${p2}`,
       action: '先查看告警详情与时间线，再从原有处置入口创建任务并保留审批。',
-      analysisPath,
-      handlingPath: alarm ? `/alarms/${alarm.id}` : undefined,
+      analysisPath: canReadAlarms
+        ? alarm
+          ? `/alarms/${encodeURIComponent(alarm.id)}`
+          : '/alarms'
+        : undefined,
+      analysisLabel: '查看告警证据',
     })
   }
   if (failedExecutions > 0) {
@@ -676,8 +699,8 @@ function buildInsights({
       relatedChange: '当前聚合数据未提供变更关联',
       evidence: `failedExecutions=${failedExecutions}`,
       action: '对照失败原因与执行节点日志，必要时重新规划，不直接重复高风险动作。',
-      analysisPath: canAsk ? '/ask' : '/executions',
-      handlingPath: alarm ? `/alarms/${alarm.id}` : undefined,
+      analysisPath: canReadExecutions ? '/executions?status=FAILED' : undefined,
+      analysisLabel: '查看失败执行',
     })
   }
   if ((abnormalWorkloads ?? 0) > 0 || (notReadyNodes ?? 0) > 0) {
@@ -692,7 +715,9 @@ function buildInsights({
       evidence: `notReadyNodes=${notReadyNodes ?? 0}, abnormalWorkloads=${abnormalWorkloads ?? 0}`,
       action: '进入集群态势查看节点与 Pod 证据，再决定是否需要发起处置。',
       analysisPath: '/monitoring',
-      handlingPath: alarm ? `/alarms/${alarm.id}` : undefined,
+      analysisLabel: '查看集群证据',
+      handlingPath: alarm ? `/alarms/${encodeURIComponent(alarm.id)}` : undefined,
+      handlingLabel: '查看告警并处置',
     })
   }
   if (insights.length === 0) {
@@ -706,7 +731,6 @@ function buildInsights({
       relatedChange: '未接入概览聚合',
       evidence: 'P1/P2=0, failedExecutions=0',
       action: '保持自动刷新，并按值班节奏检查告警与变更事件。',
-      analysisPath: '/monitoring',
     })
   }
   return insights.slice(0, 3)
@@ -714,7 +738,20 @@ function buildInsights({
 
 function toAiInsight(
   item: Awaited<ReturnType<typeof getOperationsAdvice>>['advice'][number],
+  canAsk: boolean,
+  canReadChanges: boolean,
 ): AiInsight {
+  const destination =
+    item.analysisPath === '/ask' && canAsk
+      ? {
+          path: createAskPath(item.title, item.summary, item.evidence),
+          label: '发起 AI 诊断',
+        }
+      : item.analysisPath === '/changes' && canReadChanges
+        ? { path: '/changes', label: '查看相关变更' }
+        : item.analysisPath === '/monitoring'
+          ? { path: '/monitoring', label: '查看监控证据' }
+          : null
   return {
     id: item.id,
     title: item.title,
@@ -726,9 +763,15 @@ function toAiInsight(
     relatedChange: '仅在具备对应权限时纳入研判',
     evidence: item.evidence,
     action: item.recommendation,
-    analysisPath: item.analysisPath,
+    analysisPath: destination?.path,
+    analysisLabel: destination?.label,
     source: item.source,
   }
+}
+
+function createAskPath(title: string, summary: string, evidence: string): string {
+  const question = `请基于当前监控范围分析“${title}”。现象：${summary}；已有证据：${evidence}`
+  return `/ask?question=${encodeURIComponent(question.slice(0, 4000))}`
 }
 
 function clusterHealthValue(

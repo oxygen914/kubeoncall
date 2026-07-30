@@ -1,22 +1,46 @@
-import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { AsyncState } from '@/components/feedback/AsyncState'
 import { Button } from '@/components/ui/Button'
 import { StatusBadge, type StatusTone } from '@/components/ui/StatusBadge'
 import { useAuditEvents } from './hooks'
 import type { AuditEventFilters } from './api'
+import { listReturnState, mergeSearchParams, readPageParam } from '@/lib/navigation'
 
 const PAGE_SIZE = 20
 
 export function AuditListPage() {
   const navigate = useNavigate()
-  const [page, setPage] = useState(1)
-  const [filters, setFilters] = useState<AuditEventFilters>({})
+  const location = useLocation()
+  const [searchParams, setSearchParams] = useSearchParams()
+  const page = readPageParam(searchParams.get('page'))
+  const filters: AuditEventFilters = {
+    actor: readFilter(searchParams, 'actor'),
+    action: readFilter(searchParams, 'action'),
+    resourceType: readFilter(searchParams, 'resourceType'),
+    resourceId: readFilter(searchParams, 'resourceId'),
+    result: readAuditResult(searchParams.get('result')),
+    requestId: readFilter(searchParams, 'requestId'),
+    from: readDateFilter(searchParams.get('from')),
+    to: readDateFilter(searchParams.get('to')),
+  }
   const query = useAuditEvents({ ...filters, page, size: PAGE_SIZE })
 
   const update = (key: keyof AuditEventFilters, value: string) => {
-    setFilters((current) => ({ ...current, [key]: value }))
-    setPage(1)
+    setSearchParams(
+      mergeSearchParams(searchParams, {
+        [key]: value || null,
+        page: null,
+      }),
+      { replace: true },
+    )
+  }
+  const updatePage = (nextPage: number) => {
+    setSearchParams(mergeSearchParams(searchParams, { page: nextPage === 1 ? null : nextPage }))
+  }
+  const openDetail = (auditId: string) => {
+    navigate(`/audit/${encodeURIComponent(auditId)}`, {
+      state: listReturnState(location.pathname, location.search),
+    })
   }
 
   return (
@@ -96,11 +120,11 @@ export function AuditListPage() {
                 key={item.id}
                 className="koc-table__row"
                 tabIndex={0}
-                onClick={() => navigate(`/audit/${item.id}`)}
+                onClick={() => openDetail(item.id)}
                 onKeyDown={(event) => {
                   if (event.key === 'Enter' || event.key === ' ') {
                     event.preventDefault()
-                    navigate(`/audit/${item.id}`)
+                    openDetail(item.id)
                   }
                 }}
               >
@@ -129,7 +153,7 @@ export function AuditListPage() {
                 variant="ghost"
                 size="sm"
                 disabled={page <= 1}
-                onClick={() => setPage(page - 1)}
+                onClick={() => updatePage(page - 1)}
               >
                 上一页
               </Button>
@@ -137,7 +161,7 @@ export function AuditListPage() {
                 variant="ghost"
                 size="sm"
                 disabled={!query.data.page.hasNext}
-                onClick={() => setPage(page + 1)}
+                onClick={() => updatePage(page + 1)}
               >
                 下一页
               </Button>
@@ -177,6 +201,20 @@ function toIso(value: string): string {
   if (!value) return ''
   const date = new Date(value)
   return Number.isNaN(date.valueOf()) ? '' : date.toISOString()
+}
+
+function readFilter(searchParams: URLSearchParams, key: string): string | undefined {
+  return (searchParams.get(key) ?? '').slice(0, 255) || undefined
+}
+
+function readAuditResult(value: string | null): string | undefined {
+  return value && ['SUCCESS', 'FAILURE', 'DENIED', 'CONFLICT'].includes(value) ? value : undefined
+}
+
+function readDateFilter(value: string | null): string | undefined {
+  if (!value) return undefined
+  const date = new Date(value)
+  return Number.isNaN(date.valueOf()) ? undefined : date.toISOString()
 }
 
 function toLocalInput(value: string | undefined): string {

@@ -44,6 +44,8 @@ spec:
       app.kubernetes.io/component: console
   template:
     metadata:
+      annotations:
+        checksum/console-runtime: {{ include (print $.Template.BasePath "/console-runtime-config.yaml") . | sha256sum }}
       labels:
         {{- include "kubeoncall.labels" . | nindent 8 }}
         app.kubernetes.io/component: console
@@ -116,9 +118,16 @@ spec:
             - {name: nginx-cache, mountPath: /var/cache/nginx}
             - {name: nginx-run, mountPath: /var/run}
             - {name: nginx-conf, mountPath: /etc/nginx/conf.d}
+            - name: runtime-config
+              mountPath: /usr/share/nginx/html/config/runtime.json
+              subPath: runtime.json
+              readOnly: true
       volumes:
         - {name: tmp, emptyDir: {}}
         - {name: nginx-cache, emptyDir: {}}
         - {name: nginx-run, emptyDir: {}}
         - {name: nginx-conf, emptyDir: {}}
+        - name: runtime-config
+          configMap:
+            name: {{ include "kubeoncall.fullname" . }}-console-runtime
 {{- end }}

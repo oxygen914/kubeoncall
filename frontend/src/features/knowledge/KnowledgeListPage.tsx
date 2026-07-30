@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { AsyncState } from '@/components/feedback/AsyncState'
 import { Button } from '@/components/ui/Button'
 import { StatusBadge } from '@/components/ui/StatusBadge'
@@ -8,16 +8,38 @@ import { useSession } from '@/features/auth/useSession'
 import { TaskStatusPanel } from '@/features/tasks/TaskStatusPanel'
 import { useCreateKnowledgeImport, useKnowledgeDocuments, useKnowledgeImports } from './hooks'
 import type { DuplicatePolicy, KnowledgeDocumentStatus, KnowledgeImportType } from './api'
+import { listReturnState, mergeSearchParams, readPageParam } from '@/lib/navigation'
 
 const PAGE_SIZE = 20
 
 export function KnowledgeListPage() {
   const navigate = useNavigate()
+  const location = useLocation()
+  const [searchParams, setSearchParams] = useSearchParams()
   const { session } = useSession()
-  const [page, setPage] = useState(1)
-  const [status, setStatus] = useState<KnowledgeDocumentStatus | ''>('ACTIVE')
-  const [sourceType, setSourceType] = useState('')
+  const page = readPageParam(searchParams.get('page'))
+  const statusValue = searchParams.get('status')
+  const status: KnowledgeDocumentStatus | '' =
+    statusValue === 'ALL'
+      ? ''
+      : statusValue === 'ACTIVE' || statusValue === 'DELETED'
+        ? statusValue
+        : 'ACTIVE'
+  const sourceType = (searchParams.get('sourceType') ?? '').slice(0, 64)
   const [showImport, setShowImport] = useState(false)
+  const updateFilters = (updates: Record<string, string | null>) => {
+    setSearchParams(mergeSearchParams(searchParams, { ...updates, page: null }), {
+      replace: true,
+    })
+  }
+  const updatePage = (nextPage: number) => {
+    setSearchParams(mergeSearchParams(searchParams, { page: nextPage === 1 ? null : nextPage }))
+  }
+  const openDetail = (documentId: string) => {
+    navigate(`/knowledge/${encodeURIComponent(documentId)}`, {
+      state: listReturnState(location.pathname, location.search),
+    })
+  }
   const query = useKnowledgeDocuments({ page, size: PAGE_SIZE, status, sourceType })
   const importsQuery = useKnowledgeImports()
   const canImport = hasPermission(session, PERMISSIONS.KNOWLEDGE_WRITE)
@@ -44,8 +66,7 @@ export function KnowledgeListPage() {
           <select
             value={status}
             onChange={(event) => {
-              setStatus(event.target.value as KnowledgeDocumentStatus | '')
-              setPage(1)
+              updateFilters({ status: event.target.value || 'ALL' })
             }}
           >
             <option value="">全部</option>
@@ -60,8 +81,7 @@ export function KnowledgeListPage() {
             maxLength={64}
             placeholder="RUNBOOK / DOCUMENT"
             onChange={(event) => {
-              setSourceType(event.target.value)
-              setPage(1)
+              updateFilters({ sourceType: event.target.value || null })
             }}
           />
         </label>
@@ -90,11 +110,11 @@ export function KnowledgeListPage() {
                 key={document.id}
                 className="koc-table__row"
                 tabIndex={0}
-                onClick={() => navigate(`/knowledge/${document.id}`)}
+                onClick={() => openDetail(document.id)}
                 onKeyDown={(event) => {
                   if (event.key === 'Enter' || event.key === ' ') {
                     event.preventDefault()
-                    navigate(`/knowledge/${document.id}`)
+                    openDetail(document.id)
                   }
                 }}
               >
@@ -118,7 +138,7 @@ export function KnowledgeListPage() {
           totalElements={query.data?.page.totalElements ?? 0}
           hasNext={query.data?.page.hasNext ?? false}
           isFetching={query.isFetching}
-          onPage={setPage}
+          onPage={updatePage}
         />
       </AsyncState>
 

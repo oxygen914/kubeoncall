@@ -1,20 +1,23 @@
 import { useState } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { AsyncState } from '@/components/feedback/AsyncState'
 import { Button } from '@/components/ui/Button'
 import { StatusBadge } from '@/components/ui/StatusBadge'
 import { hasPermission, PERMISSIONS } from '@/features/auth/permissions'
 import { useSession } from '@/features/auth/useSession'
 import { useDeleteMemory, useMemory, useRestoreMemory } from './hooks'
+import { resolveListReturnPath } from '@/lib/navigation'
 
 export function MemoryDetailPage() {
   const { memoryId = '' } = useParams()
   const navigate = useNavigate()
+  const location = useLocation()
   const { session } = useSession()
   const query = useMemory(memoryId)
   const deletion = useDeleteMemory(memoryId)
   const restoration = useRestoreMemory(memoryId)
   const [reason, setReason] = useState('')
+  const returnTo = resolveListReturnPath(location.state, '/memory')
   const memory = query.data
   const canMaintain = hasPermission(session, PERMISSIONS.MEMORY_MAINTAIN)
 
@@ -22,7 +25,7 @@ export function MemoryDetailPage() {
     <section className="koc-page">
       <header className="koc-page__header">
         <div className="koc-page__title-row">
-          <Button variant="ghost" size="sm" onClick={() => navigate('/memory')}>
+          <Button variant="ghost" size="sm" onClick={() => navigate(returnTo)}>
             ← 返回列表
           </Button>
           <h1>记忆详情</h1>

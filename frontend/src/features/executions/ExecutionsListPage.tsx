@@ -1,11 +1,11 @@
-import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { AsyncState } from '@/components/feedback/AsyncState'
 import { Button } from '@/components/ui/Button'
 import { StatusBadge } from '@/components/ui/StatusBadge'
 import { useExecutionList } from './hooks'
 import type { ExecutionStatus } from './api'
 import { executionTone } from './viewModels'
+import { listReturnState, mergeSearchParams, readPageParam } from '@/lib/navigation'
 
 const PAGE_SIZE = 20
 const STATUSES: ExecutionStatus[] = [
@@ -20,9 +20,27 @@ const STATUSES: ExecutionStatus[] = [
 
 export function ExecutionsListPage() {
   const navigate = useNavigate()
-  const [page, setPage] = useState(1)
-  const [status, setStatus] = useState<ExecutionStatus | ''>('')
-  const [alarmId, setAlarmId] = useState('')
+  const location = useLocation()
+  const [searchParams, setSearchParams] = useSearchParams()
+  const page = readPageParam(searchParams.get('page'))
+  const statusValue = searchParams.get('status') ?? ''
+  const status = STATUSES.includes(statusValue as ExecutionStatus)
+    ? (statusValue as ExecutionStatus)
+    : ''
+  const alarmId = (searchParams.get('alarmId') ?? '').slice(0, 128)
+  const updateFilters = (updates: Record<string, string | null>) => {
+    setSearchParams(mergeSearchParams(searchParams, { ...updates, page: null }), {
+      replace: true,
+    })
+  }
+  const updatePage = (nextPage: number) => {
+    setSearchParams(mergeSearchParams(searchParams, { page: nextPage === 1 ? null : nextPage }))
+  }
+  const openDetail = (executionId: string) => {
+    navigate(`/executions/${encodeURIComponent(executionId)}`, {
+      state: listReturnState(location.pathname, location.search),
+    })
+  }
   const { data, isLoading, error, isFetching } = useExecutionList({
     page,
     size: PAGE_SIZE,
@@ -45,8 +63,7 @@ export function ExecutionsListPage() {
           <select
             value={status}
             onChange={(event) => {
-              setStatus(event.target.value as ExecutionStatus | '')
-              setPage(1)
+              updateFilters({ status: event.target.value || null })
             }}
           >
             <option value="">全部</option>
@@ -62,8 +79,7 @@ export function ExecutionsListPage() {
           <input
             value={alarmId}
             onChange={(event) => {
-              setAlarmId(event.target.value)
-              setPage(1)
+              updateFilters({ alarmId: event.target.value || null })
             }}
             maxLength={128}
             placeholder="按告警过滤"
@@ -94,11 +110,11 @@ export function ExecutionsListPage() {
                 key={execution.id}
                 className="koc-table__row"
                 tabIndex={0}
-                onClick={() => navigate(`/executions/${execution.id}`)}
+                onClick={() => openDetail(execution.id)}
                 onKeyDown={(event) => {
                   if (event.key === 'Enter' || event.key === ' ') {
                     event.preventDefault()
-                    navigate(`/executions/${execution.id}`)
+                    openDetail(execution.id)
                   }
                 }}
               >
@@ -128,7 +144,7 @@ export function ExecutionsListPage() {
                 variant="ghost"
                 size="sm"
                 disabled={page <= 1}
-                onClick={() => setPage((value) => Math.max(1, value - 1))}
+                onClick={() => updatePage(Math.max(1, page - 1))}
               >
                 上一页
               </Button>
@@ -136,7 +152,7 @@ export function ExecutionsListPage() {
                 variant="ghost"
                 size="sm"
                 disabled={!pageInfo.hasNext}
-                onClick={() => setPage((value) => value + 1)}
+                onClick={() => updatePage(page + 1)}
               >
                 下一页
               </Button>

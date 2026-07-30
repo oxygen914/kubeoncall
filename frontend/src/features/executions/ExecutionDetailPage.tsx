@@ -1,21 +1,24 @@
-import { useNavigate, useParams } from 'react-router-dom'
+import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { AsyncState } from '@/components/feedback/AsyncState'
 import { Button } from '@/components/ui/Button'
 import { StatusBadge } from '@/components/ui/StatusBadge'
 import { useExecution, useExecutionNodes } from './hooks'
 import { executionTone } from './viewModels'
+import { resolveListReturnPath } from '@/lib/navigation'
 
 export function ExecutionDetailPage() {
   const { executionId = '' } = useParams()
   const navigate = useNavigate()
+  const location = useLocation()
   const { data: execution, isLoading, error } = useExecution(executionId)
   const { data: nodes, isLoading: nodesLoading, error: nodesError } = useExecutionNodes(executionId)
+  const returnTo = resolveListReturnPath(location.state, '/executions')
 
   return (
     <section className="koc-page">
       <header className="koc-page__header">
         <div className="koc-page__title-row">
-          <Button variant="ghost" size="sm" onClick={() => navigate('/executions')}>
+          <Button variant="ghost" size="sm" onClick={() => navigate(returnTo)}>
             ← 返回列表
           </Button>
           <h1>执行详情</h1>

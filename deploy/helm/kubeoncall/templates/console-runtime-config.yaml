@@ -1,0 +1,20 @@
+{{- if .Values.console.enabled }}
+{{- $runtime := dict
+  "apiBaseUrl" .Values.console.runtimeConfig.apiBaseUrl
+  "ssePath" .Values.console.runtimeConfig.ssePath
+  "environment" (default "production" .Values.console.runtimeConfig.environment)
+  "release" (default .Chart.AppVersion .Values.console.runtimeConfig.release)
+  "supportUrl" .Values.console.runtimeConfig.supportUrl
+  "grafanaBaseUrl" .Values.console.runtimeConfig.grafanaBaseUrl
+-}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "kubeoncall.fullname" . }}-console-runtime
+  labels:
+    {{- include "kubeoncall.labels" . | nindent 4 }}
+    app.kubernetes.io/component: console
+data:
+  runtime.json: |
+    {{- $runtime | toPrettyJson | nindent 4 }}
+{{- end }}

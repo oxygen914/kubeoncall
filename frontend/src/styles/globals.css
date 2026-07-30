@@ -1206,8 +1206,27 @@ kbd {
   font-size: 11px;
 }
 
-.koc-topbar__menu .koc-btn {
+.koc-topbar__menu .koc-btn,
+.koc-topbar__menu-link {
   justify-content: flex-start;
+}
+
+.koc-topbar__menu-link {
+  display: flex;
+  min-height: 32px;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: 6px;
+  color: var(--koc-text);
+  font-size: 12px;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.koc-topbar__menu-link:hover,
+.koc-topbar__menu-link:focus-visible {
+  background: var(--koc-surface-subtle);
 }
 
 .koc-command {
@@ -1292,6 +1311,13 @@ kbd {
   background: var(--koc-surface-subtle);
   color: var(--koc-text-muted);
   font-size: 11px;
+}
+
+.koc-command__panel > .koc-command__empty {
+  border-top: 0;
+  background: transparent;
+  color: var(--koc-text);
+  font-size: 13px;
 }
 
 /* ---------- Overview command center ---------- */

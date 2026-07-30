@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { AsyncState } from '@/components/feedback/AsyncState'
 import { Button } from '@/components/ui/Button'
 import { StatusBadge } from '@/components/ui/StatusBadge'
@@ -9,13 +9,16 @@ import { useApproval } from './hooks'
 import { approvalTone, riskTone } from './viewModels'
 import { ApprovalDecisionDialog } from './ApprovalDecisionDialog'
 import type { ApprovalDecision } from './api'
+import { resolveListReturnPath } from '@/lib/navigation'
 
 export function ApprovalDetailPage() {
   const { approvalId = '' } = useParams()
   const navigate = useNavigate()
+  const location = useLocation()
   const { session } = useSession()
   const { data: approval, isLoading, error } = useApproval(approvalId)
   const [decision, setDecision] = useState<ApprovalDecision | null>(null)
+  const returnTo = resolveListReturnPath(location.state, '/approvals')
   const canDecide =
     approval?.status === 'PENDING' && hasPermission(session, PERMISSIONS.APPROVAL_DECIDE)
 
@@ -23,7 +26,7 @@ export function ApprovalDetailPage() {
     <section className="koc-page">
       <header className="koc-page__header">
         <div className="koc-page__title-row">
-          <Button variant="ghost" size="sm" onClick={() => navigate('/approvals')}>
+          <Button variant="ghost" size="sm" onClick={() => navigate(returnTo)}>
             ← 返回列表
           </Button>
           <h1>审批详情</h1>
@@ -73,7 +76,9 @@ export function ApprovalDetailPage() {
                   <dt>执行</dt>
                   <dd>
                     {hasPermission(session, PERMISSIONS.EXECUTION_READ) ? (
-                      <Link to={`/executions/${approval.executionId}`}>{approval.executionId}</Link>
+                      <Link to={`/executions/${encodeURIComponent(approval.executionId)}`}>
+                        {approval.executionId}
+                      </Link>
                     ) : (
                       approval.executionId
                     )}

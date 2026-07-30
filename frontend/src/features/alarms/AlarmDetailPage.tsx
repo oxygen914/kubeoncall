@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Link, useParams, useNavigate } from 'react-router-dom'
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { useAlarm, useAlarmTimeline } from './hooks'
 import { AsyncState } from '@/components/feedback/AsyncState'
 import { StatusBadge } from '@/components/ui/StatusBadge'
@@ -10,6 +10,7 @@ import { SilenceApprovalDialog } from './SilenceApprovalDialog'
 import { formatTime, resourceLabel, severityTone, statusTone } from './viewModels'
 import { useSession } from '@/features/auth/useSession'
 import { hasPermission, PERMISSIONS } from '@/features/auth/permissions'
+import { resolveListReturnPath } from '@/lib/navigation'
 
 type AlarmDialog = 'acknowledge' | 'recovery' | 'silence' | null
 
@@ -17,6 +18,7 @@ type AlarmDialog = 'acknowledge' | 'recovery' | 'silence' | null
 export function AlarmDetailPage() {
   const params = useParams()
   const navigate = useNavigate()
+  const location = useLocation()
   const { session } = useSession()
   const alarmId = params.alarmId ?? ''
   const { data: alarm, isLoading, error } = useAlarm(alarmId)
@@ -26,6 +28,7 @@ export function AlarmDetailPage() {
     error: timelineError,
   } = useAlarmTimeline(alarmId)
   const [activeDialog, setActiveDialog] = useState<AlarmDialog>(null)
+  const returnTo = resolveListReturnPath(location.state, '/alarms')
 
   const canAcknowledge =
     hasPermission(session, PERMISSIONS.ALARM_ACKNOWLEDGE) &&
@@ -41,7 +44,7 @@ export function AlarmDetailPage() {
     <section className="koc-page">
       <header className="koc-page__header">
         <div className="koc-page__title-row">
-          <Button variant="ghost" size="sm" onClick={() => navigate('/alarms')}>
+          <Button variant="ghost" size="sm" onClick={() => navigate(returnTo)}>
             ← 返回列表
           </Button>
           <h1>{alarm?.alertName ?? '告警详情'}</h1>
@@ -115,7 +118,7 @@ export function AlarmDetailPage() {
                   <dd>
                     {alarm.latestExecution ? (
                       hasPermission(session, PERMISSIONS.EXECUTION_READ) ? (
-                        <Link to={`/executions/${alarm.latestExecution.id}`}>
+                        <Link to={`/executions/${encodeURIComponent(alarm.latestExecution.id)}`}>
                           {alarm.latestExecution.id} · {alarm.latestExecution.status}
                         </Link>
                       ) : (

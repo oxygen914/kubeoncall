@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useMutation } from '@tanstack/react-query'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { ApiError } from '@/api/errors'
 import { Button } from '@/components/ui/Button'
 import { Icon } from '@/components/ui/Icon'
@@ -35,9 +35,12 @@ const suggestions = [
 
 /** Durable AI operations conversation backed by the unified Execution workflow. */
 export function AskPage() {
+  const [searchParams] = useSearchParams()
   const { scope } = useMonitoringScope()
   const restored = useMemo(loadConversation, [])
-  const [question, setQuestion] = useState('')
+  const [question, setQuestion] = useState(() =>
+    (searchParams.get('question') ?? '').slice(0, 4000),
+  )
   const [sessionId, setSessionId] = useState<string | null>(restored.sessionId)
   const [turns, setTurns] = useState<ConversationTurn[]>(restored.turns)
   const [pendingQuestion, setPendingQuestion] = useState<string | null>(null)
@@ -108,7 +111,7 @@ export function AskPage() {
       <header className="koc-ask-header">
         <div>
           <p className="koc-ask-header__eyebrow">AI OPERATIONS ASSISTANT</p>
-          <h1>提问</h1>
+          <h1>AI 诊断</h1>
           <p>结合监控、日志、事件与 SOP 形成可追溯结论；变更操作始终经过校验和审批。</p>
         </div>
         <div className="koc-ask-header__state" aria-label="AI 助手状态">

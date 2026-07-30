@@ -1,8 +1,11 @@
 import { useQuery } from '@tanstack/react-query'
+import { Link } from 'react-router-dom'
 import { getCapabilities, getSystemStatus } from '@/api/system'
 import { Spinner } from '@/components/ui/Spinner'
 import { StatusBadge, type StatusTone } from '@/components/ui/StatusBadge'
 import { isApiError } from '@/api/errors'
+import { hasPermission, PERMISSIONS } from '@/features/auth/permissions'
+import { useSession } from '@/features/auth/useSession'
 
 function statusTone(status: string): StatusTone {
   const s = status.toLowerCase()
@@ -13,6 +16,7 @@ function statusTone(status: string): StatusTone {
 }
 
 export function SystemStatusPage() {
+  const { session } = useSession()
   const statusQuery = useQuery({
     queryKey: ['system', 'status'],
     queryFn: getSystemStatus,
@@ -55,6 +59,18 @@ export function SystemStatusPage() {
       ) : (
         <EmptyState />
       )}
+
+      {hasPermission(session, PERMISSIONS.SYSTEM_MANAGE) ? (
+        <section className="koc-card" aria-labelledby="advanced-system-management">
+          <h2 id="advanced-system-management">高级管理</h2>
+          <p className="koc-page__subtitle">
+            数据迁移属于低频管理操作，执行前请确认 dry-run、检查差异并准备回滚。
+          </p>
+          <Link className="koc-btn koc-btn--secondary koc-btn--md" to="/migration">
+            打开数据迁移工具
+          </Link>
+        </section>
+      ) : null}
     </section>
   )
 }

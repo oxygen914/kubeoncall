@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { MonitoringScopeContext } from '@/features/monitoring/monitoringScopeContext'
 import { AskPage } from '../AskPage'
 
-function renderPage() {
+function renderPage(initialEntries: string[] = ['/ask']) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   })
@@ -23,7 +23,7 @@ function renderPage() {
           setNamespace: vi.fn(),
         }}
       >
-        <MemoryRouter>
+        <MemoryRouter initialEntries={initialEntries}>
           <AskPage />
         </MemoryRouter>
       </MonitoringScopeContext.Provider>
@@ -164,6 +164,12 @@ describe('AskPage', () => {
   afterEach(() => {
     vi.unstubAllGlobals()
     window.localStorage.clear()
+  })
+
+  it('prefills a diagnostic question from a trusted deep link', () => {
+    renderPage(['/ask?question=%E8%AF%B7%E5%88%86%E6%9E%90%20CPU%20%E5%BC%82%E5%B8%B8'])
+
+    expect(screen.getByLabelText('向 KubeOnCall 提问')).toHaveValue('请分析 CPU 异常')
   })
 
   it('renders durable answer, planner source, evidence, confidence and approval boundary', async () => {

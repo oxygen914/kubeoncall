@@ -1,20 +1,23 @@
-import { useNavigate, useParams } from 'react-router-dom'
+import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { AsyncState } from '@/components/feedback/AsyncState'
 import { Button } from '@/components/ui/Button'
 import { StatusBadge } from '@/components/ui/StatusBadge'
 import { useAuditEvent } from './hooks'
+import { resolveListReturnPath } from '@/lib/navigation'
 
 export function AuditDetailPage() {
   const { auditId = '' } = useParams()
   const navigate = useNavigate()
+  const location = useLocation()
   const query = useAuditEvent(auditId)
   const audit = query.data
+  const returnTo = resolveListReturnPath(location.state, '/audit')
 
   return (
     <section className="koc-page">
       <header className="koc-page__header">
         <div className="koc-page__title-row">
-          <Button variant="ghost" size="sm" onClick={() => navigate('/audit')}>
+          <Button variant="ghost" size="sm" onClick={() => navigate(returnTo)}>
             ← 返回列表
           </Button>
           <h1>审计详情</h1>

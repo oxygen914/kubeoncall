@@ -30,4 +30,29 @@ describe('Sidebar', () => {
     expect(link).toHaveAttribute('target', '_blank')
     expect(link).toHaveAttribute('rel', 'noreferrer')
   })
+
+  it('keeps low-frequency token and migration tools out of the primary sidebar', () => {
+    const adminSession: SessionData = {
+      ...session,
+      user: {
+        ...session.user,
+        permissions: [
+          PERMISSIONS.DASHBOARD_READ,
+          PERMISSIONS.SYSTEM_READ,
+          PERMISSIONS.SYSTEM_MANAGE,
+          PERMISSIONS.TOKEN_READ_OWN,
+        ],
+      },
+    }
+
+    render(
+      <MemoryRouter>
+        <Sidebar collapsed={false} session={adminSession} onToggle={vi.fn()} />
+      </MemoryRouter>,
+    )
+
+    expect(screen.getByRole('link', { name: '系统' })).toHaveAttribute('href', '/system')
+    expect(screen.queryByRole('link', { name: /Token/ })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /迁移/ })).not.toBeInTheDocument()
+  })
 })

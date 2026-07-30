@@ -1,9 +1,9 @@
-import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { useAlarmList } from './hooks'
 import { AsyncState } from '@/components/feedback/AsyncState'
 import { StatusBadge } from '@/components/ui/StatusBadge'
 import { Button } from '@/components/ui/Button'
+import { listReturnState, mergeSearchParams, readPageParam } from '@/lib/navigation'
 import { formatTime, resourceLabel, severityTone, statusTone } from './viewModels'
 
 const PAGE_SIZE = 20
@@ -18,10 +18,28 @@ const STATUSES = ['FIRING', 'ACKNOWLEDGED', 'RECOVERY_PENDING', 'RESOLVED', 'SUP
  */
 export function AlarmsListPage() {
   const navigate = useNavigate()
-  const [page, setPage] = useState(1)
-  const [severity, setSeverity] = useState('')
-  const [status, setStatus] = useState('')
-  const [q, setQ] = useState('')
+  const location = useLocation()
+  const [searchParams, setSearchParams] = useSearchParams()
+  const page = readPageParam(searchParams.get('page'))
+  const severityValue = searchParams.get('severity') ?? ''
+  const severity = SEVERITIES.includes(severityValue) ? severityValue : ''
+  const statusValue = searchParams.get('status') ?? ''
+  const status = STATUSES.includes(statusValue) ? statusValue : ''
+  const q = (searchParams.get('q') ?? '').slice(0, 200)
+
+  const updateFilters = (updates: Record<string, string | null>) => {
+    setSearchParams(mergeSearchParams(searchParams, { ...updates, page: null }), {
+      replace: true,
+    })
+  }
+  const updatePage = (nextPage: number) => {
+    setSearchParams(mergeSearchParams(searchParams, { page: nextPage === 1 ? null : nextPage }))
+  }
+  const openDetail = (alarmId: string) => {
+    navigate(`/alarms/${encodeURIComponent(alarmId)}`, {
+      state: listReturnState(location.pathname, location.search),
+    })
+  }
 
   const { data, isLoading, error, isFetching } = useAlarmList({
     page,
@@ -48,8 +66,7 @@ export function AlarmsListPage() {
           <select
             value={severity}
             onChange={(e) => {
-              setSeverity(e.target.value)
-              setPage(1)
+              updateFilters({ severity: e.target.value || null })
             }}
           >
             <option value="">全部</option>
@@ -65,8 +82,7 @@ export function AlarmsListPage() {
           <select
             value={status}
             onChange={(e) => {
-              setStatus(e.target.value)
-              setPage(1)
+              updateFilters({ status: e.target.value || null })
             }}
           >
             <option value="">全部</option>
@@ -83,8 +99,7 @@ export function AlarmsListPage() {
             type="search"
             value={q}
             onChange={(e) => {
-              setQ(e.target.value)
-              setPage(1)
+              updateFilters({ q: e.target.value || null })
             }}
             placeholder="告警名或资源名"
             maxLength={200}
@@ -116,11 +131,11 @@ export function AlarmsListPage() {
                 key={alarm.id}
                 className="koc-table__row"
                 tabIndex={0}
-                onClick={() => navigate(`/alarms/${alarm.id}`)}
+                onClick={() => openDetail(alarm.id)}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' || e.key === ' ') {
                     e.preventDefault()
-                    navigate(`/alarms/${alarm.id}`)
+                    openDetail(alarm.id)
                   }
                 }}
               >
@@ -151,7 +166,7 @@ export function AlarmsListPage() {
                 variant="ghost"
                 size="sm"
                 disabled={page <= 1}
-                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                onClick={() => updatePage(Math.max(1, page - 1))}
               >
                 上一页
               </Button>
@@ -159,7 +174,7 @@ export function AlarmsListPage() {
                 variant="ghost"
                 size="sm"
                 disabled={!pageInfo.hasNext}
-                onClick={() => setPage((p) => p + 1)}
+                onClick={() => updatePage(page + 1)}
               >
                 下一页
               </Button>

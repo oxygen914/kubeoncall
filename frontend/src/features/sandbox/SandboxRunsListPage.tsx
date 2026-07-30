@@ -1,10 +1,10 @@
-import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { AsyncState } from '@/components/feedback/AsyncState'
 import { StatusBadge } from '@/components/ui/StatusBadge'
 import { useSandboxRunList } from './hooks'
 import type { SandboxRunStatus } from './api'
 import { sandboxRunTone } from './viewModels'
+import { listReturnState, mergeSearchParams } from '@/lib/navigation'
 
 const STATUSES: SandboxRunStatus[] = [
   'PENDING',
@@ -19,9 +19,22 @@ const STATUSES: SandboxRunStatus[] = [
 
 export function SandboxRunsListPage() {
   const navigate = useNavigate()
-  const [status, setStatus] = useState<SandboxRunStatus | ''>('')
-  const [executionId, setExecutionId] = useState('')
-  const [alarmId, setAlarmId] = useState('')
+  const location = useLocation()
+  const [searchParams, setSearchParams] = useSearchParams()
+  const statusValue = searchParams.get('status') ?? ''
+  const status = STATUSES.includes(statusValue as SandboxRunStatus)
+    ? (statusValue as SandboxRunStatus)
+    : ''
+  const executionId = (searchParams.get('executionId') ?? '').slice(0, 40)
+  const alarmId = (searchParams.get('alarmId') ?? '').slice(0, 40)
+  const updateFilters = (updates: Record<string, string | null>) => {
+    setSearchParams(mergeSearchParams(searchParams, updates), { replace: true })
+  }
+  const openDetail = (runId: string) => {
+    navigate(`/sandbox-runs/${encodeURIComponent(runId)}`, {
+      state: listReturnState(location.pathname, location.search),
+    })
+  }
   const {
     data: runs,
     isLoading,
@@ -45,7 +58,7 @@ export function SandboxRunsListPage() {
           <span>状态</span>
           <select
             value={status}
-            onChange={(event) => setStatus(event.target.value as SandboxRunStatus | '')}
+            onChange={(event) => updateFilters({ status: event.target.value || null })}
           >
             <option value="">全部</option>
             {STATUSES.map((value) => (
@@ -59,7 +72,7 @@ export function SandboxRunsListPage() {
           <span>执行 ID</span>
           <input
             value={executionId}
-            onChange={(event) => setExecutionId(event.target.value)}
+            onChange={(event) => updateFilters({ executionId: event.target.value || null })}
             maxLength={40}
             placeholder="关联 Workflow Execution"
           />
@@ -68,7 +81,7 @@ export function SandboxRunsListPage() {
           <span>告警 ID</span>
           <input
             value={alarmId}
-            onChange={(event) => setAlarmId(event.target.value)}
+            onChange={(event) => updateFilters({ alarmId: event.target.value || null })}
             maxLength={40}
             placeholder="关联告警"
           />
@@ -99,11 +112,11 @@ export function SandboxRunsListPage() {
                 key={run.id}
                 className="koc-table__row"
                 tabIndex={0}
-                onClick={() => navigate(`/sandbox-runs/${run.id}`)}
+                onClick={() => openDetail(run.id)}
                 onKeyDown={(event) => {
                   if (event.key === 'Enter' || event.key === ' ') {
                     event.preventDefault()
-                    navigate(`/sandbox-runs/${run.id}`)
+                    openDetail(run.id)
                   }
                 }}
               >

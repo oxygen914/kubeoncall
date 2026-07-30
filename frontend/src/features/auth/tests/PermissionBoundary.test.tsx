@@ -49,19 +49,20 @@ describe('PermissionBoundary', () => {
 
     expect(await screen.findByRole('heading', { name: '403' })).toBeInTheDocument()
     expect(screen.getByText('当前账号没有访问该页面的权限。')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: '返回可访问首页' })).toHaveAttribute('href', '/alarms')
   })
 
   it('renders a protected route when the permission is present', () => {
     renderRoute('/ask', [PERMISSIONS.ASK_EXECUTE])
 
-    expect(screen.getByRole('heading', { name: '提问' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'AI 诊断' })).toBeInTheDocument()
   })
 
-  it('only exposes permitted destinations plus system status in navigation', () => {
+  it('only exposes destinations permitted to the current account', () => {
     renderRoute('/ask', [PERMISSIONS.ASK_EXECUTE])
 
-    expect(screen.getByRole('link', { name: '提问' })).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: '系统' })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'AI 诊断' })).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: '系统' })).not.toBeInTheDocument()
     expect(screen.queryByRole('link', { name: '告警' })).not.toBeInTheDocument()
     expect(screen.queryByRole('link', { name: '技能' })).not.toBeInTheDocument()
   })

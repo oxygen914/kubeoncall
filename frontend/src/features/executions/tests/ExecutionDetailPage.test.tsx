@@ -1,5 +1,5 @@
-import { render, screen } from '@testing-library/react'
-import { MemoryRouter, Route, Routes } from 'react-router-dom'
+import { fireEvent, render, screen } from '@testing-library/react'
+import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom'
 import { describe, expect, it, vi } from 'vitest'
 import type { ExecutionDetail, ExecutionNode } from '../api'
 
@@ -96,4 +96,33 @@ describe('ExecutionDetailPage', () => {
       screen.getByText('Post-execution verification failed; the operation was rolled back'),
     ).toBeInTheDocument()
   })
+
+  it('returns to the exact filtered list URL supplied by the list page', () => {
+    useExecutionMock.mockReturnValue({ data: execution, isLoading: false, error: null })
+    useExecutionNodesMock.mockReturnValue({ data: [node], isLoading: false, error: null })
+
+    render(
+      <MemoryRouter
+        initialEntries={[
+          {
+            pathname: '/executions/exec_1',
+            state: { returnTo: '/executions?status=FAILED&page=2' },
+          },
+        ]}
+      >
+        <Routes>
+          <Route path="/executions/:executionId" element={<ExecutionDetailPage />} />
+          <Route path="/executions" element={<LocationProbe />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: '← 返回列表' }))
+    expect(screen.getByText('/executions?status=FAILED&page=2')).toBeInTheDocument()
+  })
 })
+
+function LocationProbe() {
+  const location = useLocation()
+  return <div>{`${location.pathname}${location.search}`}</div>
+}

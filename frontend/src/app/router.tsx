@@ -33,13 +33,14 @@ import { ForbiddenPage } from '@/components/feedback/ForbiddenPage'
 import { NotFoundPage } from '@/components/feedback/NotFoundPage'
 import { PermissionBoundary } from '@/features/auth/PermissionBoundary'
 import { PERMISSIONS, type Permission } from '@/features/auth/permissions'
+import { getDefaultConsolePath } from '@/features/auth/defaultRoute'
+import { useSession } from '@/features/auth/useSession'
 
 /**
  * Application route table.
  *
- * `/` is protected by AuthBoundary and redirects to `/overview` (the dashboard landing).
- * useful landing page for an operator). Other feature routes are placeholders
- * for now and will be filled in later iterations.
+ * `/` is protected by AuthBoundary and resolves to the first page the current account may access.
+ * Every feature route repeats its backend permission boundary for predictable deep-link behavior.
  */
 export function AppRouter() {
   return (
@@ -53,9 +54,16 @@ export function AppRouter() {
           </AuthBoundary>
         }
       >
-        <Route index element={<Navigate to="/overview" replace />} />
+        <Route index element={<DefaultConsoleRoute />} />
         <Route path="/forbidden" element={<ForbiddenPage />} />
-        <Route path="/system" element={<SystemStatusPage />} />
+        <Route
+          path="/system"
+          element={
+            <Restricted permission={PERMISSIONS.SYSTEM_READ}>
+              <SystemStatusPage />
+            </Restricted>
+          }
+        />
         <Route
           path="/migration"
           element={
@@ -269,6 +277,11 @@ export function AppRouter() {
       <Route path="*" element={<NotFoundPage />} />
     </Routes>
   )
+}
+
+function DefaultConsoleRoute() {
+  const { session } = useSession()
+  return <Navigate to={getDefaultConsolePath(session) ?? '/forbidden'} replace />
 }
 
 function Restricted({

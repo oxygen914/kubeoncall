@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { AsyncState } from '@/components/feedback/AsyncState'
 import { Button } from '@/components/ui/Button'
 import { StatusBadge } from '@/components/ui/StatusBadge'
@@ -13,10 +13,12 @@ import {
   useSandboxRun,
 } from './hooks'
 import { cleanupTone, sandboxRunTone } from './viewModels'
+import { resolveListReturnPath } from '@/lib/navigation'
 
 export function SandboxRunDetailPage() {
   const { runId = '' } = useParams()
   const navigate = useNavigate()
+  const location = useLocation()
   const { session } = useSession()
   const { data: run, isLoading, error } = useSandboxRun(runId)
   const {
@@ -27,6 +29,7 @@ export function SandboxRunDetailPage() {
   const cancel = useCancelSandboxRun(runId)
   const download = useArtifactDownload(runId)
   const [actionError, setActionError] = useState<string | null>(null)
+  const returnTo = resolveListReturnPath(location.state, '/sandbox-runs')
   const canCancel = Boolean(
     run && !isTerminal(run) && hasPermission(session, PERMISSIONS.SANDBOX_CANCEL),
   )
@@ -49,7 +52,7 @@ export function SandboxRunDetailPage() {
     <section className="koc-page">
       <header className="koc-page__header">
         <div className="koc-page__title-row">
-          <Button variant="ghost" size="sm" onClick={() => navigate('/sandbox-runs')}>
+          <Button variant="ghost" size="sm" onClick={() => navigate(returnTo)}>
             ← 返回列表
           </Button>
           <h1>Sandbox Run 详情</h1>
@@ -159,7 +162,7 @@ function Field({ label, value }: { label: string; value: React.ReactNode }) {
 function linkExecution(value: string | null, session: ReturnType<typeof useSession>['session']) {
   if (!value) return '—'
   return hasPermission(session, PERMISSIONS.EXECUTION_READ) ? (
-    <Link to={`/executions/${value}`}>{value}</Link>
+    <Link to={`/executions/${encodeURIComponent(value)}`}>{value}</Link>
   ) : (
     value
   )
@@ -168,7 +171,7 @@ function linkExecution(value: string | null, session: ReturnType<typeof useSessi
 function linkAlarm(value: string | null, session: ReturnType<typeof useSession>['session']) {
   if (!value) return '—'
   return hasPermission(session, PERMISSIONS.ALARM_READ) ? (
-    <Link to={`/alarms/${value}`}>{value}</Link>
+    <Link to={`/alarms/${encodeURIComponent(value)}`}>{value}</Link>
   ) : (
     value
   )
