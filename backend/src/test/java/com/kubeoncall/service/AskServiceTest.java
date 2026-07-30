@@ -16,6 +16,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.time.Instant;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -202,6 +203,50 @@ class AskServiceTest {
         verify(approvalService).saveState(checkpoint.capture());
         assertEquals("exe_durable_failed", checkpoint.getValue().getExecutionId());
         assertEquals("planning failed", checkpoint.getValue().getContext().get("durableCheckpointMessage"));
+    }
+
+    @Test
+    void shouldIgnoreNullActorAndRequestScopeFieldsForDurableAsk() {
+        PlannerAgent plannerAgent = mock(PlannerAgent.class);
+        VerifierAgent verifierAgent = mock(VerifierAgent.class);
+        ExecutorAgent executorAgent = mock(ExecutorAgent.class);
+        ApprovalService approvalService = mock(ApprovalService.class);
+        ResponseComposer responseComposer = mock(ResponseComposer.class);
+        ExecutionAuditService executionAuditService = mock(ExecutionAuditService.class);
+        AskService service = askService(
+                plannerAgent, verifierAgent, executorAgent, approvalService, responseComposer, executionAuditService);
+
+        when(responseComposer.compose(any())).thenReturn("planning failed");
+        doAnswer(invocation -> {
+                    GraphState state = invocation.getArgument(0);
+                    assertEquals(
+                            Map.of("userId", 7L, "publicId", "usr_admin"),
+                            state.getContext().get("workflowActor"));
+                    assertEquals(
+                            Map.of("cluster", "local", "namespace", "kubeoncall-system"),
+                            state.getContext().get("requestScope"));
+                    state.setStatus(GraphStatus.FAILED);
+                    return null;
+                })
+                .when(plannerAgent)
+                .run(any(GraphState.class));
+
+        Map<String, Object> actor = new LinkedHashMap<>();
+        actor.put("userId", 7L);
+        actor.put("publicId", "usr_admin");
+        actor.put("displayName", null);
+        Map<String, Object> requestScope = new LinkedHashMap<>();
+        requestScope.put("cluster", "local");
+        requestScope.put("environment", null);
+        requestScope.put("namespace", "kubeoncall-system");
+
+        AskService.AskExecutionResult result =
+                service.handleDurably("inspect adapter", null, "exe_null_actor", actor, requestScope);
+
+        assertEquals("FAILED", result.status());
+        assertFalse(result.details().containsKey("plan"));
+        assertFalse(result.details().containsKey("currentTask"));
+        verify(approvalService).saveState(any(GraphState.class));
     }
 
     @Test

@@ -92,6 +92,26 @@ class PlannerQueryToolNodeTest {
         assertEquals(false, sop.containsValue("secret upstream failure"));
     }
 
+    @Test
+    void shouldPassAnExtractedPodScopeToTheKubernetesTool() {
+        McpClient mcpClient = mock(McpClient.class);
+        when(mcpClient.call(anyString(), anyMap())).thenReturn(Map.of("status", "failed"));
+        PlannerQueryToolNode node = node(mcpClient);
+        GraphState state = new GraphState();
+        state.setUserRequest("请分析 kubeoncall-system 命名空间中 Pod kubernetes-tool-adapter-abc 的状态");
+
+        NodeResult result = node.execute(state);
+
+        assertEquals("kubernetes-tool-adapter-abc", result.payload().get("evidenceTarget"));
+        verify(mcpClient)
+                .call(
+                        eq("kubernetes.describeResource"),
+                        org.mockito.ArgumentMatchers.argThat(
+                                parameters -> "kubeoncall-system".equals(parameters.get("namespace"))
+                                        && "Pod".equals(parameters.get("resourceKind"))
+                                        && "kubernetes-tool-adapter-abc".equals(parameters.get("resourceName"))));
+    }
+
     private static PlannerQueryToolNode node(McpClient mcpClient) {
         PlannerContextAssembler contextAssembler = new PlannerContextAssembler();
         return new PlannerQueryToolNode(

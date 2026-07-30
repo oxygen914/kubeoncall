@@ -64,7 +64,8 @@ public class EvidenceOrchestrator {
         if (properties.getAiOperations().isEvidenceLokiEnabled()) {
             futures.add(CompletableFuture.supplyAsync(() -> collectLoki(scope, request), executor));
         }
-        if (properties.getAiOperations().isEvidenceK8sEventsEnabled()
+        if (properties.getAiOperations().isEvidenceK8sResourceStateEnabled()
+                || properties.getAiOperations().isEvidenceK8sEventsEnabled()
                 || properties.getAiOperations().isEvidencePodLogsEnabled()) {
             futures.add(CompletableFuture.supplyAsync(() -> kubernetes.collect(scope), executor));
         }

@@ -94,6 +94,33 @@ config:
   springAiEnabled: false
   springAiBaseUrl: https://dashscope.aliyuncs.com/compatible-mode
   springAiChatModel: qwen-plus
+  # AI Operations capabilities are independently fail-closed. Enable a source only after its
+  # endpoint, scope allowlist and acceptance evidence are available in the target environment.
+  plannerMode: RULE_FALLBACK
+  plannerProvider: openai-compatible
+  plannerModel: qwen-plus
+  plannerSchemaVersion: v1
+  plannerMaxResponseChars: 32768
+  plannerConnectTimeoutMillis: 3000
+  plannerReadTimeoutMillis: 30000
+  plannerCanaryEnabled: false
+  plannerCanaryFailFast: true
+  evidencePrometheusEnabled: false
+  evidenceLokiEnabled: false
+  evidenceK8sResourceStateEnabled: false
+  evidenceK8sEventsEnabled: false
+  evidencePodLogsEnabled: false
+  askDurableWorkflowEnabled: false
+  operationClosureEnabled: true
+  conclusionEvidenceUiEnabled: false
+  evidenceLookbackMinutes: 30
+  evidenceCollectionTimeoutMillis: 5000
+  evidenceMaxSnippetChars: 8192
+  lokiMaxWindowMinutes: 360
+  lokiMaxLines: 500
+  lokiMaxResponseBytes: 1048576
+  evidenceAllowedClusters: ""
+  evidenceAllowedNamespaces: ""
   embeddingEndpoint: https://dashscope.aliyuncs.com/compatible-mode/v1/embeddings
   embeddingModel: text-embedding-v4
   embeddingVersion: v1
@@ -148,6 +175,7 @@ config:
   changeEventWebhookAuthMode: bearer
   changeEventWebhookMaxPayloadBytes: 1048576
   kubernetesToolEndpoint: http://kubernetes-adapter:8080/api/tools/kubernetes
+  kubernetesToolAuthEnabled: false
   prometheusToolEndpoint: http://prometheus:9090
   alertmanagerToolEndpoint: http://alertmanager-adapter:8080/api/tools/alertmanager
   alertNotificationWebhookEndpoint: ""
@@ -224,6 +252,7 @@ secrets:
   minioAccessKeyKey: minio-access-key
   minioSecretKeyKey: minio-secret-key
   aliyunApiKeyKey: aliyun-api-key
+  kubernetesToolBearerTokenKey: kubernetes-tool-bearer-token
   mcpApiKeyKey: mcp-api-key
   mcpOauthClientSecretKey: mcp-oauth-client-secret
   alertmanagerWebhookTokenKey: alertmanager-webhook-token

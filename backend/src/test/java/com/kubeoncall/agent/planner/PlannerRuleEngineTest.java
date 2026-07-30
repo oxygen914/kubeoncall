@@ -86,4 +86,15 @@ class PlannerRuleEngineTest {
         assertEquals("1.3.0", reference.version());
         assertEquals("runbook", reference.source());
     }
+
+    @Test
+    void shouldExtractKubernetesPodAndRecognizeReadOnlyConstraint() {
+        String request = "请只读分析 kubeoncall-system 命名空间中 Pod adapter-abc 的日志；禁止执行任何变更";
+
+        assertEquals("QUERY_LOGS", ruleEngine.inferIntent(request));
+        assertEquals("adapter-abc", ruleEngine.inferTarget(request));
+        assertEquals("extracted_from_request", ruleEngine.inferTargetSource(request, "adapter-abc"));
+        assertTrue(ruleEngine.isExplicitReadOnlyRequest(request));
+        assertEquals("GENERAL_DIAGNOSTICS", ruleEngine.inferIntent("禁止执行任何变更"));
+    }
 }

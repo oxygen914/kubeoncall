@@ -20,6 +20,7 @@ kubeoncall:
     planner-canary-fail-fast: ${KUBEONCALL_PLANNER_CANARY_FAIL_FAST:true}
     evidence-prometheus-enabled: ${KUBEONCALL_EVIDENCE_PROMETHEUS_ENABLED:false}
     evidence-loki-enabled: ${KUBEONCALL_EVIDENCE_LOKI_ENABLED:false}
+    evidence-k8s-resource-state-enabled: ${KUBEONCALL_EVIDENCE_K8S_RESOURCE_STATE_ENABLED:false}
     evidence-k8s-events-enabled: ${KUBEONCALL_EVIDENCE_K8S_EVENTS_ENABLED:false}
     evidence-pod-logs-enabled: ${KUBEONCALL_EVIDENCE_POD_LOGS_ENABLED:false}
     ask-durable-workflow-enabled: ${KUBEONCALL_ASK_DURABLE_WORKFLOW_ENABLED:true}
@@ -108,6 +109,7 @@ kubeoncall:
   integrations:
     kubernetes:
       endpoint: ${KUBERNETES_TOOL_ENDPOINT:http://host.docker.internal:18081/api/tools/kubernetes}
+      bearer-token: ${KUBERNETES_TOOL_BEARER_TOKEN:}
     prometheus:
       endpoint: ${PROMETHEUS_TOOL_ENDPOINT:http://prometheus:9090}
     loki:

@@ -161,6 +161,7 @@ public class CapabilitiesService {
         features.put("plannerMode", ai.getPlannerMode());
         features.put("evidencePrometheus", ai.isEvidencePrometheusEnabled());
         features.put("evidenceLoki", ai.isEvidenceLokiEnabled());
+        features.put("evidenceK8sResourceState", ai.isEvidenceK8sResourceStateEnabled());
         features.put("evidenceK8sEvents", ai.isEvidenceK8sEventsEnabled());
         features.put("evidencePodLogs", ai.isEvidencePodLogsEnabled());
         features.put("durableAskWorkflow", ai.isAskDurableWorkflowEnabled());

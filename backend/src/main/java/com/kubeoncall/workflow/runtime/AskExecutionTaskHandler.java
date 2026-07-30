@@ -76,7 +76,10 @@ public class AskExecutionTaskHandler implements AsyncTaskHandler {
             Map<String, Object> actor = new LinkedHashMap<>();
             actor.put("userId", requiredLong(request, "actorUserId"));
             actor.put("publicId", requiredText(request, "actorPublicId"));
-            actor.put("displayName", optionalText(request, "actorDisplayName"));
+            String displayName = optionalText(request, "actorDisplayName");
+            if (displayName != null) {
+                actor.put("displayName", displayName);
+            }
             return askService.handleDurably(question, sessionId, executionId, actor, map(request.get("requestScope")));
         }
     }

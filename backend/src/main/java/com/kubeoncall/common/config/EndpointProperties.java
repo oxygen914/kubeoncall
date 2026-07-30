@@ -4,6 +4,7 @@ class EndpointProperties {
 
     private String endpoint;
     private int timeoutMillis = 3000;
+    private String bearerToken;
 
     public String getEndpoint() {
         return endpoint;
@@ -19,5 +20,13 @@ class EndpointProperties {
 
     public void setTimeoutMillis(int timeoutMillis) {
         this.timeoutMillis = timeoutMillis;
+    }
+
+    public String getBearerToken() {
+        return bearerToken;
+    }
+
+    public void setBearerToken(String bearerToken) {
+        this.bearerToken = bearerToken;
     }
 }

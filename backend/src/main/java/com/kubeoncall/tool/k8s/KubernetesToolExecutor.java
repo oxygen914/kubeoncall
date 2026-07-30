@@ -143,6 +143,7 @@ public class KubernetesToolExecutor implements ToolExecutor {
                 "executor", getExecutorKind(),
                 "action", action,
                 "parameters", parameters);
+        Map<String, String> headers = authorizationHeaders();
         Map<String, Object> metadata = new LinkedHashMap<>();
         metadata.put("executor", getExecutorKind());
         metadata.put("action", action);
@@ -152,6 +153,15 @@ public class KubernetesToolExecutor implements ToolExecutor {
                 properties.getIntegrations().getKubernetes().getEndpoint(),
                 request,
                 properties.getIntegrations().getKubernetes().getTimeoutMillis(),
+                headers,
                 metadata);
+    }
+
+    private Map<String, String> authorizationHeaders() {
+        String token = properties.getIntegrations().getKubernetes().getBearerToken();
+        if (token == null || token.isBlank()) {
+            return Map.of();
+        }
+        return Map.of("Authorization", "Bearer " + token.trim());
     }
 }

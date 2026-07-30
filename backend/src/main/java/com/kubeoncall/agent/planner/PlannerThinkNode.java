@@ -20,6 +20,7 @@ import com.kubeoncall.domain.task.TaskPlan;
 import com.kubeoncall.domain.task.TaskType;
 import com.kubeoncall.evidence.AiConclusion;
 import com.kubeoncall.evidence.ConclusionFactory;
+import com.kubeoncall.evidence.EvidenceClaimGrounder;
 import com.kubeoncall.skill.SkillActivation;
 
 @Component
@@ -29,16 +30,19 @@ public class PlannerThinkNode extends ThinkNode {
     private final PlannerContextAssembler contextAssembler;
     private final PlannerRuleEngine ruleEngine;
     private final ConclusionFactory conclusionFactory;
+    private final EvidenceClaimGrounder evidenceClaimGrounder;
 
     public PlannerThinkNode(
             PlannerLlmService plannerLlmService,
             PlannerContextAssembler contextAssembler,
             PlannerRuleEngine ruleEngine,
-            ConclusionFactory conclusionFactory) {
+            ConclusionFactory conclusionFactory,
+            EvidenceClaimGrounder evidenceClaimGrounder) {
         this.plannerLlmService = plannerLlmService;
         this.contextAssembler = contextAssembler;
         this.ruleEngine = ruleEngine;
         this.conclusionFactory = conclusionFactory;
+        this.evidenceClaimGrounder = evidenceClaimGrounder;
     }
 
     @Override
@@ -95,12 +99,31 @@ public class PlannerThinkNode extends ThinkNode {
             missingSignals = ruleEngine.mergeMissingSignals(missingSignals, llmDecision.missingSignals());
             plannerSource = "llm";
         }
+        if (ruleEngine.isExplicitReadOnlyRequest(normalized) && ruleEngine.isMutation(taskType)) {
+            intent = ruleEngine.inferIntent(normalized);
+            taskType = ruleEngine.mapIntentToTaskType(intent);
+            parameters = ruleEngine.inferParameters(normalized, taskType, target, plannerKnowledge);
+            parameterSources = ruleEngine.buildParameterSources(parameters, normalized, plannerKnowledge);
+            riskLevel = ruleEngine.inferRiskLevel(intent, taskType, target, parameters, plannerKnowledge);
+            missingSignals =
+                    ruleEngine.identifyMissingSignals(normalized, taskType, target, parameters, plannerKnowledge);
+            plannerSource = plannerSource + "+read_only_guard";
+            state.addObservation("Planner mutation decision was replaced by the explicit read-only request guard");
+        }
         String planSummary = ruleEngine.buildPlanSummary(intent, taskType, target, riskLevel, consultedTools);
         if (llmDecision != null
                 && llmDecision.summary() != null
                 && !llmDecision.summary().isBlank()) {
             planSummary = llmDecision.summary();
         }
+        EvidenceClaimGrounder.GroundedClaim groundedClaim = evidenceClaimGrounder.ground(
+                taskType,
+                target,
+                planSummary,
+                missingSignals,
+                state.getContext().get("evidenceItems"));
+        planSummary = groundedClaim.claim();
+        missingSignals = groundedClaim.missingSignals();
 
         if (ruleEngine.shouldRetryForMissingSignals(taskType, missingSignals, state.getCurrentLoop())) {
             state.getContext().put("plannerMissingSignals", missingSignals);
@@ -163,6 +186,10 @@ public class PlannerThinkNode extends ThinkNode {
         List<String> taskRequests = ruleEngine.splitTaskRequests(normalized);
         for (int index = 1; index < taskRequests.size(); index++) {
             String taskRequest = taskRequests.get(index);
+            if (ruleEngine.isExplicitReadOnlyRequest(taskRequest)) {
+                state.addObservation("Planner retained explicit read-only safety constraint: " + taskRequest);
+                continue;
+            }
             String taskIntent = ruleEngine.inferIntent(taskRequest);
             TaskType inferredTaskType = ruleEngine.mapIntentToTaskType(taskIntent);
             if (ruleEngine.isMutation(inferredTaskType)) {

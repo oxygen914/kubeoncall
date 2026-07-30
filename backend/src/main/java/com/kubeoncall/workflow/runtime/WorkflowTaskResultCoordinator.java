@@ -508,7 +508,7 @@ public class WorkflowTaskResultCoordinator {
         }
 
         public FinalizationResult {
-            details = details == null ? Map.of() : Map.copyOf(details);
+            details = immutableNonNullCopy(details);
         }
 
         public Map<String, Object> taskResult() {
@@ -529,5 +529,18 @@ public class WorkflowTaskResultCoordinator {
             }
             return result;
         }
+    }
+
+    private static Map<String, Object> immutableNonNullCopy(Map<String, Object> values) {
+        if (values == null || values.isEmpty()) {
+            return Map.of();
+        }
+        Map<String, Object> sanitized = new LinkedHashMap<>();
+        values.forEach((key, value) -> {
+            if (key != null && value != null) {
+                sanitized.put(key, value);
+            }
+        });
+        return sanitized.isEmpty() ? Map.of() : Map.copyOf(sanitized);
     }
 }

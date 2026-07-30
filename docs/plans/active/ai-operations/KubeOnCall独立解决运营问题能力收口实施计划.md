@@ -1,16 +1,21 @@
 # KubeOnCall“独立解决运营问题”能力收口实施计划
 
-> 版本：v1.2
-> 日期：2026-07-29
+> 版本：v1.4
+> 日期：2026-07-30
 > 当前状态：IN_PROGRESS（本地真实模型、Loki、Prometheus 和持久化 Ask 已贯通；Kubernetes
-> Evidence Adapter、版本化 SOP、真实变更闭环和四场景测试集群验收尚未完成）
+> 只读 Evidence Adapter 已部署，并已通过登录用户的持久化 Ask 将资源状态、Events、
+> current/previous logs 和 Prometheus 指标关联到同一 execution；
+> 版本化 SOP、真实变更闭环和四场景测试集群验收尚未完成）
 > 目标阶段：从“可回答、可生成计划”收口到“可诊断、可受控执行、可验证、可回滚、可升级”
 > 适用范围：Kubernetes Pending、CrashLoopBackOff、OOMKilled、Node NotReady/Unavailable
 > 关联文档：[监控能力重构实施计划](../monitoring/KubeOnCall监控能力重构实施计划.md)、[Kubernetes 操作闭环接入指南](../../../guides/Kubernetes操作闭环接入指南.md)、[Kubernetes 指标接入指南](../../../guides/Kubernetes指标接入指南.md)
 >
-> 最近更新：2026-07-29，完成本地真实模型和 Loki/Prometheus 统一证据链联调，验收记录见
-> [本地真实模型与统一证据链验收记录](validation/2026-07-29本地真实模型与统一证据链验收记录.md)；
-> 尚未据此宣称真实集群闭环或生产自主运维能力完成。
+> 最近更新：2026-07-30，在单节点 Minikube 测试集群部署带 Bearer 鉴权、cluster/Namespace
+> allowlist 和最小只读 RBAC 的 Kubernetes Tool Adapter，并从 Console 通过真实模型提交
+> 持久化只读 Ask。最终 Execution、Task 和 7 个工作流节点全部成功，Conclusion 如实区分
+> `SUCCEEDED`、`EMPTY` 与 `UNAVAILABLE`。验收记录见
+> [真实 Kubernetes 只读证据链验收记录](validation/2026-07-30真实Kubernetes只读证据链验收记录.md)；
+> 尚未据此宣称真实变更闭环、多节点故障恢复或生产自主运维能力完成。
 
 ## 1. 执行摘要
 
@@ -102,7 +107,7 @@ KubeOnCall 当前已经具备 Planner、Verifier、Executor、RAG、Skill、审�
 结论：当前应描述为“具备自主运维闭环的部分工程基础”，不能描述为“已经能够独立解决真实
 Kubernetes 运营问题”。
 
-### 3.1 第一批实施进度（2026-07-29）
+### 3.1 第一批实施进度（更新至 2026-07-30）
 
 本轮先完成代码与本地自动化验证。仓库默认配置仍保持失败关闭；本地联调实例通过仓库外 Secret
 启用真实模型、Loki 和 Prometheus，规则降级仍只读，不直接开放真实 Kubernetes 变更。
@@ -111,9 +116,9 @@ Kubernetes 运营问题”。
 | --- | --- | --- | --- |
 | M0 开关和能力状态 | 新增 AI Operations 配置、Planner/Evidence/持久化 Ask/Closure/UI 独立开关；能力接口和集成状态暴露实际模式 | 已实现 | 在目标环境核对所有开关组合、Secret 注入和关闭回退 |
 | M1 真实模型边界 | 新增 `REAL_MODEL`、`RULE_ASSISTED`、`RULE_FALLBACK`、`SIMULATION`、`UNAVAILABLE`；显式创建 `ChatClient`，真实模式缺 Key 时启动失败；校验结构化 Schema、响应大小、调用状态和 Token 指标；模型输入先脱敏 | 本地真实模型 canary 与错误 Key 失败关闭已通过 | 继续执行 429、5xx、超时、非法 JSON 和配额演练；测试/生产使用独立 Secret |
-| M2 统一证据 | 新增 Evidence/Conclusion 领域契约、确定性置信度、冲突检测、范围白名单、Loki `query_range` 客户端、固定 Prometheus 查询、Kubernetes Events/current/previous logs 采集、并行总超时和 MySQL 持久化 | 本地 Loki 与 Prometheus Evidence 已贯通 | 部署 Kubernetes Tool Adapter；补齐资源状态、告警、变更与版本化 SOP 的同一时窗联调 |
+| M2 统一证据 | 新增 Evidence/Conclusion 领域契约、确定性置信度、冲突检测、范围白名单、Loki `query_range`、固定 Prometheus 查询；实现独立只读 Kubernetes Adapter、Bearer 鉴权、最小 RBAC、资源状态、Events、current/previous logs 采集及有界返回；只读结论由实际 Evidence 状态确定性生成 | 单节点 Minikube 已实证真实 Pod 状态、Events、current log；无历史容器时 previous log 正确为空；Prometheus、资源状态、Event 和日志已写入同一持久化 execution 并被 Conclusion 引用 | 补齐告警、变更与版本化 SOP 同窗关联，并扩展专用故障 Namespace |
 | M3 Planner 降级门禁 | 所有降级原因显式记录；Verifier 和 Executor 双重禁止降级/模拟模式执行变更；同步 `/api/v1/ask` 永久限制为只读；复合请求中的后续变更必须拆成独立 execution | 已实现 | 用真实模型故障注入证明降级时不存在变更旁路 |
-| M4 持久化 Ask | Console 改用 `POST /api/v1/executions`；传递集群、环境、Namespace 和资源范围；幂等提交、轮询终态、刷新恢复、task/execution 关联和审批入口已接通；兼容同步接口保留 | 本地真实模型只读 E2E 已通过 | 验证 Planner、执行、审批阶段进程重启恢复；补充 SSE 主通道与跨设备会话恢复 |
+| M4 持久化 Ask | Console 改用 `POST /api/v1/executions`；传递集群、环境、Namespace 和资源范围；幂等提交、轮询终态、刷新恢复、task/execution 关联和审批入口已接通；兼容同步接口保留 | 登录用户的真实模型 + 真实 Kubernetes 只读 E2E 已通过；`exe_55756f2ec7f6408f9548ccea1ff1049b` 的 Execution、Task 和 7 个节点全部成功 | 验证 Planner、执行、审批阶段进程重启恢复；补充 SSE 主通道与跨设备会话恢复 |
 | M5 操作闭环 | 变更前准备、操作后验证、超时、回滚、回滚复验和人工升级继续受 Closure 开关与变更工具门禁保护；执行详情可展示 Closure 结果；异步任务终态阶段与状态一致 | 部分完成 | Closure 阶段事实持久化、重启续跑、真实适配器幂等、验证失败/回滚/Incident 故障注入 |
 | M6 可解释前端 | Ask 页面展示回答、执行状态、Planner 模式/降级、置信度、Evidence、SOP、关联结论和推荐动作；不提供绕过审批的直接执行入口 | 主要代码完成 | 使用真实长日志、无权限、冲突证据、断线和移动/窄屏场景验收 |
 | M7 四场景验收 | 尚未开始真实故障注入 | 未完成 | Pending、CrashLoopBackOff、OOMKilled、Node 不可用各 3 次，并完成超时、回滚和人工升级演练 |
@@ -135,14 +140,17 @@ Kubernetes 运营问题”。
 
 | 验证项 | 结果 |
 | --- | --- |
-| 后端格式、规范和单元测试 | 最新全量测试：816 个测试通过，0 failure，0 error；Spotless、Checkstyle 通过 |
-| 最终安全收口定向测试 | Planner、Evidence、Ask 脱敏与复合变更门禁相关测试全部通过 |
+| 后端格式、规范和单元测试 | 当前提交基线叠加本次 AI Operations 变更的隔离快照：831 个测试通过，0 failure，0 error；Spotless、Checkstyle 通过 |
+| 最终安全收口定向测试 | Planner、Evidence、Ask、Workflow 和证据一致性相关 31 个测试通过，0 failure，0 error |
 | MySQL 8 集成测试 | `WorkflowRuntimeIT`：3 个测试通过；Flyway V1～V18 全部应用，Evidence/Conclusion 幂等投影通过 |
 | OpenAPI 契约 | `-Popenapi-contract verify` 通过；基于最新 `api/openapi.json` 重复生成前端类型后逐字一致 |
 | 前端质量门禁 | format、lint、typecheck、Vitest、production build 全部通过；29 个测试文件、72 个测试通过 |
 | 浏览器 E2E | 11 个 Playwright 场景通过 |
 
 真实依赖的联调结果必须另建验收报告，不得混入本地自动化结论。
+
+同一共享工作区内另有未完成的通知模块改动；其格式、final mock 和 Spring 构造器问题会使
+未提交工作区的仓库级全量门禁失败，因此不能用上述隔离结果替代最终合并后的全仓复验。
 
 ### 3.3 本地真实依赖联调记录
 
@@ -158,6 +166,35 @@ Kubernetes 运营问题”。
 
 完整边界和证据见
 [2026-07-29 本地真实模型与统一证据链验收记录](validation/2026-07-29本地真实模型与统一证据链验收记录.md)。
+
+2026-07-30 在 `kubeoncall-monitoring` Minikube 测试集群追加完成 Kubernetes 只读证据联调：
+
+- 集群是本机 Docker Driver 的真实单节点 Minikube，Kubernetes API、kubelet 和
+  kube-state-metrics 正常；它不是生产或多节点集群。
+- 独立 Adapter 使用专用 ServiceAccount，只允许目标 Namespace 的 Pod、Pod logs、Events、
+  Deployment、StatefulSet、DaemonSet 读取，并只读 Node；变更 action 固定拒绝。
+- Bearer Token、cluster 和 Namespace 三项均失败关闭；Token 只保存于 Kubernetes Secret，
+  未进入仓库。
+- 真实目标 Pod 返回 `Running`、容器 Ready、0 restart；读取到 Scheduled、Pulled、Created、
+  Started 4 条 Events 和启动日志；没有历史容器时 previous logs 返回空集合。
+- 从实际 KubeOnCall 后端容器经 Minikube Docker 网络、使用注入的 Bearer Token 成功读取同一
+  Pod，证明不是仅在宿主机端口转发下通过。
+- 后端能力状态为 `REAL_MODEL / aliyun-dashscope / qwen-plus / HEALTHY`，资源状态、Events、
+  Pod logs、持久化 Ask 和证据 UI 开关均为 true。
+- 使用现有登录用户从 Console `/ask` 提交持久化诊断，最终
+  `executionId=exe_55756f2ec7f6408f9548ccea1ff1049b`、
+  `taskId=tsk_fbd69887d7a947218ac1199cbbbf6b04`；Execution、Task 和 7 个节点全部成功。
+- 同一 execution 下 Prometheus 指标、Kubernetes 资源状态、Readiness Event、current log
+  均为 `SUCCEEDED` 并被 Conclusion 引用；previous log 为 `EMPTY/PREVIOUS_LOG_EMPTY`。
+- 版本化 SOP、告警、拓扑和 CMDB 仍不可用，因此 Conclusion 为
+  `PARTIALLY_SUPPORTED / LOW / 0.5300`，`sop_refs=[]`，没有冒充 `RESOLVED`。
+- Planner 为 `REAL_MODEL / aliyun-dashscope / qwen-plus`，动作仅为 `QUERY_LOGS`，
+  `requiresApproval=false`，审批记录为 0。
+- Adapter 对 `rolloutRestart` 返回 `403 READ_ONLY_MODE`；验收前后 Pod UID、restartCount
+  和 Deployment generation 均未变化。
+
+完整边界和证据见
+[2026-07-30 真实 Kubernetes 只读证据链验收记录](validation/2026-07-30真实Kubernetes只读证据链验收记录.md)。
 
 ## 4. 目标架构
 
@@ -1064,7 +1101,7 @@ npm run e2e
 - [ ] 真实模型已启用，canary 和错误注入通过，模型来源可见。
 - [ ] Planner 不再静默 fallback，模拟和规则降级均被显式标记。
 - [ ] 规则 fallback 不能触发任何真实变更。
-- [ ] Loki、Kubernetes Events、current/previous Pod logs 已进入统一证据契约。
+- [x] Loki、Kubernetes Events、current/previous Pod logs 已进入统一证据契约。
 - [ ] Prometheus、资源状态、告警、变更和 SOP 能与同一 execution 关联。
 - [ ] `/ask` 使用持久化 Execution，浏览器关闭和后端重启后可恢复。
 - [ ] Ask 产生的审批能在统一审批中心处理并恢复原执行。
@@ -1073,7 +1110,8 @@ npm run e2e
 - [ ] 每个结论显示日志/Events/指标/资源状态中的相关证据、SOP 来源和置信度。
 - [ ] Pending、CrashLoopBackOff、OOMKilled、Node 不可用各完成 3 次真实演练。
 - [ ] 至少完成一次验证超时、一次自动回滚和一次人工升级演练。
-- [x] 后端和前端当前全量质量门禁通过。
+- [ ] 后端和前端最终合并态全量质量门禁通过（本次 AI Operations 隔离快照 831 个后端测试
+  已通过；共享工作区并行通知改动仍需修复后复验）。
 - [x] 当前 OpenAPI 契约和前端生成类型无漂移。
 - [ ] 测试集群验收报告包含提交号、环境、执行 ID、证据包和清理结果。
 - [ ] 生产灰度、关闭开关、数据保留和紧急回滚手册完成评审。

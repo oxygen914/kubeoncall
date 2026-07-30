@@ -7,6 +7,7 @@ import java.util.Map;
 import org.springframework.stereotype.Component;
 
 import com.kubeoncall.common.config.KubeOnCallProperties;
+import com.kubeoncall.common.k8s.KubernetesRequestTargetParser;
 import com.kubeoncall.domain.graph.GraphState;
 
 /** Resolves an evidence scope only from authenticated request context and known graph facts. */
@@ -22,11 +23,17 @@ public class EvidenceScopeResolver {
 
     public EvidenceCollectionScope resolve(GraphState state, String fallbackTarget) {
         Map<String, Object> scope = map(state.getContext().get("requestScope"));
+        KubernetesRequestTargetParser.Target parsedTarget = KubernetesRequestTargetParser.parse(state.getUserRequest());
         String cluster = first(scope.get("cluster"), state.getContext().get("cluster"));
         String environment = first(scope.get("environment"), state.getContext().get("environment"));
-        String namespace = first(scope.get("namespace"), state.getContext().get("namespace"));
-        String kind = first(scope.get("resourceKind"), state.getContext().get("resourceKind"));
-        String name = first(scope.get("resourceName"), state.getContext().get("resourceName"), fallbackTarget);
+        String namespace = first(scope.get("namespace"), state.getContext().get("namespace"), parsedTarget.namespace());
+        String kind =
+                first(scope.get("resourceKind"), state.getContext().get("resourceKind"), parsedTarget.resourceKind());
+        String name = first(
+                scope.get("resourceName"),
+                state.getContext().get("resourceName"),
+                parsedTarget.resourceName(),
+                fallbackTarget);
         String uid = first(scope.get("resourceUid"), state.getContext().get("resourceUid"));
         Instant end = Instant.now();
         return new EvidenceCollectionScope(

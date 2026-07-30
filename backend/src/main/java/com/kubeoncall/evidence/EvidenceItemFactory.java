@@ -73,7 +73,7 @@ public class EvidenceItemFactory {
         if (summary.isBlank()) {
             summary = defaultSummary(type, status, resource, source);
         }
-        String contentHash = "sha256:" + sha256(rawSnippet);
+        String contentHash = "sha256:" + sha256(contentIdentity(type, rawSnippet, safeValue));
         String evidenceId = "evd_"
                 + sha256(String.join("|", scope.executionId(), type.name(), source, resource.uid(), contentHash))
                         .substring(0, 32);
@@ -233,6 +233,13 @@ public class EvidenceItemFactory {
 
     private static boolean booleanValue(Object value) {
         return value instanceof Boolean flag ? flag : value != null && Boolean.parseBoolean(String.valueOf(value));
+    }
+
+    private static String contentIdentity(EvidenceType type, String rawSnippet, Map<String, Object> value) {
+        if (type != EvidenceType.POD_LOG || !value.containsKey("previous")) {
+            return rawSnippet;
+        }
+        return rawSnippet + "\nlogMode=" + (booleanValue(value.get("previous")) ? "previous" : "current");
     }
 
     private static void put(Map<String, Object> values, String key, Object value) {

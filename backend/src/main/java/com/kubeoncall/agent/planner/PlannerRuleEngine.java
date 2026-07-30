@@ -10,6 +10,7 @@ import java.util.regex.Pattern;
 
 import org.springframework.stereotype.Component;
 
+import com.kubeoncall.common.k8s.KubernetesRequestTargetParser;
 import com.kubeoncall.domain.task.RiskLevel;
 import com.kubeoncall.domain.task.SopReference;
 import com.kubeoncall.domain.task.Task;
@@ -20,6 +21,10 @@ public class PlannerRuleEngine {
 
     private static final Pattern SERVICE_PATTERN = Pattern.compile("(\\w+[-_]?\\w*)-?(service|gateway|api|worker|job)");
     private static final Pattern NUMBER_PATTERN = Pattern.compile("\\d+");
+    private static final Pattern READ_ONLY_CONSTRAINT_PATTERN =
+            Pattern.compile("(?iu)(?:禁止|不要|不得|不允许|严禁|无需|无须|只读|read[- ]?only|do not|don't|must not)"
+                    + ".{0,32}(?:执行|变更|修改|操作|脚本|重启|扩容|缩容|删除|"
+                    + "execute|change|mutat|script|restart|scale|patch|delete)");
     private final PlannerParameterResolver parameterResolver;
     private final PlannerTaskFactory taskFactory;
 
@@ -123,6 +128,16 @@ public class PlannerRuleEngine {
 
     public String inferIntent(String normalized) {
         String lower = normalized.toLowerCase(Locale.ROOT);
+        if (isExplicitReadOnlyRequest(normalized)
+                && !(lower.contains("日志")
+                        || lower.contains("log")
+                        || lower.contains("指标")
+                        || lower.contains("监控")
+                        || lower.contains("metric")
+                        || lower.contains("cpu")
+                        || lower.contains("memory"))) {
+            return "GENERAL_DIAGNOSTICS";
+        }
         if (lower.contains("查") || lower.contains("看") || lower.contains("日志") || lower.contains("log")) {
             return "QUERY_LOGS";
         }
@@ -178,6 +193,10 @@ public class PlannerRuleEngine {
     }
 
     public String inferTarget(String normalized) {
+        KubernetesRequestTargetParser.Target kubernetesTarget = KubernetesRequestTargetParser.parse(normalized);
+        if (kubernetesTarget.hasResource()) {
+            return kubernetesTarget.resourceName();
+        }
         Matcher matcher = SERVICE_PATTERN.matcher(normalized);
         if (matcher.find()) {
             return matcher.group(0);
@@ -199,6 +218,9 @@ public class PlannerRuleEngine {
     }
 
     public String inferTargetSource(String normalized, String target) {
+        if (KubernetesRequestTargetParser.parse(normalized).hasResource()) {
+            return "extracted_from_request";
+        }
         if (SERVICE_PATTERN.matcher(normalized).find()) {
             return "extracted_from_request";
         }
@@ -371,6 +393,10 @@ public class PlannerRuleEngine {
 
     public boolean isMutation(TaskType taskType) {
         return taskType != null && !taskType.name().startsWith("QUERY");
+    }
+
+    public boolean isExplicitReadOnlyRequest(String request) {
+        return request != null && READ_ONLY_CONSTRAINT_PATTERN.matcher(request).find();
     }
 
     private boolean isScopeTarget(Object target) {

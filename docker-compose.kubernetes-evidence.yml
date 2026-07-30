@@ -1,0 +1,27 @@
+# Local Minikube evidence bridge.
+#
+# Usage:
+#   KUBERNETES_TOOL_BEARER_TOKEN=... docker compose \
+#     -f docker-compose.yml \
+#     -f docker-compose.kubernetes-evidence.yml up -d kubeoncall
+#
+# The backend joins Minikube's Docker network and reaches the read-only adapter through its
+# authenticated NodePort. This override deliberately enables only evidence reads.
+services:
+  kubeoncall:
+    environment:
+      KUBERNETES_TOOL_ENDPOINT: http://kubeoncall-monitoring:30081/api/tools/kubernetes
+      KUBERNETES_TOOL_BEARER_TOKEN: ${KUBERNETES_TOOL_BEARER_TOKEN:?Kubernetes tool token is required}
+      KUBEONCALL_EVIDENCE_K8S_RESOURCE_STATE_ENABLED: "true"
+      KUBEONCALL_EVIDENCE_K8S_EVENTS_ENABLED: "true"
+      KUBEONCALL_EVIDENCE_POD_LOGS_ENABLED: "true"
+      KUBEONCALL_EVIDENCE_ALLOWED_CLUSTERS: local
+      KUBEONCALL_EVIDENCE_ALLOWED_NAMESPACES: kubeoncall-system
+    networks:
+      - default
+      - minikube
+
+networks:
+  minikube:
+    external: true
+    name: kubeoncall-monitoring

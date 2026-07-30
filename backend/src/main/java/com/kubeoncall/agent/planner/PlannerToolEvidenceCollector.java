@@ -8,6 +8,7 @@ import java.util.Map;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
+import com.kubeoncall.common.k8s.KubernetesRequestTargetParser;
 import com.kubeoncall.observability.SensitiveDataRedactor;
 import com.kubeoncall.tool.mcp.McpClient;
 
@@ -36,16 +37,21 @@ public class PlannerToolEvidenceCollector {
     }
 
     public Evidence collect(String request, List<String> missingSignals) {
-        String target = inferTarget(request);
-        String namespace = inferNamespace(request);
+        KubernetesRequestTargetParser.Target kubernetesTarget = KubernetesRequestTargetParser.parse(request);
+        String target = kubernetesTarget.hasResource() ? kubernetesTarget.resourceName() : inferTarget(request);
+        String namespace =
+                kubernetesTarget.namespace().isBlank() ? inferNamespace(request) : kubernetesTarget.namespace();
         Map<String, Object> evidence = new LinkedHashMap<>();
         evidence.put("sop", queryWithFallback("knowledge.searchSop", Map.of("query", request)));
         evidence.put("topology", queryWithFallback("topology.getServiceTopology", Map.of("serviceName", target)));
         evidence.put("serviceMetadata", queryWithFallback("cmdb.getServiceMetadata", Map.of("serviceName", target)));
-        evidence.put(
-                "resourceSnapshot",
-                queryWithFallback(
-                        "kubernetes.describeResource", Map.of("resourceName", target, "namespace", namespace)));
+        Map<String, Object> resourceRequest = new LinkedHashMap<>();
+        resourceRequest.put("resourceName", target);
+        resourceRequest.put("namespace", namespace);
+        if (!kubernetesTarget.resourceKind().isBlank()) {
+            resourceRequest.put("resourceKind", kubernetesTarget.resourceKind());
+        }
+        evidence.put("resourceSnapshot", queryWithFallback("kubernetes.describeResource", resourceRequest));
         evidence.put("activeAlerts", queryWithFallback("alerts.getActiveAlerts", Map.of("serviceName", target)));
         String metricQuery = "rate(http_requests_total{service=\"" + target + "\"}[5m])";
         evidence.put(

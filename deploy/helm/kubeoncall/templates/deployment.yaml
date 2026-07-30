@@ -178,6 +178,56 @@ spec:
               value: {{ .Values.config.springAiBaseUrl | quote }}
             - name: SPRING_AI_OPENAI_CHAT_OPTIONS_MODEL
               value: {{ .Values.config.springAiChatModel | quote }}
+            - name: KUBEONCALL_PLANNER_MODE
+              value: {{ .Values.config.plannerMode | quote }}
+            - name: KUBEONCALL_PLANNER_PROVIDER
+              value: {{ .Values.config.plannerProvider | quote }}
+            - name: KUBEONCALL_PLANNER_MODEL
+              value: {{ .Values.config.plannerModel | quote }}
+            - name: KUBEONCALL_PLANNER_SCHEMA_VERSION
+              value: {{ .Values.config.plannerSchemaVersion | quote }}
+            - name: KUBEONCALL_PLANNER_MAX_RESPONSE_CHARS
+              value: {{ .Values.config.plannerMaxResponseChars | quote }}
+            - name: KUBEONCALL_PLANNER_CONNECT_TIMEOUT_MILLIS
+              value: {{ .Values.config.plannerConnectTimeoutMillis | quote }}
+            - name: KUBEONCALL_PLANNER_READ_TIMEOUT_MILLIS
+              value: {{ .Values.config.plannerReadTimeoutMillis | quote }}
+            - name: KUBEONCALL_PLANNER_CANARY_ENABLED
+              value: {{ .Values.config.plannerCanaryEnabled | quote }}
+            - name: KUBEONCALL_PLANNER_CANARY_FAIL_FAST
+              value: {{ .Values.config.plannerCanaryFailFast | quote }}
+            - name: KUBEONCALL_EVIDENCE_PROMETHEUS_ENABLED
+              value: {{ .Values.config.evidencePrometheusEnabled | quote }}
+            - name: KUBEONCALL_EVIDENCE_LOKI_ENABLED
+              value: {{ .Values.config.evidenceLokiEnabled | quote }}
+            - name: KUBEONCALL_EVIDENCE_K8S_RESOURCE_STATE_ENABLED
+              value: {{ .Values.config.evidenceK8sResourceStateEnabled | quote }}
+            - name: KUBEONCALL_EVIDENCE_K8S_EVENTS_ENABLED
+              value: {{ .Values.config.evidenceK8sEventsEnabled | quote }}
+            - name: KUBEONCALL_EVIDENCE_POD_LOGS_ENABLED
+              value: {{ .Values.config.evidencePodLogsEnabled | quote }}
+            - name: KUBEONCALL_ASK_DURABLE_WORKFLOW_ENABLED
+              value: {{ .Values.config.askDurableWorkflowEnabled | quote }}
+            - name: KUBEONCALL_OPERATION_CLOSURE_ENABLED
+              value: {{ .Values.config.operationClosureEnabled | quote }}
+            - name: KUBEONCALL_CONCLUSION_EVIDENCE_UI_ENABLED
+              value: {{ .Values.config.conclusionEvidenceUiEnabled | quote }}
+            - name: KUBEONCALL_EVIDENCE_LOOKBACK_MINUTES
+              value: {{ .Values.config.evidenceLookbackMinutes | quote }}
+            - name: KUBEONCALL_EVIDENCE_COLLECTION_TIMEOUT_MILLIS
+              value: {{ .Values.config.evidenceCollectionTimeoutMillis | quote }}
+            - name: KUBEONCALL_EVIDENCE_MAX_SNIPPET_CHARS
+              value: {{ .Values.config.evidenceMaxSnippetChars | quote }}
+            - name: KUBEONCALL_LOKI_MAX_WINDOW_MINUTES
+              value: {{ .Values.config.lokiMaxWindowMinutes | quote }}
+            - name: KUBEONCALL_LOKI_MAX_LINES
+              value: {{ .Values.config.lokiMaxLines | quote }}
+            - name: KUBEONCALL_LOKI_MAX_RESPONSE_BYTES
+              value: {{ .Values.config.lokiMaxResponseBytes | quote }}
+            - name: KUBEONCALL_EVIDENCE_ALLOWED_CLUSTERS
+              value: {{ .Values.config.evidenceAllowedClusters | quote }}
+            - name: KUBEONCALL_EVIDENCE_ALLOWED_NAMESPACES
+              value: {{ .Values.config.evidenceAllowedNamespaces | quote }}
             - name: RAG_EMBEDDING_ENDPOINT
               value: {{ .Values.config.embeddingEndpoint | quote }}
             - name: RAG_EMBEDDING_MODEL
@@ -286,6 +336,13 @@ spec:
               value: {{ .Values.config.changeEventWebhookMaxPayloadBytes | int64 | quote }}
             - name: KUBERNETES_TOOL_ENDPOINT
               value: {{ .Values.config.kubernetesToolEndpoint | quote }}
+            {{- if .Values.config.kubernetesToolAuthEnabled }}
+            - name: KUBERNETES_TOOL_BEARER_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secrets.existingSecret }}
+                  key: {{ .Values.secrets.kubernetesToolBearerTokenKey }}
+            {{- end }}
             - name: PROMETHEUS_TOOL_ENDPOINT
               value: {{ .Values.config.prometheusToolEndpoint | quote }}
             - name: ALERTMANAGER_TOOL_ENDPOINT

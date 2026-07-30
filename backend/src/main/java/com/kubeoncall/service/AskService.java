@@ -171,11 +171,13 @@ public class AskService {
             state.setExecutionId(executionId);
         }
         state.setUserRequest(question);
-        if (actor != null && !actor.isEmpty()) {
-            state.getContext().put("workflowActor", Map.copyOf(actor));
+        Map<String, Object> safeActor = immutableNonNullCopy(actor);
+        if (!safeActor.isEmpty()) {
+            state.getContext().put("workflowActor", safeActor);
         }
-        if (requestScope != null && !requestScope.isEmpty()) {
-            state.getContext().put("requestScope", Map.copyOf(requestScope));
+        Map<String, Object> safeRequestScope = immutableNonNullCopy(requestScope);
+        if (!safeRequestScope.isEmpty()) {
+            state.getContext().put("requestScope", safeRequestScope);
         }
         if (compatibilityReadOnly) {
             state.getContext().put("compatibilityReadOnly", true);
@@ -189,6 +191,19 @@ public class AskService {
 
         runPlannedTasks(state, 0);
         return finishAndCheckpoint(state, startedAt, sessionId, retainCheckpoint);
+    }
+
+    private static Map<String, Object> immutableNonNullCopy(Map<String, Object> values) {
+        if (values == null || values.isEmpty()) {
+            return Map.of();
+        }
+        Map<String, Object> sanitized = new LinkedHashMap<>();
+        values.forEach((key, value) -> {
+            if (key != null && value != null) {
+                sanitized.put(key, value);
+            }
+        });
+        return sanitized.isEmpty() ? Map.of() : Map.copyOf(sanitized);
     }
 
     public AskExecutionResult resumeAfterApproval(String executionId) {
@@ -428,8 +443,12 @@ public class AskService {
 
     private Map<String, Object> structuredDetails(GraphState state) {
         Map<String, Object> details = new LinkedHashMap<>();
-        details.put("plan", state.getTaskPlan());
-        details.put("currentTask", state.getCurrentTask());
+        if (state.getTaskPlan() != null) {
+            details.put("plan", state.getTaskPlan());
+        }
+        if (state.getCurrentTask() != null) {
+            details.put("currentTask", state.getCurrentTask());
+        }
         details.put(
                 "planner",
                 selectedContext(

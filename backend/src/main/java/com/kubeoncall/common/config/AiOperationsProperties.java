@@ -22,6 +22,7 @@ class AiOperationsProperties {
     private boolean plannerCanaryFailFast = true;
     private boolean evidencePrometheusEnabled;
     private boolean evidenceLokiEnabled;
+    private boolean evidenceK8sResourceStateEnabled;
     private boolean evidenceK8sEventsEnabled;
     private boolean evidencePodLogsEnabled;
     private boolean askDurableWorkflowEnabled;
@@ -122,6 +123,14 @@ class AiOperationsProperties {
 
     public void setEvidenceLokiEnabled(boolean evidenceLokiEnabled) {
         this.evidenceLokiEnabled = evidenceLokiEnabled;
+    }
+
+    public boolean isEvidenceK8sResourceStateEnabled() {
+        return evidenceK8sResourceStateEnabled;
+    }
+
+    public void setEvidenceK8sResourceStateEnabled(boolean evidenceK8sResourceStateEnabled) {
+        this.evidenceK8sResourceStateEnabled = evidenceK8sResourceStateEnabled;
     }
 
     public boolean isEvidenceK8sEventsEnabled() {

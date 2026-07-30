@@ -190,6 +190,11 @@ public final class AsyncTaskWorker {
                 } catch (NonRetryableTaskException nonRetryable) {
                     return recordTerminalFailure(task, heartbeat, nonRetryable.errorCode(), safeMessage(nonRetryable));
                 } catch (Exception exception) {
+                    LOGGER.warn(
+                            "Async task handler failed: taskId={}, taskType={}",
+                            task.publicId(),
+                            task.taskType(),
+                            exception);
                     return recordFailure(
                             task,
                             heartbeat,

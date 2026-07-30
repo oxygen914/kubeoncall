@@ -41,6 +41,10 @@ public class KubernetesEvidenceCollector {
         List<EvidenceItem> items = new ArrayList<>();
         var rejection = scopePolicy.rejection(scope);
         if (rejection.isPresent()) {
+            if (properties.getAiOperations().isEvidenceK8sResourceStateEnabled()) {
+                items.add(statusItem(
+                        scope, EvidenceType.RESOURCE_STATE, EvidenceCollectionStatus.FORBIDDEN, rejection.get()));
+            }
             if (properties.getAiOperations().isEvidenceK8sEventsEnabled()) {
                 items.add(
                         statusItem(scope, EvidenceType.K8S_EVENT, EvidenceCollectionStatus.FORBIDDEN, rejection.get()));
@@ -51,6 +55,9 @@ public class KubernetesEvidenceCollector {
             return List.copyOf(items);
         }
         if (kubernetes == null) {
+            if (properties.getAiOperations().isEvidenceK8sResourceStateEnabled()) {
+                items.add(factory.unavailable(scope, EvidenceType.RESOURCE_STATE, "kubernetes-api", "CLIENT_MISSING"));
+            }
             if (properties.getAiOperations().isEvidenceK8sEventsEnabled()) {
                 items.add(factory.unavailable(scope, EvidenceType.K8S_EVENT, "kubernetes-api", "CLIENT_MISSING"));
             }
@@ -58,6 +65,9 @@ public class KubernetesEvidenceCollector {
                 items.add(factory.unavailable(scope, EvidenceType.POD_LOG, "kubernetes-api", "CLIENT_MISSING"));
             }
             return List.copyOf(items);
+        }
+        if (properties.getAiOperations().isEvidenceK8sResourceStateEnabled()) {
+            items.addAll(call(scope, EvidenceType.RESOURCE_STATE, "describeResource", baseParameters(scope), false));
         }
         if (properties.getAiOperations().isEvidenceK8sEventsEnabled()) {
             items.addAll(call(scope, EvidenceType.K8S_EVENT, "queryEvents", baseParameters(scope), false));
@@ -164,7 +174,11 @@ public class KubernetesEvidenceCollector {
 
     private static EvidenceCollectionStatus mapFailure(Map<String, Object> response) {
         String error = String.valueOf(response.getOrDefault("errorType", "")).toUpperCase();
-        if (error.contains("FORBIDDEN") || error.contains("RBAC") || error.contains("403")) {
+        Object httpStatus = response.get("httpStatus");
+        if (error.contains("FORBIDDEN")
+                || error.contains("RBAC")
+                || error.contains("403")
+                || httpStatus instanceof Number number && number.intValue() == 403) {
             return EvidenceCollectionStatus.FORBIDDEN;
         }
         return EvidenceCollectionStatus.UNAVAILABLE;
