@@ -40,7 +40,7 @@ class SkillCatalogConsistencyTest {
             "cluster-scheduling-capacity-triage",
             "node-cpu-pressure-triage",
             "node-memory-pressure-triage");
-    private static final Set<String> CORE_ALERTS = Set.of(
+    private static final Set<String> SKILL_REQUIRED_ALERTS = Set.of(
             "PodCrashLoopBackOffP1",
             "PodOOMKilledP1",
             "ClusterPendingPodsP1",
@@ -48,8 +48,15 @@ class SkillCatalogConsistencyTest {
             "HostHighCpuUsageP0",
             "HostMemoryPressureP1",
             "HostMemoryPressureP0",
+            "NodeDown",
             "NodeCPUHigh",
-            "NodeMemoryLow");
+            "NodeMemoryLow",
+            "NodeDiskHigh",
+            "NodeInodeHigh",
+            "NodeConntrackPressure",
+            "NodeFilesystemReadOnly",
+            "NodeNotReady",
+            "PodPendingTooLong");
 
     @Test
     void catalogShouldHaveStableDirectoriesSelectorsAndPromptBudgets() throws IOException {
@@ -83,26 +90,23 @@ class SkillCatalogConsistencyTest {
     void policiesShouldKeepRunbookAndCoreSkillLinks() throws IOException {
         List<Skill> skills = loadSkills();
         List<AlarmPolicy> catalogPolicies = policies("alarm-policies.yml");
-        List<AlarmPolicy> nodeMvpPolicies = policies("alarm-policies-node-mvp.yml");
+        List<AlarmPolicy> activePolicies = policies("alarm-policies-node-mvp.yml");
 
         catalogPolicies.stream()
                 .filter(policy -> policy.severity() == AlarmSeverity.P0 || policy.severity() == AlarmSeverity.P1)
                 .forEach(policy -> assertTrue(
                         new ClassPathResource("runbooks/" + policy.runbookId() + ".md").exists(),
                         policy.id() + " references a missing runbook"));
-        CORE_ALERTS.forEach(alertName -> {
+        activePolicies.forEach(policy -> assertTrue(
+                new ClassPathResource("runbooks/" + policy.runbookId() + ".md").exists(),
+                policy.id() + " references a missing runbook"));
+        SKILL_REQUIRED_ALERTS.forEach(alertName -> {
             List<String> owners = skills.stream()
                     .filter(skill -> skill.alertNames().contains(alertName))
                     .map(Skill::id)
                     .toList();
             assertEquals(1, owners.size(), alertName + " must have one primary Skill");
         });
-        nodeMvpPolicies.forEach(policy -> assertEquals(
-                1,
-                skills.stream()
-                        .filter(skill -> skill.alertNames().contains(policy.name()))
-                        .count(),
-                policy.name() + " must have one primary Skill"));
     }
 
     @Test

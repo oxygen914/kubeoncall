@@ -36,16 +36,24 @@ class YamlAlarmPolicyRepositoryTest {
     }
 
     @Test
-    void shouldLoadOnlyNodeMonitoringMvpPolicies() {
+    void shouldLoadPrometheusAlignedActivePolicies() {
         YamlAlarmPolicyRepository repo =
                 AlarmPolicyRepositoryFixtures.loadFromClasspath("alarm-policies-node-mvp.yml", AlarmSeverity.P3);
 
-        assertEquals(5, repo.findAll().size());
+        assertEquals(27, repo.findAll().size());
+        assertTrue(repo.findByName("KubeOnCallTargetDown").isPresent());
+        assertTrue(repo.findByName("KubeOnCallSandboxTimedOut").isPresent());
         assertTrue(repo.findByName("NodeDown").isPresent());
         assertTrue(repo.findByName("NodeCPUHigh").isPresent());
         assertTrue(repo.findByName("NodeMemoryLow").isPresent());
         assertTrue(repo.findByName("NodeDiskHigh").isPresent());
         assertTrue(repo.findByName("NodeInodeHigh").isPresent());
+        assertTrue(repo.findByName("NodeConntrackPressure").isPresent());
+        assertTrue(repo.findByName("NodeClockOffsetHigh").isPresent());
+        assertTrue(repo.findByName("NodeFilesystemReadOnly").isPresent());
+        assertTrue(repo.findByName("NodeFileDescriptorPressure").isPresent());
+        assertTrue(repo.findByName("NodeNotReady").isPresent());
+        assertTrue(repo.findByName("PodPendingTooLong").isPresent());
     }
 
     @Test

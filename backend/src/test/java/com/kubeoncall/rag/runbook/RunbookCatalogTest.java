@@ -20,7 +20,7 @@ class RunbookCatalogTest {
 
         List<RunbookAsset> assets = new RunbookCatalog(properties).load();
 
-        assertEquals(14, assets.size());
+        assertEquals(17, assets.size());
         Set<String> ids = assets.stream().map(RunbookAsset::runbookId).collect(Collectors.toSet());
         assertEquals(
                 Set.of(
@@ -28,6 +28,7 @@ class RunbookCatalogTest {
                         "runbook-host-memory-pressure",
                         "runbook-host-disk-usage",
                         "runbook-host-inode-usage",
+                        "runbook-host-file-descriptor-pressure",
                         "runbook-node-notready",
                         "runbook-pod-crashloop",
                         "runbook-pod-oom",
@@ -37,7 +38,9 @@ class RunbookCatalogTest {
                         "runbook-control-plane-apiserver",
                         "runbook-network-conntrack",
                         "runbook-service-slo",
-                        "runbook-time-sync"),
+                        "runbook-time-sync",
+                        "runbook-kubeoncall-runtime",
+                        "runbook-kubeoncall-sandbox"),
                 ids);
         assertTrue(assets.stream().allMatch(asset -> asset.content().length() >= 500));
         assertTrue(assets.stream()

@@ -1,12 +1,12 @@
 ---
 id: network-connectivity-triage
 name: Network Connectivity Triage
-version: v2
+version: v3
 description: Diagnose DNS, TCP, Service endpoint, packet-loss, and conntrack symptoms using bounded read-only evidence.
 triggers: [connection timeout, connection refused, dns failure, packet loss, network unreachable, service endpoint missing]
 resourceTypes: [service, pod, node]
-alertNames: [HostConntrackPressureP1]
-metricNames: [host.network.conntrack_usage_percent]
+alertNames: [HostConntrackPressureP1, NodeConntrackPressure]
+metricNames: [host.network.conntrack_usage_percent, node.network.conntrack_usage_percent]
 runbookIds: [runbook-network-conntrack]
 categories: [network]
 applicableTasks: [QUERY_LOGS, QUERY_METRICS]

@@ -138,3 +138,51 @@ cases:
       taskType: QUERY_METRICS
     expectedPrimarySkill: node-memory-pressure-triage
     forbiddenSkills: [pod-oom-triage, node-cpu-pressure-triage]
+
+  - id: node-notready-deployed-alert
+    request: "The Kubernetes node is NotReady and its lease may be stale"
+    context:
+      alertName: NodeNotReady
+      metricName: kube.node.ready
+      runbookId: runbook-node-notready
+      policyCategory: k8s-node
+      resourceType: NODE
+      taskType: QUERY_METRICS
+    expectedPrimarySkill: node-notready-triage
+    forbiddenSkills: [node-cpu-pressure-triage, node-memory-pressure-triage, cluster-scheduling-capacity-triage]
+
+  - id: pod-pending-deployed-alert
+    request: "This Pod remains Pending because scheduling cannot complete"
+    context:
+      alertName: PodPendingTooLong
+      metricName: kube.pod.pending
+      runbookId: runbook-cluster-capacity
+      policyCategory: k8s-pod
+      resourceType: POD
+      taskType: QUERY_METRICS
+    expectedPrimarySkill: cluster-scheduling-capacity-triage
+    forbiddenSkills: [pod-crashloop-triage, pod-oom-triage, deployment-unavailable-triage]
+
+  - id: node-conntrack-deployed-alert
+    request: "The node conntrack table is approaching exhaustion"
+    context:
+      alertName: NodeConntrackPressure
+      metricName: node.network.conntrack_usage_percent
+      runbookId: runbook-network-conntrack
+      policyCategory: node-network
+      resourceType: NODE
+      taskType: QUERY_METRICS
+    expectedPrimarySkill: network-connectivity-triage
+    forbiddenSkills: [node-cpu-pressure-triage, node-memory-pressure-triage, node-notready-triage]
+
+  - id: node-filesystem-readonly-deployed-alert
+    request: "A node filesystem was remounted read-only"
+    context:
+      alertName: NodeFilesystemReadOnly
+      metricName: node.filesystem.readonly
+      runbookId: runbook-host-disk-usage
+      policyCategory: node-storage
+      resourceType: NODE
+      taskType: QUERY_METRICS
+    expectedPrimarySkill: disk-capacity-triage
+    forbiddenSkills: [node-cpu-pressure-triage, node-memory-pressure-triage, node-notready-triage]

@@ -1,12 +1,12 @@
 ---
 id: disk-capacity-triage
 name: Disk Capacity Triage
-version: v2
+version: v3
 description: Diagnose node filesystem and inode pressure from usage, growth, mount, and workload evidence without deleting data.
 triggers: [disk full, disk usage, inode usage, filesystem pressure, read only filesystem]
 resourceTypes: [node]
-alertNames: [HostDiskUsageP1, HostDiskUsageP0, HostInodeUsageP1, HostInodeUsageP0, NodeDiskHigh, NodeInodeHigh]
-metricNames: [host.disk.usage_percent, host.inode.usage_percent, node.filesystem.usage_percent, node.filesystem.inode_usage_percent]
+alertNames: [HostDiskUsageP1, HostDiskUsageP0, HostInodeUsageP1, HostInodeUsageP0, NodeDiskHigh, NodeInodeHigh, NodeFilesystemReadOnly]
+metricNames: [host.disk.usage_percent, host.inode.usage_percent, node.filesystem.usage_percent, node.filesystem.inode_usage_percent, node.filesystem.readonly]
 runbookIds: [runbook-host-disk-usage, runbook-host-inode-usage]
 categories: [host, node-monitoring]
 applicableTasks: [QUERY_LOGS, QUERY_METRICS]

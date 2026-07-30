@@ -1,12 +1,12 @@
 ---
 id: cluster-scheduling-capacity-triage
 name: Cluster Scheduling Capacity Triage
-version: v1
+version: v2
 description: Diagnose Pending Pods and FailedScheduling from allocatable capacity, requests, quota, taints, affinity, and topology evidence.
 triggers: [pending pods, failedscheduling, unschedulable pods, insufficient cpu, insufficient memory, cluster capacity]
-resourceTypes: [cluster]
-alertNames: [ClusterPendingPodsP1]
-metricNames: [kube.cluster.pending_pods]
+resourceTypes: [cluster, pod]
+alertNames: [ClusterPendingPodsP1, PodPendingTooLong]
+metricNames: [kube.cluster.pending_pods, kube.pod.pending]
 runbookIds: [runbook-cluster-capacity]
 categories: [capacity]
 applicableTasks: [QUERY_LOGS, QUERY_METRICS]

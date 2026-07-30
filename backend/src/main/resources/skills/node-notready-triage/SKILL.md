@@ -1,11 +1,11 @@
 ---
 id: node-notready-triage
 name: Node NotReady Triage
-version: v2
+version: v3
 description: Diagnose NodeNotReady and node-exporter loss while separating node root cause from derived Pod alerts.
 triggers: [nodenotready, node not ready, node down, kubelet unavailable, node lease expired]
 resourceTypes: [node]
-alertNames: [KubeNodeNotReadyP0, NodeDown]
+alertNames: [KubeNodeNotReadyP0, NodeDown, NodeNotReady]
 metricNames: [kube.node.ready, prometheus.up]
 runbookIds: [runbook-node-notready]
 categories: [k8s-node, node-monitoring]

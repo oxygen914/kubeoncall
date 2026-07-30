@@ -203,6 +203,15 @@ curl -fsS 'http://kubeoncall.example/api/v1/monitoring/nodes/worker-1/cpu?cluste
 
 规则：
 
+- `NodeDown`：Node Exporter target 持续不可达 2 分钟。
+- `NodeCPUHigh`：节点 CPU 使用率持续高于 85% 达 5 分钟。
+- `NodeMemoryLow`：节点可用内存持续低于 15% 达 5 分钟。
+- `NodeDiskHigh`：非临时文件系统使用率持续高于 85% 达 5 分钟。
+- `NodeInodeHigh`：非临时文件系统 inode 使用率持续高于 85% 达 5 分钟。
+- `NodeConntrackPressure`：conntrack 使用率持续高于 85% 达 5 分钟。
+- `NodeClockOffsetHigh`：节点时钟偏移绝对值持续超过 1 秒达 5 分钟。
+- `NodeFilesystemReadOnly`：非临时文件系统持续处于只读状态 2 分钟。
+- `NodeFileDescriptorPressure`：文件描述符使用率持续高于 80% 达 5 分钟。
 - `NodeNotReady`：Ready condition 持续为 0 达 5 分钟。
 - `PodPendingTooLong`：Pod 持续 Pending 达 10 分钟。
 
@@ -232,4 +241,4 @@ curl -fsS 'http://kubeoncall.example/api/v1/monitoring/nodes/worker-1/cpu?cluste
 - [ ] CPU 当前值与 Grafana/Prometheus 查询基本一致。
 - [ ] 15m/1h/6h CPU 趋势有数据。
 - [ ] Prometheus 断连时 Console 明确显示错误。
-- [ ] NodeNotReady、PodPending firing/resolved 链路完成演练。
+- [ ] 11 条 Node 规则的 firing/resolved 链路按数据源分批完成演练。

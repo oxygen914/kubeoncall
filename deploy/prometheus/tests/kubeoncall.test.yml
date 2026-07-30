@@ -14,6 +14,18 @@ tests:
         values: '0x11'
       - series: 'kube_pod_status_phase{cluster="prod",namespace="payments",node="worker-2",phase="Pending",pod="payments-api-1"}'
         values: '1x11'
+      - series: 'node_nf_conntrack_entries{cluster="local",instance="node-exporter:9100",job="node-exporter",node="docker-host"}'
+        values: '90x11'
+      - series: 'node_nf_conntrack_entries_limit{cluster="local",instance="node-exporter:9100",job="node-exporter",node="docker-host"}'
+        values: '100x11'
+      - series: 'node_timex_offset_seconds{cluster="local",instance="node-exporter:9100",job="node-exporter",node="docker-host"}'
+        values: '1.5x11'
+      - series: 'node_filesystem_readonly{cluster="local",fstype="ext4",instance="node-exporter:9100",job="node-exporter",mountpoint="/",node="docker-host"}'
+        values: '1x11'
+      - series: 'node_filefd_allocated{cluster="local",instance="node-exporter:9100",job="node-exporter",node="docker-host"}'
+        values: '90x11'
+      - series: 'node_filefd_maximum{cluster="local",instance="node-exporter:9100",job="node-exporter",node="docker-host"}'
+        values: '100x11'
     alert_rule_test:
       - eval_time: 2m
         alertname: NodeDown
@@ -22,16 +34,26 @@ tests:
               cluster: local
               instance: node-exporter:9100
               job: node-exporter
+              kubeoncall_metric: prometheus.up
               node: docker-host
+              owner: infra
+              resource_type: node
+              runbook_id: runbook-node-notready
               severity: P1
+              team: infra
             exp_annotations:
               summary: Node Exporter is unreachable
       - eval_time: 10m
         alertname: KubeOnCallSandboxCleanupLeak
         exp_alerts:
           - exp_labels:
+              kubeoncall_metric: kubeoncall.sandbox.cleanup_failure
+              owner: platform
+              resource_type: service
+              runbook_id: runbook-kubeoncall-sandbox
               severity: P1
               status: FAILED
+              team: platform
             exp_annotations:
               summary: KubeOnCall Sandbox cleanup failed or remains pending over 10 minutes
       - eval_time: 5m
@@ -40,9 +62,14 @@ tests:
           - exp_labels:
               cluster: prod
               condition: Ready
+              kubeoncall_metric: kube.node.ready
               node: worker-2
+              owner: infra
+              resource_type: node
+              runbook_id: runbook-node-notready
               severity: P1
               status: "true"
+              team: infra
             exp_annotations:
               summary: Kubernetes node is not Ready
       - eval_time: 10m
@@ -50,10 +77,81 @@ tests:
         exp_alerts:
           - exp_labels:
               cluster: prod
+              kubeoncall_metric: kube.pod.pending
               namespace: payments
               node: worker-2
+              owner: platform
               phase: Pending
               pod: payments-api-1
+              resource_type: pod
+              runbook_id: runbook-cluster-capacity
               severity: P2
+              team: platform
             exp_annotations:
               summary: Kubernetes pod remains Pending
+      - eval_time: 5m
+        alertname: NodeConntrackPressure
+        exp_alerts:
+          - exp_labels:
+              cluster: local
+              instance: node-exporter:9100
+              job: node-exporter
+              kubeoncall_metric: node.network.conntrack_usage_percent
+              node: docker-host
+              owner: infra
+              resource_type: node
+              runbook_id: runbook-network-conntrack
+              severity: P1
+              team: infra
+            exp_annotations:
+              summary: Node conntrack table usage is above 85%
+      - eval_time: 5m
+        alertname: NodeClockOffsetHigh
+        exp_alerts:
+          - exp_labels:
+              cluster: local
+              instance: node-exporter:9100
+              job: node-exporter
+              kubeoncall_metric: node.time.clock_offset_seconds
+              node: docker-host
+              owner: infra
+              resource_type: node
+              runbook_id: runbook-time-sync
+              severity: P1
+              team: infra
+            exp_annotations:
+              summary: Node clock offset exceeds 1 second
+      - eval_time: 2m
+        alertname: NodeFilesystemReadOnly
+        exp_alerts:
+          - exp_labels:
+              cluster: local
+              fstype: ext4
+              instance: node-exporter:9100
+              job: node-exporter
+              kubeoncall_metric: node.filesystem.readonly
+              mountpoint: /
+              node: docker-host
+              owner: infra
+              resource_type: node
+              runbook_id: runbook-host-disk-usage
+              severity: P1
+              team: infra
+            exp_annotations:
+              summary: Node filesystem is mounted read-only
+      - eval_time: 5m
+        alertname: NodeFileDescriptorPressure
+        exp_alerts:
+          - exp_labels:
+              cluster: local
+              instance: node-exporter:9100
+              job: node-exporter
+              kubeoncall_metric: node.file_descriptor.usage_percent
+              node: docker-host
+              owner: infra
+              resource_type: node
+              runbook_id: runbook-host-file-descriptor-pressure
+              severity: P2
+              team: infra
+            exp_annotations:
+              summary: Node file descriptor usage is above 80%
