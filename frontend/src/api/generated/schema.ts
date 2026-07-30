@@ -516,6 +516,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/integrations/feishu/robots/{robotId}/connections": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["connectFeishuRobot"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/executions": {
         parameters: {
             query?: never;
@@ -2736,6 +2752,16 @@ export interface components {
             status?: string;
             /** Format: int32 */
             replayCount?: number;
+        };
+        ApiResponseConnectionView: {
+            data?: components["schemas"]["ConnectionView"];
+            meta?: components["schemas"]["ResponseMeta"];
+        };
+        ConnectionView: {
+            robotId?: string;
+            eventId?: string;
+            status?: string;
+            deliveryIds?: string[];
         };
         CreateExecutionRequest: {
             question: string;
@@ -5319,6 +5345,35 @@ export interface operations {
                 };
                 content: {
                     "*/*": components["schemas"]["ApiResponseReplayView"];
+                };
+            };
+        };
+    };
+    connectFeishuRobot: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Optional idempotency key for connection verification */
+                "Idempotency-Key"?: string;
+            };
+            path: {
+                /**
+                 * @description Server-managed Feishu robot alias
+                 * @example infra-primary
+                 */
+                robotId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Feishu robot connection verification queued */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseConnectionView"];
                 };
             };
         };

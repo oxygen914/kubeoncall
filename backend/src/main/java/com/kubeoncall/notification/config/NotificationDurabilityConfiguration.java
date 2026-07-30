@@ -11,11 +11,13 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.kubeoncall.audit.OperationAuditWriter;
 import com.kubeoncall.audit.OutboxWriter;
+import com.kubeoncall.notification.application.FeishuRobotConnectionService;
 import com.kubeoncall.notification.application.NotificationDispatcher;
 import com.kubeoncall.notification.application.NotificationReplayService;
 import com.kubeoncall.notification.application.NotificationSubmissionService;
 import com.kubeoncall.notification.delivery.NotificationDeliveryOutboxHandler;
 import com.kubeoncall.notification.delivery.NotificationDeliveryRepository;
+import com.kubeoncall.notification.provider.feishu.FeishuRobotRegistry;
 import com.kubeoncall.notification.spi.NotificationRouteResolver;
 import com.kubeoncall.service.KubeOnCallMetricsService;
 
@@ -59,6 +61,15 @@ public class NotificationDurabilityConfiguration {
             OperationAuditWriter auditWriter,
             ObjectProvider<Clock> clockProvider) {
         return new NotificationReplayService(repository, outboxWriter, auditWriter, clock(clockProvider));
+    }
+
+    @Bean
+    public FeishuRobotConnectionService feishuRobotConnectionService(
+            FeishuRobotRegistry robotRegistry,
+            NotificationSubmissionService submissionService,
+            OperationAuditWriter auditWriter,
+            ObjectProvider<Clock> clockProvider) {
+        return new FeishuRobotConnectionService(robotRegistry, submissionService, auditWriter, clock(clockProvider));
     }
 
     private static Clock clock(ObjectProvider<Clock> provider) {

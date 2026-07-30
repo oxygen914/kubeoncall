@@ -87,6 +87,30 @@ class NotificationSubmissionServiceTest {
         verify(outboxWriter, never()).enqueue(any());
     }
 
+    @Test
+    void submitsDirectlyToServerSelectedDestinationWithoutLogicalRoute() {
+        NotificationDeliveryRepository repository = mock(NotificationDeliveryRepository.class);
+        OutboxWriter outboxWriter = mock(OutboxWriter.class);
+        NotificationDestination destination = destination("feishu-robot-infra", "feishu");
+        NotificationMessage message = message();
+        when(repository.createIfAbsent(anyString(), anyString(), any(), any(), anyString(), any()))
+                .thenAnswer(invocation -> new NotificationDeliveryRepository.CreateResult(
+                        true,
+                        record(
+                                invocation.getArgument(0),
+                                invocation.getArgument(1),
+                                message,
+                                invocation.getArgument(3))));
+        NotificationSubmissionService service = new NotificationSubmissionService(
+                candidate -> java.util.Optional.empty(), repository, outboxWriter, Clock.fixed(NOW, ZoneOffset.UTC));
+
+        NotificationPublishResult result = service.submitToDestination(message, destination, "request-1");
+
+        assertThat(result.status()).isEqualTo(NotificationPublishResult.Status.QUEUED);
+        assertThat(result.deliveryIds()).hasSize(1);
+        verify(outboxWriter).enqueue(any());
+    }
+
     private static NotificationDeliveryRecord record(
             String publicId, String deliveryKey, NotificationMessage message, NotificationDestination destination) {
         return new NotificationDeliveryRecord(

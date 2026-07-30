@@ -2,7 +2,7 @@
 
 > 版本：v0.2
 > 日期：2026-07-30
-> 当前状态：M0～M2 代码已完成；M3 单向群机器人适配器和 M4 集成页已完成代码实现；真实渠道、生产和互动回调未验收
+> 当前状态：M0～M2 代码已完成；M3 单向群机器人适配器、M4 集成页和飞书 robotId 接入验证接口已完成代码实现；真实渠道、生产和互动回调未验收
 > 范围：飞书、钉钉等协作渠道共用的通知事件、逻辑路由、能力声明、Provider SPI、分发结果和可靠投递演进路径
 > 非本期范围：仓库内保存真实凭证、生产群直接投递、卡片回调、电话渠道实现
 
@@ -91,6 +91,7 @@ backend/src/main/java/com/kubeoncall/notification/
 │   ├── NotificationPublisher
 │   ├── NotificationSubmissionService
 │   ├── NotificationReplayService
+│   ├── FeishuRobotConnectionService
 │   ├── NotificationDeliveryRequest
 │   ├── NotificationDeliveryResult
 │   ├── NotificationDispatchResult
@@ -108,6 +109,7 @@ backend/src/main/java/com/kubeoncall/notification/
 │   └── NotificationDeliveryOutboxHandler
 ├── provider/
 │   ├── feishu/
+│   │   └── FeishuRobotRegistry
 │   ├── dingtalk/
 │   └── webhook/
 └── spi/
@@ -195,8 +197,9 @@ backend/src/main/java/com/kubeoncall/notification/
 
 - [x] 集成页展示平台、目标数量、能力、配置状态和最近投递。
 - [x] 通知记录展示 send/update、外部消息 ID、重试、重放次数和错误。
+- [x] 飞书机器人上层注册表以本地 `robotId` 解析服务端托管目标，调用侧不接触凭证。
+- [x] 管理员可仅提供 `robotId` 发起带权限、操作审计和可选幂等键的接入验证通知。
 - [ ] 告警、审批、执行详情展示渠道投递状态。
-- [ ] 管理员测试消息接口具备权限、审计和幂等控制。
 
 ### M5：互动回调
 
@@ -241,3 +244,14 @@ backend/src/main/java/com/kubeoncall/notification/
 - 前端完整测试 73 项通过（含集成页投递展示测试）；TypeScript、ESLint 和生产构建通过。
 - OpenAPI 已同步重放接口、平台目标能力及逐目的地投递字段，生成的前端类型与快照一致。
 - 尚未执行真实飞书/钉钉测试群投递、限流/凭证失效演练或生产验收。
+
+## 11. 飞书 robotId 上层封装验证记录
+
+2026-07-30 本地完成：
+
+- 新增本地 `robotId` 注册表、接入验证 Service 和无请求体 REST 接口；Webhook、签名密钥不进入路径、请求体、响应或通知领域模型。
+- 同一机器人与同一可选 `Idempotency-Key` 生成稳定事件 ID，逐目的地投递和 Outbox 仍使用原有唯一键防重。
+- 11 项聚焦测试通过，覆盖 ID 校验、凭证无关目的地、直达投递、事件幂等、权限接口和条件装配。
+- 完整后端单元测试共 889 项通过，0 failure、0 error、0 skipped；全局 Spotless、Checkstyle、跳过测试的打包构建及 OpenAPI 生成 Profile 均通过。
+- OpenAPI 契约和前端生成类型已同步，前端 TypeScript 检查及生成文件 Prettier 检查通过。
+- 尚未配置真实飞书机器人凭证，也未执行测试群真实接收确认；当前结论只到代码和自动化验证。

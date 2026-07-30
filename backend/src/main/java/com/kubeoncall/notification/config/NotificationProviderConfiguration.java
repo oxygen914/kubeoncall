@@ -8,6 +8,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 import com.kubeoncall.notification.provider.dingtalk.DingTalkWebhookNotificationProvider;
+import com.kubeoncall.notification.provider.feishu.FeishuRobotRegistry;
 import com.kubeoncall.notification.provider.feishu.FeishuWebhookNotificationProvider;
 import com.kubeoncall.tool.http.ToolHttpClient;
 
@@ -21,6 +22,11 @@ public class NotificationProviderConfiguration {
             ToolHttpClient httpClient, NotificationProperties properties, ObjectProvider<Clock> clockProvider) {
         return new FeishuWebhookNotificationProvider(
                 httpClient, clock(clockProvider), properties.getFeishu().getTargets());
+    }
+
+    @Bean
+    public FeishuRobotRegistry feishuRobotRegistry(NotificationProperties properties) {
+        return new FeishuRobotRegistry(properties.getFeishu().getTargets().keySet());
     }
 
     @Bean

@@ -46,12 +46,25 @@ public class NotificationSubmissionService {
         if (route == null) {
             return NotificationPublishResult.noRoute(message.eventId());
         }
+        return submitResolved(message, route.destinations(), requestId);
+    }
 
+    /** Persists one notification for an explicitly selected, server-managed destination. */
+    @Transactional
+    public NotificationPublishResult submitToDestination(
+            NotificationMessage message, NotificationDestination destination, String requestId) {
+        Objects.requireNonNull(message, "message must not be null");
+        Objects.requireNonNull(destination, "destination must not be null");
+        return submitResolved(message, List.of(destination), requestId);
+    }
+
+    private NotificationPublishResult submitResolved(
+            NotificationMessage message, List<NotificationDestination> destinations, String requestId) {
         Instant now = clock.instant();
         String normalizedRequestId = NotificationDeliveryIds.requestId(requestId);
-        List<String> deliveryIds = new ArrayList<>(route.destinations().size());
+        List<String> deliveryIds = new ArrayList<>(destinations.size());
         boolean createdAny = false;
-        for (NotificationDestination destination : route.destinations()) {
+        for (NotificationDestination destination : destinations) {
             String deliveryKey = NotificationDeliveryIds.deliveryKey(message, destination);
             String publicId = NotificationDeliveryIds.publicId(deliveryKey);
             NotificationDeliveryRepository.CreateResult created =

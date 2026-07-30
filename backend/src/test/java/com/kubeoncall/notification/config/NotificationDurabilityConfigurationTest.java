@@ -12,11 +12,13 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.kubeoncall.audit.OperationAuditWriter;
 import com.kubeoncall.audit.OutboxWriter;
+import com.kubeoncall.notification.application.FeishuRobotConnectionService;
 import com.kubeoncall.notification.application.NotificationDispatcher;
 import com.kubeoncall.notification.application.NotificationReplayService;
 import com.kubeoncall.notification.application.NotificationSubmissionService;
 import com.kubeoncall.notification.delivery.NotificationDeliveryOutboxHandler;
 import com.kubeoncall.notification.delivery.NotificationDeliveryRepository;
+import com.kubeoncall.notification.provider.feishu.FeishuRobotRegistry;
 import com.kubeoncall.notification.spi.NotificationRouteResolver;
 
 class NotificationDurabilityConfigurationTest {
@@ -27,6 +29,7 @@ class NotificationDurabilityConfigurationTest {
             .withBean(ObjectMapper.class, ObjectMapper::new)
             .withBean(OutboxWriter.class, () -> mock(OutboxWriter.class))
             .withBean(OperationAuditWriter.class, () -> mock(OperationAuditWriter.class))
+            .withBean(FeishuRobotRegistry.class, () -> new FeishuRobotRegistry(java.util.Set.of()))
             .withBean(NotificationRouteResolver.class, () -> message -> java.util.Optional.empty())
             .withBean(NotificationDispatcher.class, () -> mock(NotificationDispatcher.class))
             .withBean(Clock.class, Clock::systemUTC);
@@ -48,6 +51,7 @@ class NotificationDurabilityConfigurationTest {
                     assertThat(context).hasSingleBean(NotificationSubmissionService.class);
                     assertThat(context).hasSingleBean(NotificationDeliveryOutboxHandler.class);
                     assertThat(context).hasSingleBean(NotificationReplayService.class);
+                    assertThat(context).hasSingleBean(FeishuRobotConnectionService.class);
                 });
     }
 }
