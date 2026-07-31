@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "KubeOnCall generated-code input v1",
+  "type": "object",
+  "required": ["schemaVersion", "runtime", "source", "sourceSha256", "model", "promptVersion", "generationReason", "constraints"],
+  "properties": {
+    "schemaVersion": {"const": "v1"},
+    "runtime": {"enum": ["python3", "posix-shell"]},
+    "source": {"type": "string", "minLength": 1, "maxLength": 262144},
+    "sourceSha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "model": {"type": "string", "minLength": 1, "maxLength": 256},
+    "promptVersion": {"type": "string", "minLength": 1, "maxLength": 128},
+    "generationReason": {"type": "string", "minLength": 1, "maxLength": 2048},
+    "constraints": {
+      "type": "object",
+      "required": ["timeoutSeconds", "maxProcesses", "outputMaxBytes", "outputPath", "networkEgress"],
+      "properties": {
+        "timeoutSeconds": {"type": "integer", "minimum": 1, "maximum": 900},
+        "maxProcesses": {"type": "integer", "minimum": 1, "maximum": 32},
+        "outputMaxBytes": {"type": "integer", "minimum": 1, "maximum": 10485760},
+        "outputPath": {"const": "/sandbox/output/result.json"},
+        "networkEgress": {"const": "DENY_ALL"}
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

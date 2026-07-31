@@ -1,0 +1,68 @@
+{{- if and .Values.mysql.enabled .Values.mysql.migrationJob.enabled (not .Values.quickstart.enabled) }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "kubeoncall.fullname" . }}-migration
+  labels:
+    {{- include "kubeoncall.labels" . | nindent 4 }}
+    app.kubernetes.io/component: migration
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  backoffLimit: {{ .Values.mysql.migrationJob.backoffLimit }}
+  activeDeadlineSeconds: {{ .Values.mysql.migrationJob.activeDeadlineSeconds }}
+  template:
+    metadata:
+      labels:
+        {{- include "kubeoncall.labels" . | nindent 8 }}
+        app.kubernetes.io/component: migration
+    spec:
+      restartPolicy: OnFailure
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      {{- with .Values.global.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: flyway
+          image: {{ include "kubeoncall.imageRef" (dict "root" . "image" .Values.image) | quote }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            {{- toYaml .Values.containerSecurityContext | nindent 12 }}
+          command: ["java", "-jar", "/app/kubeoncall.jar"]
+          args:
+            - "--spring.main.web-application-type=none"
+            - "--spring.profiles.active=mysql"
+            - "--kubeoncall.migration-only=true"
+          env:
+            - name: SPRING_DATASOURCE_URL
+              value: {{ if .Values.mysql.url }}{{ .Values.mysql.url | quote }}{{ else }}{{ printf "jdbc:mysql://%s:3306/%s?useUnicode=true&characterEncoding=utf8&serverTimezone=UTC&allowPublicKeyRetrieval=true&useSSL=false" .Values.mysql.inClusterHost .Values.mysql.database | quote }}{{ end }}
+            - name: SPRING_DATASOURCE_USERNAME
+              value: {{ .Values.mysql.migrationUsername | quote }}
+            - name: SPRING_DATASOURCE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secrets.existingSecret }}
+                  key: {{ .Values.secrets.mysqlMigrationPasswordKey }}
+            - name: SPRING_FLYWAY_ENABLED
+              value: "true"
+            - name: SPRING_AUTOCONFIGURE_EXCLUDE
+              value: org.springframework.ai.autoconfigure.openai.OpenAiAutoConfiguration
+            - name: SPRING_TASK_SCHEDULING_ENABLED
+              value: "false"
+            - name: SPRING_FLYWAY_USER
+              value: {{ .Values.mysql.migrationUsername | quote }}
+            - name: SPRING_FLYWAY_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secrets.existingSecret }}
+                  key: {{ .Values.secrets.mysqlMigrationPasswordKey }}
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}
+{{- end }}

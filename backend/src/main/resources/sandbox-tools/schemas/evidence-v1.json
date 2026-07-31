@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "KubeOnCall diagnostic evidence v1",
+  "type": "object",
+  "required": ["schemaVersion", "requestId", "classification", "items"],
+  "properties": {
+    "schemaVersion": {"const": "v1"},
+    "requestId": {"type": "string", "minLength": 1},
+    "classification": {"const": "INTERNAL"},
+    "items": {"type": "array", "maxItems": 100}
+  },
+  "additionalProperties": true
+}

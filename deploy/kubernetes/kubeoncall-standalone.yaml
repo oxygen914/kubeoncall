@@ -1,0 +1,661 @@
+# KubeOnCall single-file deployment for local Kubernetes/Minikube.
+#
+# The application uses Alibaba Cloud Model Studio's OpenAI-compatible endpoint
+# for qwen-plus and text-embedding-v4. Before applying this manifest, create both
+# kubeoncall-secrets and kubeoncall-model-secrets in the kubeoncall namespace; credentials are
+# intentionally not stored here. For example:
+#   kubectl -n kubeoncall create secret generic kubeoncall-secrets \
+#     --from-literal=minio-access-key="$MINIO_ACCESS_KEY" \
+#     --from-literal=minio-secret-key="$MINIO_SECRET_KEY" \
+#     --from-literal=mysql-password="$MYSQL_PASSWORD" \
+#     --from-literal=mysql-root-password="$MYSQL_ROOT_PASSWORD"
+# MCP, cross-encoder, and external tool adapters remain disabled for local use.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: kubeoncall
+  labels:
+    app.kubernetes.io/part-of: kubeoncall
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: redis-data
+  namespace: kubeoncall
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: 1Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis
+  namespace: kubeoncall
+  labels:
+    app: redis
+    app.kubernetes.io/part-of: kubeoncall
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: redis
+  template:
+    metadata:
+      labels:
+        app: redis
+        app.kubernetes.io/part-of: kubeoncall
+    spec:
+      containers:
+        - name: redis
+          image: redis:7
+          imagePullPolicy: IfNotPresent
+          args: ["redis-server", "--appendonly", "yes"]
+          ports:
+            - name: redis
+              containerPort: 6379
+          readinessProbe:
+            exec:
+              command: ["redis-cli", "ping"]
+            initialDelaySeconds: 3
+            periodSeconds: 5
+          livenessProbe:
+            exec:
+              command: ["redis-cli", "ping"]
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          resources:
+            requests: {cpu: 50m, memory: 64Mi}
+            limits: {cpu: 500m, memory: 512Mi}
+          volumeMounts:
+            - name: data
+              mountPath: /data
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: redis-data
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis
+  namespace: kubeoncall
+spec:
+  selector:
+    app: redis
+  ports:
+    - name: redis
+      port: 6379
+      targetPort: redis
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: elasticsearch-data
+  namespace: kubeoncall
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: 5Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: elasticsearch
+  namespace: kubeoncall
+  labels:
+    app: elasticsearch
+    app.kubernetes.io/part-of: kubeoncall
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: elasticsearch
+  template:
+    metadata:
+      labels:
+        app: elasticsearch
+        app.kubernetes.io/part-of: kubeoncall
+    spec:
+      # Required by Elasticsearch. This privileged init container is intended
+      # only for a local, dedicated Minikube node.
+      initContainers:
+        - name: set-vm-max-map-count
+          image: busybox:1.36
+          command: ["sysctl", "-w", "vm.max_map_count=262144"]
+          securityContext:
+            privileged: true
+      containers:
+        - name: elasticsearch
+          image: docker.elastic.co/elasticsearch/elasticsearch:8.14.3
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: discovery.type
+              value: single-node
+            - name: xpack.security.enabled
+              value: "false"
+            - name: ES_JAVA_OPTS
+              value: -Xms512m -Xmx512m
+          ports:
+            - name: http
+              containerPort: 9200
+          readinessProbe:
+            httpGet:
+              path: /_cluster/health
+              port: http
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 12
+          livenessProbe:
+            tcpSocket:
+              port: http
+            initialDelaySeconds: 60
+            periodSeconds: 20
+          resources:
+            requests: {cpu: 250m, memory: 1Gi}
+            limits: {cpu: "2", memory: 2Gi}
+          volumeMounts:
+            - name: data
+              mountPath: /usr/share/elasticsearch/data
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: elasticsearch-data
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: elasticsearch
+  namespace: kubeoncall
+spec:
+  selector:
+    app: elasticsearch
+  ports:
+    - name: http
+      port: 9200
+      targetPort: http
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: minio-data
+  namespace: kubeoncall
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: 5Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: minio
+  namespace: kubeoncall
+  labels:
+    app: minio
+    app.kubernetes.io/part-of: kubeoncall
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: minio
+  template:
+    metadata:
+      labels:
+        app: minio
+        app.kubernetes.io/part-of: kubeoncall
+    spec:
+      containers:
+        - name: minio
+          image: minio/minio:RELEASE.2024-08-03T04-33-23Z
+          imagePullPolicy: IfNotPresent
+          args: ["server", "/data", "--console-address", ":9001"]
+          env:
+            - name: MINIO_ROOT_USER
+              valueFrom:
+                secretKeyRef:
+                  name: kubeoncall-secrets
+                  key: minio-access-key
+            - name: MINIO_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: kubeoncall-secrets
+                  key: minio-secret-key
+          ports:
+            - name: api
+              containerPort: 9000
+            - name: console
+              containerPort: 9001
+          readinessProbe:
+            httpGet:
+              path: /minio/health/ready
+              port: api
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /minio/health/live
+              port: api
+            initialDelaySeconds: 15
+            periodSeconds: 15
+          resources:
+            requests: {cpu: 100m, memory: 256Mi}
+            limits: {cpu: "1", memory: 1Gi}
+          volumeMounts:
+            - name: data
+              mountPath: /data
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: minio-data
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: minio
+  namespace: kubeoncall
+spec:
+  selector:
+    app: minio
+  ports:
+    - name: api
+      port: 9000
+      targetPort: api
+    - name: console
+      port: 9001
+      targetPort: console
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: minio-create-kubeoncall-docs
+  namespace: kubeoncall
+  labels:
+    app.kubernetes.io/part-of: kubeoncall
+spec:
+  backoffLimit: 10
+  ttlSecondsAfterFinished: 300
+  template:
+    metadata:
+      labels:
+        app: minio-bucket-init
+        app.kubernetes.io/part-of: kubeoncall
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: create-bucket
+          image: minio/mc:RELEASE.2024-07-31T15-58-33Z
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: MINIO_ROOT_USER
+              valueFrom:
+                secretKeyRef:
+                  name: kubeoncall-secrets
+                  key: minio-access-key
+            - name: MINIO_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: kubeoncall-secrets
+                  key: minio-secret-key
+          command:
+            - /bin/sh
+            - -ec
+            - |
+              until mc alias set local http://minio:9000 "$MINIO_ROOT_USER" "$MINIO_ROOT_PASSWORD"; do
+                sleep 2
+              done
+              mc mb --ignore-existing local/kubeoncall-docs
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kubeoncall
+  namespace: kubeoncall
+  labels:
+    app: kubeoncall
+    app.kubernetes.io/part-of: kubeoncall
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: kubeoncall
+  template:
+    metadata:
+      labels:
+        app: kubeoncall
+        app.kubernetes.io/part-of: kubeoncall
+    spec:
+      initContainers:
+        - name: wait-for-dependencies
+          image: busybox:1.36
+          command:
+            - /bin/sh
+            - -ec
+            - |
+              until nc -z redis 6379; do sleep 2; done
+              until wget -qO- http://elasticsearch:9200/_cluster/health >/dev/null; do sleep 3; done
+              until wget -qO- http://minio:9000/minio/health/ready >/dev/null; do sleep 2; done
+        - name: wait-for-minio-bucket
+          image: minio/mc:RELEASE.2024-07-31T15-58-33Z
+          env:
+            - name: MINIO_ROOT_USER
+              valueFrom:
+                secretKeyRef:
+                  name: kubeoncall-secrets
+                  key: minio-access-key
+            - name: MINIO_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: kubeoncall-secrets
+                  key: minio-secret-key
+          command:
+            - /bin/sh
+            - -ec
+            - |
+              until mc alias set local http://minio:9000 "$MINIO_ROOT_USER" "$MINIO_ROOT_PASSWORD"; do
+                sleep 2
+              done
+              until mc stat local/kubeoncall-docs >/dev/null 2>&1; do sleep 2; done
+      containers:
+        - name: kubeoncall
+          image: kubeoncall:aliyun2
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: SPRING_PROFILES_ACTIVE
+              value: docker,mysql
+            # WBS-12: MySQL business fact store + identity/RBAC. The standalone manifest ships an
+            # in-cluster MySQL (see mysql Deployment below); point these at it.
+            - name: SPRING_DATASOURCE_URL
+              value: jdbc:mysql://mysql:3306/kubeoncall?useUnicode=true&characterEncoding=utf8&serverTimezone=UTC&allowPublicKeyRetrieval=true&useSSL=false
+            - name: SPRING_DATASOURCE_USERNAME
+              value: kubeoncall
+            - name: SPRING_DATASOURCE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: kubeoncall-secrets
+                  key: mysql-password
+            - name: KUBEONCALL_AUTH_SESSION_COOKIE_SECURE
+              value: "false"
+            # WBS-11 cutover controls.
+            - name: KUBEONCALL_DATA_MIGRATION_ALARM_READ_SOURCE
+              value: MYSQL
+            - name: KUBEONCALL_DATA_MIGRATION_ALARM_WRITE_MODE
+              value: REDIS_PRIMARY
+            - name: KUBEONCALL_DATA_MIGRATION_SHADOW_DIFF_THRESHOLD_PERCENT
+              value: "1.0"
+            - name: KUBEONCALL_LEGACY_API_ENABLED
+              value: "true"
+            - name: SPRING_DATA_REDIS_HOST
+              value: redis
+            - name: SPRING_ELASTICSEARCH_URIS
+              value: http://elasticsearch:9200
+            - name: KUBEONCALL_STORAGE_MINIO_ENDPOINT
+              value: http://minio:9000
+            - name: MINIO_ROOT_USER
+              valueFrom:
+                secretKeyRef:
+                  name: kubeoncall-secrets
+                  key: minio-access-key
+            - name: MINIO_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: kubeoncall-secrets
+                  key: minio-secret-key
+            # Model credentials are created separately as kubeoncall-model-secrets.
+            - name: SPRING_AI_OPENAI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: kubeoncall-model-secrets
+                  key: aliyun-api-key
+            - name: SPRING_AI_OPENAI_BASE_URL
+              value: https://dashscope.aliyuncs.com/compatible-mode
+            - name: SPRING_AI_OPENAI_CHAT_OPTIONS_MODEL
+              value: qwen-plus
+            - name: KUBEONCALL_AGENT_PLANNER_LLM_ENABLED
+              value: "true"
+            - name: KUBEONCALL_RAG_VECTOR_ENABLED
+              value: "true"
+            - name: KUBEONCALL_RAG_ES_KNN_ENABLED
+              value: "true"
+            - name: KUBEONCALL_RAG_EMBEDDING_ENABLED
+              value: "true"
+            - name: KUBEONCALL_RAG_MOCK_EMBEDDING_ENABLED
+              value: "false"
+            - name: RAG_EMBEDDING_ENDPOINT
+              value: https://dashscope.aliyuncs.com/compatible-mode/v1/embeddings
+            - name: RAG_EMBEDDING_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: kubeoncall-model-secrets
+                  key: aliyun-api-key
+            - name: RAG_EMBEDDING_MODEL
+              value: text-embedding-v4
+            - name: RAG_EMBEDDING_DIMENSIONS
+              value: "1536"
+            - name: KUBEONCALL_RAG_CROSS_ENCODER_ENABLED
+              value: "false"
+            - name: KUBEONCALL_RAG_RUNBOOK_BOOTSTRAP_ENABLED
+              value: "true"
+            - name: KUBEONCALL_MCP_ENABLED
+              value: "false"
+            - name: KUBEONCALL_ALARM_RECOVERY_SCHEDULER_ENABLED
+              value: "false"
+            - name: KUBEONCALL_MEMORY_EXTRACTION_WORKER_ENABLED
+              value: "false"
+            - name: MANAGEMENT_ENDPOINT_HEALTH_PROBES_ENABLED
+              value: "true"
+          ports:
+            - name: http
+              containerPort: 8080
+          readinessProbe:
+            httpGet:
+              path: /actuator/health/readiness
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 12
+          livenessProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: http
+            initialDelaySeconds: 60
+            periodSeconds: 20
+            timeoutSeconds: 3
+          resources:
+            requests: {cpu: 250m, memory: 512Mi}
+            limits: {cpu: "2", memory: 2Gi}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: kubeoncall
+  namespace: kubeoncall
+  labels:
+    app: kubeoncall
+    app.kubernetes.io/part-of: kubeoncall
+spec:
+  type: ClusterIP
+  selector:
+    app: kubeoncall
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+---
+# WBS-12: in-cluster MySQL for the standalone manifest. Production should use a managed MySQL
+# instead; this is for single-node functional validation.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mysql
+  namespace: kubeoncall
+  labels:
+    app: mysql
+    app.kubernetes.io/part-of: kubeoncall
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mysql
+  template:
+    metadata:
+      labels:
+        app: mysql
+    spec:
+      containers:
+        - name: mysql
+          image: mysql:8.0
+          env:
+            - name: MYSQL_DATABASE
+              value: kubeoncall
+            - name: MYSQL_USER
+              value: kubeoncall
+            - name: MYSQL_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: kubeoncall-secrets
+                  key: mysql-password
+            - name: MYSQL_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: kubeoncall-secrets
+                  key: mysql-root-password
+          ports:
+            - name: mysql
+              containerPort: 3306
+          volumeMounts:
+            - name: mysql-data
+              mountPath: /var/lib/mysql
+          readinessProbe:
+            exec:
+              command: ["sh", "-c", "mysqladmin ping -h localhost -u root -p$MYSQL_ROOT_PASSWORD"]
+            initialDelaySeconds: 20
+            periodSeconds: 10
+          resources:
+            requests: {cpu: 250m, memory: 512Mi}
+            limits: {cpu: "1", memory: 1Gi}
+      volumes:
+        - name: mysql-data
+          persistentVolumeClaim:
+            claimName: mysql-data
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: mysql-data
+  namespace: kubeoncall
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: 5Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mysql
+  namespace: kubeoncall
+  labels:
+    app: mysql
+    app.kubernetes.io/part-of: kubeoncall
+spec:
+  type: ClusterIP
+  selector:
+    app: mysql
+  ports:
+    - name: mysql
+      port: 3306
+      targetPort: mysql
+---
+# WBS-12: Console (frontend) as an independent workload so it can roll back without the backend.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kubeoncall-console
+  namespace: kubeoncall
+  labels:
+    app: kubeoncall-console
+    app.kubernetes.io/part-of: kubeoncall
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: kubeoncall-console
+  template:
+    metadata:
+      labels:
+        app: kubeoncall-console
+    spec:
+      containers:
+        - name: console
+          image: kubeoncall-console:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8080
+          readinessProbe:
+            httpGet: {path: /healthz, port: http}
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: {path: /healthz, port: http}
+            initialDelaySeconds: 10
+            periodSeconds: 20
+          resources:
+            requests: {cpu: 100m, memory: 128Mi}
+            limits: {cpu: "1", memory: 512Mi}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: kubeoncall-console
+  namespace: kubeoncall
+  labels:
+    app: kubeoncall-console
+    app.kubernetes.io/part-of: kubeoncall
+spec:
+  type: ClusterIP
+  selector:
+    app: kubeoncall-console
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+---
+# WBS-12: single Ingress routing /api to backend and / to console. Actuator remains cluster-internal.
+# buffering and extends timeouts so /api/v1/events/stream stays open.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: kubeoncall
+  namespace: kubeoncall
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-buffering: "off"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+spec:
+  rules:
+    - http:
+        paths:
+          - path: /api
+            pathType: Prefix
+            backend:
+              service:
+                name: kubeoncall
+                port:
+                  name: http
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: kubeoncall-console
+                port:
+                  name: http

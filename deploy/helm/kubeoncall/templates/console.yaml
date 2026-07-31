@@ -1,0 +1,133 @@
+{{- if .Values.console.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "kubeoncall.fullname" . }}-console
+  labels:
+    {{- include "kubeoncall.labels" . | nindent 4 }}
+    app.kubernetes.io/component: console
+spec:
+  type: {{ .Values.console.service.type }}
+  selector:
+    app.kubernetes.io/name: {{ include "kubeoncall.name" . }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/component: console
+  ports:
+    - name: http
+      port: {{ .Values.console.service.port }}
+      targetPort: http
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "kubeoncall.fullname" . }}-console
+  labels:
+    {{- include "kubeoncall.labels" . | nindent 4 }}
+    app.kubernetes.io/component: console
+spec:
+  {{- if .Values.quickstart.enabled }}
+  replicas: 1
+  {{- else if not .Values.console.autoscaling.enabled }}
+  replicas: {{ .Values.console.replicaCount }}
+  {{- end }}
+  revisionHistoryLimit: {{ .Values.deployment.revisionHistoryLimit }}
+  progressDeadlineSeconds: {{ .Values.deployment.progressDeadlineSeconds }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: {{ .Values.deployment.strategy.maxUnavailable }}
+      maxSurge: {{ .Values.deployment.strategy.maxSurge }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ include "kubeoncall.name" . }}
+      app.kubernetes.io/instance: {{ .Release.Name }}
+      app.kubernetes.io/component: console
+  template:
+    metadata:
+      annotations:
+        checksum/console-runtime: {{ include (print $.Template.BasePath "/console-runtime-config.yaml") . | sha256sum }}
+      labels:
+        {{- include "kubeoncall.labels" . | nindent 8 }}
+        app.kubernetes.io/component: console
+    spec:
+      securityContext:
+        {{- toYaml .Values.console.podSecurityContext | nindent 8 }}
+      {{- if and (not .Values.quickstart.enabled) .Values.console.podAntiAffinity.enabled }}
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                topologyKey: {{ .Values.console.podAntiAffinity.topologyKey | quote }}
+                labelSelector:
+                  matchLabels:
+                    app.kubernetes.io/name: {{ include "kubeoncall.name" . }}
+                    app.kubernetes.io/instance: {{ .Release.Name }}
+                    app.kubernetes.io/component: console
+      {{- end }}
+      {{- if and (not .Values.quickstart.enabled) .Values.console.topologySpread.enabled }}
+      topologySpreadConstraints:
+        {{- range .Values.console.topologySpread.topologyKeys }}
+        - maxSkew: {{ $.Values.console.topologySpread.maxSkew }}
+          topologyKey: {{ . | quote }}
+          whenUnsatisfiable: {{ $.Values.console.topologySpread.whenUnsatisfiable }}
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: {{ include "kubeoncall.name" $ }}
+              app.kubernetes.io/instance: {{ $.Release.Name }}
+              app.kubernetes.io/component: console
+        {{- end }}
+      {{- end }}
+      {{- with .Values.global.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: console
+          image: {{ include "kubeoncall.imageRef" (dict "root" . "image" .Values.console.image) | quote }}
+          imagePullPolicy: {{ .Values.console.image.pullPolicy }}
+          securityContext:
+            {{- toYaml .Values.console.containerSecurityContext | nindent 12 }}
+          ports:
+            - name: http
+              containerPort: 8080
+          env:
+            - name: KUBEONCALL_BACKEND_HOST
+              value: {{ include "kubeoncall.fullname" . | quote }}
+            - name: KUBEONCALL_BACKEND_PORT
+              value: {{ .Values.service.port | quote }}
+          # The Console nginx serves static assets and proxies only /api to the backend. Actuator
+          # remains cluster-internal for probes and Prometheus. Health is the nginx /healthz endpoint
+          # so the probe reflects console liveness, not backend reachability.
+          readinessProbe:
+            httpGet: {path: /healthz, port: http}
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: {path: /healthz, port: http}
+            initialDelaySeconds: 10
+            periodSeconds: 20
+          resources:
+            {{- if .Values.quickstart.enabled }}
+            {{- toYaml .Values.quickstart.consoleResources | nindent 12 }}
+            {{- else }}
+            {{- toYaml .Values.console.resources | nindent 12 }}
+            {{- end }}
+          volumeMounts:
+            - {name: tmp, mountPath: /tmp}
+            - {name: nginx-cache, mountPath: /var/cache/nginx}
+            - {name: nginx-run, mountPath: /var/run}
+            - {name: nginx-conf, mountPath: /etc/nginx/conf.d}
+            - name: runtime-config
+              mountPath: /usr/share/nginx/html/config/runtime.json
+              subPath: runtime.json
+              readOnly: true
+      volumes:
+        - {name: tmp, emptyDir: {}}
+        - {name: nginx-cache, emptyDir: {}}
+        - {name: nginx-run, emptyDir: {}}
+        - {name: nginx-conf, emptyDir: {}}
+        - name: runtime-config
+          configMap:
+            name: {{ include "kubeoncall.fullname" . }}-console-runtime
+{{- end }}

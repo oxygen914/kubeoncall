@@ -1,0 +1,287 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light" />
+    <meta name="description" content="KubeOnCall 本地 API 数据调试控制台" />
+    <title>KubeOnCall Console</title>
+    <link rel="stylesheet" href="./styles.css" />
+    <script src="./app.js" defer></script>
+  </head>
+  <body>
+    <div class="page-shell">
+      <div class="marquee" aria-label="控制台运行说明">
+        <span>LOCAL DEBUG CONSOLE</span>
+        <span aria-hidden="true">●</span>
+        <span>LIVE API DATA</span>
+        <span aria-hidden="true">●</span>
+        <span>SESSION-ONLY TOKEN</span>
+      </div>
+      <header class="topbar">
+        <a class="brand" href="#overview" aria-label="KubeOnCall Console 首页">
+          <span class="brand-mark" aria-hidden="true">
+            <span></span><span></span><span></span><span></span><span></span>
+          </span>
+          <span>
+            <strong>KubeOnCall</strong>
+            <small>Console · 0.1</small>
+          </span>
+        </a>
+        <nav class="topnav" aria-label="控制台导航">
+          <a class="active" href="#overview">概览</a>
+          <a href="#ask">问答</a>
+          <a href="#approval">审批</a>
+          <a href="#explorer">API Explorer</a>
+        </nav>
+        <div class="connection-state" id="connection-state" data-state="idle">
+          <span class="state-dot" aria-hidden="true"></span>
+          <span id="connection-label">尚未连接</span>
+        </div>
+      </header>
+
+      <main>
+        <section class="hero" id="overview">
+          <div class="hero-copy">
+            <p class="eyebrow">KUBEONCALL / LOCAL CONTROL SURFACE</p>
+            <h1>把运行数据放在<br /><span>一张可调试的画布上。</span></h1>
+            <p class="hero-description">
+              调用真实 KubeOnCall API，查看原始 JSON、响应状态和耗时。
+              所有配置只保留在当前页面，不上传、不持久化 Token。
+            </p>
+            <div class="hero-tags" aria-label="控制台能力">
+              <span>Ask</span>
+              <span>Approval</span>
+              <span>Raw API</span>
+            </div>
+          </div>
+          <form class="connection-card color-block-lime" id="connection-form">
+            <div class="section-heading compact">
+              <div>
+                <p class="eyebrow">01 / CONNECTION</p>
+                <h2>连接真实后端</h2>
+              </div>
+              <span class="soft-badge">Same origin</span>
+            </div>
+            <label>
+              <span>API Base URL</span>
+              <input
+                id="base-url"
+                name="baseUrl"
+                type="url"
+                autocomplete="url"
+                placeholder="http://localhost:8080"
+              />
+            </label>
+            <label>
+              <span>Bearer Token</span>
+              <span class="password-field">
+                <input
+                  id="api-token"
+                  name="apiToken"
+                  type="password"
+                  autocomplete="off"
+                  placeholder="未启用鉴权时可留空"
+                />
+                <button
+                  class="text-button"
+                  id="toggle-token"
+                  type="button"
+                  aria-label="显示或隐藏 Token"
+                >
+                  显示
+                </button>
+              </span>
+            </label>
+            <div class="button-row">
+              <button class="button primary" type="submit">测试连接</button>
+              <button class="button secondary" id="refresh-overview" type="button">刷新概览</button>
+            </div>
+            <p class="form-hint">建议使用 Viewer Token；管理写操作再切换 Admin Token。</p>
+          </form>
+        </section>
+
+        <section class="metrics" aria-label="运行概览">
+          <article class="metric-card metric-primary">
+            <span>服务状态</span>
+            <strong id="metric-status">—</strong>
+            <small id="metric-service">等待连接</small>
+          </article>
+          <article class="metric-card metric-lilac">
+            <span>累计请求</span>
+            <strong id="metric-requests">—</strong>
+            <small id="metric-success">成功率待获取</small>
+          </article>
+          <article class="metric-card metric-cream">
+            <span>可用工具</span>
+            <strong id="metric-tools">—</strong>
+            <small id="metric-tool-detail">Planner / Executor</small>
+          </article>
+          <article class="metric-card metric-mint">
+            <span>已加载 Skill</span>
+            <strong id="metric-skills">—</strong>
+            <small id="metric-skill-errors">加载错误待获取</small>
+          </article>
+        </section>
+
+        <section class="workspace-grid">
+          <article class="panel panel-wide panel-lilac" id="ask">
+            <div class="section-heading">
+              <div>
+                <p class="eyebrow">02 / AGENT WORKFLOW</p>
+                <h2>运维问答</h2>
+              </div>
+              <code>POST /api/ask</code>
+            </div>
+            <form id="ask-form" class="form-grid">
+              <label class="span-2">
+                <span>问题</span>
+                <textarea
+                  id="ask-question"
+                  rows="5"
+                  required
+                  placeholder="例如：分析 payment-service 当前 CPU 告警并给出安全处置建议"
+                ></textarea>
+              </label>
+              <label>
+                <span>Session ID（可选）</span>
+                <input id="ask-session-id" type="text" placeholder="复用会话上下文" />
+              </label>
+              <div class="form-action">
+                <button class="button primary" type="submit">执行问答</button>
+              </div>
+            </form>
+            <div class="response-block">
+              <div class="response-toolbar">
+                <span>AskResponse</span>
+                <button class="copy-button" type="button" data-copy-target="ask-output">
+                  复制 JSON
+                </button>
+              </div>
+              <pre id="ask-output" class="response-viewer" tabindex="0">等待请求…</pre>
+            </div>
+          </article>
+
+          <article class="panel panel-mint" id="approval">
+            <div class="section-heading">
+              <div>
+                <p class="eyebrow">03 / HUMAN IN THE LOOP</p>
+                <h2>审批调试</h2>
+              </div>
+              <code>/api/approvals/{id}</code>
+            </div>
+            <form id="approval-form" class="stacked-form">
+              <label>
+                <span>Execution ID</span>
+                <input
+                  id="approval-execution-id"
+                  type="text"
+                  required
+                  placeholder="从 AskResponse 中复制"
+                />
+              </label>
+              <div class="button-row">
+                <button class="button secondary" id="lookup-approval" type="button">
+                  查询审批
+                </button>
+              </div>
+              <div class="split-fields">
+                <label>
+                  <span>决策</span>
+                  <select id="approval-decision">
+                    <option value="APPROVED">APPROVED</option>
+                    <option value="REJECTED">REJECTED</option>
+                  </select>
+                </label>
+                <label>
+                  <span>操作人</span>
+                  <input id="approval-decided-by" type="text" value="console-user" />
+                </label>
+              </div>
+              <label>
+                <span>备注</span>
+                <input id="approval-comment" type="text" placeholder="说明审批原因" />
+              </label>
+              <button class="button primary" type="submit">提交决策并恢复</button>
+            </form>
+            <div class="response-block">
+              <div class="response-toolbar">
+                <span>Approval Response</span>
+                <button class="copy-button" type="button" data-copy-target="approval-output">
+                  复制
+                </button>
+              </div>
+              <pre id="approval-output" class="response-viewer small" tabindex="0">等待请求…</pre>
+            </div>
+          </article>
+
+          <article class="panel panel-cream" id="explorer">
+            <div class="section-heading">
+              <div>
+                <p class="eyebrow">04 / RAW API</p>
+                <h2>API Explorer</h2>
+              </div>
+              <span class="soft-badge">JSON</span>
+            </div>
+            <form id="explorer-form" class="stacked-form">
+              <div class="endpoint-row">
+                <label>
+                  <span>Method</span>
+                  <select id="explorer-method">
+                    <option>GET</option>
+                    <option>POST</option>
+                    <option>DELETE</option>
+                    <option>PUT</option>
+                  </select>
+                </label>
+                <label>
+                  <span>Path</span>
+                  <input id="explorer-path" type="text" required value="/api/status" />
+                </label>
+              </div>
+              <label>
+                <span>JSON Body</span>
+                <textarea
+                  id="explorer-body"
+                  rows="7"
+                  spellcheck="false"
+                  placeholder='{"key": "value"}'
+                ></textarea>
+              </label>
+              <button class="button primary" type="submit">发送请求</button>
+            </form>
+            <div class="response-block">
+              <div class="response-toolbar">
+                <span id="explorer-response-meta">Response</span>
+                <button class="copy-button" type="button" data-copy-target="explorer-output">
+                  复制
+                </button>
+              </div>
+              <pre id="explorer-output" class="response-viewer small" tabindex="0">等待请求…</pre>
+            </div>
+          </article>
+        </section>
+
+        <section class="panel history-panel panel-coral" aria-labelledby="history-title">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">05 / SESSION TRACE</p>
+              <h2 id="history-title">最近请求</h2>
+            </div>
+            <button class="text-button" id="clear-history" type="button">清空</button>
+          </div>
+          <div id="request-history" class="request-history">
+            <p class="empty-state">当前页面还没有请求记录。</p>
+          </div>
+        </section>
+      </main>
+
+      <footer>
+        <strong>KubeOnCall</strong>
+        <span>Local Console Demo</span>
+        <span>数据来自当前配置的后端实例</span>
+      </footer>
+    </div>
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  </body>
+</html>

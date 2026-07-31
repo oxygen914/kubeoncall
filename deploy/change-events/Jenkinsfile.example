@@ -1,0 +1,30 @@
+pipeline {
+  agent any
+  environment {
+    KUBEONCALL_CHANGE_EVENT_PROVIDER = 'jenkins'
+    KUBEONCALL_CHANGE_EVENT_TYPE = 'deployment'
+    KUBEONCALL_CHANGE_EVENT_URL = credentials('kubeoncall-change-event-url')
+    KUBEONCALL_CHANGE_EVENT_TOKEN = credentials('kubeoncall-change-event-token')
+  }
+  stages {
+    stage('Deploy') {
+      steps {
+        echo 'Run deployment here'
+      }
+    }
+  }
+  post {
+    success {
+      sh '''
+        export KUBEONCALL_CHANGE_EVENT_DELIVERY_ID="${JOB_NAME}-${BUILD_NUMBER}"
+        jq -n \
+          --arg id "${BUILD_NUMBER}" \
+          --arg job "${JOB_NAME}" \
+          --arg actor "${BUILD_USER_ID:-jenkins}" \
+          '{id:$id,eventType:"deployment",resourceType:"Pipeline",resourceName:$job,changedBy:$actor,status:"completed"}' \
+          > /tmp/kubeoncall-change.json
+        ./scripts/publish-change-event.sh /tmp/kubeoncall-change.json
+      '''
+    }
+  }
+}

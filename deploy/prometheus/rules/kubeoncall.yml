@@ -1,0 +1,327 @@
+groups:
+  - name: kubeoncall-application
+    rules:
+      - alert: KubeOnCallTargetDown
+        expr: up{job="kubeoncall"} == 0
+        for: 2m
+        labels:
+          severity: P1
+          owner: platform
+          runbook_id: runbook-kubeoncall-runtime
+          kubeoncall_metric: kubeoncall.runtime.up
+          resource_type: service
+          team: platform
+        annotations:
+          summary: KubeOnCall metrics endpoint is unreachable
+      - alert: KubeOnCallHttp5xxRateHigh
+        expr: sum(rate(http_server_requests_seconds_count{job="kubeoncall",uri!~"/actuator.*",status=~"5.."}[5m])) / clamp_min(sum(rate(http_server_requests_seconds_count{job="kubeoncall",uri!~"/actuator.*"}[5m])), 1) > 0.05
+        for: 10m
+        labels:
+          severity: P1
+          owner: platform
+          runbook_id: runbook-kubeoncall-runtime
+          kubeoncall_metric: kubeoncall.http.5xx_rate
+          resource_type: service
+          team: platform
+        annotations:
+          summary: KubeOnCall HTTP 5xx rate exceeds 5 percent
+      - alert: KubeOnCallDependencyCircuitOpened
+        expr: sum by (dependency) (increase(kubeoncall_dependency_circuit_total{event="opened"}[5m])) > 0
+        labels:
+          severity: P1
+          owner: platform
+          runbook_id: runbook-kubeoncall-runtime
+          kubeoncall_metric: kubeoncall.dependency.circuit_opened
+          resource_type: service
+          team: platform
+        annotations:
+          summary: KubeOnCall dependency circuit opened
+      - alert: KubeOnCallDependencyErrorRateHigh
+        expr: sum by (dependency) (rate(kubeoncall_dependency_requests_total{outcome="error"}[5m])) / clamp_min(sum by (dependency) (rate(kubeoncall_dependency_requests_total[5m])), 0.001) > 0.10
+        for: 10m
+        labels:
+          severity: P2
+          owner: platform
+          runbook_id: runbook-kubeoncall-runtime
+          kubeoncall_metric: kubeoncall.dependency.error_rate
+          resource_type: service
+          team: platform
+        annotations:
+          summary: KubeOnCall dependency error rate exceeds 10 percent
+      - alert: KubeOnCallOutboxDeadLetter
+        expr: kubeoncall_outbox_events{status="DEAD_LETTER"} > 0
+        for: 5m
+        labels:
+          severity: P1
+          owner: platform
+          runbook_id: runbook-kubeoncall-runtime
+          kubeoncall_metric: kubeoncall.outbox.dead_letter
+          resource_type: service
+          team: platform
+        annotations:
+          summary: KubeOnCall outbox has dead-letter events
+      - alert: KubeOnCallOutboxBacklogAgeHigh
+        expr: kubeoncall_outbox_oldest_pending_age_seconds > 300
+        for: 10m
+        labels:
+          severity: P2
+          owner: platform
+          runbook_id: runbook-kubeoncall-runtime
+          kubeoncall_metric: kubeoncall.outbox.oldest_pending_age_seconds
+          resource_type: service
+          team: platform
+        annotations:
+          summary: KubeOnCall outbox oldest pending event exceeds 5 minutes
+      - alert: KubeOnCallAsyncTaskDeadLetter
+        expr: kubeoncall_async_tasks{status="DEAD_LETTER"} > 0
+        for: 5m
+        labels:
+          severity: P1
+          owner: platform
+          runbook_id: runbook-kubeoncall-runtime
+          kubeoncall_metric: kubeoncall.async_task.dead_letter
+          resource_type: service
+          team: platform
+        annotations:
+          summary: KubeOnCall async tasks have dead-letter entries
+      - alert: KubeOnCallAsyncTaskBacklogAgeHigh
+        expr: kubeoncall_async_task_oldest_due_age_seconds > 300
+        for: 10m
+        labels:
+          severity: P2
+          owner: platform
+          runbook_id: runbook-kubeoncall-runtime
+          kubeoncall_metric: kubeoncall.async_task.oldest_due_age_seconds
+          resource_type: service
+          team: platform
+        annotations:
+          summary: KubeOnCall oldest due async task exceeds 5 minutes
+      - alert: KubeOnCallDatabasePoolSaturated
+        expr: hikaricp_connections_active / clamp_min(hikaricp_connections_max, 1) > 0.90
+        for: 10m
+        labels:
+          severity: P2
+          owner: platform
+          runbook_id: runbook-kubeoncall-runtime
+          kubeoncall_metric: kubeoncall.database.pool_utilization
+          resource_type: service
+          team: platform
+        annotations:
+          summary: KubeOnCall database connection pool exceeds 90 percent utilization
+      - alert: KubeOnCallWorkerLeaseLost
+        expr: sum by (worker) (increase(kubeoncall_worker_lease_total{event="lost"}[5m])) > 0
+        labels:
+          severity: P1
+          owner: platform
+          runbook_id: runbook-kubeoncall-runtime
+          kubeoncall_metric: kubeoncall.worker.lease_lost
+          resource_type: service
+          team: platform
+        annotations:
+          summary: KubeOnCall durable worker lost a lease
+      - alert: KubeOnCallRequestCorrelationMissing
+        expr: sum by (boundary) (rate(kubeoncall_request_correlation_total{outcome="missing"}[10m])) / clamp_min(sum by (boundary) (rate(kubeoncall_request_correlation_total[10m])), 0.001) > 0.01
+        for: 10m
+        labels:
+          severity: P2
+          owner: platform
+          runbook_id: runbook-kubeoncall-runtime
+          kubeoncall_metric: kubeoncall.request_correlation.missing_rate
+          resource_type: service
+          team: platform
+        annotations:
+          summary: KubeOnCall request-to-worker correlation is missing above 1 percent
+      - alert: KubeOnCallSandboxRunBacklogAgeHigh
+        expr: kubeoncall_sandbox_oldest_active_age_seconds > 600
+        for: 10m
+        labels:
+          severity: P2
+          owner: platform
+          runbook_id: runbook-kubeoncall-sandbox
+          kubeoncall_metric: kubeoncall.sandbox.oldest_active_age_seconds
+          resource_type: service
+          team: platform
+        annotations:
+          summary: KubeOnCall Sandbox oldest active run exceeds 10 minutes
+      - alert: KubeOnCallSandboxFailureRateHigh
+        expr: sum(rate(kubeoncall_sandbox_run_events_total{event=~"failed|timed_out"}[15m])) / clamp_min(sum(rate(kubeoncall_sandbox_run_events_total{event="created"}[15m])), 0.001) > 0.10
+        for: 15m
+        labels:
+          severity: P2
+          owner: platform
+          runbook_id: runbook-kubeoncall-sandbox
+          kubeoncall_metric: kubeoncall.sandbox.failure_rate
+          resource_type: service
+          team: platform
+        annotations:
+          summary: KubeOnCall Sandbox terminal failure rate exceeds 10 percent
+      - alert: KubeOnCallSandboxCleanupLeak
+        expr: kubeoncall_sandbox_cleanup{status="FAILED"} > 0 or kubeoncall_sandbox_oldest_cleanup_pending_age_seconds > 600
+        for: 10m
+        labels:
+          severity: P1
+          owner: platform
+          runbook_id: runbook-kubeoncall-sandbox
+          kubeoncall_metric: kubeoncall.sandbox.cleanup_failure
+          resource_type: service
+          team: platform
+        annotations:
+          summary: KubeOnCall Sandbox cleanup failed or remains pending over 10 minutes
+      - alert: KubeOnCallSandboxControllerUnavailable
+        expr: sum(rate(kubeoncall_sandbox_controller_requests_total{outcome="error"}[5m])) / clamp_min(sum(rate(kubeoncall_sandbox_controller_requests_total[5m])), 0.001) > 0.25
+        for: 5m
+        labels:
+          severity: P1
+          owner: platform
+          runbook_id: runbook-kubeoncall-sandbox
+          kubeoncall_metric: kubeoncall.sandbox.controller_error_rate
+          resource_type: service
+          team: platform
+        annotations:
+          summary: KubeOnCall Sandbox Controller error rate exceeds 25 percent
+      - alert: KubeOnCallSandboxTimedOut
+        expr: sum(increase(kubeoncall_sandbox_run_events_total{event="timed_out"}[5m])) > 0
+        labels:
+          severity: P2
+          owner: platform
+          runbook_id: runbook-kubeoncall-sandbox
+          kubeoncall_metric: kubeoncall.sandbox.timed_out
+          resource_type: service
+          team: platform
+        annotations:
+          summary: KubeOnCall Sandbox Run timed out
+
+  - name: node-monitoring
+    rules:
+      - alert: NodeDown
+        expr: up{job="node-exporter"} == 0
+        for: 2m
+        labels:
+          severity: P1
+          owner: infra
+          runbook_id: runbook-node-notready
+          kubeoncall_metric: prometheus.up
+          resource_type: node
+          team: infra
+        annotations:
+          summary: Node Exporter is unreachable
+      - alert: NodeCPUHigh
+        expr: 100 - (avg by (cluster, node, instance) (rate(node_cpu_seconds_total{job="node-exporter",mode="idle"}[5m])) * 100) > 85
+        for: 5m
+        labels:
+          severity: P2
+          owner: infra
+          runbook_id: runbook-host-cpu-high
+          kubeoncall_metric: node.cpu.usage_percent
+          resource_type: node
+          team: infra
+        annotations:
+          summary: Node CPU usage is above 85%
+      - alert: NodeMemoryLow
+        expr: node_memory_MemAvailable_bytes{job="node-exporter"} / node_memory_MemTotal_bytes{job="node-exporter"} * 100 < 15
+        for: 5m
+        labels:
+          severity: P2
+          owner: infra
+          runbook_id: runbook-host-memory-pressure
+          kubeoncall_metric: node.memory.available_percent
+          resource_type: node
+          team: infra
+        annotations:
+          summary: Node available memory is below 15%
+      - alert: NodeDiskHigh
+        expr: 100 - (node_filesystem_avail_bytes{job="node-exporter",fstype!~"tmpfs|overlay"} / node_filesystem_size_bytes{job="node-exporter",fstype!~"tmpfs|overlay"} * 100) > 85
+        for: 5m
+        labels:
+          severity: P2
+          owner: infra
+          runbook_id: runbook-host-disk-usage
+          kubeoncall_metric: node.filesystem.usage_percent
+          resource_type: node
+          team: infra
+        annotations:
+          summary: Node filesystem usage is above 85%
+      - alert: NodeInodeHigh
+        expr: 100 - (node_filesystem_files_free{job="node-exporter",fstype!~"tmpfs|overlay"} / node_filesystem_files{job="node-exporter",fstype!~"tmpfs|overlay"} * 100) > 85
+        for: 5m
+        labels:
+          severity: P2
+          owner: infra
+          runbook_id: runbook-host-inode-usage
+          kubeoncall_metric: node.filesystem.inode_usage_percent
+          resource_type: node
+          team: infra
+        annotations:
+          summary: Node filesystem inode usage is above 85%
+      - alert: NodeConntrackPressure
+        expr: 100 * node_nf_conntrack_entries{job="node-exporter"} / clamp_min(node_nf_conntrack_entries_limit{job="node-exporter"}, 1) > 85
+        for: 5m
+        labels:
+          severity: P1
+          owner: infra
+          runbook_id: runbook-network-conntrack
+          kubeoncall_metric: node.network.conntrack_usage_percent
+          resource_type: node
+          team: infra
+        annotations:
+          summary: Node conntrack table usage is above 85%
+      - alert: NodeClockOffsetHigh
+        expr: abs(node_timex_offset_seconds{job="node-exporter"}) > 1
+        for: 5m
+        labels:
+          severity: P1
+          owner: infra
+          runbook_id: runbook-time-sync
+          kubeoncall_metric: node.time.clock_offset_seconds
+          resource_type: node
+          team: infra
+        annotations:
+          summary: Node clock offset exceeds 1 second
+      - alert: NodeFilesystemReadOnly
+        expr: node_filesystem_readonly{job="node-exporter",fstype!~"tmpfs|overlay"} == 1
+        for: 2m
+        labels:
+          severity: P1
+          owner: infra
+          runbook_id: runbook-host-disk-usage
+          kubeoncall_metric: node.filesystem.readonly
+          resource_type: node
+          team: infra
+        annotations:
+          summary: Node filesystem is mounted read-only
+      - alert: NodeFileDescriptorPressure
+        expr: 100 * node_filefd_allocated{job="node-exporter"} / clamp_min(node_filefd_maximum{job="node-exporter"}, 1) > 80
+        for: 5m
+        labels:
+          severity: P2
+          owner: infra
+          runbook_id: runbook-host-file-descriptor-pressure
+          kubeoncall_metric: node.file_descriptor.usage_percent
+          resource_type: node
+          team: infra
+        annotations:
+          summary: Node file descriptor usage is above 80%
+      - alert: NodeNotReady
+        expr: kube_node_status_condition{condition="Ready",status="true"} == 0
+        for: 5m
+        labels:
+          severity: P1
+          owner: infra
+          runbook_id: runbook-node-notready
+          kubeoncall_metric: kube.node.ready
+          resource_type: node
+          team: infra
+        annotations:
+          summary: Kubernetes node is not Ready
+      - alert: PodPendingTooLong
+        expr: kube_pod_status_phase{phase="Pending"} == 1
+        for: 10m
+        labels:
+          severity: P2
+          owner: platform
+          runbook_id: runbook-cluster-capacity
+          kubeoncall_metric: kube.pod.pending
+          resource_type: pod
+          team: platform
+        annotations:
+          summary: Kubernetes pod remains Pending

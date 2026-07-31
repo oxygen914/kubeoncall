@@ -1,0 +1,4 @@
+{
+  "runtime": "posix-shell",
+  "source": "printf 'generated POSIX shell runtime smoke passed\\n'"
+}

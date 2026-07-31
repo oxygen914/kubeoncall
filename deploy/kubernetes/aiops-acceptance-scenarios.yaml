@@ -1,0 +1,256 @@
+# Isolated, intentionally unhealthy Kubernetes resources for KubeOnCall read-only acceptance.
+# Never apply this manifest to a production cluster. Every object is bounded to the dedicated
+# namespace and labeled for deterministic cleanup.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: kubeoncall-aiops-acceptance
+  labels:
+    app.kubernetes.io/part-of: kubeoncall
+    kubeoncall.io/acceptance-scope: aiops
+---
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: acceptance-budget
+  namespace: kubeoncall-aiops-acceptance
+spec:
+  hard:
+    pods: "8"
+    requests.cpu: "500m"
+    requests.memory: "256Mi"
+    limits.cpu: "1"
+    limits.memory: "512Mi"
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: kubernetes-tool-adapter-readonly
+  namespace: kubeoncall-aiops-acceptance
+rules:
+  - apiGroups: [""]
+    resources: [pods, pods/log, events]
+    verbs: [get, list, watch]
+  - apiGroups: [apps]
+    resources: [deployments, statefulsets, daemonsets, replicasets]
+    verbs: [get, list, watch]
+  - apiGroups: [policy]
+    resources: [poddisruptionbudgets]
+    verbs: [get, list, watch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: kubernetes-tool-adapter-readonly
+  namespace: kubeoncall-aiops-acceptance
+subjects:
+  - kind: ServiceAccount
+    name: kubernetes-tool-adapter
+    namespace: kubeoncall-system
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: kubernetes-tool-adapter-readonly
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: kubernetes-mutation-acceptance-target
+  namespace: kubeoncall-aiops-acceptance
+rules:
+  - apiGroups: [apps]
+    resources: [deployments]
+    verbs: [get, update, patch]
+  - apiGroups: [apps]
+    resources: [replicasets]
+    verbs: [get, list]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: kubernetes-mutation-acceptance-target
+  namespace: kubeoncall-aiops-acceptance
+subjects:
+  - kind: ServiceAccount
+    name: kubernetes-mutation-adapter
+    namespace: kubeoncall-operations
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: kubernetes-mutation-acceptance-target
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: remediation-target
+  namespace: kubeoncall-aiops-acceptance
+  labels:
+    app.kubernetes.io/name: remediation-target
+    kubeoncall.io/acceptance-scenario: "true"
+    kubeoncall.io/fault-type: RemediationTarget
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: remediation-target
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: remediation-target
+    spec:
+      containers:
+        - name: target
+          image: registry.k8s.io/pause:3.10.1
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: REQUEST_TIMEOUT
+              value: 30s
+          resources:
+            requests:
+              cpu: 10m
+              memory: 8Mi
+            limits:
+              cpu: 50m
+              memory: 32Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: pending-node-selector
+  namespace: kubeoncall-aiops-acceptance
+  labels:
+    app.kubernetes.io/name: pending-node-selector
+    kubeoncall.io/acceptance-scenario: "true"
+    kubeoncall.io/fault-type: Pending
+spec:
+  restartPolicy: Never
+  nodeSelector:
+    kubeoncall.io/acceptance-target: intentionally-missing
+  containers:
+    - name: pending
+      image: registry.k8s.io/coredns/coredns:v1.13.1
+      imagePullPolicy: IfNotPresent
+      args: ["-version"]
+      resources:
+        requests:
+          cpu: 10m
+          memory: 8Mi
+        limits:
+          cpu: 50m
+          memory: 32Mi
+      securityContext:
+        allowPrivilegeEscalation: false
+        capabilities:
+          drop: [ALL]
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: crashloop-exit-42
+  namespace: kubeoncall-aiops-acceptance
+  labels:
+    app.kubernetes.io/name: crashloop-exit-42
+    kubeoncall.io/acceptance-scenario: "true"
+    kubeoncall.io/fault-type: CrashLoopBackOff
+spec:
+  restartPolicy: Always
+  containers:
+    - name: crashloop
+      image: busybox:1.36.1
+      imagePullPolicy: IfNotPresent
+      command: ["/bin/sh", "-c"]
+      args:
+        - |
+          echo "KOC_ACCEPTANCE_CRASH_EXIT_42: deterministic application startup failure" >&2
+          exit 42
+      resources:
+        requests:
+          cpu: 10m
+          memory: 8Mi
+        limits:
+          cpu: 50m
+          memory: 32Mi
+      securityContext:
+        allowPrivilegeEscalation: false
+        capabilities:
+          drop: [ALL]
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: node-unavailable-witness
+  namespace: kubeoncall-aiops-acceptance
+  labels:
+    app.kubernetes.io/name: node-unavailable-witness
+    kubeoncall.io/acceptance-scenario: "true"
+    kubeoncall.io/fault-type: NodeNotReady
+spec:
+  restartPolicy: Never
+  nodeSelector:
+    kubeoncall.io/acceptance-node: "true"
+  tolerations:
+    - key: kubeoncall.io/acceptance-only
+      operator: Equal
+      value: "true"
+      effect: NoSchedule
+  containers:
+    - name: witness
+      image: busybox:1.36.1
+      imagePullPolicy: IfNotPresent
+      command: ["/bin/sh", "-c"]
+      args:
+        - |
+          echo "KOC_ACCEPTANCE_NODE_WITNESS: running on ${NODE_NAME}"
+          sleep 7200
+      env:
+        - name: NODE_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: spec.nodeName
+      resources:
+        requests:
+          cpu: 10m
+          memory: 8Mi
+        limits:
+          cpu: 50m
+          memory: 32Mi
+      securityContext:
+        allowPrivilegeEscalation: false
+        capabilities:
+          drop: [ALL]
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: oomkilled-memory-limit
+  namespace: kubeoncall-aiops-acceptance
+  labels:
+    app.kubernetes.io/name: oomkilled-memory-limit
+    kubeoncall.io/acceptance-scenario: "true"
+    kubeoncall.io/fault-type: OOMKilled
+spec:
+  restartPolicy: Always
+  containers:
+    - name: memory-pressure
+      image: busybox:1.36.1
+      imagePullPolicy: IfNotPresent
+      command: ["/bin/sh", "-c"]
+      args:
+        - |
+          echo "KOC_ACCEPTANCE_OOM_ALLOCATING: PID 1 will exceed the 16Mi cgroup limit" >&2
+          exec awk 'BEGIN { for (i = 0; ; i++) blocks[i] = sprintf("%01024d", i) }'
+      resources:
+        requests:
+          cpu: 10m
+          memory: 8Mi
+        limits:
+          cpu: 100m
+          memory: 16Mi
+      securityContext:
+        allowPrivilegeEscalation: false
+        capabilities:
+          drop: [ALL]

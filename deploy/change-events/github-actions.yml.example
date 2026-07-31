@@ -1,0 +1,33 @@
+name: Publish KubeOnCall ChangeEvent
+
+on:
+  workflow_dispatch:
+  workflow_call:
+
+jobs:
+  publish-change-event:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build payload
+        env:
+          REPOSITORY: ${{ github.repository }}
+          SHA: ${{ github.sha }}
+          ACTOR: ${{ github.actor }}
+          RUN_ID: ${{ github.run_id }}
+        run: |
+          jq -n \
+            --arg repository "${REPOSITORY}" \
+            --arg sha "${SHA}" \
+            --arg actor "${ACTOR}" \
+            --arg runId "${RUN_ID}" \
+            '{id:$runId,eventType:"deployment",resourceType:"Deployment",resourceName:$repository,sha:$sha,changedBy:$actor,status:"completed"}' \
+            > /tmp/kubeoncall-change.json
+      - name: Publish ChangeEvent
+        env:
+          KUBEONCALL_CHANGE_EVENT_URL: ${{ secrets.KUBEONCALL_CHANGE_EVENT_URL }}
+          KUBEONCALL_CHANGE_EVENT_TOKEN: ${{ secrets.KUBEONCALL_CHANGE_EVENT_TOKEN }}
+          KUBEONCALL_CHANGE_EVENT_PROVIDER: github
+          KUBEONCALL_CHANGE_EVENT_TYPE: deployment
+          KUBEONCALL_CHANGE_EVENT_DELIVERY_ID: ${{ github.run_id }}-${{ github.run_attempt }}
+        run: ./scripts/publish-change-event.sh /tmp/kubeoncall-change.json

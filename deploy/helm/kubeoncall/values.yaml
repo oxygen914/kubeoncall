@@ -1,0 +1,465 @@
+global:
+  # Optional pull secrets applied to Backend, Console, migration and Sandbox Controller Pods.
+  imagePullSecrets: []
+
+replicaCount: 2
+
+deployment:
+  revisionHistoryLimit: 3
+  progressDeadlineSeconds: 600
+  strategy:
+    maxUnavailable: 0
+    maxSurge: 1
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 10001
+  runAsGroup: 10001
+  fsGroup: 10001
+  seccompProfile: {type: RuntimeDefault}
+
+containerSecurityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  runAsNonRoot: true
+  runAsUser: 10001
+  runAsGroup: 10001
+  capabilities: {drop: [ALL]}
+
+topologySpread:
+  enabled: true
+  maxSkew: 1
+  whenUnsatisfiable: ScheduleAnyway
+  topologyKeys: [kubernetes.io/hostname, topology.kubernetes.io/zone]
+
+podAntiAffinity:
+  enabled: true
+  topologyKey: kubernetes.io/hostname
+
+podDisruptionBudget:
+  enabled: true
+  maxUnavailable: 1
+
+autoscaling:
+  enabled: false
+  minReplicas: 2
+  maxReplicas: 6
+  targetCPUUtilizationPercentage: 70
+  targetMemoryUtilizationPercentage: 80
+
+networkPolicy:
+  enabled: false
+  ingressControllerNamespace: ingress-nginx
+  monitoringNamespace: monitoring
+  extraBackendIngress: []
+  extraConsoleIngress: []
+
+image:
+  repository: ghcr.io/oxygen914/kubeoncall-backend
+  # Empty means Chart.appVersion. Release packaging sets appVersion to the Git tag version.
+  tag: ""
+  # Prefer an immutable registry manifest digest in production. When set, this overrides tag.
+  # Example: sha256:0123... (the repository remains a separate field).
+  digest: ""
+  pullPolicy: IfNotPresent
+
+service:
+  type: ClusterIP
+  port: 8080
+
+resources:
+  requests: {cpu: 250m, memory: 512Mi}
+  limits: {cpu: "2", memory: 2Gi}
+
+config:
+  apiAuthEnabled: false
+  approvalResumeLeaseSeconds: 300
+  # Helm defaults to multiple backend replicas, so SSE fanout must use Redis Pub/Sub.
+  realtimeClusterTransport: redis
+  dependencyCircuitBreakerEnabled: true
+  dependencyCircuitBreakerFailureThreshold: 5
+  dependencyCircuitBreakerResetTimeoutSeconds: 30
+  sandboxEnabled: false
+  sandboxFixedDiagnostic: false
+  sandboxGeneratedCode: false
+  sandboxManifestValidation: false
+  sandboxRemediationSimulation: false
+  sandboxAgentAutoRouteEnabled: false
+  redisHost: redis
+  elasticsearchUri: http://elasticsearch:9200
+  minioEndpoint: http://minio:9000
+  minioBucket: kubeoncall-docs
+  # Keep Spring AI auto-configuration off for Quickstart and keyless installs. Production enables
+  # it explicitly after provisioning aliyun-api-key; rule-based planning remains available.
+  springAiEnabled: false
+  springAiBaseUrl: https://dashscope.aliyuncs.com/compatible-mode
+  springAiChatModel: qwen-plus
+  # AI Operations capabilities are independently fail-closed. Enable a source only after its
+  # endpoint, scope allowlist and acceptance evidence are available in the target environment.
+  plannerMode: RULE_FALLBACK
+  plannerProvider: openai-compatible
+  plannerModel: qwen-plus
+  plannerSchemaVersion: v1
+  plannerMaxResponseChars: 32768
+  plannerConnectTimeoutMillis: 3000
+  plannerReadTimeoutMillis: 30000
+  plannerCanaryEnabled: false
+  plannerCanaryFailFast: true
+  evidencePrometheusEnabled: false
+  evidenceLokiEnabled: false
+  evidenceK8sResourceStateEnabled: false
+  evidenceK8sEventsEnabled: false
+  evidencePodLogsEnabled: false
+  askDurableWorkflowEnabled: false
+  operationClosureEnabled: true
+  conclusionEvidenceUiEnabled: false
+  evidenceLookbackMinutes: 30
+  evidenceCollectionTimeoutMillis: 5000
+  evidenceMaxSnippetChars: 8192
+  lokiMaxWindowMinutes: 360
+  lokiMaxLines: 500
+  lokiMaxResponseBytes: 1048576
+  evidenceAllowedClusters: ""
+  evidenceAllowedNamespaces: ""
+  embeddingEndpoint: https://dashscope.aliyuncs.com/compatible-mode/v1/embeddings
+  embeddingModel: text-embedding-v4
+  embeddingVersion: v1
+  embeddingDimensions: 1536
+  embeddingBatchSize: 32
+  embeddingTimeoutMillis: 3000
+  rerankEndpoint: https://dashscope.aliyuncs.com/api/v1/services/rerank/text-rerank/text-rerank
+  rerankModel: qwen3-rerank
+  rerankTimeoutMillis: 3000
+  augmentationEnabled: false
+  augmentationEndpoint: https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions
+  augmentationModel: qwen-plus
+  augmentationVersion: v1
+  augmentationConcurrency: 2
+  augmentationTimeoutMillis: 10000
+  autoBindDatasetVersion: false
+  ragJsonlMaxPayloadBytes: 5242880
+  ragJsonlMaxLines: 10000
+  ragDocumentMaxContentBytes: 2097152
+  memoryLlmExtractionEnabled: false
+  memoryLlmExtractionEndpoint: https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions
+  memoryLlmExtractionModel: qwen-plus
+  memorySemanticDuplicateEnabled: false
+  memorySemanticDuplicateWeight: 0.75
+  memoryTokenizerEnabled: false
+  memoryTokenizerEndpoint: https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions
+  memoryTokenizerModel: qwen-plus
+  memoryTokenizerMode: chat_usage
+  memoryTokenizerChatOverheadTokens: -1
+  mcpEndpoint: http://mcp-server:8080/mcp
+  mcpAuthMode: static_bearer
+  mcpOauthTokenEndpoint: ""
+  mcpOauthClientId: ""
+  mcpOauthClientAuthMethod: client_secret_post
+  mcpOauthScope: ""
+  mcpOauthResource: ""
+  mcpOauthRefreshSkewSeconds: 30
+  mcpProtocol: jsonrpc
+  mcpProtocolVersion: 2025-11-25
+  mcpClientName: kubeoncall
+  mcpClientVersion: 1.0.0
+  mcpDiscoveryEnabled: false
+  mcpDiscoveryEndpoint: ""
+  mcpDiscoveryCacheSeconds: 60
+  mcpDiscoveryMaxPages: 20
+  mcpDiscoveryRefreshMillis: 60000
+  mcpDynamicInvocationEnabled: false
+  mcpDynamicMaxTools: 3
+  mcpMaxResponseBytes: 262144
+  mcpAllowedTools: knowledge.searchSop,topology.getServiceTopology,cmdb.getServiceMetadata,kubernetes.describeResource,prometheus.queryRange,alerts.getActiveAlerts,changes.getRecentChanges,inventory.*,metrics.*
+  changeEventWebhookEnabled: false
+  changeEventWebhookAuthMode: bearer
+  changeEventWebhookMaxPayloadBytes: 1048576
+  kubernetesToolEndpoint: http://kubernetes-adapter:8080/api/tools/kubernetes
+  kubernetesToolAuthEnabled: false
+  kubernetesMutationToolEndpoint: ""
+  kubernetesMutationToolAuthEnabled: false
+  prometheusToolEndpoint: http://prometheus:9090
+  alertmanagerToolEndpoint: http://alertmanager-adapter:8080/api/tools/alertmanager
+  alertNotificationWebhookEndpoint: ""
+  alertNotificationWebhookTimeoutMillis: 3000
+  incidentToolEndpoint: http://incident-adapter:8080/api/tools/incident
+  deviceToolEndpoint: http://device-adapter:8080/api/tools/device
+  databaseToolEndpoint: http://database-adapter:8080/api/tools/database
+
+# WBS-12: MySQL business fact store and identity/RBAC. Disabled by default so the chart still runs
+# without a database; enable in production to activate Flyway, /api/v1 auth and the alarm read model.
+mysql:
+  enabled: false
+  # Spring profiles to append when mysql is enabled (existing SPRING_PROFILES_ACTIVE is merged).
+  profile: mysql
+  # External managed MySQL is recommended in production; set url/username here and the password via
+  # the mysqlPassword secret key. Leave url empty to require a platform-provided MySQL service.
+  url: ""
+  username: kubeoncall
+  migrationUsername: kubeoncall_migration
+  # When url is empty the backend connects to an in-cluster `mysql` service on the default port.
+  inClusterHost: mysql
+  database: kubeoncall
+  # Session/CSRF/legacy-token and bootstrap-admin controls mirror application.yml defaults.
+  sessionCookieSecure: true
+  sessionIdleTimeoutSeconds: 1800
+  sessionMaxTimeoutSeconds: 28800
+  loginMaxAttempts: 5
+  loginLockDurationSeconds: 900
+  legacyTokenCompat: true
+  bootstrapAdminEnabled: false
+  bootstrapAdminUsername: ""
+  # Quickstart only: let the application run Flyway with the dedicated migration identity while
+  # retaining the DML-only datasource identity. Production must keep this false and use the Job.
+  flywayInApplication: false
+  migrationJob:
+    enabled: true
+    backoffLimit: 6
+    activeDeadlineSeconds: 600
+
+# WBS-11 cutover controls surfaced into the chart so operators drive the migration without redeploy.
+dataMigration:
+  alarmReadSource: MYSQL
+  # The write path remains Redis-primary until the MySQL-primary implementation and cutover
+  # evidence are complete. Keeping this explicit prevents an undeclared framework default.
+  alarmWriteMode: REDIS_PRIMARY
+  # Comma-separated explicit mappings for legacy Redis actor labels, e.g. system=migration-system.
+  legacyActorUsernameMappings: ""
+  backfillBatchSize: 100
+  backfillScanLimit: 10000
+  backfillMaxItemsPerSecond: 100
+  backfillTaskTimeoutSeconds: 1800
+  backfillDryRun: true
+  # Sign-off blocks when the queried SHADOW mismatch rate exceeds this percentage.
+  shadowDiffThresholdPercent: 1.0
+
+# WBS-11 legacy /api/* retirement. Set to false once the new Console is the only entry point.
+legacyApi:
+  enabled: true
+  # Stable mapping patterns, rendered into Spring environment variables as JSON.
+  successors:
+    /api/status: /api/v1/system/status
+    /api/stats: /api/v1/overview
+  # Legacy request-mapping patterns to return 410 while the remaining old API stays available.
+  retiredEndpoints: []
+
+secrets:
+  # Quickstart creates and retains a generated Secret. Production should keep this false and
+  # provide an ExternalSecret/SealedSecret or another platform-managed Secret.
+  create: false
+  existingSecret: kubeoncall-secrets
+  apiViewerTokenKey: api-viewer-token
+  apiOperatorTokenKey: api-operator-token
+  apiAdminTokenKey: api-admin-token
+  minioAccessKeyKey: minio-access-key
+  minioSecretKeyKey: minio-secret-key
+  aliyunApiKeyKey: aliyun-api-key
+  kubernetesToolBearerTokenKey: kubernetes-tool-bearer-token
+  kubernetesMutationToolBearerTokenKey: kubernetes-mutation-tool-bearer-token
+  mcpApiKeyKey: mcp-api-key
+  mcpOauthClientSecretKey: mcp-oauth-client-secret
+  alertmanagerWebhookTokenKey: alertmanager-webhook-token
+  changeEventWebhookTokenKey: change-event-webhook-token
+  changeEventGithubWebhookSecretKey: change-event-github-webhook-secret
+  changeEventGitlabWebhookTokenKey: change-event-gitlab-webhook-token
+  changeEventJenkinsWebhookTokenKey: change-event-jenkins-webhook-token
+  changeEventArgocdWebhookTokenKey: change-event-argocd-webhook-token
+  # WBS-12 MySQL identity/datasource secrets.
+  mysqlPasswordKey: mysql-password
+  mysqlMigrationPasswordKey: mysql-migration-password
+  mysqlRootPasswordKey: mysql-root-password
+  bootstrapAdminPasswordKey: bootstrap-admin-password
+
+# WBS-12 Console (frontend) deployment. The chart deploys backend and console as independent
+# workloads so either can roll back without the other. Ingress terminates TLS and proxies /api and
+# /api/v1/events/stream to the backend (SSE with buffering disabled).
+console:
+  enabled: true
+  replicaCount: 2
+  # Build-once runtime settings served as /config/runtime.json. Keep Grafana empty when no
+  # browser-reachable Grafana endpoint exists; the Console will hide that external link.
+  runtimeConfig:
+    apiBaseUrl: ""
+    ssePath: /api/v1/events/stream
+    environment: ""
+    release: ""
+    supportUrl: ""
+    grafanaBaseUrl: ""
+  image:
+    repository: ghcr.io/oxygen914/kubeoncall-console
+    tag: ""
+    digest: ""
+    pullPolicy: IfNotPresent
+  resources:
+    requests: {cpu: 100m, memory: 128Mi}
+    limits: {cpu: "1", memory: 512Mi}
+  podSecurityContext:
+    runAsNonRoot: true
+    runAsUser: 101
+    runAsGroup: 101
+    fsGroup: 101
+    seccompProfile: {type: RuntimeDefault}
+  containerSecurityContext:
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: true
+    runAsNonRoot: true
+    runAsUser: 101
+    runAsGroup: 101
+    capabilities: {drop: [ALL]}
+  topologySpread:
+    enabled: true
+    maxSkew: 1
+    whenUnsatisfiable: ScheduleAnyway
+    topologyKeys: [kubernetes.io/hostname, topology.kubernetes.io/zone]
+  podAntiAffinity:
+    enabled: true
+    topologyKey: kubernetes.io/hostname
+  podDisruptionBudget:
+    enabled: true
+    maxUnavailable: 1
+  autoscaling:
+    enabled: false
+    minReplicas: 2
+    maxReplicas: 6
+    targetCPUUtilizationPercentage: 70
+    targetMemoryUtilizationPercentage: 80
+  service:
+    type: ClusterIP
+    port: 80
+
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  host: kubeoncall.example.local
+  tls:
+    enabled: false
+    secretName: kubeoncall-tls
+
+serviceMonitor:
+  enabled: false
+  interval: 30s
+
+grafanaDashboard:
+  enabled: true
+  labelKey: grafana_dashboard
+  labelValue: "1"
+
+# SBX-11: isolated runtime, disabled until a cluster operator provisions the dedicated namespace.
+sandboxController:
+  enabled: false
+  namespace: kubeoncall-sandbox
+  # Quickstart may create this disposable namespace. Production keeps it platform-owned so
+  # uninstalling the KubeOnCall release cannot delete unrelated or still-running Sandbox Jobs.
+  createNamespace: false
+  # Secrets are namespaced. When this namespace differs from the release namespace, provision the
+  # HMAC key under this name as well (Quickstart does this automatically).
+  existingSecret: kubeoncall-sandbox-controller
+  image:
+    repository: ghcr.io/oxygen914/kubeoncall-sandbox-controller
+    tag: ""
+    digest: ""
+    pullPolicy: IfNotPresent
+  service:
+    port: 8088
+  resources:
+    requests: {cpu: 100m, memory: 128Mi}
+    limits: {cpu: "1", memory: 1Gi}
+  quota:
+    # One Controller Pod plus at most eight runtime Pods.
+    pods: "9"
+    requestsCpu: "2"
+    requestsMemory: 2Gi
+    limitsCpu: "4"
+    limitsMemory: 4Gi
+  backendKeyId: backend
+  backendHmacSecretKey: sandbox-controller-hmac
+  # Optional override for an external Controller. Empty derives the in-cluster Service FQDN from
+  # namespace and service.port, so namespace overrides cannot leave Backend on a stale endpoint.
+  backendEndpoint: ""
+  networkPolicy:
+    # Raw Kubernetes NetworkPolicy egress entries for platform-specific API server, artifact
+    # gateway or validation-cluster routes. Defaults retain DNS + in-release MinIO only.
+    controllerExtraEgress: []
+    jobExtraEgress: []
+
+# A release-generated catalogue is mounted into Backend and Controller. Enabling it requires every
+# selected image to be pinned by sha256 digest; mutable tags are deliberately rejected by Helm and
+# both applications. Only runtimes with build contexts in this repository are enabled here.
+sandboxTools:
+  catalog:
+    enabled: false
+    name: ""
+    mountPath: /etc/kubeoncall/sandbox-tools/tools.yaml
+  tools:
+    - id: generated-python
+      version: v1
+      mode: GENERATED_CODE
+      enabled: true
+      image:
+        repository: ghcr.io/oxygen914/kubeoncall-sandbox-generated-python
+        digest: ""
+      entrypoint: /usr/local/bin/koc-run-python
+      networkEgressPolicy: DENY_ALL
+      inputSchemaRef: sandbox-tools/schemas/generated-code-input-v1.json
+      outputSchemaRef: sandbox-tools/schemas/generated-code-result-v1.json
+      resources: {cpu: 500m, memory: 512Mi, ephemeralStorage: 512Mi, inputMaxBytes: 52428800, outputMaxBytes: 1048576, logMaxBytes: 2097152, scriptMaxBytes: 262144, timeoutSeconds: 120, maxTimeoutSeconds: 300}
+    - id: generated-posix-shell
+      version: v1
+      mode: GENERATED_CODE
+      enabled: true
+      image:
+        repository: ghcr.io/oxygen914/kubeoncall-sandbox-generated-posix-shell
+        digest: ""
+      entrypoint: /usr/local/bin/koc-run-posix-shell
+      networkEgressPolicy: DENY_ALL
+      inputSchemaRef: sandbox-tools/schemas/generated-code-input-v1.json
+      outputSchemaRef: sandbox-tools/schemas/generated-code-result-v1.json
+      resources: {cpu: 500m, memory: 512Mi, ephemeralStorage: 512Mi, inputMaxBytes: 52428800, outputMaxBytes: 1048576, logMaxBytes: 2097152, scriptMaxBytes: 262144, timeoutSeconds: 120, maxTimeoutSeconds: 300}
+    - id: manifest-validation
+      version: v1
+      mode: MANIFEST_VALIDATION
+      enabled: true
+      image:
+        repository: ghcr.io/oxygen914/kubeoncall-sandbox-manifest-validation
+        digest: ""
+      entrypoint: /usr/local/bin/koc-validate-manifest
+      networkEgressPolicy: DENY_ALL
+      inputSchemaRef: sandbox-tools/schemas/manifest-validation-input-v1.json
+      outputSchemaRef: sandbox-tools/schemas/manifest-validation-result-v1.json
+      resources: {cpu: 500m, memory: 512Mi, ephemeralStorage: 1Gi, inputMaxBytes: 52428800, outputMaxBytes: 1048576, logMaxBytes: 2097152, scriptMaxBytes: 262144, timeoutSeconds: 180, maxTimeoutSeconds: 300}
+
+# Self-contained, ephemeral infrastructure for Kind/Minikube evaluation. This mode is intentionally
+# single-node and non-production; disabling it leaves all dependencies externally managed.
+quickstart:
+  enabled: false
+  backendResources:
+    requests: {cpu: 100m, memory: 256Mi}
+    limits: {cpu: "1", memory: 1Gi}
+  consoleResources:
+    requests: {cpu: 25m, memory: 64Mi}
+    limits: {cpu: 250m, memory: 256Mi}
+  mysql:
+    image: mysql:8.0@sha256:7dcddc01f13bab2f15cde676d44d01f61fc9f99fe7785e86196dfc07d358ae2b
+    resources:
+      requests: {cpu: 100m, memory: 256Mi}
+      limits: {cpu: "1", memory: 768Mi}
+  redis:
+    image: redis:7@sha256:595cc6f2bb3af6e03347b90deb6123c6aa2c81dea05ce08128de8a174b6ac67b
+    resources:
+      requests: {cpu: 25m, memory: 32Mi}
+      limits: {cpu: 500m, memory: 256Mi}
+  elasticsearch:
+    enabled: true
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.14.3@sha256:96ae58e574cb40b2caf8bdebc6dda7b789e1fae7d56346cc83c288374e18b1c2
+    javaOpts: -Xms256m -Xmx256m
+    resources:
+      requests: {cpu: 150m, memory: 512Mi}
+      limits: {cpu: "1", memory: 768Mi}
+  minio:
+    image: minio/minio:RELEASE.2024-08-03T04-33-23Z@sha256:c933bb53ac226d1f4bdfeac66a3854d02903771e91d7ee2cbc330841a1d77d7e
+    clientImage: minio/mc:RELEASE.2024-07-31T15-58-33Z@sha256:5282b2b3c5d858eb8aa9a2c6c4ca4880554d9b1ed66ffe2e2663003bd581273d
+    bucket: kubeoncall-docs
+    resources:
+      requests: {cpu: 25m, memory: 64Mi}
+      limits: {cpu: 500m, memory: 256Mi}

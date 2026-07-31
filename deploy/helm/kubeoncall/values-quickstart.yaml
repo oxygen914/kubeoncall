@@ -1,0 +1,35 @@
+# Ephemeral single-cluster evaluation profile. Install into a dedicated Kind/Minikube namespace.
+# MySQL, Redis, Elasticsearch and MinIO use emptyDir and are deleted with the release.
+quickstart:
+  enabled: true
+
+config:
+  apiAuthEnabled: false
+
+mysql:
+  # Quickstart is accessed over local HTTP, so Secure cookies would make browser login unusable.
+  sessionCookieSecure: false
+  legacyTokenCompat: false
+  bootstrapAdminEnabled: true
+  bootstrapAdminUsername: admin
+
+legacyApi:
+  enabled: false
+
+replicaCount: 1
+
+console:
+  replicaCount: 1
+
+serviceMonitor:
+  enabled: false
+
+grafanaDashboard:
+  enabled: false
+
+ingress:
+  enabled: false
+
+sandboxController:
+  # Only the disposable Quickstart profile lets Helm own the dedicated Sandbox namespace.
+  createNamespace: true

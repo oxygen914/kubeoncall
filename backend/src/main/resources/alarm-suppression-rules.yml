@@ -1,0 +1,24 @@
+version: "2026-07-11"
+
+rules:
+  - id: node-not-ready-suppresses-pod
+    source:
+      resourceTypes: [NODE]
+      alertNamePatterns: ["*NodeNotReady*"]
+    target:
+      resourceTypes: [POD]
+      alertNamePatterns: []
+    correlateBy: [cluster, node]
+    ttlSeconds: 1800
+    reason: "Pod alarm suppressed while NodeNotReady is active on the same node"
+
+  - id: apiserver-down-suppresses-control-plane-derivatives
+    source:
+      resourceTypes: [CLUSTER, SERVICE]
+      alertNamePatterns: ["*ApiServerDown*", "*ApiServerUnavailable*"]
+    target:
+      resourceTypes: [POD, DEPLOYMENT, SERVICE]
+      alertNamePatterns: ["*ApiServer*", "*ControllerManager*", "*Scheduler*"]
+    correlateBy: [cluster]
+    ttlSeconds: 900
+    reason: "Derived control-plane alarm suppressed while the API server root-cause alarm is active"

@@ -1,0 +1,456 @@
+# KubeOnCall default alarm policies.
+#
+# Thresholds are initial values; tune with historical p95/p99 and false-positive rates.
+# Every policy must declare a runbookId — alarms without a runbook cannot be triaged.
+# `labels` are labels emitted for ownership/routing. Use `matchLabels` only for labels that an
+# incoming alarm must contain to match the policy.
+# `ragFilters` are static SOP metadata constraints. Runtime alert dimensions are added by the
+# workflow and take precedence for reserved keys such as runbookId/service/resourceType.
+# autoSilence defaults to false everywhere: silence is a maintenance action, never a
+# default outcome of a P0/P1 alarm.
+version: 2026-07-08
+policies:
+  # ==================== Host CPU ====================
+  - id: host-high-cpu-p1
+    name: HostHighCpuUsageP1
+    category: host
+    metricName: host.cpu.usage_percent
+    resourceType: node
+    severity: P1
+    operator: ">"
+    threshold: 70
+    for: 10m
+    promql: |
+      100 * (1 - avg by (cluster, instance) (rate(node_cpu_seconds_total{mode="idle"}[5m]))) > 70
+    window: 15m
+    recover: cpu_usage_percent < 65 for 10m
+    runbookId: runbook-host-cpu-high
+    owner: infra
+    ragFilters:
+      document_type: runbook
+      category: host
+    labels:
+      team: infra
+    actions:
+      workflowTemplate: host-resource
+      notify: oncall
+      autoSilence: false
+
+  # ==================== Network ====================
+  - id: host-conntrack-pressure-p1
+    name: HostConntrackPressureP1
+    category: network
+    metricName: host.network.conntrack_usage_percent
+    resourceType: node
+    severity: P1
+    operator: ">"
+    threshold: 85
+    for: 5m
+    promql: |
+      100 * node_nf_conntrack_entries / node_nf_conntrack_entries_limit > 85
+    window: 15m
+    recover: conntrack_usage_percent < 75 for 10m
+    runbookId: runbook-network-conntrack
+    owner: infra
+    ragFilters: {document_type: runbook, category: network}
+    labels: {team: infra}
+    actions:
+      workflowTemplate: host-resource
+      notify: oncall
+      autoSilence: false
+
+  # ==================== Kubernetes control plane ====================
+  - id: kube-apiserver-down-p0
+    name: KubeApiServerDownP0
+    category: control-plane
+    metricName: kube.controlplane.apiserver_up
+    resourceType: cluster
+    severity: P0
+    promql: |
+      up{job="apiserver"} == 0
+    window: 5m
+    recover: apiserver_up == 1 for 10m
+    runbookId: runbook-control-plane-apiserver
+    owner: platform
+    ragFilters: {document_type: runbook, category: control-plane}
+    labels: {team: platform}
+    actions:
+      workflowTemplate: control-plane
+      notify: oncall-phone
+      approvalRequiredForActions: true
+      autoSilence: false
+
+  # ==================== Certificates ====================
+  - id: certificate-expiring-p1
+    name: CertificateExpiringP1
+    category: certificate
+    metricName: certificate.expiry_days
+    resourceType: service
+    severity: P1
+    operator: "<"
+    threshold: 14
+    for: 5m
+    promql: |
+      (probe_ssl_earliest_cert_expiry - time()) / 86400 < 14
+    window: 30m
+    recover: certificate_expiry_days > 30 for 10m
+    runbookId: runbook-certificate-expiry
+    owner: security
+    ragFilters: {document_type: runbook, category: certificate}
+    labels: {team: security}
+    actions:
+      workflowTemplate: workload
+      notify: oncall
+      approvalRequiredForActions: true
+      autoSilence: false
+
+  # ==================== Service SLO ====================
+  - id: service-error-rate-p1
+    name: ServiceErrorRateP1
+    category: slo
+    metricName: service.http.error_rate_percent
+    resourceType: service
+    severity: P1
+    operator: ">"
+    threshold: 5
+    for: 5m
+    promql: |
+      100 * sum(rate(http_requests_total{status=~"5.."}[5m])) by (service) / sum(rate(http_requests_total[5m])) by (service) > 5
+    window: 30m
+    recover: error_rate_percent < 2 for 10m
+    runbookId: runbook-service-slo
+    owner: app
+    ragFilters: {document_type: runbook, category: slo}
+    labels: {team: app}
+    actions:
+      workflowTemplate: workload
+      notify: oncall
+      autoSilence: false
+
+  # ==================== Cluster capacity ====================
+  - id: cluster-pending-pods-p1
+    name: ClusterPendingPodsP1
+    category: capacity
+    metricName: kube.cluster.pending_pods
+    resourceType: cluster
+    severity: P1
+    operator: ">"
+    threshold: 10
+    for: 10m
+    promql: |
+      sum(kube_pod_status_phase{phase="Pending"}) > 10
+    window: 30m
+    recover: pending_pods < 3 for 10m
+    runbookId: runbook-cluster-capacity
+    owner: platform
+    ragFilters: {document_type: runbook, category: capacity}
+    labels: {team: platform}
+    actions:
+      workflowTemplate: control-plane
+      notify: oncall
+      autoSilence: false
+
+  # ==================== Time synchronization ====================
+  - id: host-clock-offset-p1
+    name: HostClockOffsetP1
+    category: time-sync
+    metricName: host.time.clock_offset_seconds
+    resourceType: node
+    severity: P1
+    operator: ">"
+    threshold: 1
+    for: 5m
+    promql: |
+      abs(node_timex_offset_seconds) > 1
+    window: 15m
+    recover: clock_offset_seconds < 0.1 for 10m
+    runbookId: runbook-time-sync
+    owner: infra
+    ragFilters: {document_type: runbook, category: time-sync}
+    labels: {team: infra}
+    actions:
+      workflowTemplate: host-resource
+      notify: oncall
+      autoSilence: false
+
+  - id: host-high-cpu-p0
+    name: HostHighCpuUsageP0
+    category: host
+    metricName: host.cpu.usage_percent
+    resourceType: node
+    severity: P0
+    operator: ">"
+    threshold: 85
+    for: 5m
+    promql: |
+      100 * (1 - avg by (cluster, instance) (rate(node_cpu_seconds_total{mode="idle"}[5m]))) > 85
+    window: 10m
+    recover: cpu_usage_percent < 75 for 10m
+    runbookId: runbook-host-cpu-high
+    owner: infra
+    ragFilters:
+      document_type: runbook
+      category: host
+    labels:
+      team: infra
+    actions:
+      workflowTemplate: host-resource
+      notify: oncall-phone
+      approvalRequiredForActions: true
+      autoSilence: false
+
+  # ==================== Host memory ====================
+  - id: host-memory-pressure-p1
+    name: HostMemoryPressureP1
+    category: host
+    metricName: host.memory.available_percent
+    resourceType: node
+    severity: P1
+    operator: "<"
+    threshold: 20
+    for: 10m
+    promql: |
+      100 * (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes) < 20
+    window: 15m
+    recover: available_percent > 25 for 10m
+    runbookId: runbook-host-memory-pressure
+    owner: infra
+    ragFilters:
+      document_type: runbook
+      category: host
+    labels:
+      team: infra
+    actions:
+      workflowTemplate: host-resource
+      notify: oncall
+      autoSilence: false
+
+  - id: host-memory-pressure-p0
+    name: HostMemoryPressureP0
+    category: host
+    metricName: host.memory.available_percent
+    resourceType: node
+    severity: P0
+    operator: "<"
+    threshold: 10
+    for: 5m
+    promql: |
+      100 * (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes) < 10
+    window: 10m
+    recover: available_percent > 20 for 10m
+    runbookId: runbook-host-memory-pressure
+    owner: infra
+    ragFilters:
+      document_type: runbook
+      category: host
+    labels:
+      team: infra
+    actions:
+      workflowTemplate: host-resource
+      notify: oncall-phone
+      approvalRequiredForActions: true
+      autoSilence: false
+
+  # ==================== Host disk ====================
+  - id: host-disk-usage-p1
+    name: HostDiskUsageP1
+    category: host
+    metricName: host.disk.usage_percent
+    resourceType: node
+    severity: P1
+    operator: ">"
+    threshold: 85
+    for: 10m
+    promql: |
+      100 * (1 - node_filesystem_avail_bytes{fstype!~"tmpfs|overlay"} / node_filesystem_size_bytes{fstype!~"tmpfs|overlay"}) > 85
+    window: 15m
+    recover: usage_percent < 80 for 15m
+    runbookId: runbook-host-disk-usage
+    owner: infra
+    ragFilters:
+      document_type: runbook
+      category: host
+    labels:
+      team: infra
+    actions:
+      workflowTemplate: host-resource
+      notify: oncall
+      autoSilence: false
+
+  - id: host-disk-usage-p0
+    name: HostDiskUsageP0
+    category: host
+    metricName: host.disk.usage_percent
+    resourceType: node
+    severity: P0
+    operator: ">"
+    threshold: 95
+    for: 5m
+    promql: |
+      100 * (1 - node_filesystem_avail_bytes{fstype!~"tmpfs|overlay"} / node_filesystem_size_bytes{fstype!~"tmpfs|overlay"}) > 95
+    window: 10m
+    recover: usage_percent < 85 for 15m
+    runbookId: runbook-host-disk-usage
+    owner: infra
+    ragFilters:
+      document_type: runbook
+      category: host
+    labels:
+      team: infra
+    actions:
+      workflowTemplate: host-resource
+      notify: oncall-phone
+      approvalRequiredForActions: true
+      autoSilence: false
+
+  # ==================== Host inode ====================
+  - id: host-inode-usage-p1
+    name: HostInodeUsageP1
+    category: host
+    metricName: host.inode.usage_percent
+    resourceType: node
+    severity: P1
+    operator: ">"
+    threshold: 85
+    for: 10m
+    promql: |
+      100 * (1 - node_filesystem_files_free{fstype!~"tmpfs|overlay"} / node_filesystem_files{fstype!~"tmpfs|overlay"}) > 85
+    window: 15m
+    recover: usage_percent < 80 for 15m
+    runbookId: runbook-host-inode-usage
+    owner: infra
+    ragFilters:
+      document_type: runbook
+      category: host
+    labels:
+      team: infra
+    actions:
+      workflowTemplate: host-resource
+      notify: oncall
+      autoSilence: false
+
+  - id: host-inode-usage-p0
+    name: HostInodeUsageP0
+    category: host
+    metricName: host.inode.usage_percent
+    resourceType: node
+    severity: P0
+    operator: ">"
+    threshold: 95
+    for: 5m
+    promql: |
+      100 * (1 - node_filesystem_files_free{fstype!~"tmpfs|overlay"} / node_filesystem_files{fstype!~"tmpfs|overlay"}) > 95
+    window: 10m
+    recover: usage_percent < 85 for 15m
+    runbookId: runbook-host-inode-usage
+    owner: infra
+    ragFilters:
+      document_type: runbook
+      category: host
+    labels:
+      team: infra
+    actions:
+      workflowTemplate: host-resource
+      notify: oncall-phone
+      approvalRequiredForActions: true
+      autoSilence: false
+
+  # ==================== Kubernetes node ====================
+  - id: kube-node-not-ready-p0
+    name: KubeNodeNotReadyP0
+    category: k8s-node
+    metricName: kube.node.ready
+    resourceType: node
+    severity: P0
+    for: 3m
+    promql: |
+      kube_node_status_condition{condition="Ready",status="true"} == 0
+    window: 5m
+    recover: ready == true for 5m
+    runbookId: runbook-node-notready
+    owner: infra
+    ragFilters:
+      document_type: runbook
+      category: k8s-node
+    labels:
+      team: infra
+    actions:
+      workflowTemplate: k8s-node
+      notify: oncall-phone
+      approvalRequiredForActions: true
+      autoSilence: false
+
+  # ==================== Kubernetes pod ====================
+  - id: pod-crashloop-p1
+    name: PodCrashLoopBackOffP1
+    category: k8s-pod
+    metricName: kube.pod.waiting_reason
+    resourceType: pod
+    severity: P1
+    for: 5m
+    promql: |
+      max_over_time(kube_pod_container_status_waiting_reason{reason="CrashLoopBackOff"}[5m]) > 0
+    window: 10m
+    recover: waiting_reason != CrashLoopBackOff for 5m
+    runbookId: runbook-pod-crashloop
+    owner: app
+    ragFilters:
+      document_type: runbook
+      category: k8s-pod
+    labels:
+      team: app
+    actions:
+      workflowTemplate: k8s-pod
+      notify: oncall
+      autoSilence: false
+
+  - id: pod-oom-killed-p1
+    name: PodOOMKilledP1
+    category: k8s-pod
+    metricName: kube.pod.oom_killed
+    resourceType: pod
+    severity: P1
+    for: 1m
+    promql: |
+      increase(kube_pod_container_status_restarts_total[10m]) > 0
+      and on (cluster, namespace, pod, container)
+      kube_pod_container_status_last_terminated_reason{reason="OOMKilled"} == 1
+    window: 10m
+    recover: no new oom_killed for 10m
+    runbookId: runbook-pod-oom
+    owner: app
+    ragFilters:
+      document_type: runbook
+      category: k8s-pod
+    labels:
+      team: app
+    actions:
+      workflowTemplate: k8s-pod
+      notify: oncall
+      autoSilence: false
+
+  # ==================== Kubernetes workload ====================
+  - id: deployment-unavailable-p1
+    name: DeploymentUnavailableP1
+    category: workload
+    metricName: kube.deployment.unavailable_replicas
+    resourceType: deployment
+    severity: P1
+    operator: ">"
+    threshold: 0
+    for: 10m
+    promql: |
+      kube_deployment_status_replicas_unavailable > 0
+    window: 15m
+    recover: unavailable_replicas == 0 for 10m
+    runbookId: runbook-deployment-unavailable
+    owner: app
+    ragFilters:
+      document_type: runbook
+      category: workload
+    labels:
+      team: app
+    actions:
+      workflowTemplate: workload
+      notify: oncall
+      autoSilence: false

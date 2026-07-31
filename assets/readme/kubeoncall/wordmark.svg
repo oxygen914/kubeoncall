@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1320 240" role="img" aria-labelledby="title desc">
+  <title id="title">KubeOnCall gradient wordmark</title>
+  <desc id="desc">A rounded KubeOnCall wordmark drawn with a blue-to-violet gradient on a transparent background.</desc>
+  <defs>
+    <linearGradient id="wordmark-gradient" x1="106" y1="0" x2="1214" y2="0" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#1689F7" />
+      <stop offset="45%" stop-color="#536BEA" />
+      <stop offset="72%" stop-color="#7958E8" />
+      <stop offset="100%" stop-color="#B94BEA" />
+    </linearGradient>
+  </defs>
+  <g fill="none" stroke="url(#wordmark-gradient)" stroke-width="20" stroke-linecap="round" stroke-linejoin="round">
+  <path id="glyph-1-K-1" d="M 129 50 L 129 190" />
+  <path id="glyph-1-K-2" d="M 134 124 L 203 50" />
+  <path id="glyph-1-K-3" d="M 134 124 L 207 190" />
+  <path id="glyph-2-u-1" d="M 243 86 L 243 152 C 243 176 247 190 279 190 C 311 190 315 176 315 152 L 315 86" />
+  <path id="glyph-3-b-1" d="M 356 50 L 356 190" />
+  <path id="glyph-3-b-2" d="M 360 102 C 370 92 376 86 394 86 C 412 86 428 110 428 138 C 428 166 412 190 394 190 C 376 190 360 190 360 172" />
+  <path id="glyph-4-e-1" d="M 556 134 C 544 126 550 86 536 86 C 518 86 486 104 486 132 C 486 164 506 190 528 190 C 546 190 548 182 558 172" />
+  <path id="glyph-4-e-2" d="M 492 134 L 550 134" />
+  <path id="glyph-5-O-1" d="M 660 50 C 684 50 704 81 704 120 C 704 159 684 190 660 190 C 636 190 616 159 616 120 C 616 81 636 50 660 50 Z" />
+  <path id="glyph-6-n-1" d="M 748 190 L 748 88" />
+  <path id="glyph-6-n-2" d="M 752 128 C 764 110 764 86 782 86 C 800 86 816 104 816 128 C 816 152 816 190 816 190" />
+  <path id="glyph-7-C-1" d="M 940 68 C 930 58 924 50 906 50 C 880 50 858 80 858 120 C 858 160 880 190 906 190 C 924 190 930 182 940 172" />
+  <path id="glyph-8-a-1" d="M 1030 86 C 1048 86 1062 110 1062 138 C 1062 166 1048 190 1030 190 C 1012 190 988 166 988 138 C 988 110 1012 86 1030 86 C 1048 86 1012 86 1030 86 Z" />
+  <path id="glyph-8-a-2" d="M 1062 86 L 1062 190" />
+  <path id="glyph-9-l-1" d="M 1104 50 L 1104 172 C 1104 184 1112 190 1124 190" />
+  <path id="glyph-10-l-1" d="M 1172 50 L 1172 172 C 1172 184 1180 190 1192 190" />
+  </g>
+</svg>

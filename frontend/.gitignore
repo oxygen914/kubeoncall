@@ -1,0 +1,12 @@
+node_modules
+dist
+.vite
+coverage
+playwright-report
+test-results
+*.local
+.DS_Store
+*.tsbuildinfo
+# stray emit from tsc -b should never be committed; configs stay .ts
+vite.config.js
+playwright.config.js

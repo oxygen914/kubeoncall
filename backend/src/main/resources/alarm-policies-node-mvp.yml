@@ -1,0 +1,560 @@
+# Active policy catalog paired one-to-one with deploy/prometheus/rules/kubeoncall.yml.
+# The historical filename is retained for deployment compatibility.
+version: 2026-07-30-alerting-v2
+policies:
+  # ==================== KubeOnCall runtime ====================
+  - id: kubeoncall-target-down
+    name: KubeOnCallTargetDown
+    category: kubeoncall-runtime
+    metricName: kubeoncall.runtime.up
+    resourceType: service
+    severity: P1
+    for: 2m
+    promql: up{job="kubeoncall"} == 0
+    window: 5m
+    recover: up == 1 for 5m
+    runbookId: runbook-kubeoncall-runtime
+    owner: platform
+    ragFilters: {document_type: runbook, category: kubeoncall-runtime}
+    labels: {team: platform}
+    actions:
+      workflowTemplate: workload
+      notify: oncall
+      autoSilence: false
+
+  - id: kubeoncall-http-5xx-rate-high
+    name: KubeOnCallHttp5xxRateHigh
+    category: kubeoncall-runtime
+    metricName: kubeoncall.http.5xx_rate
+    resourceType: service
+    severity: P1
+    operator: ">"
+    threshold: 0.05
+    for: 10m
+    promql: sum(rate(http_server_requests_seconds_count{job="kubeoncall",uri!~"/actuator.*",status=~"5.."}[5m])) / clamp_min(sum(rate(http_server_requests_seconds_count{job="kubeoncall",uri!~"/actuator.*"}[5m])), 1) > 0.05
+    window: 15m
+    recover: http_5xx_rate < 0.02 for 10m
+    runbookId: runbook-kubeoncall-runtime
+    owner: platform
+    ragFilters: {document_type: runbook, category: kubeoncall-runtime}
+    labels: {team: platform}
+    actions:
+      workflowTemplate: workload
+      notify: oncall
+      autoSilence: false
+
+  - id: kubeoncall-dependency-circuit-opened
+    name: KubeOnCallDependencyCircuitOpened
+    category: kubeoncall-runtime
+    metricName: kubeoncall.dependency.circuit_opened
+    resourceType: service
+    severity: P1
+    operator: ">"
+    threshold: 0
+    promql: sum by (dependency) (increase(kubeoncall_dependency_circuit_total{event="opened"}[5m])) > 0
+    window: 15m
+    recover: no circuit-open event for 10m
+    runbookId: runbook-kubeoncall-runtime
+    owner: platform
+    ragFilters: {document_type: runbook, category: kubeoncall-runtime}
+    labels: {team: platform}
+    actions:
+      workflowTemplate: workload
+      notify: oncall
+      autoSilence: false
+
+  - id: kubeoncall-dependency-error-rate-high
+    name: KubeOnCallDependencyErrorRateHigh
+    category: kubeoncall-runtime
+    metricName: kubeoncall.dependency.error_rate
+    resourceType: service
+    severity: P2
+    operator: ">"
+    threshold: 0.10
+    for: 10m
+    promql: sum by (dependency) (rate(kubeoncall_dependency_requests_total{outcome="error"}[5m])) / clamp_min(sum by (dependency) (rate(kubeoncall_dependency_requests_total[5m])), 0.001) > 0.10
+    window: 15m
+    recover: dependency_error_rate < 0.05 for 10m
+    runbookId: runbook-kubeoncall-runtime
+    owner: platform
+    ragFilters: {document_type: runbook, category: kubeoncall-runtime}
+    labels: {team: platform}
+    actions:
+      workflowTemplate: workload
+      notify: oncall
+      autoSilence: false
+
+  - id: kubeoncall-outbox-dead-letter
+    name: KubeOnCallOutboxDeadLetter
+    category: kubeoncall-runtime
+    metricName: kubeoncall.outbox.dead_letter
+    resourceType: service
+    severity: P1
+    operator: ">"
+    threshold: 0
+    for: 5m
+    promql: kubeoncall_outbox_events{status="DEAD_LETTER"} > 0
+    window: 15m
+    recover: dead_letter_count == 0 for 10m
+    runbookId: runbook-kubeoncall-runtime
+    owner: platform
+    ragFilters: {document_type: runbook, category: kubeoncall-runtime}
+    labels: {team: platform}
+    actions:
+      workflowTemplate: workload
+      notify: oncall
+      autoSilence: false
+
+  - id: kubeoncall-outbox-backlog-age-high
+    name: KubeOnCallOutboxBacklogAgeHigh
+    category: kubeoncall-runtime
+    metricName: kubeoncall.outbox.oldest_pending_age_seconds
+    resourceType: service
+    severity: P2
+    operator: ">"
+    threshold: 300
+    for: 10m
+    promql: kubeoncall_outbox_oldest_pending_age_seconds > 300
+    window: 30m
+    recover: oldest_pending_age_seconds < 120 for 10m
+    runbookId: runbook-kubeoncall-runtime
+    owner: platform
+    ragFilters: {document_type: runbook, category: kubeoncall-runtime}
+    labels: {team: platform}
+    actions:
+      workflowTemplate: workload
+      notify: oncall
+      autoSilence: false
+
+  - id: kubeoncall-async-task-dead-letter
+    name: KubeOnCallAsyncTaskDeadLetter
+    category: kubeoncall-runtime
+    metricName: kubeoncall.async_task.dead_letter
+    resourceType: service
+    severity: P1
+    operator: ">"
+    threshold: 0
+    for: 5m
+    promql: kubeoncall_async_tasks{status="DEAD_LETTER"} > 0
+    window: 15m
+    recover: dead_letter_count == 0 for 10m
+    runbookId: runbook-kubeoncall-runtime
+    owner: platform
+    ragFilters: {document_type: runbook, category: kubeoncall-runtime}
+    labels: {team: platform}
+    actions:
+      workflowTemplate: workload
+      notify: oncall
+      autoSilence: false
+
+  - id: kubeoncall-async-task-backlog-age-high
+    name: KubeOnCallAsyncTaskBacklogAgeHigh
+    category: kubeoncall-runtime
+    metricName: kubeoncall.async_task.oldest_due_age_seconds
+    resourceType: service
+    severity: P2
+    operator: ">"
+    threshold: 300
+    for: 10m
+    promql: kubeoncall_async_task_oldest_due_age_seconds > 300
+    window: 30m
+    recover: oldest_due_age_seconds < 120 for 10m
+    runbookId: runbook-kubeoncall-runtime
+    owner: platform
+    ragFilters: {document_type: runbook, category: kubeoncall-runtime}
+    labels: {team: platform}
+    actions:
+      workflowTemplate: workload
+      notify: oncall
+      autoSilence: false
+
+  - id: kubeoncall-database-pool-saturated
+    name: KubeOnCallDatabasePoolSaturated
+    category: kubeoncall-runtime
+    metricName: kubeoncall.database.pool_utilization
+    resourceType: service
+    severity: P2
+    operator: ">"
+    threshold: 0.90
+    for: 10m
+    promql: hikaricp_connections_active / clamp_min(hikaricp_connections_max, 1) > 0.90
+    window: 30m
+    recover: database_pool_utilization < 0.75 for 10m
+    runbookId: runbook-kubeoncall-runtime
+    owner: platform
+    ragFilters: {document_type: runbook, category: kubeoncall-runtime}
+    labels: {team: platform}
+    actions:
+      workflowTemplate: workload
+      notify: oncall
+      autoSilence: false
+
+  - id: kubeoncall-worker-lease-lost
+    name: KubeOnCallWorkerLeaseLost
+    category: kubeoncall-runtime
+    metricName: kubeoncall.worker.lease_lost
+    resourceType: service
+    severity: P1
+    operator: ">"
+    threshold: 0
+    promql: sum by (worker) (increase(kubeoncall_worker_lease_total{event="lost"}[5m])) > 0
+    window: 15m
+    recover: no lease-lost event for 10m
+    runbookId: runbook-kubeoncall-runtime
+    owner: platform
+    ragFilters: {document_type: runbook, category: kubeoncall-runtime}
+    labels: {team: platform}
+    actions:
+      workflowTemplate: workload
+      notify: oncall
+      autoSilence: false
+
+  - id: kubeoncall-request-correlation-missing
+    name: KubeOnCallRequestCorrelationMissing
+    category: kubeoncall-runtime
+    metricName: kubeoncall.request_correlation.missing_rate
+    resourceType: service
+    severity: P2
+    operator: ">"
+    threshold: 0.01
+    for: 10m
+    promql: sum by (boundary) (rate(kubeoncall_request_correlation_total{outcome="missing"}[10m])) / clamp_min(sum by (boundary) (rate(kubeoncall_request_correlation_total[10m])), 0.001) > 0.01
+    window: 30m
+    recover: request_correlation_missing_rate < 0.005 for 10m
+    runbookId: runbook-kubeoncall-runtime
+    owner: platform
+    ragFilters: {document_type: runbook, category: kubeoncall-runtime}
+    labels: {team: platform}
+    actions:
+      workflowTemplate: workload
+      notify: oncall
+      autoSilence: false
+
+  # ==================== KubeOnCall Sandbox ====================
+  - id: kubeoncall-sandbox-run-backlog-age-high
+    name: KubeOnCallSandboxRunBacklogAgeHigh
+    category: kubeoncall-sandbox
+    metricName: kubeoncall.sandbox.oldest_active_age_seconds
+    resourceType: service
+    severity: P2
+    operator: ">"
+    threshold: 600
+    for: 10m
+    promql: kubeoncall_sandbox_oldest_active_age_seconds > 600
+    window: 30m
+    recover: oldest_active_age_seconds < 300 for 10m
+    runbookId: runbook-kubeoncall-sandbox
+    owner: platform
+    ragFilters: {document_type: runbook, category: kubeoncall-sandbox}
+    labels: {team: platform}
+    actions:
+      workflowTemplate: workload
+      notify: oncall
+      autoSilence: false
+
+  - id: kubeoncall-sandbox-failure-rate-high
+    name: KubeOnCallSandboxFailureRateHigh
+    category: kubeoncall-sandbox
+    metricName: kubeoncall.sandbox.failure_rate
+    resourceType: service
+    severity: P2
+    operator: ">"
+    threshold: 0.10
+    for: 15m
+    promql: sum(rate(kubeoncall_sandbox_run_events_total{event=~"failed|timed_out"}[15m])) / clamp_min(sum(rate(kubeoncall_sandbox_run_events_total{event="created"}[15m])), 0.001) > 0.10
+    window: 30m
+    recover: sandbox_failure_rate < 0.05 for 15m
+    runbookId: runbook-kubeoncall-sandbox
+    owner: platform
+    ragFilters: {document_type: runbook, category: kubeoncall-sandbox}
+    labels: {team: platform}
+    actions:
+      workflowTemplate: workload
+      notify: oncall
+      autoSilence: false
+
+  - id: kubeoncall-sandbox-cleanup-leak
+    name: KubeOnCallSandboxCleanupLeak
+    category: kubeoncall-sandbox
+    metricName: kubeoncall.sandbox.cleanup_failure
+    resourceType: service
+    severity: P1
+    for: 10m
+    promql: kubeoncall_sandbox_cleanup{status="FAILED"} > 0 or kubeoncall_sandbox_oldest_cleanup_pending_age_seconds > 600
+    window: 30m
+    recover: cleanup_failed == 0 and oldest_cleanup_pending_age_seconds < 300 for 10m
+    runbookId: runbook-kubeoncall-sandbox
+    owner: platform
+    ragFilters: {document_type: runbook, category: kubeoncall-sandbox}
+    labels: {team: platform}
+    actions:
+      workflowTemplate: workload
+      notify: oncall
+      autoSilence: false
+
+  - id: kubeoncall-sandbox-controller-unavailable
+    name: KubeOnCallSandboxControllerUnavailable
+    category: kubeoncall-sandbox
+    metricName: kubeoncall.sandbox.controller_error_rate
+    resourceType: service
+    severity: P1
+    operator: ">"
+    threshold: 0.25
+    for: 5m
+    promql: sum(rate(kubeoncall_sandbox_controller_requests_total{outcome="error"}[5m])) / clamp_min(sum(rate(kubeoncall_sandbox_controller_requests_total[5m])), 0.001) > 0.25
+    window: 15m
+    recover: sandbox_controller_error_rate < 0.10 for 10m
+    runbookId: runbook-kubeoncall-sandbox
+    owner: platform
+    ragFilters: {document_type: runbook, category: kubeoncall-sandbox}
+    labels: {team: platform}
+    actions:
+      workflowTemplate: workload
+      notify: oncall
+      autoSilence: false
+
+  - id: kubeoncall-sandbox-timed-out
+    name: KubeOnCallSandboxTimedOut
+    category: kubeoncall-sandbox
+    metricName: kubeoncall.sandbox.timed_out
+    resourceType: service
+    severity: P2
+    operator: ">"
+    threshold: 0
+    promql: sum(increase(kubeoncall_sandbox_run_events_total{event="timed_out"}[5m])) > 0
+    window: 15m
+    recover: no sandbox timeout event for 10m
+    runbookId: runbook-kubeoncall-sandbox
+    owner: platform
+    ragFilters: {document_type: runbook, category: kubeoncall-sandbox}
+    labels: {team: platform}
+    actions:
+      workflowTemplate: workload
+      notify: oncall
+      autoSilence: false
+
+  # ==================== Node monitoring ====================
+  - id: node-down
+    name: NodeDown
+    category: node-monitoring
+    metricName: prometheus.up
+    resourceType: node
+    severity: P1
+    for: 2m
+    promql: up{job="node-exporter"} == 0
+    window: 5m
+    recover: up == 1 for 5m
+    runbookId: runbook-node-notready
+    owner: infra
+    ragFilters: {document_type: runbook, category: node-monitoring}
+    labels: {team: infra}
+    actions:
+      workflowTemplate: node-mvp
+      notify: oncall
+      autoSilence: false
+
+  - id: node-cpu-high
+    name: NodeCPUHigh
+    category: node-monitoring
+    metricName: node.cpu.usage_percent
+    resourceType: node
+    severity: P2
+    operator: ">"
+    threshold: 85
+    for: 5m
+    promql: 100 - (avg by (cluster, node, instance) (rate(node_cpu_seconds_total{job="node-exporter",mode="idle"}[5m])) * 100) > 85
+    window: 5m
+    recover: cpu_usage_percent < 75 for 10m
+    runbookId: runbook-host-cpu-high
+    owner: infra
+    ragFilters: {document_type: runbook, category: node-monitoring}
+    labels: {team: infra}
+    actions:
+      workflowTemplate: node-mvp
+      notify: oncall
+      autoSilence: false
+
+  - id: node-memory-low
+    name: NodeMemoryLow
+    category: node-monitoring
+    metricName: node.memory.available_percent
+    resourceType: node
+    severity: P2
+    operator: "<"
+    threshold: 15
+    for: 5m
+    promql: node_memory_MemAvailable_bytes{job="node-exporter"} / node_memory_MemTotal_bytes{job="node-exporter"} * 100 < 15
+    window: 5m
+    recover: available_percent >= 20 for 10m
+    runbookId: runbook-host-memory-pressure
+    owner: infra
+    ragFilters: {document_type: runbook, category: node-monitoring}
+    labels: {team: infra}
+    actions:
+      workflowTemplate: node-mvp
+      notify: oncall
+      autoSilence: false
+
+  - id: node-disk-high
+    name: NodeDiskHigh
+    category: node-monitoring
+    metricName: node.filesystem.usage_percent
+    resourceType: node
+    severity: P2
+    operator: ">"
+    threshold: 85
+    for: 5m
+    promql: 100 - (node_filesystem_avail_bytes{job="node-exporter",fstype!~"tmpfs|overlay"} / node_filesystem_size_bytes{job="node-exporter",fstype!~"tmpfs|overlay"} * 100) > 85
+    window: 5m
+    recover: filesystem_usage_percent < 80 for 10m
+    runbookId: runbook-host-disk-usage
+    owner: infra
+    ragFilters: {document_type: runbook, category: node-monitoring}
+    labels: {team: infra}
+    actions:
+      workflowTemplate: node-mvp
+      notify: oncall
+      autoSilence: false
+
+  - id: node-inode-high
+    name: NodeInodeHigh
+    category: node-monitoring
+    metricName: node.filesystem.inode_usage_percent
+    resourceType: node
+    severity: P2
+    operator: ">"
+    threshold: 85
+    for: 5m
+    promql: 100 - (node_filesystem_files_free{job="node-exporter",fstype!~"tmpfs|overlay"} / node_filesystem_files{job="node-exporter",fstype!~"tmpfs|overlay"} * 100) > 85
+    window: 5m
+    recover: inode_usage_percent < 80 for 10m
+    runbookId: runbook-host-inode-usage
+    owner: infra
+    ragFilters: {document_type: runbook, category: node-monitoring}
+    labels: {team: infra}
+    actions:
+      workflowTemplate: node-mvp
+      notify: oncall
+      autoSilence: false
+
+  - id: node-conntrack-pressure
+    name: NodeConntrackPressure
+    category: node-network
+    metricName: node.network.conntrack_usage_percent
+    resourceType: node
+    severity: P1
+    operator: ">"
+    threshold: 85
+    for: 5m
+    promql: 100 * node_nf_conntrack_entries{job="node-exporter"} / clamp_min(node_nf_conntrack_entries_limit{job="node-exporter"}, 1) > 85
+    window: 15m
+    recover: conntrack_usage_percent < 75 for 10m
+    runbookId: runbook-network-conntrack
+    owner: infra
+    ragFilters: {document_type: runbook, category: network}
+    labels: {team: infra}
+    actions:
+      workflowTemplate: node-mvp
+      notify: oncall
+      autoSilence: false
+
+  - id: node-clock-offset-high
+    name: NodeClockOffsetHigh
+    category: node-time
+    metricName: node.time.clock_offset_seconds
+    resourceType: node
+    severity: P1
+    operator: ">"
+    threshold: 1
+    for: 5m
+    promql: abs(node_timex_offset_seconds{job="node-exporter"}) > 1
+    window: 15m
+    recover: clock_offset_seconds < 0.1 for 10m
+    runbookId: runbook-time-sync
+    owner: infra
+    ragFilters: {document_type: runbook, category: infrastructure}
+    labels: {team: infra}
+    actions:
+      workflowTemplate: node-mvp
+      notify: oncall
+      autoSilence: false
+
+  - id: node-filesystem-readonly
+    name: NodeFilesystemReadOnly
+    category: node-storage
+    metricName: node.filesystem.readonly
+    resourceType: node
+    severity: P1
+    operator: ">"
+    threshold: 0
+    for: 2m
+    promql: node_filesystem_readonly{job="node-exporter",fstype!~"tmpfs|overlay"} == 1
+    window: 15m
+    recover: filesystem_readonly == 0 for 10m
+    runbookId: runbook-host-disk-usage
+    owner: infra
+    ragFilters: {document_type: runbook, category: host}
+    labels: {team: infra}
+    actions:
+      workflowTemplate: node-mvp
+      notify: oncall
+      autoSilence: false
+
+  - id: node-file-descriptor-pressure
+    name: NodeFileDescriptorPressure
+    category: node-runtime
+    metricName: node.file_descriptor.usage_percent
+    resourceType: node
+    severity: P2
+    operator: ">"
+    threshold: 80
+    for: 5m
+    promql: 100 * node_filefd_allocated{job="node-exporter"} / clamp_min(node_filefd_maximum{job="node-exporter"}, 1) > 80
+    window: 15m
+    recover: file_descriptor_usage_percent < 70 for 10m
+    runbookId: runbook-host-file-descriptor-pressure
+    owner: infra
+    ragFilters: {document_type: runbook, category: infrastructure}
+    labels: {team: infra}
+    actions:
+      workflowTemplate: node-mvp
+      notify: oncall
+      autoSilence: false
+
+  - id: node-not-ready
+    name: NodeNotReady
+    category: k8s-node
+    metricName: kube.node.ready
+    resourceType: node
+    severity: P1
+    for: 5m
+    promql: kube_node_status_condition{condition="Ready",status="true"} == 0
+    window: 10m
+    recover: ready == true for 5m
+    runbookId: runbook-node-notready
+    owner: infra
+    ragFilters: {document_type: runbook, category: k8s-node}
+    labels: {team: infra}
+    actions:
+      workflowTemplate: node-mvp
+      notify: oncall
+      autoSilence: false
+
+  - id: pod-pending-too-long
+    name: PodPendingTooLong
+    category: k8s-pod
+    metricName: kube.pod.pending
+    resourceType: pod
+    severity: P2
+    for: 10m
+    promql: kube_pod_status_phase{phase="Pending"} == 1
+    window: 15m
+    recover: pending == 0 for 5m
+    runbookId: runbook-cluster-capacity
+    owner: platform
+    ragFilters: {document_type: runbook, category: capacity}
+    labels: {team: platform}
+    actions:
+      workflowTemplate: k8s-pod
+      notify: oncall
+      autoSilence: false

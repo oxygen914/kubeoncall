@@ -1,0 +1,50 @@
+package com.kubeoncall.common.config;
+
+class EndpointProperties {
+
+    private String endpoint;
+    private int timeoutMillis = 3000;
+    private String bearerToken;
+    private String mutationEndpoint;
+    private String mutationBearerToken;
+
+    public String getEndpoint() {
+        return endpoint;
+    }
+
+    public void setEndpoint(String endpoint) {
+        this.endpoint = endpoint;
+    }
+
+    public int getTimeoutMillis() {
+        return timeoutMillis;
+    }
+
+    public void setTimeoutMillis(int timeoutMillis) {
+        this.timeoutMillis = timeoutMillis;
+    }
+
+    public String getBearerToken() {
+        return bearerToken;
+    }
+
+    public void setBearerToken(String bearerToken) {
+        this.bearerToken = bearerToken;
+    }
+
+    public String getMutationEndpoint() {
+        return mutationEndpoint;
+    }
+
+    public void setMutationEndpoint(String mutationEndpoint) {
+        this.mutationEndpoint = mutationEndpoint;
+    }
+
+    public String getMutationBearerToken() {
+        return mutationBearerToken;
+    }
+
+    public void setMutationBearerToken(String mutationBearerToken) {
+        this.mutationBearerToken = mutationBearerToken;
+    }
+}

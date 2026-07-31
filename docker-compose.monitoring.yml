@@ -1,0 +1,12 @@
+services:
+  prometheus:
+    volumes:
+      - ./deploy/prometheus/prometheus-single-node.yml:/etc/prometheus/prometheus.yml:ro
+    networks:
+      - default
+      - minikube-monitoring
+
+networks:
+  minikube-monitoring:
+    external: true
+    name: kubeoncall-monitoring

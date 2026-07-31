@@ -1,0 +1,540 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "kubeoncall.fullname" . }}
+  labels:
+    {{- include "kubeoncall.labels" . | nindent 4 }}
+    app.kubernetes.io/component: backend
+spec:
+  {{- if .Values.quickstart.enabled }}
+  replicas: 1
+  {{- else if not .Values.autoscaling.enabled }}
+  replicas: {{ .Values.replicaCount }}
+  {{- end }}
+  revisionHistoryLimit: {{ .Values.deployment.revisionHistoryLimit }}
+  progressDeadlineSeconds: {{ .Values.deployment.progressDeadlineSeconds }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: {{ .Values.deployment.strategy.maxUnavailable }}
+      maxSurge: {{ .Values.deployment.strategy.maxSurge }}
+  selector:
+    matchLabels:
+      {{- include "kubeoncall.labels" . | nindent 6 }}
+      app.kubernetes.io/component: backend
+  template:
+    metadata:
+      labels:
+        {{- include "kubeoncall.labels" . | nindent 8 }}
+        app.kubernetes.io/component: backend
+    spec:
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      {{- if and (not .Values.quickstart.enabled) .Values.podAntiAffinity.enabled }}
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                topologyKey: {{ .Values.podAntiAffinity.topologyKey | quote }}
+                labelSelector:
+                  matchLabels:
+                    app.kubernetes.io/name: {{ include "kubeoncall.name" . }}
+                    app.kubernetes.io/instance: {{ .Release.Name }}
+                    app.kubernetes.io/component: backend
+      {{- end }}
+      {{- if and (not .Values.quickstart.enabled) .Values.topologySpread.enabled }}
+      topologySpreadConstraints:
+        {{- range .Values.topologySpread.topologyKeys }}
+        - maxSkew: {{ $.Values.topologySpread.maxSkew }}
+          topologyKey: {{ . | quote }}
+          whenUnsatisfiable: {{ $.Values.topologySpread.whenUnsatisfiable }}
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: {{ include "kubeoncall.name" $ }}
+              app.kubernetes.io/instance: {{ $.Release.Name }}
+              app.kubernetes.io/component: backend
+        {{- end }}
+      {{- end }}
+      {{- with .Values.global.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- if .Values.quickstart.enabled }}
+      # The application owns Quickstart Flyway execution. Wait for both MySQL and its init scripts
+      # to create the migration identity, otherwise the first Pod would crash-loop during image
+      # pulls even though the release is healthy once dependencies settle.
+      initContainers:
+        - name: wait-for-mysql
+          image: {{ .Values.quickstart.mysql.image | quote }}
+          imagePullPolicy: IfNotPresent
+          command: ["/bin/sh", "-ec"]
+          args:
+            - >-
+              until mysql --connect-timeout=2
+              --host={{ .Values.mysql.inClusterHost | quote }}
+              --user="${MYSQL_MIGRATION_USER}"
+              --password="${MYSQL_MIGRATION_PASSWORD}"
+              --execute='SELECT 1'; do sleep 2; done
+          env:
+            - name: MYSQL_MIGRATION_USER
+              value: {{ .Values.mysql.migrationUsername | quote }}
+            - name: MYSQL_MIGRATION_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secrets.existingSecret }}
+                  key: {{ .Values.secrets.mysqlMigrationPasswordKey }}
+          resources:
+            requests: {cpu: 10m, memory: 32Mi}
+            limits: {cpu: 100m, memory: 128Mi}
+          securityContext:
+            {{- toYaml .Values.containerSecurityContext | nindent 12 }}
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      {{- end }}
+      containers:
+        - name: kubeoncall
+          image: {{ include "kubeoncall.imageRef" (dict "root" . "image" .Values.image) | quote }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            {{- toYaml .Values.containerSecurityContext | nindent 12 }}
+          ports:
+            - name: http
+              containerPort: 8080
+          env:
+            - name: SPRING_PROFILES_ACTIVE
+              value: {{ if or .Values.mysql.enabled .Values.quickstart.enabled }}docker,{{ .Values.mysql.profile }}{{ else }}docker{{ end }}
+            - name: KUBEONCALL_API_AUTH_ENABLED
+              value: {{ and .Values.config.apiAuthEnabled .Values.legacyApi.enabled | quote }}
+            - name: KUBEONCALL_MYSQL_ENABLED
+              value: {{ or .Values.mysql.enabled .Values.quickstart.enabled | quote }}
+            - name: KUBEONCALL_API_VIEWER_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secrets.existingSecret }}
+                  key: {{ .Values.secrets.apiViewerTokenKey }}
+                  optional: true
+            - name: KUBEONCALL_API_OPERATOR_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secrets.existingSecret }}
+                  key: {{ .Values.secrets.apiOperatorTokenKey }}
+                  optional: true
+            - name: KUBEONCALL_API_ADMIN_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secrets.existingSecret }}
+                  key: {{ .Values.secrets.apiAdminTokenKey }}
+                  optional: {{ not (and .Values.config.apiAuthEnabled .Values.legacyApi.enabled) }}
+            - name: APPROVAL_RESUME_LEASE_SECONDS
+              value: {{ .Values.config.approvalResumeLeaseSeconds | quote }}
+            - name: KUBEONCALL_REALTIME_CLUSTER_TRANSPORT
+              value: {{ .Values.config.realtimeClusterTransport | quote }}
+            - name: KUBEONCALL_DEPENDENCY_CIRCUIT_BREAKER_ENABLED
+              value: {{ .Values.config.dependencyCircuitBreakerEnabled | quote }}
+            - name: KUBEONCALL_DEPENDENCY_CIRCUIT_BREAKER_FAILURE_THRESHOLD
+              value: {{ .Values.config.dependencyCircuitBreakerFailureThreshold | quote }}
+            - name: KUBEONCALL_DEPENDENCY_CIRCUIT_BREAKER_RESET_TIMEOUT_SECONDS
+              value: {{ .Values.config.dependencyCircuitBreakerResetTimeoutSeconds | quote }}
+            - name: KUBEONCALL_SANDBOX_ENABLED
+              value: {{ .Values.config.sandboxEnabled | quote }}
+            - name: KUBEONCALL_SANDBOX_FIXED_DIAGNOSTIC
+              value: {{ .Values.config.sandboxFixedDiagnostic | quote }}
+            - name: KUBEONCALL_SANDBOX_GENERATED_CODE
+              value: {{ .Values.config.sandboxGeneratedCode | quote }}
+            - name: KUBEONCALL_SANDBOX_MANIFEST_VALIDATION
+              value: {{ .Values.config.sandboxManifestValidation | quote }}
+            - name: KUBEONCALL_SANDBOX_REMEDIATION_SIMULATION
+              value: {{ .Values.config.sandboxRemediationSimulation | quote }}
+            - name: KUBEONCALL_SANDBOX_AGENT_AUTO_ROUTE_ENABLED
+              value: {{ .Values.config.sandboxAgentAutoRouteEnabled | quote }}
+            {{- if .Values.sandboxTools.catalog.enabled }}
+            - name: KUBEONCALL_SANDBOX_TOOL_CATALOG_PATH
+              value: {{ .Values.sandboxTools.catalog.mountPath | quote }}
+            {{- end }}
+            {{- if .Values.sandboxController.enabled }}
+            - name: KUBEONCALL_SANDBOX_CONTROLLER_ENDPOINT
+              value: {{ default (printf "http://sandbox-controller.%s.svc.cluster.local:%v" .Values.sandboxController.namespace .Values.sandboxController.service.port) .Values.sandboxController.backendEndpoint | quote }}
+            - name: KUBEONCALL_SANDBOX_CONTROLLER_KEY_ID
+              value: {{ .Values.sandboxController.backendKeyId | quote }}
+            - name: KUBEONCALL_SANDBOX_CONTROLLER_HMAC_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secrets.existingSecret }}
+                  key: {{ .Values.sandboxController.backendHmacSecretKey }}
+            {{- end }}
+            - name: SPRING_DATA_REDIS_HOST
+              value: {{ .Values.config.redisHost | quote }}
+            - name: SPRING_ELASTICSEARCH_URIS
+              value: {{ .Values.config.elasticsearchUri | quote }}
+            - name: KUBEONCALL_STORAGE_MINIO_ENDPOINT
+              value: {{ if .Values.quickstart.enabled }}{{ printf "http://minio.%s.svc.cluster.local:9000" .Release.Namespace | quote }}{{ else }}{{ .Values.config.minioEndpoint | quote }}{{ end }}
+            {{- if not .Values.config.springAiEnabled }}
+            - name: SPRING_AUTOCONFIGURE_EXCLUDE
+              value: org.springframework.ai.autoconfigure.openai.OpenAiAutoConfiguration
+            {{- end }}
+            - name: SPRING_AI_OPENAI_BASE_URL
+              value: {{ .Values.config.springAiBaseUrl | quote }}
+            - name: SPRING_AI_OPENAI_CHAT_OPTIONS_MODEL
+              value: {{ .Values.config.springAiChatModel | quote }}
+            - name: KUBEONCALL_PLANNER_MODE
+              value: {{ .Values.config.plannerMode | quote }}
+            - name: KUBEONCALL_PLANNER_PROVIDER
+              value: {{ .Values.config.plannerProvider | quote }}
+            - name: KUBEONCALL_PLANNER_MODEL
+              value: {{ .Values.config.plannerModel | quote }}
+            - name: KUBEONCALL_PLANNER_SCHEMA_VERSION
+              value: {{ .Values.config.plannerSchemaVersion | quote }}
+            - name: KUBEONCALL_PLANNER_MAX_RESPONSE_CHARS
+              value: {{ .Values.config.plannerMaxResponseChars | quote }}
+            - name: KUBEONCALL_PLANNER_CONNECT_TIMEOUT_MILLIS
+              value: {{ .Values.config.plannerConnectTimeoutMillis | quote }}
+            - name: KUBEONCALL_PLANNER_READ_TIMEOUT_MILLIS
+              value: {{ .Values.config.plannerReadTimeoutMillis | quote }}
+            - name: KUBEONCALL_PLANNER_CANARY_ENABLED
+              value: {{ .Values.config.plannerCanaryEnabled | quote }}
+            - name: KUBEONCALL_PLANNER_CANARY_FAIL_FAST
+              value: {{ .Values.config.plannerCanaryFailFast | quote }}
+            - name: KUBEONCALL_EVIDENCE_PROMETHEUS_ENABLED
+              value: {{ .Values.config.evidencePrometheusEnabled | quote }}
+            - name: KUBEONCALL_EVIDENCE_LOKI_ENABLED
+              value: {{ .Values.config.evidenceLokiEnabled | quote }}
+            - name: KUBEONCALL_EVIDENCE_K8S_RESOURCE_STATE_ENABLED
+              value: {{ .Values.config.evidenceK8sResourceStateEnabled | quote }}
+            - name: KUBEONCALL_EVIDENCE_K8S_EVENTS_ENABLED
+              value: {{ .Values.config.evidenceK8sEventsEnabled | quote }}
+            - name: KUBEONCALL_EVIDENCE_POD_LOGS_ENABLED
+              value: {{ .Values.config.evidencePodLogsEnabled | quote }}
+            - name: KUBEONCALL_ASK_DURABLE_WORKFLOW_ENABLED
+              value: {{ .Values.config.askDurableWorkflowEnabled | quote }}
+            - name: KUBEONCALL_OPERATION_CLOSURE_ENABLED
+              value: {{ .Values.config.operationClosureEnabled | quote }}
+            - name: KUBEONCALL_CONCLUSION_EVIDENCE_UI_ENABLED
+              value: {{ .Values.config.conclusionEvidenceUiEnabled | quote }}
+            - name: KUBEONCALL_EVIDENCE_LOOKBACK_MINUTES
+              value: {{ .Values.config.evidenceLookbackMinutes | quote }}
+            - name: KUBEONCALL_EVIDENCE_COLLECTION_TIMEOUT_MILLIS
+              value: {{ .Values.config.evidenceCollectionTimeoutMillis | quote }}
+            - name: KUBEONCALL_EVIDENCE_MAX_SNIPPET_CHARS
+              value: {{ .Values.config.evidenceMaxSnippetChars | quote }}
+            - name: KUBEONCALL_LOKI_MAX_WINDOW_MINUTES
+              value: {{ .Values.config.lokiMaxWindowMinutes | quote }}
+            - name: KUBEONCALL_LOKI_MAX_LINES
+              value: {{ .Values.config.lokiMaxLines | quote }}
+            - name: KUBEONCALL_LOKI_MAX_RESPONSE_BYTES
+              value: {{ .Values.config.lokiMaxResponseBytes | quote }}
+            - name: KUBEONCALL_EVIDENCE_ALLOWED_CLUSTERS
+              value: {{ .Values.config.evidenceAllowedClusters | quote }}
+            - name: KUBEONCALL_EVIDENCE_ALLOWED_NAMESPACES
+              value: {{ .Values.config.evidenceAllowedNamespaces | quote }}
+            - name: RAG_EMBEDDING_ENDPOINT
+              value: {{ .Values.config.embeddingEndpoint | quote }}
+            - name: RAG_EMBEDDING_MODEL
+              value: {{ .Values.config.embeddingModel | quote }}
+            - name: RAG_EMBEDDING_VERSION
+              value: {{ .Values.config.embeddingVersion | quote }}
+            - name: RAG_EMBEDDING_DIMENSIONS
+              value: {{ .Values.config.embeddingDimensions | quote }}
+            - name: RAG_EMBEDDING_BATCH_SIZE
+              value: {{ .Values.config.embeddingBatchSize | quote }}
+            - name: RAG_EMBEDDING_TIMEOUT_MILLIS
+              value: {{ .Values.config.embeddingTimeoutMillis | quote }}
+            - name: RAG_RERANK_ENDPOINT
+              value: {{ .Values.config.rerankEndpoint | quote }}
+            - name: RAG_RERANK_MODEL
+              value: {{ .Values.config.rerankModel | quote }}
+            - name: RAG_RERANK_TIMEOUT_MILLIS
+              value: {{ .Values.config.rerankTimeoutMillis | quote }}
+            - name: RAG_AUGMENTATION_ENABLED
+              value: {{ .Values.config.augmentationEnabled | quote }}
+            - name: RAG_AUGMENTATION_ENDPOINT
+              value: {{ .Values.config.augmentationEndpoint | quote }}
+            - name: RAG_AUGMENTATION_MODEL
+              value: {{ .Values.config.augmentationModel | quote }}
+            - name: RAG_AUGMENTATION_VERSION
+              value: {{ .Values.config.augmentationVersion | quote }}
+            - name: RAG_AUGMENTATION_CONCURRENCY
+              value: {{ .Values.config.augmentationConcurrency | quote }}
+            - name: RAG_AUGMENTATION_TIMEOUT_MILLIS
+              value: {{ .Values.config.augmentationTimeoutMillis | quote }}
+            - name: RAG_AUTO_BIND_DATASET_VERSION
+              value: {{ .Values.config.autoBindDatasetVersion | quote }}
+            - name: RAG_JSONL_MAX_PAYLOAD_BYTES
+              value: {{ .Values.config.ragJsonlMaxPayloadBytes | int64 | quote }}
+            - name: RAG_JSONL_MAX_LINES
+              value: {{ .Values.config.ragJsonlMaxLines | quote }}
+            - name: RAG_DOCUMENT_MAX_CONTENT_BYTES
+              value: {{ .Values.config.ragDocumentMaxContentBytes | int64 | quote }}
+            - name: MEMORY_LLM_EXTRACTION_ENABLED
+              value: {{ .Values.config.memoryLlmExtractionEnabled | quote }}
+            - name: MEMORY_LLM_EXTRACTION_ENDPOINT
+              value: {{ .Values.config.memoryLlmExtractionEndpoint | quote }}
+            - name: MEMORY_LLM_EXTRACTION_MODEL
+              value: {{ .Values.config.memoryLlmExtractionModel | quote }}
+            - name: MEMORY_SEMANTIC_DUPLICATE_ENABLED
+              value: {{ .Values.config.memorySemanticDuplicateEnabled | quote }}
+            - name: MEMORY_SEMANTIC_DUPLICATE_WEIGHT
+              value: {{ .Values.config.memorySemanticDuplicateWeight | quote }}
+            - name: MEMORY_TOKENIZER_ENABLED
+              value: {{ .Values.config.memoryTokenizerEnabled | quote }}
+            - name: MEMORY_TOKENIZER_ENDPOINT
+              value: {{ .Values.config.memoryTokenizerEndpoint | quote }}
+            - name: MEMORY_TOKENIZER_MODEL
+              value: {{ .Values.config.memoryTokenizerModel | quote }}
+            - name: MEMORY_TOKENIZER_MODE
+              value: {{ .Values.config.memoryTokenizerMode | quote }}
+            - name: MEMORY_TOKENIZER_CHAT_OVERHEAD_TOKENS
+              value: {{ .Values.config.memoryTokenizerChatOverheadTokens | quote }}
+            - name: MCP_ENDPOINT
+              value: {{ .Values.config.mcpEndpoint | quote }}
+            - name: MCP_AUTH_MODE
+              value: {{ .Values.config.mcpAuthMode | quote }}
+            - name: MCP_OAUTH_TOKEN_ENDPOINT
+              value: {{ .Values.config.mcpOauthTokenEndpoint | quote }}
+            - name: MCP_OAUTH_CLIENT_ID
+              value: {{ .Values.config.mcpOauthClientId | quote }}
+            - name: MCP_OAUTH_CLIENT_AUTH_METHOD
+              value: {{ .Values.config.mcpOauthClientAuthMethod | quote }}
+            - name: MCP_OAUTH_SCOPE
+              value: {{ .Values.config.mcpOauthScope | quote }}
+            - name: MCP_OAUTH_RESOURCE
+              value: {{ .Values.config.mcpOauthResource | quote }}
+            - name: MCP_OAUTH_REFRESH_SKEW_SECONDS
+              value: {{ .Values.config.mcpOauthRefreshSkewSeconds | quote }}
+            - name: MCP_PROTOCOL
+              value: {{ .Values.config.mcpProtocol | quote }}
+            - name: MCP_PROTOCOL_VERSION
+              value: {{ .Values.config.mcpProtocolVersion | quote }}
+            - name: MCP_CLIENT_NAME
+              value: {{ .Values.config.mcpClientName | quote }}
+            - name: MCP_CLIENT_VERSION
+              value: {{ .Values.config.mcpClientVersion | quote }}
+            - name: MCP_DISCOVERY_ENABLED
+              value: {{ .Values.config.mcpDiscoveryEnabled | quote }}
+            - name: MCP_DISCOVERY_ENDPOINT
+              value: {{ .Values.config.mcpDiscoveryEndpoint | quote }}
+            - name: MCP_DISCOVERY_CACHE_SECONDS
+              value: {{ .Values.config.mcpDiscoveryCacheSeconds | quote }}
+            - name: MCP_DISCOVERY_MAX_PAGES
+              value: {{ .Values.config.mcpDiscoveryMaxPages | quote }}
+            - name: MCP_DISCOVERY_REFRESH_MILLIS
+              value: {{ .Values.config.mcpDiscoveryRefreshMillis | quote }}
+            - name: MCP_DYNAMIC_INVOCATION_ENABLED
+              value: {{ .Values.config.mcpDynamicInvocationEnabled | quote }}
+            - name: MCP_DYNAMIC_MAX_TOOLS
+              value: {{ .Values.config.mcpDynamicMaxTools | quote }}
+            - name: MCP_MAX_RESPONSE_BYTES
+              value: {{ .Values.config.mcpMaxResponseBytes | quote }}
+            - name: MCP_ALLOWED_TOOLS
+              value: {{ .Values.config.mcpAllowedTools | quote }}
+            - name: CHANGE_EVENT_WEBHOOK_ENABLED
+              value: {{ .Values.config.changeEventWebhookEnabled | quote }}
+            - name: CHANGE_EVENT_WEBHOOK_AUTH_MODE
+              value: {{ .Values.config.changeEventWebhookAuthMode | quote }}
+            - name: CHANGE_EVENT_WEBHOOK_MAX_PAYLOAD_BYTES
+              value: {{ .Values.config.changeEventWebhookMaxPayloadBytes | int64 | quote }}
+            - name: KUBERNETES_TOOL_ENDPOINT
+              value: {{ .Values.config.kubernetesToolEndpoint | quote }}
+            {{- if .Values.config.kubernetesToolAuthEnabled }}
+            - name: KUBERNETES_TOOL_BEARER_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secrets.existingSecret }}
+                  key: {{ .Values.secrets.kubernetesToolBearerTokenKey }}
+            {{- end }}
+            - name: KUBERNETES_MUTATION_TOOL_ENDPOINT
+              value: {{ .Values.config.kubernetesMutationToolEndpoint | quote }}
+            {{- if .Values.config.kubernetesMutationToolAuthEnabled }}
+            - name: KUBERNETES_MUTATION_TOOL_BEARER_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secrets.existingSecret }}
+                  key: {{ .Values.secrets.kubernetesMutationToolBearerTokenKey }}
+            {{- end }}
+            - name: PROMETHEUS_TOOL_ENDPOINT
+              value: {{ .Values.config.prometheusToolEndpoint | quote }}
+            - name: ALERTMANAGER_TOOL_ENDPOINT
+              value: {{ .Values.config.alertmanagerToolEndpoint | quote }}
+            - name: ALERT_NOTIFICATION_WEBHOOK_ENDPOINT
+              value: {{ .Values.config.alertNotificationWebhookEndpoint | quote }}
+            - name: ALERT_NOTIFICATION_WEBHOOK_TIMEOUT_MILLIS
+              value: {{ .Values.config.alertNotificationWebhookTimeoutMillis | quote }}
+            - name: INCIDENT_TOOL_ENDPOINT
+              value: {{ .Values.config.incidentToolEndpoint | quote }}
+            - name: DEVICE_TOOL_ENDPOINT
+              value: {{ .Values.config.deviceToolEndpoint | quote }}
+            - name: DATABASE_TOOL_ENDPOINT
+              value: {{ .Values.config.databaseToolEndpoint | quote }}
+            - name: MINIO_ROOT_USER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secrets.existingSecret }}
+                  key: {{ .Values.secrets.minioAccessKeyKey }}
+            - name: MINIO_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secrets.existingSecret }}
+                  key: {{ .Values.secrets.minioSecretKeyKey }}
+            - name: MINIO_BUCKET
+              value: {{ if .Values.quickstart.enabled }}{{ .Values.quickstart.minio.bucket | quote }}{{ else }}{{ .Values.config.minioBucket | quote }}{{ end }}
+            - name: ALIYUN_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secrets.existingSecret }}
+                  key: {{ .Values.secrets.aliyunApiKeyKey }}
+                  optional: {{ not (or .Values.config.springAiEnabled .Values.config.augmentationEnabled .Values.config.memoryLlmExtractionEnabled .Values.config.memoryTokenizerEnabled) }}
+            - name: SPRING_AI_OPENAI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secrets.existingSecret }}
+                  key: {{ .Values.secrets.aliyunApiKeyKey }}
+                  optional: {{ not (or .Values.config.springAiEnabled .Values.config.augmentationEnabled .Values.config.memoryLlmExtractionEnabled .Values.config.memoryTokenizerEnabled) }}
+            - name: MCP_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secrets.existingSecret }}
+                  key: {{ .Values.secrets.mcpApiKeyKey }}
+                  optional: {{ not (and (or .Values.config.mcpDiscoveryEnabled .Values.config.mcpDynamicInvocationEnabled) (eq .Values.config.mcpAuthMode "static_bearer")) }}
+            - name: MCP_OAUTH_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secrets.existingSecret }}
+                  key: {{ .Values.secrets.mcpOauthClientSecretKey }}
+                  optional: {{ not (and (or .Values.config.mcpDiscoveryEnabled .Values.config.mcpDynamicInvocationEnabled) (eq .Values.config.mcpAuthMode "oauth_client_credentials")) }}
+            - name: ALERTMANAGER_WEBHOOK_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secrets.existingSecret }}
+                  key: {{ .Values.secrets.alertmanagerWebhookTokenKey }}
+                  optional: true
+            - name: CHANGE_EVENT_WEBHOOK_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secrets.existingSecret }}
+                  key: {{ .Values.secrets.changeEventWebhookTokenKey }}
+                  optional: {{ not .Values.config.changeEventWebhookEnabled }}
+            - name: CHANGE_EVENT_GITHUB_WEBHOOK_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secrets.existingSecret }}
+                  key: {{ .Values.secrets.changeEventGithubWebhookSecretKey }}
+                  optional: true
+            - name: CHANGE_EVENT_GITLAB_WEBHOOK_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secrets.existingSecret }}
+                  key: {{ .Values.secrets.changeEventGitlabWebhookTokenKey }}
+                  optional: true
+            - name: CHANGE_EVENT_JENKINS_WEBHOOK_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secrets.existingSecret }}
+                  key: {{ .Values.secrets.changeEventJenkinsWebhookTokenKey }}
+                  optional: true
+            - name: CHANGE_EVENT_ARGOCD_WEBHOOK_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secrets.existingSecret }}
+                  key: {{ .Values.secrets.changeEventArgocdWebhookTokenKey }}
+                  optional: true
+            {{- if or .Values.mysql.enabled .Values.quickstart.enabled }}
+            - name: SPRING_DATASOURCE_URL
+              value: {{ if .Values.mysql.url }}{{ .Values.mysql.url | quote }}{{ else }}{{ printf "jdbc:mysql://%s:3306/%s?useUnicode=true&characterEncoding=utf8&serverTimezone=UTC&allowPublicKeyRetrieval=true&useSSL=false" .Values.mysql.inClusterHost .Values.mysql.database | quote }}{{ end }}
+            - name: SPRING_DATASOURCE_USERNAME
+              value: {{ .Values.mysql.username | quote }}
+            - name: SPRING_DATASOURCE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secrets.existingSecret }}
+                  key: {{ .Values.secrets.mysqlPasswordKey }}
+            # Production schema changes run in the Helm migration Job. Quickstart lets the
+            # application run Flyway with the separate DDL identity so bundled MySQL can start in
+            # the same release without a pre-install hook dependency cycle.
+            - name: SPRING_FLYWAY_ENABLED
+              value: {{ or .Values.mysql.flywayInApplication .Values.quickstart.enabled | quote }}
+            {{- if or .Values.mysql.flywayInApplication .Values.quickstart.enabled }}
+            - name: SPRING_FLYWAY_USER
+              value: {{ .Values.mysql.migrationUsername | quote }}
+            - name: SPRING_FLYWAY_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secrets.existingSecret }}
+                  key: {{ .Values.secrets.mysqlMigrationPasswordKey }}
+            {{- end }}
+            - name: KUBEONCALL_AUTH_SESSION_COOKIE_SECURE
+              value: {{ ternary false .Values.mysql.sessionCookieSecure .Values.quickstart.enabled | quote }}
+            - name: KUBEONCALL_AUTH_SESSION_IDLE_TIMEOUT_SECONDS
+              value: {{ .Values.mysql.sessionIdleTimeoutSeconds | quote }}
+            - name: KUBEONCALL_AUTH_SESSION_MAX_TIMEOUT_SECONDS
+              value: {{ .Values.mysql.sessionMaxTimeoutSeconds | quote }}
+            - name: KUBEONCALL_AUTH_LOGIN_MAX_ATTEMPTS
+              value: {{ .Values.mysql.loginMaxAttempts | quote }}
+            - name: KUBEONCALL_AUTH_LOGIN_LOCK_DURATION_SECONDS
+              value: {{ .Values.mysql.loginLockDurationSeconds | quote }}
+            - name: KUBEONCALL_AUTH_LEGACY_TOKEN_COMPAT
+              value: {{ ternary false .Values.mysql.legacyTokenCompat .Values.quickstart.enabled | quote }}
+            - name: KUBEONCALL_BOOTSTRAP_ADMIN_ENABLED
+              value: {{ or .Values.mysql.bootstrapAdminEnabled .Values.quickstart.enabled | quote }}
+            - name: KUBEONCALL_BOOTSTRAP_ADMIN_USERNAME
+              value: {{ ternary (default "admin" .Values.mysql.bootstrapAdminUsername) .Values.mysql.bootstrapAdminUsername .Values.quickstart.enabled | quote }}
+            - name: KUBEONCALL_BOOTSTRAP_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secrets.existingSecret }}
+                  key: {{ .Values.secrets.bootstrapAdminPasswordKey }}
+                  optional: true
+            {{- end }}
+            - name: KUBEONCALL_DATA_MIGRATION_ALARM_READ_SOURCE
+              value: {{ .Values.dataMigration.alarmReadSource | quote }}
+            - name: KUBEONCALL_DATA_MIGRATION_ALARM_WRITE_MODE
+              value: {{ .Values.dataMigration.alarmWriteMode | quote }}
+            - name: KUBEONCALL_DATA_MIGRATION_BACKFILL_DRY_RUN
+              value: {{ .Values.dataMigration.backfillDryRun | quote }}
+            - name: KUBEONCALL_DATA_MIGRATION_SHADOW_DIFF_THRESHOLD_PERCENT
+              value: {{ .Values.dataMigration.shadowDiffThresholdPercent | quote }}
+            - name: KUBEONCALL_DATA_MIGRATION_BACKFILL_MAX_ITEMS_PER_SECOND
+              value: {{ .Values.dataMigration.backfillMaxItemsPerSecond | quote }}
+            - name: KUBEONCALL_DATA_MIGRATION_BACKFILL_TASK_TIMEOUT_SECONDS
+              value: {{ .Values.dataMigration.backfillTaskTimeoutSeconds | quote }}
+            - name: KUBEONCALL_DATA_MIGRATION_LEGACY_ACTOR_USERNAME_MAPPINGS
+              value: {{ .Values.dataMigration.legacyActorUsernameMappings | quote }}
+            - name: KUBEONCALL_LEGACY_API_ENABLED
+              value: {{ ternary false .Values.legacyApi.enabled .Values.quickstart.enabled | quote }}
+            - name: SPRING_APPLICATION_JSON
+              value: {{ include "kubeoncall.legacyApiSpringJson" . | quote }}
+          readinessProbe:
+            httpGet: {path: /actuator/health/readiness, port: http}
+            initialDelaySeconds: 20
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: {path: /actuator/health/liveness, port: http}
+            initialDelaySeconds: 30
+            periodSeconds: 20
+          resources:
+            {{- if .Values.quickstart.enabled }}
+            {{- toYaml .Values.quickstart.backendResources | nindent 12 }}
+            {{- else }}
+            {{- toYaml .Values.resources | nindent 12 }}
+            {{- end }}
+          {{- if .Values.sandboxTools.catalog.enabled }}
+          volumeMounts:
+            - name: sandbox-tool-catalog
+              mountPath: {{ .Values.sandboxTools.catalog.mountPath | quote }}
+              subPath: tools.yaml
+              readOnly: true
+            - name: tmp
+              mountPath: /tmp
+          {{- else }}
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+          {{- end }}
+      volumes:
+        - name: tmp
+          emptyDir: {}
+      {{- if .Values.sandboxTools.catalog.enabled }}
+        - name: sandbox-tool-catalog
+          configMap:
+            name: {{ include "kubeoncall.sandboxCatalogName" . }}
+      {{- end }}

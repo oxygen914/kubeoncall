@@ -1,0 +1,1 @@
+{"schemaVersion":"v1","findings":["restart backoff pattern"],"evidenceReferences":["log:pod/api"],"confidence":0.82,"recommendations":["inspect the failing container configuration"]}

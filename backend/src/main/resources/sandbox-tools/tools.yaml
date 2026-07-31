@@ -1,0 +1,64 @@
+tools:
+  - id: log-pattern-analysis
+    version: v1
+    mode: FIXED_DIAGNOSTIC
+    imageDigest: registry.kubeoncall.io/sandbox/log-pattern-analysis@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+    entrypoint: /tool
+    networkEgressPolicy: DNS_AND_ARTIFACT_CHANNEL
+    inputSchemaRef: sandbox-tools/schemas/evidence-v1.json
+    outputSchemaRef: sandbox-tools/schemas/diagnosis-v1.json
+    resources: {cpu: 250m, memory: 256Mi, ephemeralStorage: 512Mi, inputMaxBytes: 52428800, outputMaxBytes: 10485760, logMaxBytes: 2097152, scriptMaxBytes: 262144, timeoutSeconds: 300, maxTimeoutSeconds: 900}
+  - id: kubernetes-consistency
+    version: v1
+    mode: FIXED_DIAGNOSTIC
+    imageDigest: registry.kubeoncall.io/sandbox/kubernetes-consistency@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+    entrypoint: /tool
+    networkEgressPolicy: DNS_AND_ARTIFACT_CHANNEL
+    inputSchemaRef: sandbox-tools/schemas/evidence-v1.json
+    outputSchemaRef: sandbox-tools/schemas/diagnosis-v1.json
+    resources: {cpu: 250m, memory: 256Mi, ephemeralStorage: 512Mi, inputMaxBytes: 52428800, outputMaxBytes: 10485760, logMaxBytes: 2097152, scriptMaxBytes: 262144, timeoutSeconds: 300, maxTimeoutSeconds: 900}
+  - id: configuration-diff
+    version: v1
+    mode: FIXED_DIAGNOSTIC
+    imageDigest: registry.kubeoncall.io/sandbox/configuration-diff@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+    entrypoint: /tool
+    networkEgressPolicy: DNS_AND_ARTIFACT_CHANNEL
+    inputSchemaRef: sandbox-tools/schemas/evidence-v1.json
+    outputSchemaRef: sandbox-tools/schemas/diagnosis-v1.json
+    resources: {cpu: 250m, memory: 256Mi, ephemeralStorage: 512Mi, inputMaxBytes: 52428800, outputMaxBytes: 10485760, logMaxBytes: 2097152, scriptMaxBytes: 262144, timeoutSeconds: 300, maxTimeoutSeconds: 900}
+  - id: generated-python
+    version: v1
+    mode: GENERATED_CODE
+    imageDigest: registry.kubeoncall.io/sandbox/generated-python@sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd
+    entrypoint: /usr/local/bin/koc-run-python
+    networkEgressPolicy: DENY_ALL
+    inputSchemaRef: sandbox-tools/schemas/generated-code-input-v1.json
+    outputSchemaRef: sandbox-tools/schemas/generated-code-result-v1.json
+    resources: {cpu: 500m, memory: 512Mi, ephemeralStorage: 512Mi, inputMaxBytes: 52428800, outputMaxBytes: 1048576, logMaxBytes: 2097152, scriptMaxBytes: 262144, timeoutSeconds: 120, maxTimeoutSeconds: 300}
+  - id: generated-posix-shell
+    version: v1
+    mode: GENERATED_CODE
+    imageDigest: registry.kubeoncall.io/sandbox/generated-posix-shell@sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee
+    entrypoint: /usr/local/bin/koc-run-posix-shell
+    networkEgressPolicy: DENY_ALL
+    inputSchemaRef: sandbox-tools/schemas/generated-code-input-v1.json
+    outputSchemaRef: sandbox-tools/schemas/generated-code-result-v1.json
+    resources: {cpu: 500m, memory: 512Mi, ephemeralStorage: 512Mi, inputMaxBytes: 52428800, outputMaxBytes: 1048576, logMaxBytes: 2097152, scriptMaxBytes: 262144, timeoutSeconds: 120, maxTimeoutSeconds: 300}
+  - id: manifest-validation
+    version: v1
+    mode: MANIFEST_VALIDATION
+    imageDigest: registry.kubeoncall.io/sandbox/manifest-validation@sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff
+    entrypoint: /usr/local/bin/koc-validate-manifest
+    networkEgressPolicy: DENY_ALL
+    inputSchemaRef: sandbox-tools/schemas/manifest-validation-input-v1.json
+    outputSchemaRef: sandbox-tools/schemas/manifest-validation-result-v1.json
+    resources: {cpu: 500m, memory: 512Mi, ephemeralStorage: 1Gi, inputMaxBytes: 52428800, outputMaxBytes: 1048576, logMaxBytes: 2097152, scriptMaxBytes: 262144, timeoutSeconds: 180, maxTimeoutSeconds: 300}
+  - id: remediation-simulation
+    version: v1
+    mode: REMEDIATION_SIMULATION
+    imageDigest: registry.kubeoncall.io/sandbox/remediation-simulation@sha256:1111111111111111111111111111111111111111111111111111111111111111
+    entrypoint: /usr/local/bin/koc-simulate-remediation
+    networkEgressPolicy: DENY_ALL
+    inputSchemaRef: sandbox-tools/schemas/remediation-simulation-input-v1.json
+    outputSchemaRef: sandbox-tools/schemas/remediation-simulation-result-v1.json
+    resources: {cpu: 500m, memory: 512Mi, ephemeralStorage: 1Gi, inputMaxBytes: 52428800, outputMaxBytes: 1048576, logMaxBytes: 2097152, scriptMaxBytes: 262144, timeoutSeconds: 300, maxTimeoutSeconds: 600}

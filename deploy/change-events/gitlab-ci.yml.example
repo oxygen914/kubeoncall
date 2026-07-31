@@ -1,0 +1,21 @@
+publish-kubeoncall-change:
+  stage: deploy
+  image: alpine:3.20
+  before_script:
+    - apk add --no-cache bash curl jq
+  script:
+    - >-
+      jq -n
+      --arg id "${CI_PIPELINE_ID}"
+      --arg project "${CI_PROJECT_PATH}"
+      --arg sha "${CI_COMMIT_SHA}"
+      --arg actor "${GITLAB_USER_LOGIN}"
+      '{id:$id,eventType:"deployment",resourceType:"Deployment",resourceName:$project,sha:$sha,changedBy:$actor,status:"completed"}'
+      > /tmp/kubeoncall-change.json
+    - ./scripts/publish-change-event.sh /tmp/kubeoncall-change.json
+  variables:
+    KUBEONCALL_CHANGE_EVENT_PROVIDER: gitlab
+    KUBEONCALL_CHANGE_EVENT_TYPE: Deployment Hook
+    KUBEONCALL_CHANGE_EVENT_DELIVERY_ID: ${CI_PIPELINE_ID}-${CI_JOB_ID}
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH

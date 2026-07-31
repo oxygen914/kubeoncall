@@ -1,0 +1,47 @@
+{{- if .Values.ingress.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "kubeoncall.fullname" . }}
+  labels:
+    {{- include "kubeoncall.labels" . | nindent 4 }}
+  annotations:
+    # SSE: disable response buffering and extend timeouts so /api/v1/events/stream stays open.
+    nginx.ingress.kubernetes.io/proxy-buffering: "off"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+    nginx.org/websocket-services: {{ include "kubeoncall.fullname" . }}-console
+    {{- with .Values.ingress.annotations }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  {{- if .Values.ingress.className }}
+  ingressClassName: {{ .Values.ingress.className | quote }}
+  {{- end }}
+  {{- if .Values.ingress.tls.enabled }}
+  tls:
+    - hosts:
+        - {{ .Values.ingress.host | quote }}
+      secretName: {{ .Values.ingress.tls.secretName }}
+  {{- end }}
+  rules:
+    - host: {{ .Values.ingress.host | quote }}
+      http:
+        paths:
+          # API and SSE stream → backend.
+          - path: /api
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "kubeoncall.fullname" . }}
+                port:
+                  name: http
+          # Everything else (Console SPA + runtime config) → console.
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "kubeoncall.fullname" . }}-console
+                port:
+                  name: http
+{{- end }}

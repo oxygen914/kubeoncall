@@ -1,9 +1,212 @@
-version: '3.9'
 services:
+  kubeoncall:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    environment:
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-docker,mysql}
+      KUBEONCALL_API_AUTH_ENABLED: ${KUBEONCALL_API_AUTH_ENABLED:-false}
+      KUBEONCALL_API_VIEWER_TOKEN: ${KUBEONCALL_API_VIEWER_TOKEN:-}
+      KUBEONCALL_API_OPERATOR_TOKEN: ${KUBEONCALL_API_OPERATOR_TOKEN:-}
+      KUBEONCALL_API_ADMIN_TOKEN: ${KUBEONCALL_API_ADMIN_TOKEN:-}
+      KUBEONCALL_CORS_ENABLED: ${KUBEONCALL_CORS_ENABLED:-true}
+      KUBEONCALL_CORS_ALLOWED_ORIGINS: ${KUBEONCALL_CORS_ALLOWED_ORIGINS:-http://127.0.0.1:8081,http://localhost:8081}
+      APPROVAL_RESUME_LEASE_SECONDS: ${APPROVAL_RESUME_LEASE_SECONDS:-300}
+      KUBEONCALL_DEPENDENCY_CIRCUIT_BREAKER_ENABLED: ${KUBEONCALL_DEPENDENCY_CIRCUIT_BREAKER_ENABLED:-true}
+      KUBEONCALL_DEPENDENCY_CIRCUIT_BREAKER_FAILURE_THRESHOLD: ${KUBEONCALL_DEPENDENCY_CIRCUIT_BREAKER_FAILURE_THRESHOLD:-5}
+      KUBEONCALL_DEPENDENCY_CIRCUIT_BREAKER_RESET_TIMEOUT_SECONDS: ${KUBEONCALL_DEPENDENCY_CIRCUIT_BREAKER_RESET_TIMEOUT_SECONDS:-30}
+      # Set to redis when running multiple backend replicas; the default Compose topology has one.
+      KUBEONCALL_REALTIME_CLUSTER_TRANSPORT: ${KUBEONCALL_REALTIME_CLUSTER_TRANSPORT:-none}
+      SPRING_AI_OPENAI_API_KEY: ${ALIYUN_API_KEY:-}
+      SPRING_AI_OPENAI_BASE_URL: ${SPRING_AI_OPENAI_BASE_URL:-https://dashscope.aliyuncs.com/compatible-mode}
+      SPRING_AI_OPENAI_CHAT_OPTIONS_MODEL: ${SPRING_AI_OPENAI_CHAT_OPTIONS_MODEL:-qwen-plus}
+      # Spring AI 1.0.0-M2 creates an OpenAI moderation client without an enabled switch.
+      # Exclude its complete auto-configuration until a deployment supplies a key and explicitly
+      # clears this exclusion before enabling a required provider capability.
+      SPRING_AUTOCONFIGURE_EXCLUDE: ${SPRING_AUTOCONFIGURE_EXCLUDE-org.springframework.ai.autoconfigure.openai.OpenAiAutoConfiguration}
+      SPRING_AI_OPENAI_CHAT_ENABLED: ${SPRING_AI_OPENAI_CHAT_ENABLED:-false}
+      SPRING_AI_OPENAI_EMBEDDING_ENABLED: ${SPRING_AI_OPENAI_EMBEDDING_ENABLED:-false}
+      SPRING_AI_OPENAI_IMAGE_ENABLED: ${SPRING_AI_OPENAI_IMAGE_ENABLED:-false}
+      SPRING_AI_OPENAI_AUDIO_TRANSCRIPTION_ENABLED: ${SPRING_AI_OPENAI_AUDIO_TRANSCRIPTION_ENABLED:-false}
+      SPRING_AI_OPENAI_AUDIO_SPEECH_ENABLED: ${SPRING_AI_OPENAI_AUDIO_SPEECH_ENABLED:-false}
+      KUBEONCALL_PLANNER_MODE: ${KUBEONCALL_PLANNER_MODE:-RULE_FALLBACK}
+      KUBEONCALL_PLANNER_PROVIDER: ${KUBEONCALL_PLANNER_PROVIDER:-openai-compatible}
+      KUBEONCALL_PLANNER_MODEL: ${KUBEONCALL_PLANNER_MODEL:-qwen-plus}
+      KUBEONCALL_PLANNER_CONNECT_TIMEOUT_MILLIS: ${KUBEONCALL_PLANNER_CONNECT_TIMEOUT_MILLIS:-3000}
+      KUBEONCALL_PLANNER_READ_TIMEOUT_MILLIS: ${KUBEONCALL_PLANNER_READ_TIMEOUT_MILLIS:-30000}
+      KUBEONCALL_PLANNER_CANARY_ENABLED: ${KUBEONCALL_PLANNER_CANARY_ENABLED:-false}
+      KUBEONCALL_PLANNER_CANARY_FAIL_FAST: ${KUBEONCALL_PLANNER_CANARY_FAIL_FAST:-true}
+      KUBEONCALL_EVIDENCE_PROMETHEUS_ENABLED: ${KUBEONCALL_EVIDENCE_PROMETHEUS_ENABLED:-false}
+      KUBEONCALL_EVIDENCE_LOKI_ENABLED: ${KUBEONCALL_EVIDENCE_LOKI_ENABLED:-false}
+      KUBEONCALL_EVIDENCE_K8S_RESOURCE_STATE_ENABLED: ${KUBEONCALL_EVIDENCE_K8S_RESOURCE_STATE_ENABLED:-false}
+      KUBEONCALL_EVIDENCE_K8S_EVENTS_ENABLED: ${KUBEONCALL_EVIDENCE_K8S_EVENTS_ENABLED:-false}
+      KUBEONCALL_EVIDENCE_POD_LOGS_ENABLED: ${KUBEONCALL_EVIDENCE_POD_LOGS_ENABLED:-false}
+      KUBEONCALL_EVIDENCE_LOOKBACK_MINUTES: ${KUBEONCALL_EVIDENCE_LOOKBACK_MINUTES:-30}
+      KUBEONCALL_EVIDENCE_ALLOWED_CLUSTERS: ${KUBEONCALL_EVIDENCE_ALLOWED_CLUSTERS:-}
+      KUBEONCALL_EVIDENCE_ALLOWED_NAMESPACES: ${KUBEONCALL_EVIDENCE_ALLOWED_NAMESPACES:-}
+      KUBEONCALL_ASK_DURABLE_WORKFLOW_ENABLED: ${KUBEONCALL_ASK_DURABLE_WORKFLOW_ENABLED:-true}
+      KUBEONCALL_OPERATION_CLOSURE_ENABLED: ${KUBEONCALL_OPERATION_CLOSURE_ENABLED:-true}
+      KUBEONCALL_CONCLUSION_EVIDENCE_UI_ENABLED: ${KUBEONCALL_CONCLUSION_EVIDENCE_UI_ENABLED:-true}
+      LOKI_ENDPOINT: ${LOKI_ENDPOINT:-http://loki:3100}
+      RAG_EMBEDDING_API_KEY: ${ALIYUN_API_KEY:-}
+      RAG_EMBEDDING_ENDPOINT: ${RAG_EMBEDDING_ENDPOINT:-https://dashscope.aliyuncs.com/compatible-mode/v1/embeddings}
+      RAG_EMBEDDING_MODEL: ${RAG_EMBEDDING_MODEL:-text-embedding-v4}
+      RAG_EMBEDDING_VERSION: ${RAG_EMBEDDING_VERSION:-v1}
+      RAG_EMBEDDING_DIMENSIONS: ${RAG_EMBEDDING_DIMENSIONS:-1536}
+      RAG_EMBEDDING_TIMEOUT_MILLIS: ${RAG_EMBEDDING_TIMEOUT_MILLIS:-3000}
+      RAG_EMBEDDING_BATCH_SIZE: ${RAG_EMBEDDING_BATCH_SIZE:-32}
+      RAG_RERANK_API_KEY: ${RAG_RERANK_API_KEY:-${ALIYUN_API_KEY:-}}
+      RAG_RERANK_ENDPOINT: ${RAG_RERANK_ENDPOINT:-https://dashscope.aliyuncs.com/api/v1/services/rerank/text-rerank/text-rerank}
+      RAG_RERANK_MODEL: ${RAG_RERANK_MODEL:-qwen3-rerank}
+      RAG_RERANK_TIMEOUT_MILLIS: ${RAG_RERANK_TIMEOUT_MILLIS:-3000}
+      RAG_AUGMENTATION_ENABLED: ${RAG_AUGMENTATION_ENABLED:-false}
+      RAG_AUGMENTATION_ENDPOINT: ${RAG_AUGMENTATION_ENDPOINT:-https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions}
+      RAG_AUGMENTATION_API_KEY: ${RAG_AUGMENTATION_API_KEY:-${ALIYUN_API_KEY:-}}
+      RAG_AUGMENTATION_MODEL: ${RAG_AUGMENTATION_MODEL:-qwen-plus}
+      RAG_AUGMENTATION_VERSION: ${RAG_AUGMENTATION_VERSION:-v1}
+      RAG_AUGMENTATION_TIMEOUT_MILLIS: ${RAG_AUGMENTATION_TIMEOUT_MILLIS:-10000}
+      RAG_AUGMENTATION_CONCURRENCY: ${RAG_AUGMENTATION_CONCURRENCY:-2}
+      RAG_AUTO_BIND_DATASET_VERSION: ${RAG_AUTO_BIND_DATASET_VERSION:-false}
+      RAG_JSONL_MAX_PAYLOAD_BYTES: ${RAG_JSONL_MAX_PAYLOAD_BYTES:-5242880}
+      RAG_JSONL_MAX_LINES: ${RAG_JSONL_MAX_LINES:-10000}
+      RAG_DOCUMENT_MAX_CONTENT_BYTES: ${RAG_DOCUMENT_MAX_CONTENT_BYTES:-2097152}
+      MEMORY_LLM_EXTRACTION_ENABLED: ${MEMORY_LLM_EXTRACTION_ENABLED:-false}
+      MEMORY_LLM_EXTRACTION_ENDPOINT: ${MEMORY_LLM_EXTRACTION_ENDPOINT:-https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions}
+      MEMORY_LLM_EXTRACTION_API_KEY: ${MEMORY_LLM_EXTRACTION_API_KEY:-${ALIYUN_API_KEY:-}}
+      MEMORY_LLM_EXTRACTION_MODEL: ${MEMORY_LLM_EXTRACTION_MODEL:-qwen-plus}
+      MEMORY_EXTRACTION_PROCESSING_TIMEOUT_SECONDS: ${MEMORY_EXTRACTION_PROCESSING_TIMEOUT_SECONDS:-300}
+      MEMORY_EXTRACTION_RECLAIM_LIMIT: ${MEMORY_EXTRACTION_RECLAIM_LIMIT:-100}
+      MEMORY_SEMANTIC_DUPLICATE_ENABLED: ${MEMORY_SEMANTIC_DUPLICATE_ENABLED:-false}
+      MEMORY_SEMANTIC_DUPLICATE_WEIGHT: ${MEMORY_SEMANTIC_DUPLICATE_WEIGHT:-0.75}
+      MEMORY_TOKENIZER_ENABLED: ${MEMORY_TOKENIZER_ENABLED:-false}
+      MEMORY_TOKENIZER_ENDPOINT: ${MEMORY_TOKENIZER_ENDPOINT:-https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions}
+      MEMORY_TOKENIZER_API_KEY: ${MEMORY_TOKENIZER_API_KEY:-${ALIYUN_API_KEY:-}}
+      MEMORY_TOKENIZER_MODEL: ${MEMORY_TOKENIZER_MODEL:-qwen-plus}
+      MEMORY_TOKENIZER_MODE: ${MEMORY_TOKENIZER_MODE:-chat_usage}
+      MEMORY_TOKENIZER_CHAT_OVERHEAD_TOKENS: ${MEMORY_TOKENIZER_CHAT_OVERHEAD_TOKENS:--1}
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
+      MINIO_BUCKET: ${MINIO_BUCKET:-kubeoncall-docs}
+      MCP_ENABLED: ${MCP_ENABLED:-false}
+      MCP_ENDPOINT: ${MCP_ENDPOINT:-http://host.docker.internal:18080/mcp/call}
+      MCP_API_KEY: ${MCP_API_KEY:-}
+      MCP_AUTH_MODE: ${MCP_AUTH_MODE:-static_bearer}
+      MCP_OAUTH_TOKEN_ENDPOINT: ${MCP_OAUTH_TOKEN_ENDPOINT:-}
+      MCP_OAUTH_CLIENT_ID: ${MCP_OAUTH_CLIENT_ID:-}
+      MCP_OAUTH_CLIENT_SECRET: ${MCP_OAUTH_CLIENT_SECRET:-}
+      MCP_OAUTH_CLIENT_AUTH_METHOD: ${MCP_OAUTH_CLIENT_AUTH_METHOD:-client_secret_post}
+      MCP_OAUTH_SCOPE: ${MCP_OAUTH_SCOPE:-}
+      MCP_OAUTH_RESOURCE: ${MCP_OAUTH_RESOURCE:-}
+      MCP_OAUTH_REFRESH_SKEW_SECONDS: ${MCP_OAUTH_REFRESH_SKEW_SECONDS:-30}
+      MCP_PROTOCOL: ${MCP_PROTOCOL:-custom}
+      MCP_PROTOCOL_VERSION: ${MCP_PROTOCOL_VERSION:-2025-11-25}
+      MCP_CLIENT_NAME: ${MCP_CLIENT_NAME:-kubeoncall}
+      MCP_CLIENT_VERSION: ${MCP_CLIENT_VERSION:-1.0.0}
+      MCP_DISCOVERY_ENABLED: ${MCP_DISCOVERY_ENABLED:-false}
+      MCP_DISCOVERY_ENDPOINT: ${MCP_DISCOVERY_ENDPOINT:-}
+      MCP_DISCOVERY_CACHE_SECONDS: ${MCP_DISCOVERY_CACHE_SECONDS:-60}
+      MCP_DISCOVERY_MAX_PAGES: ${MCP_DISCOVERY_MAX_PAGES:-20}
+      MCP_DISCOVERY_REFRESH_MILLIS: ${MCP_DISCOVERY_REFRESH_MILLIS:-60000}
+      MCP_DYNAMIC_INVOCATION_ENABLED: ${MCP_DYNAMIC_INVOCATION_ENABLED:-false}
+      MCP_DYNAMIC_MAX_TOOLS: ${MCP_DYNAMIC_MAX_TOOLS:-3}
+      MCP_MAX_RESPONSE_BYTES: ${MCP_MAX_RESPONSE_BYTES:-262144}
+      MCP_ALLOWED_TOOLS: ${MCP_ALLOWED_TOOLS:-knowledge.searchSop,topology.getServiceTopology,cmdb.getServiceMetadata,kubernetes.describeResource,prometheus.queryRange,alerts.getActiveAlerts,changes.getRecentChanges,inventory.*,metrics.*}
+      CHANGE_EVENT_WEBHOOK_ENABLED: ${CHANGE_EVENT_WEBHOOK_ENABLED:-false}
+      CHANGE_EVENT_WEBHOOK_AUTH_MODE: ${CHANGE_EVENT_WEBHOOK_AUTH_MODE:-bearer}
+      CHANGE_EVENT_WEBHOOK_TOKEN: ${CHANGE_EVENT_WEBHOOK_TOKEN:-}
+      CHANGE_EVENT_WEBHOOK_MAX_PAYLOAD_BYTES: ${CHANGE_EVENT_WEBHOOK_MAX_PAYLOAD_BYTES:-1048576}
+      CHANGE_EVENT_GITHUB_WEBHOOK_SECRET: ${CHANGE_EVENT_GITHUB_WEBHOOK_SECRET:-}
+      CHANGE_EVENT_GITLAB_WEBHOOK_TOKEN: ${CHANGE_EVENT_GITLAB_WEBHOOK_TOKEN:-}
+      CHANGE_EVENT_JENKINS_WEBHOOK_TOKEN: ${CHANGE_EVENT_JENKINS_WEBHOOK_TOKEN:-}
+      CHANGE_EVENT_ARGOCD_WEBHOOK_TOKEN: ${CHANGE_EVENT_ARGOCD_WEBHOOK_TOKEN:-}
+      KUBERNETES_TOOL_ENDPOINT: ${KUBERNETES_TOOL_ENDPOINT:-http://host.docker.internal:18081/api/tools/kubernetes}
+      KUBERNETES_TOOL_BEARER_TOKEN: ${KUBERNETES_TOOL_BEARER_TOKEN:-}
+      KUBERNETES_MUTATION_TOOL_ENDPOINT: ${KUBERNETES_MUTATION_TOOL_ENDPOINT:-}
+      KUBERNETES_MUTATION_TOOL_BEARER_TOKEN: ${KUBERNETES_MUTATION_TOOL_BEARER_TOKEN:-}
+      PROMETHEUS_TOOL_ENDPOINT: ${PROMETHEUS_TOOL_ENDPOINT:-http://prometheus:9090}
+      ALERTMANAGER_TOOL_ENDPOINT: ${ALERTMANAGER_TOOL_ENDPOINT:-http://host.docker.internal:18083/api/tools/alertmanager}
+      ALERT_NOTIFICATION_WEBHOOK_ENDPOINT: ${ALERT_NOTIFICATION_WEBHOOK_ENDPOINT:-}
+      ALERT_NOTIFICATION_WEBHOOK_TIMEOUT_MILLIS: ${ALERT_NOTIFICATION_WEBHOOK_TIMEOUT_MILLIS:-3000}
+      INCIDENT_TOOL_ENDPOINT: ${INCIDENT_TOOL_ENDPOINT:-http://host.docker.internal:18087/api/tools/incident}
+      ALERTMANAGER_WEBHOOK_TOKEN: ${ALERTMANAGER_WEBHOOK_TOKEN:-}
+      SPRING_DATASOURCE_URL: ${SPRING_DATASOURCE_URL:-jdbc:mysql://mysql:3306/kubeoncall?useUnicode=true&characterEncoding=utf8&serverTimezone=UTC&allowPublicKeyRetrieval=true&useSSL=false}
+      SPRING_DATASOURCE_USERNAME: ${SPRING_DATASOURCE_USERNAME:-kubeoncall}
+      SPRING_DATASOURCE_PASSWORD: ${SPRING_DATASOURCE_PASSWORD:-CHANGE_ME}
+      SPRING_FLYWAY_USER: ${MYSQL_MIGRATION_USER:-kubeoncall_migration}
+      SPRING_FLYWAY_PASSWORD: ${MYSQL_MIGRATION_PASSWORD:-CHANGE_ME}
+      KUBEONCALL_AUTH_SESSION_COOKIE_SECURE: ${KUBEONCALL_AUTH_SESSION_COOKIE_SECURE:-false}
+      KUBEONCALL_AUTH_SESSION_IDLE_TIMEOUT_SECONDS: ${KUBEONCALL_AUTH_SESSION_IDLE_TIMEOUT_SECONDS:-1800}
+      KUBEONCALL_AUTH_SESSION_MAX_TIMEOUT_SECONDS: ${KUBEONCALL_AUTH_SESSION_MAX_TIMEOUT_SECONDS:-28800}
+      KUBEONCALL_AUTH_LOGIN_MAX_ATTEMPTS: ${KUBEONCALL_AUTH_LOGIN_MAX_ATTEMPTS:-5}
+      KUBEONCALL_AUTH_LOGIN_LOCK_DURATION_SECONDS: ${KUBEONCALL_AUTH_LOGIN_LOCK_DURATION_SECONDS:-900}
+      KUBEONCALL_BOOTSTRAP_ADMIN_ENABLED: ${KUBEONCALL_BOOTSTRAP_ADMIN_ENABLED:-false}
+      KUBEONCALL_BOOTSTRAP_ADMIN_USERNAME: ${KUBEONCALL_BOOTSTRAP_ADMIN_USERNAME:-}
+      KUBEONCALL_BOOTSTRAP_ADMIN_PASSWORD: ${KUBEONCALL_BOOTSTRAP_ADMIN_PASSWORD:-}
+      KUBEONCALL_DATA_MIGRATION_LEGACY_ACTOR_USERNAME_MAPPINGS: ${KUBEONCALL_DATA_MIGRATION_LEGACY_ACTOR_USERNAME_MAPPINGS:-}
+      KUBEONCALL_DATA_MIGRATION_BACKFILL_MAX_ITEMS_PER_SECOND: ${KUBEONCALL_DATA_MIGRATION_BACKFILL_MAX_ITEMS_PER_SECOND:-100}
+      KUBEONCALL_DATA_MIGRATION_BACKFILL_TASK_TIMEOUT_SECONDS: ${KUBEONCALL_DATA_MIGRATION_BACKFILL_TASK_TIMEOUT_SECONDS:-1800}
+      KUBEONCALL_DATA_MIGRATION_SHADOW_DIFF_THRESHOLD_PERCENT: ${KUBEONCALL_DATA_MIGRATION_SHADOW_DIFF_THRESHOLD_PERCENT:-1.0}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "${KUBEONCALL_BIND_ADDRESS:-127.0.0.1}:${KUBEONCALL_PORT:-8080}:8080"
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      elasticsearch:
+        condition: service_healthy
+      minio:
+        condition: service_started
+      minio-init:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  console:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "${CONSOLE_BIND_ADDRESS:-127.0.0.1}:${CONSOLE_PORT:-8081}:8080"
+    depends_on:
+      kubeoncall:
+        condition: service_started
+    restart: unless-stopped
+
+  mysql:
+    image: mysql:8.0
+    environment:
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-kubeoncall}
+      MYSQL_USER: ${MYSQL_USER:-kubeoncall}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-CHANGE_ME}
+      MYSQL_MIGRATION_USER: ${MYSQL_MIGRATION_USER:-kubeoncall_migration}
+      MYSQL_MIGRATION_PASSWORD: ${MYSQL_MIGRATION_PASSWORD:-CHANGE_ME}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-CHANGE_ME}
+    ports:
+      - "${INFRA_BIND_ADDRESS:-127.0.0.1}:3306:3306"
+    volumes:
+      - mysql-data:/var/lib/mysql
+      - ./deploy/mysql/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p$${MYSQL_ROOT_PASSWORD}"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+    restart: unless-stopped
+
   redis:
     image: redis:7
     ports:
-      - "6379:6379"
+      - "${INFRA_BIND_ADDRESS:-127.0.0.1}:6379:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
 
   elasticsearch:
     image: docker.elastic.co/elasticsearch/elasticsearch:8.14.3
@@ -12,14 +215,137 @@ services:
       - xpack.security.enabled=false
       - ES_JAVA_OPTS=-Xms512m -Xmx512m
     ports:
-      - "9200:9200"
+      - "${INFRA_BIND_ADDRESS:-127.0.0.1}:9200:9200"
+    volumes:
+      - elasticsearch-data:/usr/share/elasticsearch/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:9200/_cluster/health >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+    restart: unless-stopped
 
   minio:
     image: minio/minio:RELEASE.2024-08-03T04-33-23Z
     command: server /data --console-address ":9001"
     environment:
-      MINIO_ROOT_USER: minioadmin
-      MINIO_ROOT_PASSWORD: minioadmin
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
     ports:
-      - "9000:9000"
-      - "9001:9001"
+      - "${INFRA_BIND_ADDRESS:-127.0.0.1}:9000:9000"
+      - "${INFRA_BIND_ADDRESS:-127.0.0.1}:9001:9001"
+    volumes:
+      - minio-data:/data
+    restart: unless-stopped
+
+  minio-init:
+    image: minio/mc:RELEASE.2024-07-31T15-58-33Z
+    depends_on:
+      minio:
+        condition: service_started
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
+      MINIO_BUCKET: ${MINIO_BUCKET:-kubeoncall-docs}
+    entrypoint:
+      - /bin/sh
+      - -ec
+    command:
+      - |
+        until mc alias set local http://minio:9000 "$${MINIO_ROOT_USER}" "$${MINIO_ROOT_PASSWORD}"; do
+          sleep 2
+        done
+        mc mb --ignore-existing "local/$${MINIO_BUCKET}"
+
+  prometheus:
+    image: prom/prometheus:v2.53.1
+    command: ["--config.file=/etc/prometheus/prometheus.yml"]
+    volumes:
+      - ./deploy/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./deploy/prometheus/rules:/etc/prometheus/rules:ro
+      - prometheus-data:/prometheus
+    ports:
+      - "${OBSERVABILITY_BIND_ADDRESS:-127.0.0.1}:9090:9090"
+    depends_on:
+      kubeoncall:
+        condition: service_started
+    restart: unless-stopped
+
+  loki:
+    image: grafana/loki:3.1.1
+    command: ["-config.file=/etc/loki/loki.yml"]
+    volumes:
+      - ./deploy/loki/loki.yml:/etc/loki/loki.yml:ro
+      - loki-data:/loki
+    ports:
+      - "${OBSERVABILITY_BIND_ADDRESS:-127.0.0.1}:3100:3100"
+    restart: unless-stopped
+
+  alloy:
+    image: grafana/alloy:v1.3.1
+    command:
+      - run
+      - --server.http.listen-addr=0.0.0.0:12345
+      - --storage.path=/var/lib/alloy/data
+      - /etc/alloy/config.alloy
+    volumes:
+      - ./deploy/alloy/config.alloy:/etc/alloy/config.alloy:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - alloy-data:/var/lib/alloy/data
+    ports:
+      - "${OBSERVABILITY_BIND_ADDRESS:-127.0.0.1}:12345:12345"
+    depends_on:
+      loki:
+        condition: service_started
+    restart: unless-stopped
+
+  alertmanager:
+    profiles: [alerting]
+    image: prom/alertmanager:v0.27.0
+    command: ["--config.file=/etc/alertmanager/alertmanager.yml"]
+    volumes:
+      - ./deploy/alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+      - ./deploy/alertmanager/secrets/kubeoncall-webhook-token:/etc/alertmanager/secrets/kubeoncall-webhook-token:ro
+      - alertmanager-data:/alertmanager
+    ports:
+      - "${OBSERVABILITY_BIND_ADDRESS:-127.0.0.1}:9093:9093"
+    depends_on:
+      kubeoncall:
+        condition: service_started
+    restart: unless-stopped
+
+  node-exporter:
+    profiles: [alerting]
+    image: prom/node-exporter:v1.8.2
+    ports:
+      - "${OBSERVABILITY_BIND_ADDRESS:-127.0.0.1}:9100:9100"
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:11.1.4
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+    volumes:
+      - ./deploy/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./deploy/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana-data:/var/lib/grafana
+    ports:
+      - "${OBSERVABILITY_BIND_ADDRESS:-127.0.0.1}:3000:3000"
+    depends_on:
+      prometheus:
+        condition: service_started
+      loki:
+        condition: service_started
+    restart: unless-stopped
+
+volumes:
+  redis-data:
+  elasticsearch-data:
+  minio-data:
+  mysql-data:
+  prometheus-data:
+  alertmanager-data:
+  grafana-data:
+  loki-data:
+  alloy-data:

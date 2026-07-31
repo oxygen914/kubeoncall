@@ -1,0 +1,146 @@
+spring:
+  data:
+    redis:
+      host: redis
+      port: 6379
+  elasticsearch:
+    uris: http://elasticsearch:9200
+
+kubeoncall:
+  # Compose keeps the historical MySQL-on default; Helm explicitly supplies false when the
+  # external database profile is disabled.
+  mysql-enabled: ${KUBEONCALL_MYSQL_ENABLED:true}
+  ai-operations:
+    planner-mode: ${KUBEONCALL_PLANNER_MODE:RULE_FALLBACK}
+    planner-provider: ${KUBEONCALL_PLANNER_PROVIDER:openai-compatible}
+    planner-model: ${KUBEONCALL_PLANNER_MODEL:${SPRING_AI_OPENAI_CHAT_OPTIONS_MODEL:qwen-plus}}
+    planner-connect-timeout-millis: ${KUBEONCALL_PLANNER_CONNECT_TIMEOUT_MILLIS:3000}
+    planner-read-timeout-millis: ${KUBEONCALL_PLANNER_READ_TIMEOUT_MILLIS:30000}
+    planner-canary-enabled: ${KUBEONCALL_PLANNER_CANARY_ENABLED:false}
+    planner-canary-fail-fast: ${KUBEONCALL_PLANNER_CANARY_FAIL_FAST:true}
+    evidence-prometheus-enabled: ${KUBEONCALL_EVIDENCE_PROMETHEUS_ENABLED:false}
+    evidence-loki-enabled: ${KUBEONCALL_EVIDENCE_LOKI_ENABLED:false}
+    evidence-k8s-resource-state-enabled: ${KUBEONCALL_EVIDENCE_K8S_RESOURCE_STATE_ENABLED:false}
+    evidence-k8s-events-enabled: ${KUBEONCALL_EVIDENCE_K8S_EVENTS_ENABLED:false}
+    evidence-pod-logs-enabled: ${KUBEONCALL_EVIDENCE_POD_LOGS_ENABLED:false}
+    ask-durable-workflow-enabled: ${KUBEONCALL_ASK_DURABLE_WORKFLOW_ENABLED:true}
+    operation-closure-enabled: ${KUBEONCALL_OPERATION_CLOSURE_ENABLED:true}
+    conclusion-evidence-ui-enabled: ${KUBEONCALL_CONCLUSION_EVIDENCE_UI_ENABLED:true}
+    allowed-clusters: ${KUBEONCALL_EVIDENCE_ALLOWED_CLUSTERS:}
+    allowed-namespaces: ${KUBEONCALL_EVIDENCE_ALLOWED_NAMESPACES:}
+  auth:
+    session-cookie-secure: ${KUBEONCALL_AUTH_SESSION_COOKIE_SECURE:false}
+    session-idle-timeout-seconds: ${KUBEONCALL_AUTH_SESSION_IDLE_TIMEOUT_SECONDS:1800}
+    session-max-timeout-seconds: ${KUBEONCALL_AUTH_SESSION_MAX_TIMEOUT_SECONDS:28800}
+    login-max-attempts: ${KUBEONCALL_AUTH_LOGIN_MAX_ATTEMPTS:5}
+    login-lock-duration-seconds: ${KUBEONCALL_AUTH_LOGIN_LOCK_DURATION_SECONDS:900}
+    bootstrap-admin-enabled: ${KUBEONCALL_BOOTSTRAP_ADMIN_ENABLED:false}
+    bootstrap-admin-username: ${KUBEONCALL_BOOTSTRAP_ADMIN_USERNAME:}
+    bootstrap-admin-password: ${KUBEONCALL_BOOTSTRAP_ADMIN_PASSWORD:}
+  rag:
+    knowledge-index-alias: ${RAG_KNOWLEDGE_INDEX_ALIAS:kubeoncall-knowledge-active}
+    active-dataset-version: ${RAG_ACTIVE_DATASET_VERSION:}
+    vector-enabled: true
+    vector-backend: es
+    es-knn-enabled: true
+    embedding-enabled: true
+    mock-embedding-enabled: false
+    embedding-endpoint: ${RAG_EMBEDDING_ENDPOINT:https://dashscope.aliyuncs.com/compatible-mode/v1/embeddings}
+    embedding-api-key: ${RAG_EMBEDDING_API_KEY:${ALIYUN_API_KEY:}}
+    embedding-model: ${RAG_EMBEDDING_MODEL:text-embedding-v4}
+    embedding-version: ${RAG_EMBEDDING_VERSION:v1}
+    embedding-dimensions: ${RAG_EMBEDDING_DIMENSIONS:1536}
+    embedding-batch-size: ${RAG_EMBEDDING_BATCH_SIZE:32}
+    embedding-timeout-millis: ${RAG_EMBEDDING_TIMEOUT_MILLIS:3000}
+    cross-encoder-enabled: true
+    cross-encoder-endpoint: ${RAG_RERANK_ENDPOINT:https://dashscope.aliyuncs.com/api/v1/services/rerank/text-rerank/text-rerank}
+    cross-encoder-api-key: ${RAG_RERANK_API_KEY:${ALIYUN_API_KEY:}}
+    cross-encoder-model: ${RAG_RERANK_MODEL:qwen3-rerank}
+    cross-encoder-timeout-millis: ${RAG_RERANK_TIMEOUT_MILLIS:3000}
+    runbook-bootstrap-enabled: true
+    augmentation-enabled: ${RAG_AUGMENTATION_ENABLED:false}
+    augmentation-endpoint: ${RAG_AUGMENTATION_ENDPOINT:https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions}
+    augmentation-api-key: ${RAG_AUGMENTATION_API_KEY:${ALIYUN_API_KEY:}}
+    augmentation-model: ${RAG_AUGMENTATION_MODEL:qwen-plus}
+    augmentation-version: ${RAG_AUGMENTATION_VERSION:v1}
+    augmentation-timeout-millis: ${RAG_AUGMENTATION_TIMEOUT_MILLIS:10000}
+    augmentation-concurrency: ${RAG_AUGMENTATION_CONCURRENCY:2}
+    auto-bind-dataset-version: ${RAG_AUTO_BIND_DATASET_VERSION:false}
+  storage:
+    minio:
+      endpoint: http://minio:9000
+      access-key: ${MINIO_ROOT_USER:minioadmin}
+      secret-key: ${MINIO_ROOT_PASSWORD:minioadmin}
+      bucket: ${MINIO_BUCKET:kubeoncall-docs}
+  mcp:
+    enabled: ${MCP_ENABLED:false}
+    endpoint: ${MCP_ENDPOINT:http://host.docker.internal:18080/mcp/call}
+    api-key: ${MCP_API_KEY:}
+    auth-mode: ${MCP_AUTH_MODE:static_bearer}
+    oauth-token-endpoint: ${MCP_OAUTH_TOKEN_ENDPOINT:}
+    oauth-client-id: ${MCP_OAUTH_CLIENT_ID:}
+    oauth-client-secret: ${MCP_OAUTH_CLIENT_SECRET:}
+    oauth-client-auth-method: ${MCP_OAUTH_CLIENT_AUTH_METHOD:client_secret_post}
+    oauth-scope: ${MCP_OAUTH_SCOPE:}
+    oauth-resource: ${MCP_OAUTH_RESOURCE:}
+    oauth-refresh-skew-seconds: ${MCP_OAUTH_REFRESH_SKEW_SECONDS:30}
+    protocol: ${MCP_PROTOCOL:custom}
+    protocol-version: ${MCP_PROTOCOL_VERSION:2025-11-25}
+    client-name: ${MCP_CLIENT_NAME:kubeoncall}
+    client-version: ${MCP_CLIENT_VERSION:1.0.0}
+    discovery-enabled: ${MCP_DISCOVERY_ENABLED:false}
+    discovery-endpoint: ${MCP_DISCOVERY_ENDPOINT:}
+    discovery-cache-seconds: ${MCP_DISCOVERY_CACHE_SECONDS:60}
+    discovery-max-pages: ${MCP_DISCOVERY_MAX_PAGES:20}
+    discovery-refresh-millis: ${MCP_DISCOVERY_REFRESH_MILLIS:60000}
+    dynamic-invocation-enabled: ${MCP_DYNAMIC_INVOCATION_ENABLED:false}
+    dynamic-max-tools: ${MCP_DYNAMIC_MAX_TOOLS:3}
+    max-response-bytes: ${MCP_MAX_RESPONSE_BYTES:262144}
+    allowed-tools: ${MCP_ALLOWED_TOOLS:knowledge.searchSop,topology.getServiceTopology,cmdb.getServiceMetadata,kubernetes.describeResource,prometheus.queryRange,alerts.getActiveAlerts,inventory.*,metrics.*}
+  change-events:
+    webhook-enabled: ${CHANGE_EVENT_WEBHOOK_ENABLED:false}
+    webhook-auth-mode: ${CHANGE_EVENT_WEBHOOK_AUTH_MODE:bearer}
+    webhook-token: ${CHANGE_EVENT_WEBHOOK_TOKEN:}
+    webhook-max-payload-bytes: ${CHANGE_EVENT_WEBHOOK_MAX_PAYLOAD_BYTES:1048576}
+    github-webhook-secret: ${CHANGE_EVENT_GITHUB_WEBHOOK_SECRET:}
+    gitlab-webhook-token: ${CHANGE_EVENT_GITLAB_WEBHOOK_TOKEN:}
+    jenkins-webhook-token: ${CHANGE_EVENT_JENKINS_WEBHOOK_TOKEN:}
+    argocd-webhook-token: ${CHANGE_EVENT_ARGOCD_WEBHOOK_TOKEN:}
+  integrations:
+    kubernetes:
+      endpoint: ${KUBERNETES_TOOL_ENDPOINT:http://host.docker.internal:18081/api/tools/kubernetes}
+      bearer-token: ${KUBERNETES_TOOL_BEARER_TOKEN:}
+    prometheus:
+      endpoint: ${PROMETHEUS_TOOL_ENDPOINT:http://prometheus:9090}
+    loki:
+      endpoint: ${LOKI_ENDPOINT:http://loki:3100}
+      timeout-millis: ${LOKI_TIMEOUT_MILLIS:5000}
+    alertmanager:
+      endpoint: ${ALERTMANAGER_TOOL_ENDPOINT:http://host.docker.internal:18083/api/tools/alertmanager}
+    notification:
+      endpoint: ${ALERT_NOTIFICATION_WEBHOOK_ENDPOINT:}
+      timeout-millis: ${ALERT_NOTIFICATION_WEBHOOK_TIMEOUT_MILLIS:3000}
+    incident:
+      endpoint: ${INCIDENT_TOOL_ENDPOINT:http://host.docker.internal:18087/api/tools/incident}
+    device:
+      endpoint: ${DEVICE_TOOL_ENDPOINT:http://host.docker.internal:18084/api/tools/device}
+    database:
+      endpoint: ${DATABASE_TOOL_ENDPOINT:http://host.docker.internal:18085/api/tools/database}
+  alarm:
+    recovery-health-check-required: true
+    recovery-health-check-endpoint: ${ALARM_RECOVERY_HEALTH_CHECK_ENDPOINT:http://host.docker.internal:18088/api/health/alarm-recovery}
+    recovery-health-check-timeout-millis: ${ALARM_RECOVERY_HEALTH_CHECK_TIMEOUT_MILLIS:3000}
+    recovery-confirmation-timeout-seconds: ${ALARM_RECOVERY_CONFIRMATION_TIMEOUT_SECONDS:86400}
+  memory:
+    semantic-duplicate-enabled: ${MEMORY_SEMANTIC_DUPLICATE_ENABLED:false}
+    semantic-duplicate-weight: ${MEMORY_SEMANTIC_DUPLICATE_WEIGHT:0.75}
+    llm-extraction-enabled: ${MEMORY_LLM_EXTRACTION_ENABLED:false}
+    llm-extraction-endpoint: ${MEMORY_LLM_EXTRACTION_ENDPOINT:https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions}
+    llm-extraction-api-key: ${MEMORY_LLM_EXTRACTION_API_KEY:${ALIYUN_API_KEY:}}
+    llm-extraction-model: ${MEMORY_LLM_EXTRACTION_MODEL:qwen-plus}
+    tokenizer-enabled: ${MEMORY_TOKENIZER_ENABLED:false}
+    tokenizer-endpoint: ${MEMORY_TOKENIZER_ENDPOINT:https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions}
+    tokenizer-api-key: ${MEMORY_TOKENIZER_API_KEY:${ALIYUN_API_KEY:}}
+    tokenizer-model: ${MEMORY_TOKENIZER_MODEL:qwen-plus}
+    tokenizer-mode: ${MEMORY_TOKENIZER_MODE:chat_usage}
+    tokenizer-chat-overhead-tokens: ${MEMORY_TOKENIZER_CHAT_OVERHEAD_TOKENS:-1}

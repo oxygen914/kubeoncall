@@ -1,0 +1,433 @@
+spring:
+  application:
+    name: kubeoncall
+  profiles:
+    active: local
+  autoconfigure:
+    exclude:
+      - org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration
+      - org.springframework.boot.autoconfigure.jdbc.DataSourceTransactionManagerAutoConfiguration
+      - org.springframework.boot.autoconfigure.flyway.FlywayAutoConfiguration
+      - org.springframework.boot.actuate.autoconfigure.jdbc.DataSourceHealthContributorAutoConfiguration
+  data:
+    redis:
+      host: localhost
+      port: 6379
+      repositories:
+        enabled: false
+    elasticsearch:
+      repositories:
+        enabled: false
+  elasticsearch:
+    uris: http://localhost:9200
+  jackson:
+    serialization:
+      write-dates-as-timestamps: false
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:}
+    username: ${SPRING_DATASOURCE_USERNAME:}
+    password: ${SPRING_DATASOURCE_PASSWORD:}
+  flyway:
+    enabled: ${KUBEONCALL_MYSQL_ENABLED:false}
+    locations: classpath:db/migration
+    baseline-on-migrate: true
+    user: ${SPRING_FLYWAY_USER:${SPRING_DATASOURCE_USERNAME:}}
+    password: ${SPRING_FLYWAY_PASSWORD:${SPRING_DATASOURCE_PASSWORD:}}
+  jdbc:
+    template:
+      fetch-size: 100
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+
+server:
+  port: 8080
+
+kubeoncall:
+  mysql-enabled: ${KUBEONCALL_MYSQL_ENABLED:false}
+  migration-only: ${KUBEONCALL_MIGRATION_ONLY:false}
+  notifications:
+    enabled: ${KUBEONCALL_NOTIFICATIONS_ENABLED:false}
+    reconcile-poll-millis: ${KUBEONCALL_NOTIFICATIONS_RECONCILE_POLL_MILLIS:5000}
+    routes: []
+  api:
+    default-page-size: 20
+    max-page-size: 100
+    max-upload-bytes: 52428800
+    max-jsonl-lines: 100000
+  api-security:
+    enabled: ${KUBEONCALL_API_AUTH_ENABLED:false}
+    viewer-token: ${KUBEONCALL_API_VIEWER_TOKEN:}
+    operator-token: ${KUBEONCALL_API_OPERATOR_TOKEN:}
+    admin-token: ${KUBEONCALL_API_ADMIN_TOKEN:}
+  cors:
+    enabled: ${KUBEONCALL_CORS_ENABLED:true}
+    allowed-origins: ${KUBEONCALL_CORS_ALLOWED_ORIGINS:http://127.0.0.1:8081,http://localhost:8081}
+  auth:
+    session-cookie-name: KOC_SESSION
+    csrf-cookie-name: KOC_CSRF
+    session-cookie-secure: ${KUBEONCALL_AUTH_SESSION_COOKIE_SECURE:false}
+    session-idle-timeout-seconds: ${KUBEONCALL_AUTH_SESSION_IDLE_TIMEOUT_SECONDS:1800}
+    session-max-timeout-seconds: ${KUBEONCALL_AUTH_SESSION_MAX_TIMEOUT_SECONDS:28800}
+    login-max-attempts: ${KUBEONCALL_AUTH_LOGIN_MAX_ATTEMPTS:5}
+    login-lock-duration-seconds: ${KUBEONCALL_AUTH_LOGIN_LOCK_DURATION_SECONDS:900}
+    legacy-token-compat: ${KUBEONCALL_AUTH_LEGACY_TOKEN_COMPAT:true}
+    bootstrap-admin-enabled: ${KUBEONCALL_BOOTSTRAP_ADMIN_ENABLED:false}
+    bootstrap-admin-username: ${KUBEONCALL_BOOTSTRAP_ADMIN_USERNAME:}
+    bootstrap-admin-password: ${KUBEONCALL_BOOTSTRAP_ADMIN_PASSWORD:}
+  release:
+    version: ${KUBEONCALL_RELEASE_VERSION:0.1.0}
+    commit: ${KUBEONCALL_RELEASE_COMMIT:unknown}
+    environment: ${KUBEONCALL_RELEASE_ENVIRONMENT:local}
+  data-migration:
+    alarm-read-source: ${KUBEONCALL_DATA_MIGRATION_ALARM_READ_SOURCE:MYSQL}
+    alarm-write-mode: ${KUBEONCALL_DATA_MIGRATION_ALARM_WRITE_MODE:REDIS_PRIMARY}
+    change-event-read-source: ${KUBEONCALL_DATA_MIGRATION_CHANGE_EVENT_READ_SOURCE:REDIS}
+    change-event-write-mode: ${KUBEONCALL_DATA_MIGRATION_CHANGE_EVENT_WRITE_MODE:REDIS_PRIMARY}
+    approval:
+      fact-source: ${KUBEONCALL_DATA_MIGRATION_APPROVAL_FACT_SOURCE:REDIS}
+      legacy-write-disabled: ${KUBEONCALL_DATA_MIGRATION_APPROVAL_LEGACY_WRITE_DISABLED:false}
+    skill-state:
+      fact-source: ${KUBEONCALL_DATA_MIGRATION_SKILL_STATE_FACT_SOURCE:REDIS}
+      legacy-write-disabled: ${KUBEONCALL_DATA_MIGRATION_SKILL_STATE_LEGACY_WRITE_DISABLED:false}
+    execution-audit:
+      fact-source: ${KUBEONCALL_DATA_MIGRATION_EXECUTION_AUDIT_FACT_SOURCE:REDIS}
+      legacy-write-disabled: ${KUBEONCALL_DATA_MIGRATION_EXECUTION_AUDIT_LEGACY_WRITE_DISABLED:false}
+    backfill-batch-size: ${KUBEONCALL_DATA_MIGRATION_BACKFILL_BATCH_SIZE:100}
+    backfill-scan-limit: ${KUBEONCALL_DATA_MIGRATION_BACKFILL_SCAN_LIMIT:10000}
+    backfill-max-items-per-second: ${KUBEONCALL_DATA_MIGRATION_BACKFILL_MAX_ITEMS_PER_SECOND:100}
+    backfill-task-timeout-seconds: ${KUBEONCALL_DATA_MIGRATION_BACKFILL_TASK_TIMEOUT_SECONDS:1800}
+    backfill-dry-run: ${KUBEONCALL_DATA_MIGRATION_BACKFILL_DRY_RUN:true}
+    shadow-diff-threshold-percent: ${KUBEONCALL_DATA_MIGRATION_SHADOW_DIFF_THRESHOLD_PERCENT:1.0}
+    legacy-actor-username-mappings: ${KUBEONCALL_DATA_MIGRATION_LEGACY_ACTOR_USERNAME_MAPPINGS:}
+  legacy-api:
+    enabled: ${KUBEONCALL_LEGACY_API_ENABLED:true}
+    deprecated-at: ${KUBEONCALL_LEGACY_API_DEPRECATED_AT:2026-07-01T00:00:00Z}
+    sunset-at: ${KUBEONCALL_LEGACY_API_SUNSET_AT:2026-12-31T23:59:59Z}
+    successors:
+      "[/api/status]": "/api/v1/system/status"
+      "[/api/stats]": "/api/v1/overview"
+      "[/api/change-events]": "/api/v1/change-events"
+      "[/api/change-events/correlations]": "/api/v1/change-events/correlations"
+      "[/api/alarm-policies/reload]": "/api/v1/operations/policies/reload"
+      "[/api/alarm-policies/rollback]": "/api/v1/operations/policies/rollback"
+      "[/api/alarm-policies/versions]": "/api/v1/operations/policies"
+      "[/api/alarm-policies/dry-run]": "/api/v1/operations/policies/dry-run"
+      "[/api/alarm-policies/replay]": "/api/v1/operations/policies/replay"
+      "[/api/alarm-policies/prometheus-rules/dry-run]": "/api/v1/operations/policies/prometheus-rules/dry-run"
+      "[/api/alarm-maintenance-windows]": "/api/v1/operations/maintenance-windows"
+      "[/api/alarm-maintenance-windows/{id}]": "/api/v1/operations/maintenance-windows/{id}"
+      "[/api/alarm-suppression-rules]": "/api/v1/operations/suppression-rules"
+      "[/api/alarm-suppression-rules/reload]": "/api/v1/operations/suppression-rules/reload"
+      "[/api/tools]": "/api/v1/tools"
+      "[/api/tools/planner]": "/api/v1/tools/planner"
+      "[/api/tools/executor]": "/api/v1/tools/executor"
+      "[/api/tools/verifier]": "/api/v1/tools/verifier"
+  realtime:
+    heartbeat-seconds: ${KUBEONCALL_REALTIME_HEARTBEAT_SECONDS:15}
+    replay-capacity: ${KUBEONCALL_REALTIME_REPLAY_CAPACITY:2048}
+    replay-retention-seconds: ${KUBEONCALL_REALTIME_REPLAY_RETENTION_SECONDS:600}
+    # Cluster fanout: "none" (single-instance) or "redis" (Pub/Sub multi-instance broadcast).
+    cluster-transport: ${KUBEONCALL_REALTIME_CLUSTER_TRANSPORT:none}
+  agent:
+    max-loops: 3
+    planner-llm-enabled: true
+    post-execution-verification-enabled: ${KUBEONCALL_POST_EXECUTION_VERIFICATION_ENABLED:true}
+    post-execution-verification-timeout-seconds: ${KUBEONCALL_POST_EXECUTION_VERIFICATION_TIMEOUT_SECONDS:120}
+    post-execution-verification-poll-millis: ${KUBEONCALL_POST_EXECUTION_VERIFICATION_POLL_MILLIS:5000}
+    post-execution-verification-stable-window-seconds: ${KUBEONCALL_POST_EXECUTION_VERIFICATION_STABLE_WINDOW_SECONDS:30}
+    automatic-rollback-enabled: ${KUBEONCALL_AUTOMATIC_ROLLBACK_ENABLED:true}
+    post-execution-escalation-enabled: ${KUBEONCALL_POST_EXECUTION_ESCALATION_ENABLED:true}
+  ai-operations:
+    planner-mode: ${KUBEONCALL_PLANNER_MODE:RULE_FALLBACK}
+    planner-provider: ${KUBEONCALL_PLANNER_PROVIDER:openai-compatible}
+    planner-model: ${KUBEONCALL_PLANNER_MODEL:${SPRING_AI_OPENAI_CHAT_OPTIONS_MODEL:qwen-plus}}
+    planner-schema-version: ${KUBEONCALL_PLANNER_SCHEMA_VERSION:v1}
+    planner-max-response-chars: ${KUBEONCALL_PLANNER_MAX_RESPONSE_CHARS:32768}
+    planner-connect-timeout-millis: ${KUBEONCALL_PLANNER_CONNECT_TIMEOUT_MILLIS:3000}
+    planner-read-timeout-millis: ${KUBEONCALL_PLANNER_READ_TIMEOUT_MILLIS:30000}
+    planner-canary-enabled: ${KUBEONCALL_PLANNER_CANARY_ENABLED:false}
+    planner-canary-fail-fast: ${KUBEONCALL_PLANNER_CANARY_FAIL_FAST:true}
+    evidence-prometheus-enabled: ${KUBEONCALL_EVIDENCE_PROMETHEUS_ENABLED:false}
+    evidence-loki-enabled: ${KUBEONCALL_EVIDENCE_LOKI_ENABLED:false}
+    evidence-k8s-resource-state-enabled: ${KUBEONCALL_EVIDENCE_K8S_RESOURCE_STATE_ENABLED:false}
+    evidence-k8s-events-enabled: ${KUBEONCALL_EVIDENCE_K8S_EVENTS_ENABLED:false}
+    evidence-pod-logs-enabled: ${KUBEONCALL_EVIDENCE_POD_LOGS_ENABLED:false}
+    ask-durable-workflow-enabled: ${KUBEONCALL_ASK_DURABLE_WORKFLOW_ENABLED:false}
+    operation-closure-enabled: ${KUBEONCALL_OPERATION_CLOSURE_ENABLED:true}
+    conclusion-evidence-ui-enabled: ${KUBEONCALL_CONCLUSION_EVIDENCE_UI_ENABLED:false}
+    evidence-lookback-minutes: ${KUBEONCALL_EVIDENCE_LOOKBACK_MINUTES:30}
+    evidence-collection-timeout-millis: ${KUBEONCALL_EVIDENCE_COLLECTION_TIMEOUT_MILLIS:5000}
+    evidence-max-snippet-chars: ${KUBEONCALL_EVIDENCE_MAX_SNIPPET_CHARS:8192}
+    loki-max-window-minutes: ${KUBEONCALL_LOKI_MAX_WINDOW_MINUTES:360}
+    loki-max-lines: ${KUBEONCALL_LOKI_MAX_LINES:500}
+    loki-max-response-bytes: ${KUBEONCALL_LOKI_MAX_RESPONSE_BYTES:1048576}
+    allowed-clusters: ${KUBEONCALL_EVIDENCE_ALLOWED_CLUSTERS:}
+    allowed-namespaces: ${KUBEONCALL_EVIDENCE_ALLOWED_NAMESPACES:}
+  approval:
+    enabled: true
+    callback-timeout-seconds: 1800
+    resume-lease-seconds: ${APPROVAL_RESUME_LEASE_SECONDS:300}
+    repository: redis
+  rag:
+    default-top-k: 5
+    knowledge-index: kubeoncall-knowledge
+    active-dataset-version: ${RAG_ACTIVE_DATASET_VERSION:}
+    vector-enabled: false
+    vector-backend: es
+    vector-endpoint: http://localhost:18086/api/vector/search
+    vector-timeout-millis: 3000
+    es-knn-enabled: false
+    embedding-enabled: false
+    mock-embedding-enabled: false
+    embedding-endpoint: http://localhost:18086/api/embedding
+    embedding-api-key: ${RAG_EMBEDDING_API_KEY:}
+    embedding-model: text-embedding-3-small
+    embedding-version: v1
+    embedding-timeout-millis: 3000
+    embedding-dimensions: 1536
+    embedding-batch-size: ${RAG_EMBEDDING_BATCH_SIZE:32}
+    chunk-strategy: recursive
+    chunk-size: 1000
+    chunk-overlap: 200
+    cross-encoder-enabled: false
+    cross-encoder-endpoint: http://localhost:18086/api/rerank
+    cross-encoder-api-key: ${RAG_RERANK_API_KEY:}
+    cross-encoder-model: cross-encoder
+    cross-encoder-timeout-millis: 3000
+    lexical-candidate-top-n: 20
+    vector-candidate-top-n: 20
+    rrf-k: 60
+    rerank-top-n: 30
+    runbook-location: classpath*:runbooks/*.md
+    runbook-bootstrap-enabled: false
+    augmentation-enabled: ${RAG_AUGMENTATION_ENABLED:false}
+    augmentation-endpoint: ${RAG_AUGMENTATION_ENDPOINT:https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions}
+    augmentation-api-key: ${RAG_AUGMENTATION_API_KEY:${ALIYUN_API_KEY:}}
+    augmentation-model: ${RAG_AUGMENTATION_MODEL:qwen-plus}
+    augmentation-version: ${RAG_AUGMENTATION_VERSION:v1}
+    augmentation-timeout-millis: ${RAG_AUGMENTATION_TIMEOUT_MILLIS:10000}
+    augmentation-concurrency: ${RAG_AUGMENTATION_CONCURRENCY:2}
+    auto-bind-dataset-version: ${RAG_AUTO_BIND_DATASET_VERSION:false}
+    jsonl-max-payload-bytes: ${RAG_JSONL_MAX_PAYLOAD_BYTES:5242880}
+    jsonl-max-lines: ${RAG_JSONL_MAX_LINES:10000}
+    document-max-content-bytes: ${RAG_DOCUMENT_MAX_CONTENT_BYTES:2097152}
+  storage:
+    minio:
+      endpoint: http://localhost:9000
+      access-key: minioadmin
+      secret-key: minioadmin
+      bucket: kubeoncall-docs
+  dependency-circuit-breaker:
+    enabled: ${KUBEONCALL_DEPENDENCY_CIRCUIT_BREAKER_ENABLED:true}
+    failure-threshold: ${KUBEONCALL_DEPENDENCY_CIRCUIT_BREAKER_FAILURE_THRESHOLD:5}
+    reset-timeout-seconds: ${KUBEONCALL_DEPENDENCY_CIRCUIT_BREAKER_RESET_TIMEOUT_SECONDS:30}
+  sandbox:
+    # Master switch and every per-mode toggle default to off; existing behavior is unchanged until an
+    # operator explicitly opts in. Configured values must stay within the server-side hard ceilings.
+    enabled: ${KUBEONCALL_SANDBOX_ENABLED:false}
+    fixed-diagnostic: ${KUBEONCALL_SANDBOX_FIXED_DIAGNOSTIC:false}
+    generated-code: ${KUBEONCALL_SANDBOX_GENERATED_CODE:false}
+    manifest-validation: ${KUBEONCALL_SANDBOX_MANIFEST_VALIDATION:false}
+    remediation-simulation: ${KUBEONCALL_SANDBOX_REMEDIATION_SIMULATION:false}
+    agent-auto-route-enabled: ${KUBEONCALL_SANDBOX_AGENT_AUTO_ROUTE_ENABLED:false}
+    # Internal Sandbox Controller endpoint; never echoed through /api/v1/capabilities.
+    controller-endpoint: ${KUBEONCALL_SANDBOX_CONTROLLER_ENDPOINT:}
+    controller-key-id: ${KUBEONCALL_SANDBOX_CONTROLLER_KEY_ID:backend}
+    controller-hmac-secret: ${KUBEONCALL_SANDBOX_CONTROLLER_HMAC_SECRET:}
+    # Releases may mount a server-owned catalogue containing the actual registry image digests.
+    # Empty keeps the immutable classpath catalogue for local development and tests.
+    tool-catalog-path: ${KUBEONCALL_SANDBOX_TOOL_CATALOG_PATH:}
+    controller-connect-timeout-millis: ${KUBEONCALL_SANDBOX_CONTROLLER_CONNECT_TIMEOUT_MILLIS:3000}
+    controller-read-timeout-millis: ${KUBEONCALL_SANDBOX_CONTROLLER_READ_TIMEOUT_MILLIS:5000}
+    controller-max-response-bytes: ${KUBEONCALL_SANDBOX_CONTROLLER_MAX_RESPONSE_BYTES:2097152}
+    timeout-seconds: ${KUBEONCALL_SANDBOX_TIMEOUT_SECONDS:300}
+    max-timeout-seconds: ${KUBEONCALL_SANDBOX_MAX_TIMEOUT_SECONDS:900}
+    cpu: ${KUBEONCALL_SANDBOX_CPU:1}
+    memory: ${KUBEONCALL_SANDBOX_MEMORY:1Gi}
+    ephemeral-storage: ${KUBEONCALL_SANDBOX_EPHEMERAL_STORAGE:2Gi}
+    input-max-bytes: ${KUBEONCALL_SANDBOX_INPUT_MAX_BYTES:52428800}
+    output-max-bytes: ${KUBEONCALL_SANDBOX_OUTPUT_MAX_BYTES:10485760}
+    log-max-bytes: ${KUBEONCALL_SANDBOX_LOG_MAX_BYTES:2097152}
+    script-max-bytes: ${KUBEONCALL_SANDBOX_SCRIPT_MAX_BYTES:262144}
+    artifact-retention-hours: ${KUBEONCALL_SANDBOX_ARTIFACT_RETENTION_HOURS:24}
+    per-alarm-concurrency: ${KUBEONCALL_SANDBOX_PER_ALARM_CONCURRENCY:1}
+    global-concurrency: ${KUBEONCALL_SANDBOX_GLOBAL_CONCURRENCY:4}
+  knowledge:
+    orphan-grace-seconds: ${KUBEONCALL_KNOWLEDGE_ORPHAN_GRACE_SECONDS:3600}
+  mcp:
+    enabled: true
+    server-name: local-mcp
+    endpoint: http://localhost:18080/mcp/call
+    api-key: ${MCP_API_KEY:}
+    auth-mode: ${MCP_AUTH_MODE:static_bearer}
+    oauth-token-endpoint: ${MCP_OAUTH_TOKEN_ENDPOINT:}
+    oauth-client-id: ${MCP_OAUTH_CLIENT_ID:}
+    oauth-client-secret: ${MCP_OAUTH_CLIENT_SECRET:}
+    oauth-client-auth-method: ${MCP_OAUTH_CLIENT_AUTH_METHOD:client_secret_post}
+    oauth-scope: ${MCP_OAUTH_SCOPE:}
+    oauth-resource: ${MCP_OAUTH_RESOURCE:}
+    oauth-refresh-skew-seconds: ${MCP_OAUTH_REFRESH_SKEW_SECONDS:30}
+    timeout-millis: 3000
+    protocol: ${MCP_PROTOCOL:custom}
+    protocol-version: ${MCP_PROTOCOL_VERSION:2025-11-25}
+    client-name: ${MCP_CLIENT_NAME:kubeoncall}
+    client-version: ${MCP_CLIENT_VERSION:1.0.0}
+    discovery-enabled: ${MCP_DISCOVERY_ENABLED:false}
+    discovery-endpoint: ${MCP_DISCOVERY_ENDPOINT:}
+    discovery-cache-seconds: ${MCP_DISCOVERY_CACHE_SECONDS:60}
+    discovery-max-pages: ${MCP_DISCOVERY_MAX_PAGES:20}
+    discovery-refresh-millis: ${MCP_DISCOVERY_REFRESH_MILLIS:60000}
+    dynamic-invocation-enabled: ${MCP_DYNAMIC_INVOCATION_ENABLED:false}
+    dynamic-max-tools: ${MCP_DYNAMIC_MAX_TOOLS:3}
+    max-response-bytes: ${MCP_MAX_RESPONSE_BYTES:262144}
+    allowed-tools: ${MCP_ALLOWED_TOOLS:knowledge.searchSop,topology.getServiceTopology,cmdb.getServiceMetadata,kubernetes.describeResource,prometheus.queryRange,alerts.getActiveAlerts,changes.getRecentChanges,inventory.*,metrics.*}
+  change-events:
+    webhook-enabled: ${CHANGE_EVENT_WEBHOOK_ENABLED:false}
+    webhook-auth-mode: ${CHANGE_EVENT_WEBHOOK_AUTH_MODE:bearer}
+    webhook-token: ${CHANGE_EVENT_WEBHOOK_TOKEN:}
+    webhook-max-payload-bytes: ${CHANGE_EVENT_WEBHOOK_MAX_PAYLOAD_BYTES:1048576}
+    github-webhook-secret: ${CHANGE_EVENT_GITHUB_WEBHOOK_SECRET:}
+    gitlab-webhook-token: ${CHANGE_EVENT_GITLAB_WEBHOOK_TOKEN:}
+    jenkins-webhook-token: ${CHANGE_EVENT_JENKINS_WEBHOOK_TOKEN:}
+    argocd-webhook-token: ${CHANGE_EVENT_ARGOCD_WEBHOOK_TOKEN:}
+  integrations:
+    kubernetes:
+      endpoint: ${KUBERNETES_TOOL_ENDPOINT:http://localhost:18081/api/tools/kubernetes}
+      timeout-millis: 3000
+      bearer-token: ${KUBERNETES_TOOL_BEARER_TOKEN:}
+      mutation-endpoint: ${KUBERNETES_MUTATION_TOOL_ENDPOINT:}
+      mutation-bearer-token: ${KUBERNETES_MUTATION_TOOL_BEARER_TOKEN:}
+    prometheus:
+      endpoint: http://localhost:18082/api/tools/prometheus
+      timeout-millis: 3000
+    loki:
+      endpoint: ${LOKI_ENDPOINT:http://localhost:3100}
+      timeout-millis: ${LOKI_TIMEOUT_MILLIS:5000}
+    alertmanager:
+      endpoint: http://localhost:18083/api/tools/alertmanager
+      timeout-millis: 3000
+    notification:
+      endpoint: ${ALERT_NOTIFICATION_WEBHOOK_ENDPOINT:}
+      timeout-millis: ${ALERT_NOTIFICATION_WEBHOOK_TIMEOUT_MILLIS:3000}
+    incident:
+      endpoint: http://localhost:18087/api/tools/incident
+      timeout-millis: 3000
+    device:
+      endpoint: http://localhost:18084/api/tools/device
+      timeout-millis: 3000
+    database:
+      endpoint: http://localhost:18085/api/tools/database
+      timeout-millis: 3000
+  workflow:
+    alarm-dedup-ttl-seconds: 600
+    diagnosis-node-timeout-millis: ${ALARM_WORKFLOW_DIAGNOSIS_NODE_TIMEOUT_MILLIS:45000}
+  alarm:
+    enabled: true
+    policy-location: classpath:alarm-policies-node-mvp.yml
+    default-severity: P3
+    active-ttl-seconds: 86400
+    resolved-retention-seconds: 3600
+    p0-dedup-ttl-seconds: 1800
+    p1-dedup-ttl-seconds: 1200
+    p2-dedup-ttl-seconds: 600
+    p3-dedup-ttl-seconds: 300
+    info-dedup-ttl-seconds: 120
+    node-not-ready-suppression-ttl-seconds: 1800
+    escalation-ttl-seconds: 3600
+    acknowledgement-ttl-seconds: 86400
+    silence-approval-ttl-seconds: 1800
+    p0-recovery-window-seconds: 900
+    p1-recovery-window-seconds: 600
+    p2-recovery-window-seconds: 300
+    p3-recovery-window-seconds: 120
+    info-recovery-window-seconds: 0
+    recovery-state-ttl-seconds: 259200
+    recovery-scheduler-enabled: true
+    recovery-check-interval-millis: 30000
+    recovery-batch-size: 100
+    recovery-health-check-required: true
+    recovery-health-check-endpoint: ${ALARM_RECOVERY_HEALTH_CHECK_ENDPOINT:}
+    recovery-health-check-timeout-millis: 3000
+    recovery-confirmation-timeout-seconds: 86400
+    p0-escalation-count: 2
+    p1-escalation-count: 3
+    p0-escalation-after-seconds: 600
+    p1-escalation-after-seconds: 1800
+    policy-version-history-limit: 20
+    p1-aggregation-window-seconds: 300
+    p2-aggregation-window-seconds: 900
+    p3-aggregation-window-seconds: 3600
+    alertmanager-webhook-enabled: true
+    alertmanager-webhook-auth-mode: bearer
+    alertmanager-webhook-token: ${ALERTMANAGER_WEBHOOK_TOKEN:}
+    alertmanager-webhook-token-file: ${ALERTMANAGER_WEBHOOK_TOKEN_FILE:}
+    alertmanager-webhook-max-alerts-per-request: 100
+    alertmanager-webhook-max-payload-bytes: 1048576
+    inbox-stream-key: kubeoncall:alarm:inbox
+    inbox-consumer-group: kubeoncall-alarm-workers
+    inbox-dead-letter-key: kubeoncall:alarm:dead-letter
+    inbox-max-retries: 5
+    inbox-retention-hours: 168
+    inbox-worker-enabled: true
+    inbox-worker-batch-size: 10
+    inbox-worker-block-millis: 1000
+    inbox-pending-claim-idle-millis: 60000
+  memory:
+    enabled: true
+    session-ttl-seconds: 86400
+    max-session-turns: 12
+    session-recent-turns: 6
+    session-token-budget: 1200
+    session-append-max-retries: 5
+    session-summary-token-budget: 600
+    context-token-budget: 2400
+    unified-context-token-budget: 3200
+    observation-token-budget: 800
+    max-observation-entries: 20
+    long-term-enabled: true
+    inject-max-entries: 5
+    stale-after-days: 30
+    temporal-normalization-zone: Asia/Shanghai
+    consolidation-enabled: false
+    consolidation-cron: "0 0 3 * * *"
+    consolidation-scan-limit: 500
+    consolidation-lock-ttl-seconds: 1800
+    duplicate-similarity-threshold: 0.92
+    semantic-duplicate-enabled: ${MEMORY_SEMANTIC_DUPLICATE_ENABLED:false}
+    semantic-duplicate-weight: ${MEMORY_SEMANTIC_DUPLICATE_WEIGHT:0.75}
+    extraction-worker-enabled: true
+    extraction-poll-interval-millis: 5000
+    extraction-max-attempts: 3
+    extraction-processing-timeout-seconds: ${MEMORY_EXTRACTION_PROCESSING_TIMEOUT_SECONDS:300}
+    extraction-reclaim-limit: ${MEMORY_EXTRACTION_RECLAIM_LIMIT:100}
+    extraction-status-ttl-seconds: ${MEMORY_EXTRACTION_STATUS_TTL_SECONDS:86400}
+    llm-extraction-enabled: ${MEMORY_LLM_EXTRACTION_ENABLED:false}
+    llm-extraction-endpoint: ${MEMORY_LLM_EXTRACTION_ENDPOINT:}
+    llm-extraction-api-key: ${MEMORY_LLM_EXTRACTION_API_KEY:}
+    llm-extraction-model: ${MEMORY_LLM_EXTRACTION_MODEL:}
+    llm-extraction-timeout-millis: ${MEMORY_LLM_EXTRACTION_TIMEOUT_MILLIS:5000}
+    extraction-quality-threshold: ${MEMORY_EXTRACTION_QUALITY_THRESHOLD:0.55}
+    tokenizer-enabled: ${MEMORY_TOKENIZER_ENABLED:false}
+    tokenizer-endpoint: ${MEMORY_TOKENIZER_ENDPOINT:}
+    tokenizer-api-key: ${MEMORY_TOKENIZER_API_KEY:}
+    tokenizer-model: ${MEMORY_TOKENIZER_MODEL:}
+    tokenizer-timeout-millis: ${MEMORY_TOKENIZER_TIMEOUT_MILLIS:2000}
+    tokenizer-mode: ${MEMORY_TOKENIZER_MODE:count_endpoint}
+    tokenizer-chat-overhead-tokens: ${MEMORY_TOKENIZER_CHAT_OVERHEAD_TOKENS:-1}
+  skill:
+    enabled: true
+    location: classpath*:skills/**/*.md
+    project-location: file:./skills/**/SKILL.md
+    max-active-skills: 3
+    activation-threshold: 3
+    prompt-max-chars: 4000
+    prompt-token-budget: 900
+    version-conflict-policy: ${SKILL_VERSION_CONFLICT_POLICY:PREFER_PROJECT}
+    automatic-alert-diagnosis-enabled: ${SKILL_AUTOMATIC_ALERT_DIAGNOSIS_ENABLED:true}
+  audit:
+    repository: redis
+    retention-hours: 168

@@ -1,0 +1,188 @@
+cases:
+  - id: crashloop-canonical-alert
+    request: "Deployment unavailable and OOMKilled also appear in the grouped summary"
+    context:
+      alertName: PodCrashLoopBackOffP1
+      metricName: kube.pod.waiting_reason
+      runbookId: runbook-pod-crashloop
+      policyCategory: k8s-pod
+      resourceType: POD
+      taskType: QUERY_LOGS
+    expectedPrimarySkill: pod-crashloop-triage
+    forbiddenSkills: [pod-oom-triage, cluster-scheduling-capacity-triage, node-cpu-pressure-triage, node-memory-pressure-triage, deployment-unavailable-triage]
+
+  - id: crashloop-chinese
+    request: "Pod 一直 CrashLoopBackOff，先看 previous container logs 和退出码"
+    context:
+      resourceType: POD
+      taskType: QUERY_LOGS
+    expectedPrimarySkill: pod-crashloop-triage
+    forbiddenSkills: [pod-oom-triage, deployment-unavailable-triage]
+
+  - id: crashloop-english
+    request: "Investigate this pod crash loop with repeated container exits"
+    context:
+      resourceType: POD
+      taskType: QUERY_LOGS
+    expectedPrimarySkill: pod-crashloop-triage
+    forbiddenSkills: [pod-oom-triage, deployment-unavailable-triage]
+
+  - id: pod-oom-canonical-alert
+    request: "The summary also mentions node memory pressure and a deployment rollout"
+    context:
+      alertName: PodOOMKilledP1
+      metricName: kube.pod.oom_killed
+      runbookId: runbook-pod-oom
+      policyCategory: k8s-pod
+      resourceType: POD
+      taskType: QUERY_METRICS
+    expectedPrimarySkill: pod-oom-triage
+    forbiddenSkills: [pod-crashloop-triage, cluster-scheduling-capacity-triage, node-cpu-pressure-triage, node-memory-pressure-triage, deployment-unavailable-triage]
+
+  - id: pod-oom-chinese
+    request: "容器 OOMKilled，排查 cgroup oom 和 memory limit exceeded"
+    context:
+      resourceType: POD
+      taskType: QUERY_METRICS
+    expectedPrimarySkill: pod-oom-triage
+    forbiddenSkills: [node-memory-pressure-triage, pod-crashloop-triage]
+
+  - id: pod-oom-english
+    request: "Triage a pod OOM after the container ran out of memory"
+    context:
+      resourceType: POD
+      taskType: QUERY_METRICS
+    expectedPrimarySkill: pod-oom-triage
+    forbiddenSkills: [node-memory-pressure-triage, pod-crashloop-triage]
+
+  - id: scheduling-canonical-alert
+    request: "A pod also has CrashLoopBackOff, but the cluster alert is about the pending backlog"
+    context:
+      alertName: ClusterPendingPodsP1
+      metricName: kube.cluster.pending_pods
+      runbookId: runbook-cluster-capacity
+      policyCategory: capacity
+      resourceType: CLUSTER
+      taskType: QUERY_METRICS
+    expectedPrimarySkill: cluster-scheduling-capacity-triage
+    forbiddenSkills: [pod-crashloop-triage, pod-oom-triage, node-cpu-pressure-triage, node-memory-pressure-triage, deployment-unavailable-triage]
+
+  - id: scheduling-chinese
+    request: "集群 pending pods 持续增加，FailedScheduling 提示 insufficient cpu"
+    context:
+      resourceType: CLUSTER
+      taskType: QUERY_METRICS
+    expectedPrimarySkill: cluster-scheduling-capacity-triage
+    forbiddenSkills: [pod-crashloop-triage, deployment-unavailable-triage]
+
+  - id: scheduling-english
+    request: "Investigate unschedulable pods and cluster capacity constraints"
+    context:
+      resourceType: CLUSTER
+      taskType: QUERY_METRICS
+    expectedPrimarySkill: cluster-scheduling-capacity-triage
+    forbiddenSkills: [pod-crashloop-triage, deployment-unavailable-triage]
+
+  - id: node-cpu-canonical-alert
+    request: "Application latency and node memory are mentioned, but CPU is the governed alert"
+    context:
+      alertName: HostHighCpuUsageP0
+      metricName: host.cpu.usage_percent
+      runbookId: runbook-host-cpu-high
+      policyCategory: host
+      resourceType: NODE
+      taskType: QUERY_METRICS
+    expectedPrimarySkill: node-cpu-pressure-triage
+    forbiddenSkills: [pod-crashloop-triage, pod-oom-triage, cluster-scheduling-capacity-triage, node-memory-pressure-triage, database-latency-triage]
+
+  - id: node-cpu-chinese
+    request: "节点 CPU 持续高，node cpu high 并伴随 cpu iowait"
+    context:
+      resourceType: NODE
+      taskType: QUERY_METRICS
+    expectedPrimarySkill: node-cpu-pressure-triage
+    forbiddenSkills: [node-memory-pressure-triage, pod-oom-triage]
+
+  - id: node-cpu-english
+    request: "Host CPU is high with elevated load average and CPU steal"
+    context:
+      resourceType: NODE
+      taskType: QUERY_METRICS
+    expectedPrimarySkill: node-cpu-pressure-triage
+    forbiddenSkills: [node-memory-pressure-triage, pod-oom-triage]
+
+  - id: node-memory-canonical-alert
+    request: "One pod was OOMKilled, but the governed signal is node-wide memory pressure"
+    context:
+      alertName: HostMemoryPressureP0
+      metricName: host.memory.available_percent
+      runbookId: runbook-host-memory-pressure
+      policyCategory: host
+      resourceType: NODE
+      taskType: QUERY_METRICS
+    expectedPrimarySkill: node-memory-pressure-triage
+    forbiddenSkills: [pod-crashloop-triage, pod-oom-triage, cluster-scheduling-capacity-triage, node-cpu-pressure-triage, node-notready-triage]
+
+  - id: node-memory-chinese
+    request: "节点可用内存低，出现 host memory pressure 和 kernel oom"
+    context:
+      resourceType: NODE
+      taskType: QUERY_METRICS
+    expectedPrimarySkill: node-memory-pressure-triage
+    forbiddenSkills: [pod-oom-triage, node-cpu-pressure-triage]
+
+  - id: node-memory-english
+    request: "Investigate node memory low and a MemoryPressure condition"
+    context:
+      resourceType: NODE
+      taskType: QUERY_METRICS
+    expectedPrimarySkill: node-memory-pressure-triage
+    forbiddenSkills: [pod-oom-triage, node-cpu-pressure-triage]
+
+  - id: node-notready-deployed-alert
+    request: "The Kubernetes node is NotReady and its lease may be stale"
+    context:
+      alertName: NodeNotReady
+      metricName: kube.node.ready
+      runbookId: runbook-node-notready
+      policyCategory: k8s-node
+      resourceType: NODE
+      taskType: QUERY_METRICS
+    expectedPrimarySkill: node-notready-triage
+    forbiddenSkills: [node-cpu-pressure-triage, node-memory-pressure-triage, cluster-scheduling-capacity-triage]
+
+  - id: pod-pending-deployed-alert
+    request: "This Pod remains Pending because scheduling cannot complete"
+    context:
+      alertName: PodPendingTooLong
+      metricName: kube.pod.pending
+      runbookId: runbook-cluster-capacity
+      policyCategory: k8s-pod
+      resourceType: POD
+      taskType: QUERY_METRICS
+    expectedPrimarySkill: cluster-scheduling-capacity-triage
+    forbiddenSkills: [pod-crashloop-triage, pod-oom-triage, deployment-unavailable-triage]
+
+  - id: node-conntrack-deployed-alert
+    request: "The node conntrack table is approaching exhaustion"
+    context:
+      alertName: NodeConntrackPressure
+      metricName: node.network.conntrack_usage_percent
+      runbookId: runbook-network-conntrack
+      policyCategory: node-network
+      resourceType: NODE
+      taskType: QUERY_METRICS
+    expectedPrimarySkill: network-connectivity-triage
+    forbiddenSkills: [node-cpu-pressure-triage, node-memory-pressure-triage, node-notready-triage]
+
+  - id: node-filesystem-readonly-deployed-alert
+    request: "A node filesystem was remounted read-only"
+    context:
+      alertName: NodeFilesystemReadOnly
+      metricName: node.filesystem.readonly
+      runbookId: runbook-host-disk-usage
+      policyCategory: node-storage
+      resourceType: NODE
+      taskType: QUERY_METRICS
+    expectedPrimarySkill: disk-capacity-triage
+    forbiddenSkills: [node-cpu-pressure-triage, node-memory-pressure-triage, node-notready-triage]

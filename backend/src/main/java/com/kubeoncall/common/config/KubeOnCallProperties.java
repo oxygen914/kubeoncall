@@ -1,0 +1,167 @@
+package com.kubeoncall.common.config;
+
+import org.springframework.boot.context.properties.ConfigurationProperties;
+
+@ConfigurationProperties(prefix = "kubeoncall")
+public class KubeOnCallProperties {
+
+    private final Agent agent = new Agent();
+    private final Approval approval = new Approval();
+    private final Rag rag = new Rag();
+    private final Storage storage = new Storage();
+    private final Mcp mcp = new Mcp();
+    private final Workflow workflow = new Workflow();
+    private final Audit audit = new Audit();
+    private final Integrations integrations = new Integrations();
+    private final Alarm alarm = new Alarm();
+    private final ChangeEvents changeEvents = new ChangeEvents();
+    private final Memory memory = new Memory();
+    private final Skill skill = new Skill();
+    private final ApiSecurity apiSecurity = new ApiSecurity();
+    private final Cors cors = new Cors();
+    private final Auth auth = new Auth();
+    private final Api api = new Api();
+    private final DataMigration dataMigration = new DataMigration();
+    private final LegacyApi legacyApi = new LegacyApi();
+    private final Knowledge knowledge = new Knowledge();
+    private final DependencyCircuitBreaker dependencyCircuitBreaker = new DependencyCircuitBreaker();
+    private final Sandbox sandbox = new Sandbox();
+    private final AiOperations aiOperations = new AiOperations();
+
+    public Agent getAgent() {
+        return agent;
+    }
+
+    public Approval getApproval() {
+        return approval;
+    }
+
+    public Rag getRag() {
+        return rag;
+    }
+
+    public Storage getStorage() {
+        return storage;
+    }
+
+    public Mcp getMcp() {
+        return mcp;
+    }
+
+    public Workflow getWorkflow() {
+        return workflow;
+    }
+
+    public Integrations getIntegrations() {
+        return integrations;
+    }
+
+    public Audit getAudit() {
+        return audit;
+    }
+
+    public Alarm getAlarm() {
+        return alarm;
+    }
+
+    public Memory getMemory() {
+        return memory;
+    }
+
+    public ChangeEvents getChangeEvents() {
+        return changeEvents;
+    }
+
+    public Skill getSkill() {
+        return skill;
+    }
+
+    public ApiSecurity getApiSecurity() {
+        return apiSecurity;
+    }
+
+    public Cors getCors() {
+        return cors;
+    }
+
+    public Auth getAuth() {
+        return auth;
+    }
+
+    public Api getApi() {
+        return api;
+    }
+
+    public DataMigration getDataMigration() {
+        return dataMigration;
+    }
+
+    public LegacyApi getLegacyApi() {
+        return legacyApi;
+    }
+
+    public Knowledge getKnowledge() {
+        return knowledge;
+    }
+
+    public DependencyCircuitBreaker getDependencyCircuitBreaker() {
+        return dependencyCircuitBreaker;
+    }
+
+    public Sandbox getSandbox() {
+        return sandbox;
+    }
+
+    public AiOperations getAiOperations() {
+        return aiOperations;
+    }
+
+    public static class Agent extends AgentProperties {}
+
+    public static class Approval extends ApprovalProperties {}
+
+    public static class Rag extends RagProperties {}
+
+    public static class Storage extends StorageProperties {
+
+        public static class Minio extends MinioProperties {}
+    }
+
+    public static class Mcp extends McpProperties {}
+
+    public static class Workflow extends WorkflowProperties {}
+
+    public static class Audit extends AuditProperties {}
+
+    public static class Alarm extends AlarmProperties {}
+
+    public static class Memory extends MemoryProperties {}
+
+    public static class ChangeEvents extends ChangeEventProperties {}
+
+    public static class Skill extends SkillProperties {}
+
+    public static class ApiSecurity extends ApiSecurityProperties {}
+
+    public static class Cors extends CorsProperties {}
+
+    public static class Auth extends AuthProperties {}
+
+    public static class Api extends ApiProperties {}
+
+    public static class DataMigration extends DataMigrationProperties {}
+
+    public static class LegacyApi extends LegacyApiProperties {}
+
+    public static class Knowledge extends KnowledgeProperties {}
+
+    public static class DependencyCircuitBreaker extends DependencyCircuitBreakerProperties {}
+
+    public static class Integrations extends IntegrationsProperties {}
+
+    public static class Endpoint extends EndpointProperties {}
+
+    public static class Sandbox extends SandboxProperties {}
+
+    public static class AiOperations extends AiOperationsProperties {}
+}

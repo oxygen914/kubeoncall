@@ -1,0 +1,4 @@
+{
+  "runtime": "python3",
+  "source": "result = {\"findings\": [{\"code\": \"PYTHON_SMOKE_OK\"}], \"evidenceReferences\": [\"fixture://generated-python\"], \"summary\": \"generated Python runtime smoke passed\"}"
+}

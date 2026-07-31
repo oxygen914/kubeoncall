@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "KubeOnCall generated-code result v1",
+  "type": "object",
+  "required": ["schemaVersion", "status", "findings", "evidenceReferences", "summary"],
+  "properties": {
+    "schemaVersion": {"const": "v1"},
+    "status": {"enum": ["SUCCEEDED", "FAILED", "TIMED_OUT", "REJECTED"]},
+    "findings": {"type": "array", "items": {"type": "string"}},
+    "evidenceReferences": {"type": "array", "items": {"type": "string"}},
+    "summary": {"type": "string", "maxLength": 16384}
+  },
+  "additionalProperties": false
+}

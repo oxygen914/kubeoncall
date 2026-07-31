@@ -1,0 +1,10 @@
+{
+  "schemaVersion": "v1",
+  "rulesetVersion": "sandbox-manifest-rules-v1",
+  "type": "MANIFEST",
+  "preflight": {
+    "valid": true,
+    "findings": []
+  },
+  "document": "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: sandbox-runtime-smoke\ndata:\n  verified: \"true\"\n"
+}

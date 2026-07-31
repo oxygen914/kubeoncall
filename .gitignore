@@ -1,4 +1,77 @@
+# Build outputs and generated code
+/backend/target/
+/frontend/dist/
+/frontend/node_modules/
+/frontend/coverage/
 /target/
+*.class
+*.log
+npm-debug.log*
+
+# Maven Wrapper runtime artifact
+/backend/.mvn/wrapper/maven-wrapper.jar
+
+# Local environment and secrets
+**/.env
+**/.env.*
+!**/.env.example
+**/secrets/
+*.pem
+*.key
+*.p12
+*.jks
+api-key*.md
+pre-api-token*.md
+
+# Go build and test outputs
+/sandbox-controller/sandbox-controller
+**/*.test
+**/coverage.out
+
+# Python environments, caches, and coverage outputs
+**/__pycache__/
+**/.pytest_cache/
+**/.mypy_cache/
+**/.ruff_cache/
+**/.venv/
+**/*.py[cod]
+**/.coverage
+**/htmlcov/
+
+# IDE, editor and OS metadata
+/.idea/
+/.vscode/
+/.fleet/
+/.classpath
+/.project
+/.settings/
+*.iml
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# Local agent and workspace state
+/.claude/
+/.codex/
+/.agents/
+
+# Project refactor plans, progress records, and acceptance documents are tracked.
+# Keep only personal interview materials and scratch documents local.
+/面试问题/
+/新面试问题/
 /mianshiti/
-# Maven Wrapper downloaded jar (regenerated on demand by ./mvnw)
-/.mvn/wrapper/maven-wrapper.jar
+/notes/
+/drafts/
+*.local.md
+*.draft.md
+
+# Temporary files and reports
+*.tmp
+*.temp
+*.bak
+*.orig
+*.rej
+/tmp/
+/reports/

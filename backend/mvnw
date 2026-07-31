@@ -1,0 +1,130 @@
+#!/bin/sh
+# ----------------------------------------------------------------------------
+# Licensed to the Apache Software Foundation (ASF) under one
+# or more contributor license agreements.  See the NOTICE file
+# distributed with this work for additional information
+# regarding copyright ownership.  The ASF licenses this file
+# to you under the Apache License, Version 2.0 (the
+# "License"); you may not use this file except in compliance
+# with the License.  You may obtain a copy of the License at
+#
+#    http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing,
+# software distributed under the License is distributed on an
+# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+# KIND, either express or implied.  See the License for the
+# specific language governing permissions and limitations
+# under the License.
+# ----------------------------------------------------------------------------
+
+# ----------------------------------------------------------------------------
+# Apache Maven Wrapper startup batch script, version 3.3.2
+# ----------------------------------------------------------------------------
+
+# Sanitize environment
+set -e
+
+# OS specific support
+cygwin=false
+msys=false
+darwin=false
+unix=false
+nonstop=false
+case "$(uname)" in
+  CYGWIN* )
+    cygwin=true ;;
+  Darwin* )
+    darwin=true ;;
+  MSYS* | MINGW* )
+    msys=true ;;
+  NONSTOP* )
+    nonstop=true ;;
+  * )
+    unix=true ;;
+esac
+
+# Determine the Java command to use to start the JVM.
+if [ -n "$JAVA_HOME" ] ; then
+  if [ -x "$JAVA_HOME/jre/sh/java" ] ; then
+    JAVACMD="$JAVA_HOME/jre/sh/java"
+  else
+    JAVACMD="$JAVA_HOME/bin/java"
+  fi
+  if [ ! -x "$JAVACMD" ] ; then
+    echo "ERROR: JAVA_HOME is set to an invalid directory: $JAVA_HOME" >&2
+    echo "Please set the JAVA_HOME variable in your environment to match the" >&2
+    echo "location of your Java installation." >&2
+    exit 1
+  fi
+else
+  JAVACMD=java
+  if ! command -v java >/dev/null 2>&1 ; then
+    echo "ERROR: JAVA_HOME is not set and 'java' could not be found in your PATH." >&2
+    echo "Please set the JAVA_HOME variable in your environment to match the" >&2
+    echo "location of your Java installation." >&2
+    exit 1
+  fi
+fi
+
+# Resolve the project base directory
+MAVEN_PROJECTBASEDIR="${MAVEN_BASEDIR:-$(cd "$(dirname "$0")" && pwd)}"
+MAVEN_PROJECTBASEDIR="$(cd "$MAVEN_PROJECTBASEDIR" && pwd)"
+
+# Maven Wrapper JAR / properties
+WRAPPER_PROPERTIES="$MAVEN_PROJECTBASEDIR/.mvn/wrapper/maven-wrapper.properties"
+WRAPPER_JAR="$MAVEN_PROJECTBASEDIR/.mvn/wrapper/maven-wrapper.jar"
+WRAPPER_DOWNLOADED=false
+
+# Download the wrapper jar if it is missing
+if [ ! -e "$WRAPPER_JAR" ] ; then
+  if [ -e "$WRAPPER_PROPERTIES" ] ; then
+    # shellcheck disable=SC2013
+    wrapperUrl=$(grep -E '^wrapperUrl=' "$WRAPPER_PROPERTIES" | sed -E 's/^wrapperUrl=//')
+  fi
+  if [ -z "$wrapperUrl" ] ; then
+    wrapperUrl="https://repo.maven.apache.org/maven2/org/apache/maven/wrapper/maven-wrapper/3.3.2/maven-wrapper-3.3.2.jar"
+  fi
+  echo "Downloading Maven Wrapper from $wrapperUrl" >&2
+  if command -v curl >/dev/null 2>&1 ; then
+    curl -fsSL "$wrapperUrl" -o "$WRAPPER_JAR" || exit 1
+  elif command -v wget >/dev/null 2>&1 ; then
+    wget -q -O "$WRAPPER_JAR" "$wrapperUrl" || exit 1
+  else
+    echo "ERROR: Could not download Maven Wrapper JAR (need curl or wget)." >&2
+    exit 1
+  fi
+  WRAPPER_DOWNLOADED=true
+fi
+
+# Verify the wrapper JAR before executing it.
+if [ -e "$WRAPPER_PROPERTIES" ] ; then
+  wrapperSha256Sum=$(grep -E '^wrapperSha256Sum=' "$WRAPPER_PROPERTIES" | sed -E 's/^wrapperSha256Sum=//')
+fi
+if [ -n "$wrapperSha256Sum" ] ; then
+  if command -v sha256sum >/dev/null 2>&1 ; then
+    actualWrapperSha256=$(sha256sum "$WRAPPER_JAR" | awk '{print $1}')
+  elif command -v shasum >/dev/null 2>&1 ; then
+    actualWrapperSha256=$(shasum -a 256 "$WRAPPER_JAR" | awk '{print $1}')
+  else
+    echo "ERROR: Cannot verify Maven Wrapper JAR (need sha256sum or shasum)." >&2
+    exit 1
+  fi
+  if [ "$actualWrapperSha256" != "$wrapperSha256Sum" ] ; then
+    echo "ERROR: Maven Wrapper JAR SHA-256 mismatch." >&2
+    echo "Expected: $wrapperSha256Sum" >&2
+    echo "Actual:   $actualWrapperSha256" >&2
+    exit 1
+  fi
+fi
+
+# Execute Maven
+MAVEN_CMDLINE_ARGS="$MAVEN_CONFIG $@"
+export MAVEN_CMDLINE_ARGS
+
+# shellcheck disable=SC2086
+exec "$JAVACMD" \
+  $MAVEN_OPTS \
+  -Dmaven.multiModuleProjectDirectory="$MAVEN_PROJECTBASEDIR" \
+  -classpath "$WRAPPER_JAR" \
+  org.apache.maven.wrapper.MavenWrapperMain "$@"

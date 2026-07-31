@@ -1,0 +1,1 @@
+{"schemaVersion":"v1","findings":["deployment replicas differ from ready replicas"],"evidenceReferences":["resource:deployment/api"],"confidence":0.91,"recommendations":["compare rollout conditions with recent events"]}

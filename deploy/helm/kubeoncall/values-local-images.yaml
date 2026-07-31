@@ -1,0 +1,17 @@
+# Use with locally built images loaded into Minikube/Kind.
+image:
+  repository: kubeoncall-backend
+  tag: latest
+  pullPolicy: Never
+
+console:
+  image:
+    repository: kubeoncall-console
+    tag: latest
+    pullPolicy: Never
+
+sandboxController:
+  image:
+    repository: kubeoncall-sandbox-controller
+    tag: latest
+    pullPolicy: Never
