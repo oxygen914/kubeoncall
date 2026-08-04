@@ -223,7 +223,7 @@ spec:
             - name: KUBEONCALL_LOKI_MAX_LINES
               value: {{ .Values.config.lokiMaxLines | quote }}
             - name: KUBEONCALL_LOKI_MAX_RESPONSE_BYTES
-              value: {{ .Values.config.lokiMaxResponseBytes | quote }}
+              value: {{ .Values.config.lokiMaxResponseBytes | int64 | quote }}
             - name: KUBEONCALL_EVIDENCE_ALLOWED_CLUSTERS
               value: {{ .Values.config.evidenceAllowedClusters | quote }}
             - name: KUBEONCALL_EVIDENCE_ALLOWED_NAMESPACES
@@ -473,7 +473,9 @@ spec:
             - name: KUBEONCALL_AUTH_LOGIN_LOCK_DURATION_SECONDS
               value: {{ .Values.mysql.loginLockDurationSeconds | quote }}
             - name: KUBEONCALL_AUTH_LEGACY_TOKEN_COMPAT
-              value: {{ ternary false .Values.mysql.legacyTokenCompat .Values.quickstart.enabled | quote }}
+              # Quickstart defaults this compatibility path off, but an explicit profile override
+              # must remain effective for local API smoke tests and staged migrations.
+              value: {{ .Values.mysql.legacyTokenCompat | quote }}
             - name: KUBEONCALL_BOOTSTRAP_ADMIN_ENABLED
               value: {{ or .Values.mysql.bootstrapAdminEnabled .Values.quickstart.enabled | quote }}
             - name: KUBEONCALL_BOOTSTRAP_ADMIN_USERNAME
