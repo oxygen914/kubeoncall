@@ -12,6 +12,7 @@ import {
 import { useExecution } from '@/features/executions/hooks'
 import { useMonitoringScope } from '@/features/monitoring/monitoringScopeContext'
 import { createAskExecution, type CreateAskExecutionRequest } from './api'
+import { formatAskAnswer } from './answerFormatter'
 
 interface ConversationTurn {
   id: string
@@ -284,7 +285,8 @@ function ConversationItem({
   }, [onSession, result?.sessionId])
 
   const conclusion = result?.conclusions?.[0]
-  const message = result?.answer || result?.resultSummary
+  const rawMessage = result?.answer || result?.resultSummary
+  const message = formatAskAnswer(rawMessage, turn.question, result)
   const englishAnswer = Boolean(message && isPrimarilyEnglish(message))
   return (
     <>
