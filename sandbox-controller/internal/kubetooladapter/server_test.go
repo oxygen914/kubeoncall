@@ -42,6 +42,11 @@ func (reader *fakeReader) GetPods(_ context.Context, parameters Parameters) (any
 	return map[string]any{"items": []any{}}, nil
 }
 
+func (reader *fakeReader) QueryMetricsContext(_ context.Context, parameters Parameters) (any, error) {
+	reader.action, reader.parameters = "queryMetricsContext", parameters
+	return map[string]any{"podCount": 1, "readyPodCount": 1}, nil
+}
+
 func TestServerRequiresAuthenticationAndAllowlistedScope(t *testing.T) {
 	reader := &fakeReader{}
 	server := NewServer(testConfig(), reader)
@@ -74,6 +79,27 @@ func TestServerRequiresAuthenticationAndAllowlistedScope(t *testing.T) {
 	}
 	if reader.action != "queryEvents" || text(reader.parameters, "namespace") != "kubeoncall-system" {
 		t.Fatalf("unexpected reader call: action=%s parameters=%v", reader.action, reader.parameters)
+	}
+}
+
+func TestServerSupportsReadOnlyMetricsContext(t *testing.T) {
+	reader := &fakeReader{}
+	server := NewServer(testConfig(), reader)
+	body := toolRequest("queryMetricsContext", Parameters{
+		"cluster": "local", "namespace": "kubeoncall-system", "windowMinutes": 10,
+	})
+	request := httptest.NewRequest(http.MethodPost, "/api/tools/kubernetes", bytes.NewReader(body))
+	request.Header.Set("Content-Type", "application/json")
+	request.Header.Set("Authorization", "Bearer 0123456789abcdef0123456789abcdef")
+	response := httptest.NewRecorder()
+
+	server.Handler().ServeHTTP(response, request)
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", response.Code, response.Body.String())
+	}
+	if reader.action != "queryMetricsContext" {
+		t.Fatalf("unexpected reader action: %s", reader.action)
 	}
 }
 

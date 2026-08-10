@@ -19,6 +19,94 @@ data:
     FLUSH PRIVILEGES;
     SQL
 ---
+{{- if .Values.quickstart.persistence.enabled }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "kubeoncall.fullname" . }}-mysql-data
+  namespace: {{ .Release.Namespace }}
+  {{- if .Values.quickstart.persistence.retain }}
+  annotations:
+    helm.sh/resource-policy: keep
+  {{- end }}
+  labels:
+    {{- include "kubeoncall.labels" . | nindent 4 }}
+    app.kubernetes.io/component: quickstart-mysql
+spec:
+  accessModes: ["ReadWriteOnce"]
+  {{- with .Values.quickstart.persistence.storageClassName }}
+  storageClassName: {{ . | quote }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.quickstart.persistence.mysql.size | quote }}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "kubeoncall.fullname" . }}-redis-data
+  namespace: {{ .Release.Namespace }}
+  {{- if .Values.quickstart.persistence.retain }}
+  annotations:
+    helm.sh/resource-policy: keep
+  {{- end }}
+  labels:
+    {{- include "kubeoncall.labels" . | nindent 4 }}
+    app.kubernetes.io/component: quickstart-redis
+spec:
+  accessModes: ["ReadWriteOnce"]
+  {{- with .Values.quickstart.persistence.storageClassName }}
+  storageClassName: {{ . | quote }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.quickstart.persistence.redis.size | quote }}
+---
+{{- if .Values.quickstart.elasticsearch.enabled }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "kubeoncall.fullname" . }}-elasticsearch-data
+  namespace: {{ .Release.Namespace }}
+  {{- if .Values.quickstart.persistence.retain }}
+  annotations:
+    helm.sh/resource-policy: keep
+  {{- end }}
+  labels:
+    {{- include "kubeoncall.labels" . | nindent 4 }}
+    app.kubernetes.io/component: quickstart-elasticsearch
+spec:
+  accessModes: ["ReadWriteOnce"]
+  {{- with .Values.quickstart.persistence.storageClassName }}
+  storageClassName: {{ . | quote }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.quickstart.persistence.elasticsearch.size | quote }}
+---
+{{- end }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "kubeoncall.fullname" . }}-minio-data
+  namespace: {{ .Release.Namespace }}
+  {{- if .Values.quickstart.persistence.retain }}
+  annotations:
+    helm.sh/resource-policy: keep
+  {{- end }}
+  labels:
+    {{- include "kubeoncall.labels" . | nindent 4 }}
+    app.kubernetes.io/component: quickstart-minio
+spec:
+  accessModes: ["ReadWriteOnce"]
+  {{- with .Values.quickstart.persistence.storageClassName }}
+  storageClassName: {{ . | quote }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.quickstart.persistence.minio.size | quote }}
+---
+{{- end }}
 apiVersion: v1
 kind: Service
 metadata:
@@ -110,7 +198,12 @@ spec:
               readOnly: true
       volumes:
         - name: data
+          {{- if .Values.quickstart.persistence.enabled }}
+          persistentVolumeClaim:
+            claimName: {{ include "kubeoncall.fullname" . }}-mysql-data
+          {{- else }}
           emptyDir: {}
+          {{- end }}
         - name: init
           configMap:
             name: {{ include "kubeoncall.fullname" . }}-mysql-init
@@ -159,7 +252,11 @@ spec:
       containers:
         - name: redis
           image: {{ .Values.quickstart.redis.image | quote }}
+          {{- if .Values.quickstart.persistence.enabled }}
+          args: ["redis-server", "--appendonly", "yes", "--appendfsync", "everysec"]
+          {{- else }}
           args: ["redis-server", "--save", "", "--appendonly", "no"]
+          {{- end }}
           ports:
             - name: redis
               containerPort: 6379
@@ -175,6 +272,17 @@ spec:
             periodSeconds: 10
           resources:
             {{- toYaml .Values.quickstart.redis.resources | nindent 12 }}
+          {{- if .Values.quickstart.persistence.enabled }}
+          volumeMounts:
+            - name: data
+              mountPath: /data
+          {{- end }}
+      {{- if .Values.quickstart.persistence.enabled }}
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: {{ include "kubeoncall.fullname" . }}-redis-data
+      {{- end }}
 ---
 {{- if .Values.quickstart.elasticsearch.enabled }}
 apiVersion: v1
@@ -242,7 +350,12 @@ spec:
               mountPath: /usr/share/elasticsearch/data
       volumes:
         - name: data
+          {{- if .Values.quickstart.persistence.enabled }}
+          persistentVolumeClaim:
+            claimName: {{ include "kubeoncall.fullname" . }}-elasticsearch-data
+          {{- else }}
           emptyDir: {}
+          {{- end }}
 ---
 {{- end }}
 apiVersion: v1
@@ -322,7 +435,12 @@ spec:
               mountPath: /data
       volumes:
         - name: data
+          {{- if .Values.quickstart.persistence.enabled }}
+          persistentVolumeClaim:
+            claimName: {{ include "kubeoncall.fullname" . }}-minio-data
+          {{- else }}
           emptyDir: {}
+          {{- end }}
 ---
 apiVersion: batch/v1
 kind: Job

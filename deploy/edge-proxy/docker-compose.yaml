@@ -1,0 +1,27 @@
+services:
+  kubeoncall-tunnel:
+    image: nginx:1.27-alpine
+    container_name: kubeoncall-tunnel
+    network_mode: host
+    entrypoint: ["/usr/local/bin/kubectl"]
+    command:
+      - --namespace=kubeoncall
+      - port-forward
+      - --address=127.0.0.1
+      - service/kubeoncall-kubeoncall-console
+      - 18082:80
+    volumes:
+      - /usr/bin/kubectl:/usr/local/bin/kubectl:ro
+      - /home/jsa/.kube:/root/.kube:ro
+    restart: unless-stopped
+
+  nginx:
+    image: nginx:1.27-alpine
+    container_name: kubeoncall-edge-nginx
+    network_mode: host
+    depends_on:
+      - kubeoncall-tunnel
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./certs:/etc/nginx/certs:ro
+    restart: unless-stopped

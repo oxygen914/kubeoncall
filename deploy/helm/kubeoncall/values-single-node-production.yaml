@@ -1,0 +1,63 @@
+# Single-host internal production profile. This profile improves durability and
+# security but intentionally does not claim host-level high availability.
+image:
+  repository: kubeoncall-backend
+  tag: prod-064a9af9dc09
+  pullPolicy: Never
+
+console:
+  image:
+    repository: kubeoncall-console
+    tag: prod-0cbb5b56aead
+    pullPolicy: Never
+  replicaCount: 1
+
+quickstart:
+  enabled: true
+  productionMode: true
+  persistence:
+    enabled: true
+    retain: true
+    storageClassName: standard
+    mysql:
+      size: 20Gi
+    redis:
+      size: 5Gi
+    elasticsearch:
+      size: 40Gi
+    minio:
+      size: 50Gi
+
+config:
+  apiAuthEnabled: true
+  askDurableWorkflowEnabled: true
+  evidenceAllowedClusters: kind
+  evidenceAllowedNamespaces: default,kubeoncall,kube-system,monitoring
+  kubernetesToolEndpoint: http://kubernetes-tool-adapter:8080/api/tools/kubernetes
+  kubernetesToolAuthEnabled: true
+  corsAllowedOrigins: http://127.0.0.1:8081,http://localhost:8081,https://127.0.0.1:18443,https://localhost:18443,https://192.168.172.18,https://10.147.17.17,https://10.255.253.18
+
+mysql:
+  sessionCookieSecure: true
+  # Keep scoped Viewer/Operator/Admin Bearer tokens for documented /api/v1
+  # automation. The legacy API surface remains disabled below.
+  legacyTokenCompat: true
+  bootstrapAdminEnabled: false
+  bootstrapAdminUsername: admin
+
+legacyApi:
+  enabled: false
+
+replicaCount: 1
+
+serviceMonitor:
+  enabled: false
+
+grafanaDashboard:
+  enabled: false
+
+ingress:
+  enabled: false
+
+sandboxController:
+  createNamespace: false

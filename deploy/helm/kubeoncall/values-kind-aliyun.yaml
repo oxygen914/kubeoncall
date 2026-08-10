@@ -1,0 +1,69 @@
+# Local Kind evaluation overlay. Keep the API key in the Kubernetes Secret;
+# this file intentionally contains no credentials.
+quickstart:
+  enabled: true
+
+mysql:
+  # Keep the retired /api surface disabled, but allow the configured admin token on /api/v1
+  # for local smoke tests and operator diagnostics.
+  legacyTokenCompat: true
+
+secrets:
+  # The Secret is provisioned out-of-band so the Alibaba API key is never
+  # rendered into Helm output or generated away by the Quickstart helper.
+  create: false
+  existingSecret: kubeoncall-secrets
+
+image:
+  repository: kubeoncall-backend
+  tag: local
+  pullPolicy: Never
+
+console:
+  replicaCount: 1
+  image:
+    repository: kubeoncall-console
+    tag: local
+    pullPolicy: Never
+
+config:
+  corsAllowedOrigins: http://127.0.0.1:8081,http://localhost:8081,https://192.168.172.18,https://10.147.17.17,https://10.255.253.18
+  springAiEnabled: true
+  springAiBaseUrl: https://dashscope.aliyuncs.com/compatible-mode
+  springAiChatModel: qwen-plus
+  plannerMode: REAL_MODEL
+  plannerProvider: openai-compatible
+  plannerModel: qwen-plus
+  plannerCanaryEnabled: true
+  plannerCanaryFailFast: true
+  askDurableWorkflowEnabled: true
+
+  evidencePrometheusEnabled: true
+  prometheusToolEndpoint: http://prometheus.monitoring.svc.cluster.local:9090
+  # This local Kind overlay intentionally limits evidence collection to the
+  # evaluation cluster and application namespace.
+  evidenceAllowedClusters: kind
+  evidenceAllowedNamespaces: kubeoncall,kube-system
+  evidenceK8sResourceStateEnabled: true
+  kubernetesToolEndpoint: http://kubernetes-tool-adapter:8080/api/tools/kubernetes
+  kubernetesToolAuthEnabled: true
+
+  embeddingEndpoint: https://dashscope.aliyuncs.com/compatible-mode/v1/embeddings
+  embeddingModel: text-embedding-v4
+  embeddingVersion: v1
+  embeddingDimensions: 1536
+  rerankEndpoint: https://dashscope.aliyuncs.com/api/v1/services/rerank/text-rerank/text-rerank
+  rerankModel: qwen3-rerank
+
+  # Keep augmentation and memory extraction fail-closed until their data
+  # boundaries are explicitly approved for this environment.
+  augmentationEnabled: false
+  memoryLlmExtractionEnabled: false
+  memorySemanticDuplicateEnabled: false
+  memoryTokenizerEnabled: false
+
+serviceMonitor:
+  enabled: false
+
+grafanaDashboard:
+  enabled: false

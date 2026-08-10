@@ -73,6 +73,7 @@ resources:
 
 config:
   apiAuthEnabled: false
+  corsAllowedOrigins: http://127.0.0.1:8081,http://localhost:8081
   approvalResumeLeaseSeconds: 300
   # Helm defaults to multiple backend replicas, so SSE fanout must use Redis Pub/Sub.
   realtimeClusterTransport: redis
@@ -433,6 +434,23 @@ sandboxTools:
 # single-node and non-production; disabling it leaves all dependencies externally managed.
 quickstart:
   enabled: false
+  # Harden the self-contained dependency stack for a long-running single-host
+  # installation. This does not provide host-level high availability.
+  productionMode: false
+  persistence:
+    enabled: false
+    # Keep claims when the Helm release is removed accidentally.
+    retain: true
+    # Empty uses the cluster default StorageClass.
+    storageClassName: ""
+    mysql:
+      size: 20Gi
+    redis:
+      size: 5Gi
+    elasticsearch:
+      size: 40Gi
+    minio:
+      size: 50Gi
   backendResources:
     requests: {cpu: 100m, memory: 256Mi}
     limits: {cpu: "1", memory: 1Gi}

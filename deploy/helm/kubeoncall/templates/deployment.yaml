@@ -106,7 +106,9 @@ spec:
             - name: SPRING_PROFILES_ACTIVE
               value: {{ if or .Values.mysql.enabled .Values.quickstart.enabled }}docker,{{ .Values.mysql.profile }}{{ else }}docker{{ end }}
             - name: KUBEONCALL_API_AUTH_ENABLED
-              value: {{ and .Values.config.apiAuthEnabled .Values.legacyApi.enabled | quote }}
+              value: {{ .Values.config.apiAuthEnabled | quote }}
+            - name: KUBEONCALL_CORS_ALLOWED_ORIGINS
+              value: {{ .Values.config.corsAllowedOrigins | quote }}
             - name: KUBEONCALL_MYSQL_ENABLED
               value: {{ or .Values.mysql.enabled .Values.quickstart.enabled | quote }}
             - name: KUBEONCALL_API_VIEWER_TOKEN
@@ -126,7 +128,7 @@ spec:
                 secretKeyRef:
                   name: {{ .Values.secrets.existingSecret }}
                   key: {{ .Values.secrets.apiAdminTokenKey }}
-                  optional: {{ not (and .Values.config.apiAuthEnabled .Values.legacyApi.enabled) }}
+                  optional: {{ not .Values.config.apiAuthEnabled }}
             - name: APPROVAL_RESUME_LEASE_SECONDS
               value: {{ .Values.config.approvalResumeLeaseSeconds | quote }}
             - name: KUBEONCALL_REALTIME_CLUSTER_TRANSPORT
@@ -463,7 +465,7 @@ spec:
                   key: {{ .Values.secrets.mysqlMigrationPasswordKey }}
             {{- end }}
             - name: KUBEONCALL_AUTH_SESSION_COOKIE_SECURE
-              value: {{ ternary false .Values.mysql.sessionCookieSecure .Values.quickstart.enabled | quote }}
+              value: {{ ternary false .Values.mysql.sessionCookieSecure (and .Values.quickstart.enabled (not .Values.quickstart.productionMode)) | quote }}
             - name: KUBEONCALL_AUTH_SESSION_IDLE_TIMEOUT_SECONDS
               value: {{ .Values.mysql.sessionIdleTimeoutSeconds | quote }}
             - name: KUBEONCALL_AUTH_SESSION_MAX_TIMEOUT_SECONDS
@@ -477,9 +479,9 @@ spec:
               # must remain effective for local API smoke tests and staged migrations.
               value: {{ .Values.mysql.legacyTokenCompat | quote }}
             - name: KUBEONCALL_BOOTSTRAP_ADMIN_ENABLED
-              value: {{ or .Values.mysql.bootstrapAdminEnabled .Values.quickstart.enabled | quote }}
+              value: {{ or .Values.mysql.bootstrapAdminEnabled (and .Values.quickstart.enabled (not .Values.quickstart.productionMode)) | quote }}
             - name: KUBEONCALL_BOOTSTRAP_ADMIN_USERNAME
-              value: {{ ternary (default "admin" .Values.mysql.bootstrapAdminUsername) .Values.mysql.bootstrapAdminUsername .Values.quickstart.enabled | quote }}
+              value: {{ ternary (default "admin" .Values.mysql.bootstrapAdminUsername) .Values.mysql.bootstrapAdminUsername (and .Values.quickstart.enabled (not .Values.quickstart.productionMode)) | quote }}
             - name: KUBEONCALL_BOOTSTRAP_ADMIN_PASSWORD
               valueFrom:
                 secretKeyRef:

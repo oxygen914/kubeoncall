@@ -239,6 +239,69 @@ func (reader *KubernetesReader) GetPods(ctx context.Context, parameters Paramete
 	return map[string]any{"items": items}, nil
 }
 
+// QueryMetricsContext returns bounded, read-only workload context for a namespace. Prometheus
+// remains the source of time-series utilization; this adapter contributes Kubernetes readiness,
+// restart and requested-resource facts required by the QUERY_METRICS executor contract.
+func (reader *KubernetesReader) QueryMetricsContext(ctx context.Context, parameters Parameters) (any, error) {
+	namespace := text(parameters, "namespace")
+	pods, err := reader.client.CoreV1().Pods(namespace).List(ctx, metav1.ListOptions{
+		Limit: int64(reader.config.MaxPods),
+	})
+	if err != nil {
+		return nil, safeKubernetesError(err)
+	}
+
+	phases := make(map[string]int)
+	readyPods := 0
+	restarts := int32(0)
+	requests := resourceRequests{}
+	items := make([]map[string]any, 0, len(pods.Items))
+	for _, pod := range pods.Items {
+		phases[string(pod.Status.Phase)]++
+		ready := podReady(pod)
+		if ready {
+			readyPods++
+		}
+		podRestarts := int32(0)
+		for _, container := range pod.Status.ContainerStatuses {
+			podRestarts += container.RestartCount
+		}
+		restarts += podRestarts
+		podRequests := requestedResources(pod)
+		requests.add(podRequests)
+		items = append(items, map[string]any{
+			"name":         pod.Name,
+			"phase":        string(pod.Status.Phase),
+			"ready":        ready,
+			"restartCount": podRestarts,
+			"requests":     podRequests.view(),
+		})
+	}
+
+	return map[string]any{
+		"observedAt":      time.Now().UTC().Format(time.RFC3339Nano),
+		"namespace":       namespace,
+		"podCount":        len(pods.Items),
+		"readyPodCount":   readyPods,
+		"phaseCounts":     phases,
+		"restartCount":    restarts,
+		"requestedTotals": requests.view(),
+		"pods":            items,
+		"truncated":       pods.Continue != "",
+		"metricNames":     parameters["metricNames"],
+		"windowMinutes":   parameters["windowMinutes"],
+	}, nil
+}
+
+func podReady(pod corev1.Pod) bool {
+	for _, condition := range pod.Status.Conditions {
+		if condition.Type == corev1.PodReady {
+			return condition.Status == corev1.ConditionTrue
+		}
+	}
+	return false
+}
+
 func (reader *KubernetesReader) targetPods(ctx context.Context, parameters Parameters) ([]corev1.Pod, error) {
 	namespace := text(parameters, "namespace")
 	kind := strings.ToLower(text(parameters, "resourceKind", "resourceType", "kind"))

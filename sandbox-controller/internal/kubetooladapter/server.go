@@ -19,6 +19,7 @@ type Reader interface {
 	DescribeResource(context.Context, Parameters) (any, error)
 	DescribeWorkload(context.Context, Parameters) (any, error)
 	GetPods(context.Context, Parameters) (any, error)
+	QueryMetricsContext(context.Context, Parameters) (any, error)
 }
 
 // Parameters preserves the backend's governed tool envelope without accepting arbitrary actions.
@@ -130,6 +131,8 @@ func (server *Server) execute(writer http.ResponseWriter, request *http.Request)
 		result, err = server.reader.DescribeWorkload(request.Context(), envelope.Parameters)
 	case "getPods":
 		result, err = server.reader.GetPods(request.Context(), envelope.Parameters)
+	case "queryMetricsContext":
+		result, err = server.reader.QueryMetricsContext(request.Context(), envelope.Parameters)
 	case "rolloutRestart", "rolloutUndo", "scaleWorkload", "patchConfig":
 		err = &APIError{
 			Status:  http.StatusForbidden,

@@ -1,0 +1,205 @@
+# Read-only Kubernetes evidence adapter for the local Kind KubeOnCall deployment.
+# Create kubernetes-tool-adapter-auth/token in namespace kubeoncall before applying.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: kubernetes-tool-adapter
+  namespace: kubeoncall
+  labels:
+    app.kubernetes.io/name: kubernetes-tool-adapter
+    app.kubernetes.io/part-of: kubeoncall
+automountServiceAccountToken: true
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: kubernetes-tool-adapter-readonly
+  namespace: kubeoncall
+rules:
+  - apiGroups: [""]
+    resources: [pods, pods/log, events]
+    verbs: [get, list, watch]
+  - apiGroups: [apps]
+    resources: [deployments, statefulsets, daemonsets, replicasets]
+    verbs: [get, list, watch]
+  - apiGroups: [policy]
+    resources: [poddisruptionbudgets]
+    verbs: [get, list, watch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: kubernetes-tool-adapter-readonly
+  namespace: kubeoncall
+subjects:
+  - kind: ServiceAccount
+    name: kubernetes-tool-adapter
+    namespace: kubeoncall
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: kubernetes-tool-adapter-readonly
+---
+# The Ask UI defaults to kube-system in this local Kind environment. Keep the
+# same read-only verbs, scoped independently to that namespace.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: kubernetes-tool-adapter-readonly
+  namespace: kube-system
+rules:
+  - apiGroups: [""]
+    resources: [pods, pods/log, events]
+    verbs: [get, list, watch]
+  - apiGroups: [apps]
+    resources: [deployments, statefulsets, daemonsets, replicasets]
+    verbs: [get, list, watch]
+  - apiGroups: [policy]
+    resources: [poddisruptionbudgets]
+    verbs: [get, list, watch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: kubernetes-tool-adapter-readonly
+  namespace: kube-system
+subjects:
+  - kind: ServiceAccount
+    name: kubernetes-tool-adapter
+    namespace: kubeoncall
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: kubernetes-tool-adapter-readonly
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: kubeoncall-kind-node-evidence-readonly
+rules:
+  - apiGroups: [""]
+    resources: [nodes]
+    verbs: [get, list]
+  - apiGroups: [coordination.k8s.io]
+    resources: [leases]
+    verbs: [get, list]
+  - apiGroups: [""]
+    resources: [pods, pods/log, events]
+    verbs: [get, list, watch]
+  - apiGroups: [apps]
+    resources: [deployments, statefulsets, daemonsets, replicasets]
+    verbs: [get, list, watch]
+  - apiGroups: [policy]
+    resources: [poddisruptionbudgets]
+    verbs: [get, list, watch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: kubeoncall-kind-node-evidence-readonly
+subjects:
+  - kind: ServiceAccount
+    name: kubernetes-tool-adapter
+    namespace: kubeoncall
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: kubeoncall-kind-node-evidence-readonly
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kubernetes-tool-adapter
+  namespace: kubeoncall
+  labels:
+    app.kubernetes.io/name: kubernetes-tool-adapter
+    app.kubernetes.io/part-of: kubeoncall
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: kubernetes-tool-adapter
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: kubernetes-tool-adapter
+        app.kubernetes.io/part-of: kubeoncall
+    spec:
+      serviceAccountName: kubernetes-tool-adapter
+      automountServiceAccountToken: true
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: adapter
+          image: kubeoncall/kubernetes-tool-adapter:prod-askmetrics-20260810
+          imagePullPolicy: Never
+          env:
+            - name: KUBERNETES_TOOL_ADAPTER_CLUSTER_ID
+              value: kind
+            - name: KUBERNETES_TOOL_ADAPTER_ALLOWED_NAMESPACES
+              value: default,kubeoncall,kube-system,monitoring
+            - name: KUBERNETES_TOOL_ADAPTER_ALLOWED_CONFIG_KEYS
+              value: ""
+            - name: KUBERNETES_TOOL_ADAPTER_BEARER_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: kubernetes-tool-adapter-auth
+                  key: token
+            - name: KUBERNETES_TOOL_ADAPTER_REQUEST_TIMEOUT
+              value: 10s
+            - name: KUBERNETES_TOOL_ADAPTER_MAX_CONCURRENT
+              value: "8"
+            - name: KUBERNETES_TOOL_ADAPTER_MAX_EVENTS
+              value: "200"
+            - name: KUBERNETES_TOOL_ADAPTER_MAX_PODS
+              value: "20"
+            - name: KUBERNETES_TOOL_ADAPTER_MAX_LOG_LINES
+              value: "500"
+            - name: KUBERNETES_TOOL_ADAPTER_MAX_LOG_BYTES
+              value: "262144"
+          ports:
+            - name: http
+              containerPort: 8080
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+            periodSeconds: 5
+            timeoutSeconds: 2
+            failureThreshold: 6
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 2
+          resources:
+            requests:
+              cpu: 25m
+              memory: 48Mi
+            limits:
+              cpu: 250m
+              memory: 128Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: kubernetes-tool-adapter
+  namespace: kubeoncall
+  labels:
+    app.kubernetes.io/name: kubernetes-tool-adapter
+spec:
+  selector:
+    app.kubernetes.io/name: kubernetes-tool-adapter
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
