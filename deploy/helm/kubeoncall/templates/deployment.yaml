@@ -139,6 +139,10 @@ spec:
               value: {{ .Values.config.dependencyCircuitBreakerFailureThreshold | quote }}
             - name: KUBEONCALL_DEPENDENCY_CIRCUIT_BREAKER_RESET_TIMEOUT_SECONDS
               value: {{ .Values.config.dependencyCircuitBreakerResetTimeoutSeconds | quote }}
+            {{- if .Values.config.javaNetworkPreferIpv4Stack }}
+            - name: JAVA_TOOL_OPTIONS
+              value: "-Djava.net.preferIPv4Stack=true"
+            {{- end }}
             - name: KUBEONCALL_SANDBOX_ENABLED
               value: {{ .Values.config.sandboxEnabled | quote }}
             - name: KUBEONCALL_SANDBOX_FIXED_DIAGNOSTIC
@@ -362,6 +366,8 @@ spec:
               value: {{ .Values.config.alertNotificationWebhookEndpoint | quote }}
             - name: ALERT_NOTIFICATION_WEBHOOK_TIMEOUT_MILLIS
               value: {{ .Values.config.alertNotificationWebhookTimeoutMillis | quote }}
+            - name: ALERTMANAGER_WEBHOOK_AUTH_MODE
+              value: {{ .Values.config.alertmanagerWebhookAuthMode | quote }}
             - name: INCIDENT_TOOL_ENDPOINT
               value: {{ .Values.config.incidentToolEndpoint | quote }}
             - name: DEVICE_TOOL_ENDPOINT
@@ -409,7 +415,7 @@ spec:
                 secretKeyRef:
                   name: {{ .Values.secrets.existingSecret }}
                   key: {{ .Values.secrets.alertmanagerWebhookTokenKey }}
-                  optional: true
+                  optional: {{ eq .Values.config.alertmanagerWebhookAuthMode "none" }}
             - name: CHANGE_EVENT_WEBHOOK_TOKEN
               valueFrom:
                 secretKeyRef:

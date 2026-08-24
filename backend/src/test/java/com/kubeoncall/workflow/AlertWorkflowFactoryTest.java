@@ -92,9 +92,24 @@ class AlertWorkflowFactoryTest {
         List<AlertWorkflowDefinition> workflow = factory.buildWorkflow("control-plane");
 
         assertEquals("stateCompareNode", workflow.get(0).name());
-        assertIterableEquals(
-                List.of("knowledgeRetrieveNode", "stateCompareNode"),
-                workflow.get(2).dependencies());
+        assertIterableEquals(List.of(), workflow.get(1).dependencies());
+        assertIterableEquals(List.of(), workflow.get(2).dependencies());
+    }
+
+    @Test
+    void evidenceCollectionShouldNeverBlockIntelligentDiagnosis() {
+        AlertWorkflowFactory factory = factory();
+
+        for (String template :
+                List.of("default", "host-resource", "k8s-pod", "k8s-node", "workload", "control-plane")) {
+            List<AlertWorkflowDefinition> workflow = factory.buildWorkflow(template);
+            AlertWorkflowDefinition diagnosis = workflow.stream()
+                    .filter(definition -> definition.name().equals("intelligentDiagnosisNode"))
+                    .findFirst()
+                    .orElseThrow();
+
+            assertIterableEquals(List.of(), diagnosis.dependencies(), template);
+        }
     }
 
     @Test

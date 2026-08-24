@@ -115,6 +115,54 @@ class PlannerThinkNodeTest {
     }
 
     @Test
+    void splitBareNegativeConstraintCannotBeMisclassifiedAsASecondMutation() {
+        PlannerLlmService llmService = mock(PlannerLlmService.class);
+        ConclusionFactory conclusionFactory = mock(ConclusionFactory.class);
+        PlannerLlmDecision decision = new PlannerLlmDecision(
+                "GENERAL_DIAGNOSTICS",
+                "LOW",
+                "kubeoncall",
+                "llm",
+                TaskType.QUERY_METRICS,
+                RiskLevel.LOW,
+                Map.of("namespace", "kubeoncall", "cluster", "kind"),
+                List.of(),
+                List.of(),
+                "Read-only health assessment");
+        when(llmService.planWithStatus(any(), any()))
+                .thenReturn(PlannerLlmResult.success(
+                        decision, PlannerMode.REAL_MODEL, "openai-compatible", "qwen-plus", 10, Map.of()));
+        when(llmService.activateRequestedSkills(any(), any(), any())).thenReturn(SkillActivation.empty());
+        when(conclusionFactory.create(any(), any(), any()))
+                .thenReturn(new AiConclusion(
+                        "con_2",
+                        "exe_2",
+                        "read-only diagnosis",
+                        "P4",
+                        "PARTIALLY_SUPPORTED",
+                        List.of(),
+                        List.of(),
+                        new ConfidenceAssessment(0.2, "LOW", Map.of()),
+                        Map.of("mode", "REAL_MODEL"),
+                        null));
+        PlannerThinkNode node = new PlannerThinkNode(
+                llmService,
+                new PlannerContextAssembler(),
+                new PlannerRuleEngine(new PlannerParameterResolver(), new PlannerTaskFactory()),
+                conclusionFactory,
+                new EvidenceClaimGrounder());
+        GraphState state = new GraphState();
+        state.setExecutionId("exe_2");
+        state.setUserRequest("请只读检查 kind 集群 kubeoncall 命名空间当前健康状态，并说明是否存在需要修复的告警；必须基于实时工具证据，不执行任何变更。");
+
+        NodeResult result = node.execute(state);
+
+        assertThat(result.status()).isEqualTo(NodeStatus.SUCCESS);
+        assertThat(state.getTaskPlan().tasks()).hasSize(1);
+        assertThat(state.getContext()).doesNotContainKey("plannerRejectedCompoundMutation");
+    }
+
+    @Test
     void automaticAlertDiagnosisCannotExpandItsSkillBoundaryFromModelOutput() {
         PlannerLlmService llmService = mock(PlannerLlmService.class);
         ConclusionFactory conclusionFactory = mock(ConclusionFactory.class);

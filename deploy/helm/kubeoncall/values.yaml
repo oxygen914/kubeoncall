@@ -80,6 +80,9 @@ config:
   dependencyCircuitBreakerEnabled: true
   dependencyCircuitBreakerFailureThreshold: 5
   dependencyCircuitBreakerResetTimeoutSeconds: 30
+  # Enable on hosts whose DNS advertises IPv6 but whose container network has no working IPv6
+  # egress. This prevents the JDK HTTP client from exhausting short RAG/tool timeouts on IPv6.
+  javaNetworkPreferIpv4Stack: false
   sandboxEnabled: false
   sandboxFixedDiagnostic: false
   sandboxGeneratedCode: false
@@ -183,6 +186,7 @@ config:
   alertmanagerToolEndpoint: http://alertmanager-adapter:8080/api/tools/alertmanager
   alertNotificationWebhookEndpoint: ""
   alertNotificationWebhookTimeoutMillis: 3000
+  alertmanagerWebhookAuthMode: bearer
   incidentToolEndpoint: http://incident-adapter:8080/api/tools/incident
   deviceToolEndpoint: http://device-adapter:8080/api/tools/device
   databaseToolEndpoint: http://database-adapter:8080/api/tools/database
@@ -340,6 +344,23 @@ ingress:
 serviceMonitor:
   enabled: false
   interval: 30s
+
+alertmanager:
+  enabled: false
+  image:
+    repository: prom/alertmanager
+    tag: v0.28.1
+    digest: sha256:27c475db5fb156cab31d5c18a4251ac7ed567746a2483ff264516437a39b15ba
+    pullPolicy: IfNotPresent
+  service:
+    port: 9093
+  route:
+    groupWait: 10s
+    groupInterval: 30s
+    repeatInterval: 4h
+  resources:
+    requests: {cpu: 50m, memory: 64Mi}
+    limits: {cpu: 500m, memory: 256Mi}
 
 grafanaDashboard:
   enabled: true

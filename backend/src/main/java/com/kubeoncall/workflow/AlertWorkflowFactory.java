@@ -71,18 +71,10 @@ public class AlertWorkflowFactory {
     private List<AlertWorkflowDefinition> defaultWorkflow() {
         return List.of(
                 new AlertWorkflowDefinition("logCollectionNode", true, List.of(), logCollectionNode),
-                new AlertWorkflowDefinition("deviceInfoNode", true, List.of("logCollectionNode"), deviceInfoNode),
-                new AlertWorkflowDefinition("stateCompareNode", true, List.of("deviceInfoNode"), stateCompareNode),
-                new AlertWorkflowDefinition(
-                        "knowledgeRetrieveNode",
-                        true,
-                        List.of("logCollectionNode", "stateCompareNode"),
-                        knowledgeRetrieveNode),
-                new AlertWorkflowDefinition(
-                        "intelligentDiagnosisNode",
-                        false,
-                        List.of("knowledgeRetrieveNode", "stateCompareNode"),
-                        intelligentDiagnosisNode),
+                new AlertWorkflowDefinition("deviceInfoNode", true, List.of(), deviceInfoNode),
+                new AlertWorkflowDefinition("stateCompareNode", true, List.of(), stateCompareNode),
+                new AlertWorkflowDefinition("knowledgeRetrieveNode", true, List.of(), knowledgeRetrieveNode),
+                new AlertWorkflowDefinition("intelligentDiagnosisNode", false, List.of(), intelligentDiagnosisNode),
                 new AlertWorkflowDefinition(
                         "resultPushNode", false, List.of("intelligentDiagnosisNode"), resultPushNode),
                 new AlertWorkflowDefinition("notificationNode", true, List.of("resultPushNode"), notificationNode),
@@ -108,17 +100,9 @@ public class AlertWorkflowFactory {
     private List<AlertWorkflowDefinition> k8sPodWorkflow() {
         return List.of(
                 new AlertWorkflowDefinition("logCollectionNode", true, List.of(), logCollectionNode),
-                new AlertWorkflowDefinition("stateCompareNode", true, List.of("logCollectionNode"), stateCompareNode),
-                new AlertWorkflowDefinition(
-                        "knowledgeRetrieveNode",
-                        true,
-                        List.of("logCollectionNode", "stateCompareNode"),
-                        knowledgeRetrieveNode),
-                new AlertWorkflowDefinition(
-                        "intelligentDiagnosisNode",
-                        false,
-                        List.of("knowledgeRetrieveNode", "stateCompareNode"),
-                        intelligentDiagnosisNode),
+                new AlertWorkflowDefinition("stateCompareNode", true, List.of(), stateCompareNode),
+                new AlertWorkflowDefinition("knowledgeRetrieveNode", true, List.of(), knowledgeRetrieveNode),
+                new AlertWorkflowDefinition("intelligentDiagnosisNode", false, List.of(), intelligentDiagnosisNode),
                 new AlertWorkflowDefinition(
                         "resultPushNode", false, List.of("intelligentDiagnosisNode"), resultPushNode),
                 new AlertWorkflowDefinition("notificationNode", true, List.of("resultPushNode"), notificationNode),
@@ -129,14 +113,9 @@ public class AlertWorkflowFactory {
     private List<AlertWorkflowDefinition> k8sNodeWorkflow() {
         return List.of(
                 new AlertWorkflowDefinition("deviceInfoNode", true, List.of(), deviceInfoNode),
-                new AlertWorkflowDefinition("stateCompareNode", true, List.of("deviceInfoNode"), stateCompareNode),
-                new AlertWorkflowDefinition(
-                        "knowledgeRetrieveNode", true, List.of("stateCompareNode"), knowledgeRetrieveNode),
-                new AlertWorkflowDefinition(
-                        "intelligentDiagnosisNode",
-                        false,
-                        List.of("knowledgeRetrieveNode", "stateCompareNode"),
-                        intelligentDiagnosisNode),
+                new AlertWorkflowDefinition("stateCompareNode", true, List.of(), stateCompareNode),
+                new AlertWorkflowDefinition("knowledgeRetrieveNode", true, List.of(), knowledgeRetrieveNode),
+                new AlertWorkflowDefinition("intelligentDiagnosisNode", false, List.of(), intelligentDiagnosisNode),
                 new AlertWorkflowDefinition(
                         "resultPushNode", false, List.of("intelligentDiagnosisNode"), resultPushNode),
                 new AlertWorkflowDefinition("notificationNode", true, List.of("resultPushNode"), notificationNode),
@@ -147,14 +126,9 @@ public class AlertWorkflowFactory {
     private List<AlertWorkflowDefinition> workloadWorkflow() {
         return List.of(
                 new AlertWorkflowDefinition("logCollectionNode", true, List.of(), logCollectionNode),
-                new AlertWorkflowDefinition("stateCompareNode", true, List.of("logCollectionNode"), stateCompareNode),
-                new AlertWorkflowDefinition(
-                        "knowledgeRetrieveNode", true, List.of("stateCompareNode"), knowledgeRetrieveNode),
-                new AlertWorkflowDefinition(
-                        "intelligentDiagnosisNode",
-                        false,
-                        List.of("knowledgeRetrieveNode", "stateCompareNode"),
-                        intelligentDiagnosisNode),
+                new AlertWorkflowDefinition("stateCompareNode", true, List.of(), stateCompareNode),
+                new AlertWorkflowDefinition("knowledgeRetrieveNode", true, List.of(), knowledgeRetrieveNode),
+                new AlertWorkflowDefinition("intelligentDiagnosisNode", false, List.of(), intelligentDiagnosisNode),
                 new AlertWorkflowDefinition(
                         "resultPushNode", false, List.of("intelligentDiagnosisNode"), resultPushNode),
                 new AlertWorkflowDefinition("notificationNode", true, List.of("resultPushNode"), notificationNode),
@@ -165,13 +139,8 @@ public class AlertWorkflowFactory {
     private List<AlertWorkflowDefinition> controlPlaneWorkflow() {
         return List.of(
                 new AlertWorkflowDefinition("stateCompareNode", true, List.of(), stateCompareNode),
-                new AlertWorkflowDefinition(
-                        "knowledgeRetrieveNode", true, List.of("stateCompareNode"), knowledgeRetrieveNode),
-                new AlertWorkflowDefinition(
-                        "intelligentDiagnosisNode",
-                        false,
-                        List.of("knowledgeRetrieveNode", "stateCompareNode"),
-                        intelligentDiagnosisNode),
+                new AlertWorkflowDefinition("knowledgeRetrieveNode", true, List.of(), knowledgeRetrieveNode),
+                new AlertWorkflowDefinition("intelligentDiagnosisNode", false, List.of(), intelligentDiagnosisNode),
                 new AlertWorkflowDefinition(
                         "resultPushNode", false, List.of("intelligentDiagnosisNode"), resultPushNode),
                 new AlertWorkflowDefinition("notificationNode", true, List.of("resultPushNode"), notificationNode),

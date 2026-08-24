@@ -95,6 +95,8 @@ class PlannerRuleEngineTest {
         assertEquals("adapter-abc", ruleEngine.inferTarget(request));
         assertEquals("extracted_from_request", ruleEngine.inferTargetSource(request, "adapter-abc"));
         assertTrue(ruleEngine.isExplicitReadOnlyRequest(request));
+        assertTrue(ruleEngine.isExplicitReadOnlyRequest("必须基于实时工具证据，不执行任何变更"));
         assertEquals("GENERAL_DIAGNOSTICS", ruleEngine.inferIntent("禁止执行任何变更"));
+        assertEquals("GENERAL_DIAGNOSTICS", ruleEngine.inferIntent("不执行任何变更"));
     }
 }

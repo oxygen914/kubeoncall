@@ -7,6 +7,8 @@ import jakarta.servlet.http.HttpServletRequest;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.core.Ordered;
+import org.springframework.core.annotation.Order;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
@@ -26,6 +28,7 @@ import com.kubeoncall.workflow.runtime.WorkflowCommandException;
  * its existing {@code ApiErrorResponse} contract untouched during the migration window.
  */
 @RestControllerAdvice(basePackages = "com.kubeoncall.web.api.v1")
+@Order(Ordered.HIGHEST_PRECEDENCE)
 public class V1ApiExceptionHandler {
 
     private static final Logger log = LoggerFactory.getLogger(V1ApiExceptionHandler.class);

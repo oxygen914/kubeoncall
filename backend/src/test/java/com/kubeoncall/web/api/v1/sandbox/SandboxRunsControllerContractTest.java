@@ -37,6 +37,7 @@ import com.kubeoncall.sandbox.domain.SandboxCleanupStatus;
 import com.kubeoncall.sandbox.domain.SandboxRiskLevel;
 import com.kubeoncall.sandbox.domain.SandboxRunMode;
 import com.kubeoncall.sandbox.domain.SandboxRunStatus;
+import com.kubeoncall.web.ApiExceptionHandler;
 import com.kubeoncall.web.api.v1.RequestIdFilter;
 import com.kubeoncall.web.api.v1.V1ApiExceptionHandler;
 import com.kubeoncall.web.api.v1.V1Principal;
@@ -64,7 +65,7 @@ class SandboxRunsControllerContractTest {
         mockMvc = MockMvcBuilders.standaloneSetup(new SandboxRunsController(
                         provider(commandService), provider(repository), provider(artifactStore), security))
                 .addFilters(new RequestIdFilter())
-                .setControllerAdvice(new V1ApiExceptionHandler())
+                .setControllerAdvice(new V1ApiExceptionHandler(), new ApiExceptionHandler())
                 .build();
     }
 
@@ -96,6 +97,25 @@ class SandboxRunsControllerContractTest {
         mockMvc.perform(post("/api/v1/sandbox-runs/sbx_1/cancel"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.error.code").value("INVALID_REQUEST"));
+    }
+
+    @Test
+    void disabledModeUsesTheV1ErrorEnvelopeInsteadOfLeakingAsHttp500() throws Exception {
+        when(commandService.create(any(), any(), eq("sandbox-create-0002")))
+                .thenThrow(new com.kubeoncall.sandbox.SandboxRunCommandException(
+                        com.kubeoncall.sandbox.SandboxRunCommandException.Code.INVALID,
+                        "sandbox mode FIXED_DIAGNOSTIC is not enabled in this deployment"));
+
+        mockMvc.perform(post("/api/v1/sandbox-runs")
+                        .header("Idempotency-Key", "sandbox-create-0002")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"mode":"FIXED_DIAGNOSTIC","toolId":"pod-inspect","toolVersion":"v1"}
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error.code").value("INVALID_REQUEST"))
+                .andExpect(jsonPath("$.error.message")
+                        .value("sandbox mode FIXED_DIAGNOSTIC is not enabled in this deployment"));
     }
 
     @Test

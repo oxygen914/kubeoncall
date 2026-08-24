@@ -64,6 +64,9 @@
             "local"
           ]
         },
+        "javaNetworkPreferIpv4Stack": {
+          "type": "boolean"
+        },
         "sandboxEnabled": {
           "type": "boolean"
         },
@@ -81,6 +84,66 @@
         },
         "springAiEnabled": {
           "type": "boolean"
+        },
+        "alertmanagerWebhookAuthMode": {
+          "type": "string",
+          "enum": [
+            "bearer",
+            "none"
+          ]
+        }
+      }
+    },
+    "alertmanager": {
+      "type": "object",
+      "required": [
+        "enabled",
+        "image",
+        "service",
+        "route"
+      ],
+      "additionalProperties": true,
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "image": {
+          "$ref": "#/definitions/image"
+        },
+        "service": {
+          "type": "object",
+          "required": [
+            "port"
+          ],
+          "properties": {
+            "port": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 65535
+            }
+          }
+        },
+        "route": {
+          "type": "object",
+          "required": [
+            "groupWait",
+            "groupInterval",
+            "repeatInterval"
+          ],
+          "properties": {
+            "groupWait": {
+              "type": "string",
+              "minLength": 1
+            },
+            "groupInterval": {
+              "type": "string",
+              "minLength": 1
+            },
+            "repeatInterval": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
         }
       }
     },

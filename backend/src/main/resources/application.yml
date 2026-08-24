@@ -362,7 +362,7 @@ kubeoncall:
     p2-aggregation-window-seconds: 900
     p3-aggregation-window-seconds: 3600
     alertmanager-webhook-enabled: true
-    alertmanager-webhook-auth-mode: bearer
+    alertmanager-webhook-auth-mode: ${ALERTMANAGER_WEBHOOK_AUTH_MODE:bearer}
     alertmanager-webhook-token: ${ALERTMANAGER_WEBHOOK_TOKEN:}
     alertmanager-webhook-token-file: ${ALERTMANAGER_WEBHOOK_TOKEN_FILE:}
     alertmanager-webhook-max-alerts-per-request: 100

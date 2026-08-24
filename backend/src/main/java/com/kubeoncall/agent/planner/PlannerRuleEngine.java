@@ -22,9 +22,10 @@ public class PlannerRuleEngine {
     private static final Pattern SERVICE_PATTERN = Pattern.compile("(\\w+[-_]?\\w*)-?(service|gateway|api|worker|job)");
     private static final Pattern NUMBER_PATTERN = Pattern.compile("\\d+");
     private static final Pattern READ_ONLY_CONSTRAINT_PATTERN =
-            Pattern.compile("(?iu)(?:禁止|不要|不得|不允许|严禁|无需|无须|只读|read[- ]?only|do not|don't|must not)"
+            Pattern.compile("(?iu)(?:(?:禁止|不要|不得|不允许|严禁|无需|无须|只读|read[- ]?only|do not|don't|must not)"
                     + ".{0,32}(?:执行|变更|修改|操作|脚本|重启|扩容|缩容|删除|"
-                    + "execute|change|mutat|script|restart|scale|patch|delete)");
+                    + "execute|change|mutat|script|restart|scale|patch|delete)"
+                    + "|不(?:执行|变更|修改|操作|运行|重启|扩容|缩容|删除))");
     private final PlannerParameterResolver parameterResolver;
     private final PlannerTaskFactory taskFactory;
 

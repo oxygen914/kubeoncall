@@ -1,0 +1,130 @@
+{{- if .Values.alertmanager.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "kubeoncall.fullname" . }}-alertmanager
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "kubeoncall.labels" . | nindent 4 }}
+    app.kubernetes.io/component: alertmanager
+data:
+  alertmanager.yml: |
+    global:
+      resolve_timeout: 5m
+    route:
+      receiver: kubeoncall
+      group_by: [alertname, cluster, namespace, pod, service]
+      group_wait: {{ .Values.alertmanager.route.groupWait }}
+      group_interval: {{ .Values.alertmanager.route.groupInterval }}
+      repeat_interval: {{ .Values.alertmanager.route.repeatInterval }}
+    receivers:
+      - name: kubeoncall
+        webhook_configs:
+          - url: http://{{ include "kubeoncall.fullname" . }}:{{ .Values.service.port }}/api/integrations/alertmanager/webhook
+            send_resolved: true
+            http_config:
+              authorization:
+                type: Bearer
+                credentials_file: /etc/alertmanager/credentials/token
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "kubeoncall.fullname" . }}-alertmanager
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "kubeoncall.labels" . | nindent 4 }}
+    app.kubernetes.io/component: alertmanager
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ include "kubeoncall.name" . }}
+      app.kubernetes.io/instance: {{ .Release.Name }}
+      app.kubernetes.io/component: alertmanager
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: {{ include "kubeoncall.name" . }}
+        app.kubernetes.io/instance: {{ .Release.Name }}
+        app.kubernetes.io/component: alertmanager
+      annotations:
+        checksum/config: {{ toYaml .Values.alertmanager | sha256sum }}
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        runAsGroup: 65534
+        fsGroup: 65534
+        seccompProfile: {type: RuntimeDefault}
+      {{- with .Values.global.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: alertmanager
+          image: {{ include "kubeoncall.imageRef" (dict "root" . "image" .Values.alertmanager.image) | quote }}
+          imagePullPolicy: {{ .Values.alertmanager.image.pullPolicy }}
+          args:
+            - --config.file=/etc/alertmanager/alertmanager.yml
+            - --storage.path=/alertmanager
+            - --web.listen-address=:9093
+            - --cluster.listen-address=
+          ports:
+            - name: http
+              containerPort: 9093
+          readinessProbe:
+            httpGet: {path: /-/ready, port: http}
+            initialDelaySeconds: 3
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: {path: /-/healthy, port: http}
+            initialDelaySeconds: 10
+            periodSeconds: 20
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: {drop: ["ALL"]}
+          resources: {{- toYaml .Values.alertmanager.resources | nindent 12 }}
+          volumeMounts:
+            - name: config
+              mountPath: /etc/alertmanager
+              readOnly: true
+            - name: credentials
+              mountPath: /etc/alertmanager/credentials
+              readOnly: true
+            - name: data
+              mountPath: /alertmanager
+      volumes:
+        - name: config
+          configMap:
+            name: {{ include "kubeoncall.fullname" . }}-alertmanager
+        - name: credentials
+          secret:
+            secretName: {{ .Values.secrets.existingSecret }}
+            items:
+              - key: {{ .Values.secrets.alertmanagerWebhookTokenKey }}
+                path: token
+        - name: data
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "kubeoncall.fullname" . }}-alertmanager
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "kubeoncall.labels" . | nindent 4 }}
+    app.kubernetes.io/component: alertmanager
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: {{ include "kubeoncall.name" . }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/component: alertmanager
+  ports:
+    - name: http
+      port: {{ .Values.alertmanager.service.port }}
+      targetPort: http
+{{- end }}

@@ -49,6 +49,15 @@ data:
       scrape_interval: 15s
       evaluation_interval: 15s
 
+    rule_files:
+      - /etc/prometheus/rules/*.yml
+
+    alerting:
+      alertmanagers:
+        - scheme: http
+          static_configs:
+            - targets: ["kubeoncall-kubeoncall-alertmanager.kubeoncall.svc.cluster.local:9093"]
+
     scrape_configs:
       - job_name: kubeoncall
         metrics_path: /actuator/prometheus
@@ -117,6 +126,32 @@ data:
             target_label: container
             replacement: POD
 ---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-rules
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/name: prometheus
+    app.kubernetes.io/part-of: kubeoncall-monitoring
+data:
+  kubeoncall.rules.yml: |
+    groups:
+      - name: kubeoncall-platform
+        rules:
+          - alert: KubeOnCallBackendUnavailable
+            expr: absent(up{job="kubeoncall"} == 1) or (up{job="kubeoncall"} == 0)
+            for: 2m
+            labels:
+              severity: P1
+              cluster: kind
+              namespace: kubeoncall
+              service: kubeoncall
+              resource_type: service
+            annotations:
+              summary: KubeOnCall backend has been unavailable for at least two minutes
+              runbook_id: SOP-KUBEONCALL-BACKEND-UNAVAILABLE
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -179,12 +214,18 @@ spec:
             - name: config
               mountPath: /etc/prometheus
               readOnly: true
+            - name: rules
+              mountPath: /etc/prometheus/rules
+              readOnly: true
             - name: data
               mountPath: /prometheus
       volumes:
         - name: config
           configMap:
             name: prometheus-config
+        - name: rules
+          configMap:
+            name: prometheus-rules
         - name: data
           emptyDir: {}
 ---
