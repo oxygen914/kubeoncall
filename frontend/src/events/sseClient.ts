@@ -108,9 +108,13 @@ export class SseClient {
       this.closeSource()
       this.scheduleReconnect()
     }
-    source.onmessage = this.handleMessage
+    const handleMessage = (message: MessageEvent<string>): void => {
+      if (source !== this.source || this.stopped) return
+      this.handleMessage(message)
+    }
+    source.onmessage = handleMessage
     for (const eventType of NAMED_EVENT_TYPES) {
-      source.addEventListener(eventType, this.handleMessage)
+      source.addEventListener(eventType, handleMessage)
     }
   }
 
