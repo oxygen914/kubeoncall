@@ -1,12 +1,14 @@
 package com.kubeoncall.identity;
 
 import java.time.Duration;
+import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.stereotype.Component;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -25,6 +27,21 @@ public class RedisSessionStore implements SessionStore {
 
     private static final String SESSION_PREFIX = "koc:session:";
     private static final String USER_INDEX_PREFIX = "koc:session:user:";
+    /**
+     * Extends the reverse index only when the new session lives longer than the current index
+     * expiry. Keeping this decision in Redis makes concurrent logins safe: a short-lived session
+     * cannot shorten the index for a longer-lived session created at the same time.
+     */
+    private static final DefaultRedisScript<Long> EXTEND_USER_INDEX_TTL_SCRIPT =
+            new DefaultRedisScript<>("""
+            local current = redis.call('TTL', KEYS[1])
+            local requested = tonumber(ARGV[1])
+            if current == -1 or current >= requested then
+              return 0
+            end
+            redis.call('EXPIRE', KEYS[1], requested)
+            return 1
+            """, Long.class);
 
     private final StringRedisTemplate redisTemplate;
     private final ObjectMapper objectMapper;
@@ -102,7 +119,10 @@ public class RedisSessionStore implements SessionStore {
             String json = objectMapper.writeValueAsString(record);
             redisTemplate.opsForValue().set(key(sessionId), json, ttl);
             redisTemplate.opsForSet().add(userIndexKey(record.userId()), sessionId);
-            redisTemplate.expire(userIndexKey(record.userId()), ttl);
+            redisTemplate.execute(
+                    EXTEND_USER_INDEX_TTL_SCRIPT,
+                    List.of(userIndexKey(record.userId())),
+                    Long.toString(ttl.toSeconds()));
         } catch (JsonProcessingException ex) {
             throw new IllegalStateException("Failed to serialize session record", ex);
         }
