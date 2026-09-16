@@ -42,6 +42,8 @@ class SessionIdGeneratorTest {
         SessionRecord record = new SessionRecord(
                 1L, "usr_1", "alice", "Alice", 1L, issued, issued, issued.plusSeconds(3600), "secret");
         assertThat(record.isExpired(issued.plusSeconds(60), 1800)).isFalse();
+        assertThat(record.isExpired(issued.plusSeconds(1800), 1800)).isTrue(); // idle boundary
+        assertThat(record.isExpired(issued.plusSeconds(3600), 1800)).isTrue(); // absolute boundary
         assertThat(record.isExpired(issued.plusSeconds(4000), 1800)).isTrue(); // absolute
         assertThat(record.isExpired(issued.plusSeconds(2000), 1800)).isTrue(); // idle
     }

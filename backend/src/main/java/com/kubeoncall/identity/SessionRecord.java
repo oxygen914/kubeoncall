@@ -19,11 +19,11 @@ public record SessionRecord(
         String csrfSecret) {
 
     public boolean isExpired(Instant now, long idleTimeoutSeconds) {
-        if (expiresAt != null && now.isAfter(expiresAt)) {
+        if (expiresAt != null && !now.isBefore(expiresAt)) {
             return true;
         }
         Instant idleDeadline = lastAccessAt.plusSeconds(idleTimeoutSeconds);
-        return now.isAfter(idleDeadline);
+        return !now.isBefore(idleDeadline);
     }
 
     public SessionRecord touch(Instant now, long idleTimeoutSeconds, long maxTimeoutSeconds) {
