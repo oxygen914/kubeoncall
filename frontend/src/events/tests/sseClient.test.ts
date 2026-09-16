@@ -225,4 +225,38 @@ describe('SseClient', () => {
     expect(clearTimer).toHaveBeenCalledWith(2)
     expect(statuses.at(-1)).toBe('closed')
   })
+
+  it('ignores late events from a source replaced after reconnect', () => {
+    const sources: FakeEventSource[] = []
+    const callbacks: Array<() => void> = []
+    const storage = new MemoryStorage()
+    const received: RealtimeEvent[] = []
+    const client = new SseClient({
+      url: '/api/v1/events/stream',
+      topics: ['alarms'],
+      storage,
+      eventSourceFactory: () => {
+        const source = new FakeEventSource()
+        sources.push(source)
+        return source
+      },
+      setTimer: (callback) => {
+        callbacks.push(callback)
+        return callbacks.length as unknown as ReturnType<typeof setTimeout>
+      },
+      onEvent: (event) => received.push(event),
+      onGap: vi.fn(),
+    })
+
+    client.start()
+    sources[0]!.onerror?.(new Event('error'))
+    callbacks[0]!()
+
+    sources[1]!.emit('alarm.updated', { schemaVersion: 1, resourceId: 'current' }, 'evt_current')
+    sources[0]!.emit('alarm.updated', { schemaVersion: 1, resourceId: 'stale' }, 'evt_stale')
+
+    expect(received).toHaveLength(1)
+    expect(received[0]).toMatchObject({ resourceId: 'current' })
+    expect(storage.getItem('koc.realtime.lastEventId')).toBe('evt_current')
+  })
 })
