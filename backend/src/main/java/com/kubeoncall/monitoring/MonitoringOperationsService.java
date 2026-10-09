@@ -70,10 +70,11 @@ public class MonitoringOperationsService {
                 null));
         List<AlarmChangeCorrelation> result = new ArrayList<>();
         boolean changeDataAvailable = true;
+        Instant windowCutoff = window == null ? null : Instant.now().minus(window);
         for (AlarmListItem alarm : alarmPage.items()) {
             try {
                 List<RelatedChange> related = changes.findRelatedChanges(normalized(alarm)).stream()
-                        .filter(correlation -> withinWindow(correlation, window))
+                        .filter(correlation -> withinWindow(correlation, windowCutoff))
                         .map(MonitoringOperationsService::relatedChange)
                         .toList();
                 if (!related.isEmpty()) {
@@ -250,11 +251,11 @@ public class MonitoringOperationsService {
                 Map.of());
     }
 
-    private static boolean withinWindow(ChangeCorrelation correlation, Duration window) {
-        if (window == null || correlation.changeEvent() == null) {
+    static boolean withinWindow(ChangeCorrelation correlation, Instant windowCutoff) {
+        if (windowCutoff == null || correlation.changeEvent() == null) {
             return true;
         }
-        return correlation.changeEvent().changedAt().isAfter(Instant.now().minus(window));
+        return !correlation.changeEvent().changedAt().isBefore(windowCutoff);
     }
 
     private static RelatedChange relatedChange(ChangeCorrelation correlation) {

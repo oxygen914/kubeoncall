@@ -8,6 +8,7 @@ import static org.mockito.Mockito.when;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.List;
 import java.util.Map;
 
 import org.junit.jupiter.api.BeforeEach;
@@ -17,7 +18,9 @@ import com.kubeoncall.agent.planner.PlannerDegradedReason;
 import com.kubeoncall.agent.planner.PlannerLlmResult;
 import com.kubeoncall.agent.planner.PlannerLlmService;
 import com.kubeoncall.agent.planner.PlannerMode;
+import com.kubeoncall.alarm.correlation.ChangeCorrelation;
 import com.kubeoncall.alarm.correlation.ChangeCorrelationService;
+import com.kubeoncall.alarm.correlation.ChangeEvent;
 import com.kubeoncall.alarm.readmodel.AlarmQueryService;
 import com.kubeoncall.monitoring.MonitoringViews.DataSources;
 import com.kubeoncall.monitoring.MonitoringViews.Scope;
@@ -80,5 +83,29 @@ class MonitoringOperationsServiceTest {
         assertThat(result.alarmDataAvailable()).isFalse();
         assertThat(result.changeDataAvailable()).isFalse();
         assertThat(result.correlations()).isEmpty();
+    }
+
+    @Test
+    void includesChangesExactlyAtTheCorrelationWindowBoundary() {
+        Instant cutoff = Instant.parse("2026-10-09T10:00:00Z");
+        ChangeCorrelation correlation = new ChangeCorrelation(
+                new ChangeEvent(
+                        "chg_1",
+                        "deployment_image_change",
+                        "operator",
+                        cutoff,
+                        "Deployment",
+                        "payments",
+                        "default",
+                        "prod",
+                        Map.of(),
+                        "test",
+                        "corr_1"),
+                0.8,
+                "resource matches",
+                List.of());
+
+        assertThat(MonitoringOperationsService.withinWindow(correlation, cutoff))
+                .isTrue();
     }
 }
