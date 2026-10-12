@@ -33,6 +33,8 @@ public class AlertmanagerPayloadValidator {
         if (request.alerts().size() > properties.getAlarm().getAlertmanagerWebhookMaxAlertsPerRequest()) {
             throw new WebhookPayloadTooLargeException("Too many alerts in webhook request");
         }
+        validateMap(request.commonLabels(), "commonLabels");
+        validateMap(request.commonAnnotations(), "commonAnnotations");
         for (AlertmanagerAlertDto alert : request.alerts()) {
             if (alert == null || alert.labels() == null || blank(alert.labels().get("alertname"))) {
                 throw new IllegalArgumentException("Every alert must include labels.alertname");
@@ -50,7 +52,10 @@ public class AlertmanagerPayloadValidator {
             throw new IllegalArgumentException(field + " contains too many entries");
         }
         for (Map.Entry<String, String> entry : values.entrySet()) {
-            if (blank(entry.getKey()) || entry.getKey().length() > 128 || valueTooLong(entry.getValue())) {
+            if (blank(entry.getKey())
+                    || entry.getKey().length() > 128
+                    || entry.getValue() == null
+                    || valueTooLong(entry.getValue())) {
                 throw new IllegalArgumentException(field + " contains an invalid entry");
             }
         }
