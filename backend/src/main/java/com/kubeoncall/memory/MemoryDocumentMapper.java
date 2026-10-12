@@ -2,6 +2,7 @@ package com.kubeoncall.memory;
 
 import java.time.Instant;
 import java.util.LinkedHashMap;
+import java.util.Locale;
 import java.util.Map;
 
 import org.springframework.beans.factory.annotation.Autowired;
@@ -136,7 +137,7 @@ public class MemoryDocumentMapper {
             return fallback;
         }
         try {
-            return Enum.valueOf(type, value.trim().toUpperCase());
+            return Enum.valueOf(type, value.trim().toUpperCase(Locale.ROOT));
         } catch (IllegalArgumentException ex) {
             return fallback;
         }
